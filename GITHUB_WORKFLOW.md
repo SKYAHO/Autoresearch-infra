@@ -200,10 +200,13 @@ git diff --check
 Terraform/IaC 파일이 추가된 뒤에는 아래 검증을 PR template에 포함합니다.
 
 ```bash
-terraform fmt -check
-terraform validate
-terraform plan
+terraform -chdir=terraform/envs/dev fmt -check -recursive
+terraform -chdir=terraform/envs/dev init -backend=false
+terraform -chdir=terraform/envs/dev validate
+terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
 ```
+
+`terraform plan`은 실제 GCP project id와 인증이 준비된 뒤 실행합니다. 로컬 `terraform.tfvars`와 state/plan 파일은 커밋하지 않습니다.
 
 ## Label 및 Project 운영
 
