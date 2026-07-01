@@ -37,7 +37,6 @@
 ├── scripts/                # 검증/배포 보조 스크립트 예정
 ├── CONTRIBUTING.md
 ├── GITHUB_WORKFLOW.md
-├── NOTION_GITHUB_WORKFLOW.md
 └── README.md
 ```
 
