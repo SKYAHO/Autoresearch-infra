@@ -4,7 +4,6 @@
 resource "google_compute_network" "dev" {
   name                    = local.vpc_name
   auto_create_subnetworks = false
-  routing_mode            = "REGIONAL"
 }
 
 resource "google_compute_subnetwork" "dev" {
@@ -19,7 +18,6 @@ resource "google_compute_subnetwork" "dev" {
 resource "google_compute_firewall" "allow_ssh_iap" {
   name          = "${local.resource_prefix}-allow-ssh-iap"
   network       = google_compute_network.dev.id
-  direction     = "INGRESS"
   source_ranges = ["35.235.240.0/20"]
 
   allow {

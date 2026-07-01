@@ -43,8 +43,3 @@ output "dev_subnet_self_link" {
   value       = google_compute_subnetwork.dev.self_link
 }
 
-output "dev_subnet_cidr" {
-  description = "CIDR range of the dev subnet."
-  value       = google_compute_subnetwork.dev.ip_cidr_range
-}
-
