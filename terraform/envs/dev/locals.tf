@@ -1,6 +1,9 @@
 locals {
   resource_prefix = "${var.name_prefix}-${var.environment}"
 
+  vpc_name        = "${local.resource_prefix}-vpc"
+  dev_subnet_name = "${local.resource_prefix}-subnet"
+
   default_labels = merge(
     {
       environment = var.environment

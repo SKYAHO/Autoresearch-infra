@@ -9,3 +9,7 @@ labels = {
   owner = "infra"
 }
 
+# dev VPC / subnet (#2)
+dev_subnet_cidr              = "10.10.0.0/20"
+enable_private_google_access = true
+

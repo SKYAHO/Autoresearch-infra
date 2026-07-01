@@ -43,3 +43,20 @@ variable "labels" {
   default     = {}
 }
 
+variable "dev_subnet_cidr" {
+  description = "Primary CIDR range for the dev subnet."
+  type        = string
+  default     = "10.10.0.0/20"
+
+  validation {
+    condition     = can(cidrhost(var.dev_subnet_cidr, 0))
+    error_message = "dev_subnet_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}
+
+variable "enable_private_google_access" {
+  description = "Enable Private Google Access on the dev subnet."
+  type        = bool
+  default     = true
+}
+
