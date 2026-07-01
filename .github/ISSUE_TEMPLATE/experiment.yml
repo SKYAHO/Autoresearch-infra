@@ -1,0 +1,85 @@
+name: Experiment
+description: GCP 인프라 구성, Terraform 방식, 운영 자동화 실험을 기록합니다.
+title: "[EXP] "
+labels: ["experiment"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        실험 issue는 GCP 인프라 운영 가설과 판정 기준을 먼저 정하는 데 목적이 있습니다. 결과가 나오면 같은 issue에 요약을 남겨 주세요.
+
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: 가설
+      description: 이번 실험으로 검증하려는 가설을 명확하게 적어 주세요.
+      placeholder: 예) Terraform state backend를 GCS로 분리하면 협업 시 state 충돌을 줄일 수 있다.
+    validations:
+      required: true
+
+  - type: input
+    id: target
+    attributes:
+      label: 실험 대상
+      description: 실험할 GCP 리소스, Terraform 구성, workflow, 운영 정책을 적어 주세요.
+      placeholder: 예) Terraform remote state backend
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 영역
+      options:
+        - Terraform / IaC
+        - GCP IAM / Security
+        - Deployment Workflow
+        - Cost / Quota
+        - Monitoring / Logging
+        - GitHub Actions / CI-CD
+        - GitHub 협업 설정
+        - 기타
+    validations:
+      required: true
+
+  - type: dropdown
+    id: criterion
+    attributes:
+      label: 주요 판정 기준
+      multiple: true
+      options:
+        - 보안 위험 감소
+        - 운영 복잡도 감소
+        - 배포 실패 감소
+        - 비용 절감
+        - 롤백 용이성
+        - 리뷰/승인 명확성
+        - 기타
+    validations:
+      required: true
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: 실험 설정
+      description: 변경할 인프라 설정, 비교 기준, 관찰 방법을 적어 주세요.
+      value: |
+        - 변경 인프라:
+        - 비교 기준:
+        - 관찰 방법:
+        - 비용/권한 영향:
+        - 롤백 기준:
+    validations:
+      required: true
+
+  - type: textarea
+    id: result
+    attributes:
+      label: 결과
+      description: 실험 후 관찰 결과와 결론을 업데이트해 주세요.
+      value: |
+        - 관찰 결과:
+        - 결론:
+        - 후속 작업:
+    validations:
+      required: false

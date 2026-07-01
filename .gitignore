@@ -1,0 +1,38 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+
+# Local-only agent settings
+.claude/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.json.key
+*service-account*.json
+
+# Terraform / IaC
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# GCP local files
+application_default_credentials.json
+gcloud-config/

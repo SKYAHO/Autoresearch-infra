@@ -1,0 +1,17 @@
+# 컴포넌트별 담당자 매핑
+# GitHub 유저명(@member)을 실제 팀원 계정으로 교체해 주세요.
+
+# GCP 인프라 / IaC
+/terraform/  @member1
+/gcp/        @member1
+/scripts/    @member1
+
+# GitHub 설정 및 CI/CD
+/.github/    @member2
+
+# 운영 문서
+/docs/       @member3
+/*.md        @member3
+
+# 저장소 기본 설정
+/.gitignore  @member2
