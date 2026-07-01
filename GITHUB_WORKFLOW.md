@@ -9,11 +9,15 @@
 ## 핵심 원칙
 
 ```text
-Issue 생성 -> Project Todo -> Branch 생성 -> 인프라 변경 -> PR 생성 -> Review -> Squash Merge -> Project Done
+Issue 등록 -> Project Todo -> 작업 branch 생성 -> 작업/검증 -> Draft PR 생성
+  -> 셀프 리뷰 및 설명 보강 -> Ready for review 전환 -> 에이전트 리뷰 실행
+  -> 이해도 체크 inline 답변 -> 팀원 리뷰 요청 -> 최소 2명 승인 -> Squash Merge -> Project Done
 ```
 
 - **Issue는 작업의 시작점**입니다. GCP 리소스, Terraform/IaC, GitHub Actions, IAM, secret, 운영 문서 변경은 먼저 issue로 만듭니다.
 - **Branch는 issue 번호를 포함**합니다. 어떤 인프라 변경을 위한 브랜치인지 추적하기 쉽게 만듭니다.
+- **PR은 Draft로 시작**합니다. 작업/검증이 끝나면 Draft PR을 열고, 셀프 리뷰로 설명을 보강한 뒤 Ready로 전환합니다.
+- **에이전트 리뷰는 Ready 전환 시 실행**됩니다. Claude Code가 `이해도 확인:` inline comment를 남기면, 각 스레드에서 답변/검증 후 resolve합니다.
 - **PR은 issue를 닫는 단위**입니다. PR 본문에 `Closes #이슈번호`를 넣습니다.
 - **인프라 변경은 안전성 중심으로 리뷰**합니다. 권한, 비용, 리전, 롤백, secret 노출 여부를 확인합니다.
 
@@ -255,8 +259,8 @@ is:issue,pr is:open repo:SKYAHO/Autoresearch-infra
 
 - 직접 push 금지
 - PR을 통한 변경만 허용
-- 최소 1명 approve 필요
-- conversation resolved 필요
+- 최소 2명 approve 필요
+- 모든 대화 resolved 필요
 - Claude Code PR Review workflow가 안정화되면 required check로 지정
 - Terraform plan workflow가 생기면 required check로 지정
 
