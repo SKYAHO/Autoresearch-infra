@@ -31,6 +31,7 @@ Issue 생성 -> Project Todo -> Branch 생성 -> 인프라 변경 -> PR 생성 -
 - CODEOWNERS
 - Claude Code PR Review workflow
 - GitHub 운영 문서
+- GitHub label 및 Project 초기 운영값 문서
 - GCP/IaC 작업을 고려한 `.gitignore`
 
 추후 포함:
@@ -199,6 +200,40 @@ Terraform/IaC 추가 이후:
 terraform fmt -check
 terraform validate
 terraform plan
+```
+
+## Label 및 Project 운영
+
+label과 Project 상태는 `docs/GITHUB_LABELS_AND_PROJECT.md`를 기준으로 관리한다.
+
+필수 label:
+
+| label | 사용 기준 |
+|---|---|
+| `feature` | GCP 인프라, IaC, GitHub 자동화 추가/개선 |
+| `bug` | 권한, workflow, 리소스 설정, 자동화 오류 |
+| `experiment` | GCP 구성, Terraform 방식, 운영 정책 실험 |
+| `documentation` | 운영 문서 변경 |
+| `chore` | 저장소 설정, label, Project, CODEOWNERS 관리 |
+| `question` | 결정이 필요한 질문 또는 확인 요청 |
+
+인프라 분류 label:
+
+| label | 사용 기준 |
+|---|---|
+| `gcp` | GCP 리소스 전반 |
+| `terraform` | Terraform/IaC 변경 |
+| `iam` | IAM, service account, 권한 변경 |
+| `ci-cd` | GitHub Actions, 배포/검증 자동화 |
+| `security` | secret, 접근 제어, 보안 정책 |
+| `cost` | 비용, quota, 리소스 크기 조정 |
+
+Project 기본 상태는 `Todo`, `In Progress`, `Done`을 사용한다.
+
+권장 auto-add filter:
+
+```text
+is:issue,pr is:open repo:SKYAHO/Autoresearch-infra
 ```
 
 ## 추천 GitHub 저장소 설정

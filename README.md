@@ -19,6 +19,7 @@
 - CODEOWNERS
 - Claude Code PR Review workflow
 - GitHub issue, branch, PR, project 운영 문서
+- GitHub label 및 Project 초기 운영값 문서
 - GCP/IaC 작업을 고려한 `.gitignore`
 
 ## 예정 구조
@@ -32,7 +33,7 @@
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── terraform/              # Terraform root/modules/envs 예정
 ├── gcp/                    # GCP 운영 스크립트/설정 예정
-├── docs/                   # 인프라 운영 문서 예정
+├── docs/                   # 인프라/GitHub 운영 문서
 ├── scripts/                # 검증/배포 보조 스크립트 예정
 ├── CONTRIBUTING.md
 ├── GITHUB_WORKFLOW.md
@@ -46,4 +47,4 @@
 Issue 생성 -> Branch 생성 -> 작업 -> PR 생성 -> Review -> Squash Merge
 ```
 
-인프라 변경은 권한, 비용, 리전, 롤백 가능성, secret 노출 여부를 반드시 함께 검토합니다. 자세한 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md), GitHub 운영 문서는 [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md)를 참고합니다.
+인프라 변경은 권한, 비용, 리전, 롤백 가능성, secret 노출 여부를 반드시 함께 검토합니다. 자세한 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md), GitHub 운영 문서는 [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md), label/Project 규칙은 [docs/GITHUB_LABELS_AND_PROJECT.md](docs/GITHUB_LABELS_AND_PROJECT.md)를 참고합니다.
