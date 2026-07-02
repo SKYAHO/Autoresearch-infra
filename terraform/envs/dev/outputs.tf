@@ -53,3 +53,23 @@ output "artifact_registry_image_url" {
   value       = "${google_artifact_registry_repository.dev.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.dev.repository_id}"
 }
 
+output "cloud_sql_instance_connection_name" {
+  description = "Cloud SQL instance connection name (Cloud SQL Auth Proxy / Connector 용)."
+  value       = google_sql_database_instance.dev.connection_name
+}
+
+output "cloud_sql_private_ip_address" {
+  description = "Private IP address of the dev Cloud SQL instance (VPC 내부 접근)."
+  value       = google_sql_database_instance.dev.private_ip_address
+}
+
+output "cloud_sql_database_name" {
+  description = "dev application database name."
+  value       = google_sql_database.dev.name
+}
+
+output "cloud_sql_db_app_password_secret_id" {
+  description = "Secret Manager secret id holding the dev DB app user password (값 미출력)."
+  value       = google_secret_manager_secret.db_app_password.id
+}
+

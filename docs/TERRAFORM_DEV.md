@@ -12,6 +12,7 @@ terraform/
 │       ├── README.md
 │       ├── artifact_registry.tf
 │       ├── backend.tf.example
+│       ├── cloud_sql.tf      # #4 dev Cloud SQL (PostgreSQL, private IP)
 │       ├── locals.tf
 │       ├── main.tf
 │       ├── outputs.tf
@@ -26,9 +27,8 @@ terraform/
 
 ## 현재 단계에서 생성하지 않는 것
 
-#1은 Terraform 실행 골격, #2는 dev VPC/subnet/최소 firewall, #3는 Artifact Registry까지 구성합니다. 아래 리소스는 생성하지 않습니다.
+#1은 Terraform 실행 골격, #2는 dev VPC/subnet/최소 firewall, #3는 Artifact Registry, #4는 Cloud SQL까지 구성합니다. 아래 리소스는 생성하지 않습니다.
 
-- Cloud SQL instance
 - GKE cluster
 - GitHub OIDC IAM/service account
 - Terraform remote state bucket
@@ -66,6 +66,26 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 - **GCR은 사실상 deprecated**: Google이 신규 기능/이미지를 Artifact Registry로 이관 중이며, 신규 프로젝트는 AR 권장.
 - **IAM 정밀도**: AR은 리포 단위 IAM/labels로 세분화 가능. GCR은 프로젝트 단위(`gcr.io/<project>`)로 권한이 거침.
 - **확장성**: AR은 Docker 외 npm/Maven/Python 등 멀티 포맷 + 리전/멀티리전 + 빌트인 취약점 스캔 지원.
+
+## dev Cloud SQL (#4)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Instance | `autoresearch-dev-pg` | `${resource_prefix}-pg` (`local.sql_instance_name`) |
+| Engine | PostgreSQL 15 | `var.db_database_version` |
+| Tier | `db-f1-micro` | `var.db_tier`, shared-core 최소 비용 (~$7/월) |
+| Availability | `ZONAL` | dev 단일 zone, 비용 절감 |
+| 접속 | **private IP only** (`ipv4_enabled=false`) | VPC 내부에서만 접근. `google_service_networking_connection` peering |
+| Private services 대역 | `10.20.0.0/20` | `var.private_services_cidr`, VPC subnet(`10.10.0.0/20`)과 미중복 |
+| DB / User | `autoresearch` / `app` | `var.db_name`, `var.db_app_user` |
+| 비밀번호 | random 24자 → **Secret Manager** | `output.cloud_sql_db_app_password_secret_id`(값 미출력). 향후 GKE app consumer 용 |
+| Backup | 켜짐, point-in-time recovery on | `start_time 17:00` UTC |
+| Maintenance | `stable` track, 일 17:00 UTC(월 02:00 KST) | `day=7`(1=Mon..7=Sun) |
+| deletion_protection | **false** (dev) | `var.sql_deletion_protection`. 운영 전환 시 true |
+
+**선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com`, `secretmanager.googleapis.com` (수동 활성화 — `google_project_service` 미사용).
+
+접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 Secret Manager에서 조회(`secret_id` = `output.cloud_sql_db_app_password_secret_id`).
 
 ## 필수 GCP API 후보
 
