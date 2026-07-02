@@ -10,8 +10,8 @@ terraform/
 ├── envs/
 │   └── dev/
 │       ├── README.md
-│       ├── backend.tf.example
 │       ├── artifact_registry.tf
+│       ├── backend.tf.example
 │       ├── locals.tf
 │       ├── main.tf
 │       ├── outputs.tf
