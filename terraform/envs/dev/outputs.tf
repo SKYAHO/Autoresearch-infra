@@ -33,6 +33,16 @@ output "required_services" {
   value       = sort(tolist(local.required_services))
 }
 
+output "vpc_self_link" {
+  description = "Self link of the dev VPC."
+  value       = google_compute_network.dev.self_link
+}
+
+output "dev_subnet_self_link" {
+  description = "Self link of the dev subnet. Cloud SQL / GKE 가 이 값을 참조한다."
+  value       = google_compute_subnetwork.dev.self_link
+}
+
 output "artifact_registry_repo_id" {
   description = "Artifact Registry Docker repository id (배포 workflow 참조)."
   value       = google_artifact_registry_repository.dev.repository_id

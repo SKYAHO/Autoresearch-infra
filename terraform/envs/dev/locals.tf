@@ -1,6 +1,10 @@
 locals {
   resource_prefix = "${var.name_prefix}-${var.environment}"
 
+  vpc_name        = "${local.resource_prefix}-vpc"
+  dev_subnet_name = "${local.resource_prefix}-subnet"
+  ssh_iap_tag     = "ssh-iap"
+
   default_labels = merge(
     {
       environment = var.environment
