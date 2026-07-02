@@ -43,3 +43,13 @@ output "dev_subnet_self_link" {
   value       = google_compute_subnetwork.dev.self_link
 }
 
+output "artifact_registry_repo_id" {
+  description = "Artifact Registry Docker repository id (배포 workflow 참조)."
+  value       = google_artifact_registry_repository.dev.repository_id
+}
+
+output "artifact_registry_image_url" {
+  description = "Base image URL for pushing/pulling dev Docker images: <location>-docker.pkg.dev/<project>/<repo>."
+  value       = "${google_artifact_registry_repository.dev.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.dev.repository_id}"
+}
+

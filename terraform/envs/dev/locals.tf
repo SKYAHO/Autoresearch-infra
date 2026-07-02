@@ -29,5 +29,7 @@ locals {
     "sqladmin.googleapis.com",
     "sts.googleapis.com",
   ])
+
+  ar_repo_id = "${local.resource_prefix}-docker"
 }
 
