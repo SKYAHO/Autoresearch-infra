@@ -43,6 +43,7 @@ terraform/
 | Subnet CIDR | `10.10.0.0/20` | `var.dev_subnet_cidr`, dev 확장 여유분 |
 | Region | `asia-northeast3` | `var.region` |
 | Private Google Access | `true` | `var.enable_private_google_access`, Google API 사설 접근 |
+| Route(PGA) | `restricted.googleapis.com`(`199.36.153.8/30`) → default-internet-gateway | `enable_private_google_access=true`일 때 생성. 외부 IP 없는 VM 의 Google API 도달 |
 | Firewall(ingress) | IAP(35.235.240.0/20) → TCP 22 | 최소 SSH 접근. 추가 포트는 별도 규칙 |
 
 Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet_self_link`)를 참조해 같은 VPC에 배치한다.
@@ -65,6 +66,28 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 | `secretmanager.googleapis.com` | secret 저장 및 참조 |
 | `logging.googleapis.com` | 운영 로그 |
 | `monitoring.googleapis.com` | 모니터링 |
+
+## 사전 조건 (apply 전)
+
+이 모듈은 `google_project_service` 리소스로 GCP API를 enable하지 않습니다. API 활성화를 같은
+root module에 넣으면 "API가 켜져야 생성 가능한 리소스"와 순환/부트스트랩 문제가 생기는
+안티패턴이므로, API enable은 apply 전 별도 부트스트랩 단계로 분리한다.
+
+`google_compute_network` / `google_compute_subnetwork` 생성은 `compute.googleapis.com` 활성화에
+하드 의존하므로, 대상 프로젝트(`var.project_id`)에 최소 compute API가 먼저 켜져 있어야 apply가 성공한다.
+
+```bash
+# 최소: VPC/subnet 생성에 필요한 compute API
+gcloud services enable compute.googleapis.com --project=ar-infra-501108
+
+# 또는 required_services output 전체를 한 번에
+terraform -chdir=terraform/envs/dev output -json required_services \
+  | jq -r '.[]' | xargs gcloud services enable --project=ar-infra-501108
+```
+
+> Private Google Access(`enable_private_google_access`, 기본 `true`) 사용 시,
+> `restricted.googleapis.com`(`199.36.153.8/30`)로 가는 default-internet-gateway 라우트를
+> 모듈이 자동 생성한다. `private.googleapis.com` 범위가 필요한 서비스가 생기면 라우트를 추가한다.
 
 ## 검증 명령
 
