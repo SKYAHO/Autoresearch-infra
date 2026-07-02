@@ -1,5 +1,6 @@
 locals {
   resource_prefix = "${var.name_prefix}-${var.environment}"
+  ar_repo_id      = "${local.resource_prefix}-docker"
 
   default_labels = merge(
     {

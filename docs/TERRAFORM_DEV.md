@@ -11,6 +11,7 @@ terraform/
 │   └── dev/
 │       ├── README.md
 │       ├── backend.tf.example
+│       ├── artifact_registry.tf
 │       ├── locals.tf
 │       ├── main.tf
 │       ├── outputs.tf
@@ -27,11 +28,29 @@ terraform/
 #1은 Terraform 실행 골격만 구성합니다. 아래 리소스는 생성하지 않습니다.
 
 - VPC/subnet
-- Artifact Registry repository
 - Cloud SQL instance
 - GKE cluster
 - GitHub OIDC IAM/service account
 - Terraform remote state bucket
+
+## Artifact Registry (#3)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Repository id | `autoresearch-dev-docker` | `${resource_prefix}-docker` (`local.ar_repo_id`) |
+| Format | `DOCKER` | 컨테이너 이미지 |
+| Location | `asia-northeast3` | `var.region`, dev 기본 region |
+| Labels | `default_labels` 상속 | provider `default_labels`에서 일괄 적용 |
+| Image URL | `asia-northeast3-docker.pkg.dev/ar-infra-501108/autoresearch-dev-docker` | `output.artifact_registry_image_url` |
+| IAM | (미구성) | push/pull 바인딩은 GitHub OIDC SA / GKE 노드 SA 이슈에서 추가 |
+
+배포 workflow는 `output.artifact_registry_repo_id`(repo명)와 `output.artifact_registry_image_url`(이미지 base URL)을 참조한다.
+
+### 왜 GCR이 아니라 Artifact Registry인가
+
+- **GCR은 사실상 deprecated**: Google이 신규 기능/이미지를 Artifact Registry로 이관 중이며, 신규 프로젝트는 AR 권장.
+- **IAM 정밀도**: AR은 리포 단위 IAM/labels로 세분화 가능. GCR은 프로젝트 단위(`gcr.io/<project>`)로 권한이 거침.
+- **확장성**: AR은 Docker 외 npm/Maven/Python 등 멀티 포맷 + 리전/멀티리전 + 빌트인 취약점 스캔 지원.
 
 ## 필수 GCP API 후보
 
