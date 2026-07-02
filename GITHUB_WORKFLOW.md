@@ -11,7 +11,7 @@
 ```text
 Issue 등록 -> Project Todo -> 작업 branch 생성 -> 작업/검증 -> Draft PR 생성
   -> 셀프 리뷰 및 설명 보강 -> Ready for review 전환 -> 에이전트 리뷰 실행
-  -> 이해도 체크 inline 답변 -> 팀원 리뷰 요청 -> 최소 2명 승인 -> Squash Merge -> Project Done
+  -> 이해도 체크 inline 답변 -> 팀원 리뷰 요청 -> 최소 2명 승인 -> Merge (squash 권장) -> Project Done
 ```
 
 - **Issue는 작업의 시작점**입니다. GCP 리소스, Terraform/IaC, GitHub Actions, IAM, secret, 운영 문서 변경은 먼저 issue로 만듭니다.
@@ -248,9 +248,9 @@ is:issue,pr is:open repo:SKYAHO/Autoresearch-infra
 
 ### Merge 설정
 
-- `Allow squash merging`: 켜기
-- `Allow merge commits`: 끄기
-- `Allow rebase merging`: 끄기
+- `Allow squash merging`: 켜기 (권장)
+- `Allow merge commits`: 켜기
+- `Allow rebase merging`: 켜기
 - `Automatically delete head branches`: 켜기
 
 ### Branch protection 또는 ruleset

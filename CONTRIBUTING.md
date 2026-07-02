@@ -11,7 +11,7 @@ autoresearch-infra 저장소에 기여해 주셔서 감사합니다.
 ```
 이슈 등록 → 작업 브랜치 생성 → 작업/검증 → Draft PR 생성 → 셀프 리뷰 및 설명 보강
        → Ready for review 전환 → 에이전트 리뷰 실행 → 이해도 체크 inline 답변
-       → 팀원 리뷰 요청 → 최소 2명 승인 → Squash Merge
+       → 팀원 리뷰 요청 → 최소 2명 승인 → Merge (squash 권장)
 ```
 
 1. **이슈 등록**: 작업 시작 전 반드시 이슈를 먼저 만듭니다.
@@ -36,7 +36,7 @@ autoresearch-infra 저장소에 기여해 주셔서 감사합니다.
 
 10. **최소 2명 승인**: 팀원 **최소 2명**의 Approve와 모든 대화 resolve가 있어야 머지할 수 있습니다.
 
-11. **Squash Merge**: 머지는 항상 **Squash and merge** 방식으로 합니다.
+11. **Merge**: 머지 방식은 merge/squash/rebase 모두 허용하되 **squash를 권장**합니다.
     머지 커밋 제목은 `<type>: <설명> (#PR번호)` 형식으로 작성합니다.
 
 ---
@@ -96,7 +96,7 @@ docs: GCP 운영 가이드 초안 작성
 - **직접 push 금지**: 모든 변경은 PR을 통해서만 반영됩니다.
 - **리뷰 승인 필수**: 최소 2명의 팀원 Approve와 모든 대화 resolve가 있어야 머지할 수 있습니다.
 - **PR 통과 후 머지**: 설정한 필수 체크가 모두 통과해야 머지할 수 있습니다.
-- **머지 방식**: Squash and merge만 허용합니다.
+- **머지 방식**: merge/squash/rebase 모두 허용 (squash 권장).
 
 > GitHub 레포 설정 → Settings → Branches → Branch protection rules 에서 확인할 수 있습니다.
 
