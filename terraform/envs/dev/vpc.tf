@@ -14,11 +14,13 @@ resource "google_compute_subnetwork" "dev" {
   private_ip_google_access = var.enable_private_google_access
 }
 
-# ponytail: 최소 ingress — IAP 경유 SSH만 허용. 추가 포트는 필요 시 별도 규칙으로.
+# ponytail: 최소 ingress — IAP 경유 SSH(22)는 ssh-iap 태그 인스턴스만. 추가 포트는 별도 규칙.
 resource "google_compute_firewall" "allow_ssh_iap" {
   name          = "${local.resource_prefix}-allow-ssh-iap"
   network       = google_compute_network.dev.id
+  direction     = "INGRESS"
   source_ranges = ["35.235.240.0/20"]
+  target_tags   = [local.ssh_iap_tag]
 
   allow {
     protocol = "tcp"

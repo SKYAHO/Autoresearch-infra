@@ -44,7 +44,7 @@ terraform/
 | Region | `asia-northeast3` | `var.region` |
 | Private Google Access | `true` | `var.enable_private_google_access`, Google API 사설 접근 |
 | Route(PGA) | `restricted.googleapis.com`(`199.36.153.8/30`) → default-internet-gateway | `enable_private_google_access=true`일 때 생성. 외부 IP 없는 VM 의 Google API 도달 |
-| Firewall(ingress) | IAP(35.235.240.0/20) → TCP 22 | 최소 SSH 접근. 추가 포트는 별도 규칙 |
+| Firewall(ingress) | IAP(35.235.240.0/20) → TCP 22, `target_tags=["ssh-iap"]` | IAP 경유 SSH. **SSH 필요 VM은 `ssh-iap` 태그 부착 필수**. 접근은 `roles/iap.tunnelAccessor`로 gating |
 
 Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet_self_link`)를 참조해 같은 VPC에 배치한다.
 
