@@ -68,3 +68,39 @@ output "cloud_sql_database_name" {
   value       = google_sql_database.dev.name
 }
 
+output "gke_cluster_name" {
+  description = "dev GKE 클러스터 이름."
+  value       = google_container_cluster.dev.name
+}
+
+output "gke_cluster_endpoint" {
+  description = "dev GKE API endpoint."
+  value       = google_container_cluster.dev.endpoint
+}
+
+output "gke_cluster_ca_certificate" {
+  description = "dev GKE 클러스터 CA 인증서(base64)."
+  value       = google_container_cluster.dev.master_auth[0].cluster_ca_certificate
+  sensitive   = true
+}
+
+output "gke_node_service_account_email" {
+  description = "노드 풀에 연결된 GCP 서비스 계정(AR pull/로깅/모니터링)."
+  value       = google_service_account.gke_nodes.email
+}
+
+output "gke_app_service_account_email" {
+  description = "app Workload Identity용 GCP 서비스 계정(Cloud SQL/Secret)."
+  value       = google_service_account.gke_app.email
+}
+
+output "gke_workload_identity_principal" {
+  description = "KSA가 가장할 principal 식별자. app KSA annotation에 사용."
+  value       = local.gke_workload_identity_principal
+}
+
+output "db_app_password_secret_id" {
+  description = "DB app 비밀번호 Secret Manager secret id."
+  value       = google_secret_manager_secret.db_app_password.id
+}
+

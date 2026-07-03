@@ -13,10 +13,11 @@ terraform/
 │       ├── artifact_registry.tf
 │       ├── backend.tf.example
 │       ├── cloud_sql.tf      # #4 dev Cloud SQL (PostgreSQL, private IP)
+│       ├── gke.tf            # #5 dev GKE cluster + 노드풀 + SA/WI
 │       ├── locals.tf
-│       ├── main.tf
+│       ├── nat.tf            # #5 Cloud Router + Cloud NAT (private 노드 egress)
 │       ├── outputs.tf
-│       ├── providers.tf
+│       ├── secret_manager.tf # #5 DB 비밀번호 Secret Manager 저장
 │       ├── terraform.tfvars.example
 │       ├── variables.tf
 │       ├── versions.tf
@@ -27,9 +28,8 @@ terraform/
 
 ## 현재 단계에서 생성하지 않는 것
 
-#1은 Terraform 실행 골격, #2는 dev VPC/subnet/최소 firewall, #3는 Artifact Registry, #4는 Cloud SQL까지 구성합니다. 아래 리소스는 생성하지 않습니다.
+#1은 Terraform 실행 골격, #2는 dev VPC/subnet/최소 firewall, #3는 Artifact Registry, #4는 Cloud SQL, #5는 GKE 클러스터까지 구성합니다. 아래 리소스는 생성하지 않습니다.
 
-- GKE cluster
 - GitHub OIDC IAM/service account
 - Terraform remote state bucket
 
@@ -78,14 +78,54 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 | 접속 | **private IP only** (`ipv4_enabled=false`) | VPC 내부에서만 접근. `google_service_networking_connection` peering |
 | Private services 대역 | `10.20.0.0/20` | `var.private_services_cidr`, VPC subnet(`10.10.0.0/20`)과 미중복 |
 | DB / User | `autoresearch` / `app` | `var.db_name`, `var.db_app_user` |
-| 비밀번호 | random 24자 → SQL user 주입 | Secret Manager 저장은 #5(GKE app 소비 시점)에 추가 |
+| 비밀번호 | random 24자 → SQL user 주입, #5 Secret Manager 저장 | `random_password.db_app_password`, `output.db_app_password_secret_id` |
 | Backup | 켜짐, point-in-time recovery on | `start_time 17:00` UTC |
 | Maintenance | `stable` track, 일 17:00 UTC(월 02:00 KST) | `day=7`(1=Mon..7=Sun) |
 | deletion_protection | **false** (dev) | `var.sql_deletion_protection`. 운영 전환 시 true |
 
-**선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com` (수동 활성화 — `google_project_service` 미사용). `secretmanager.googleapis.com`은 #5(Secret Manager 도입) 시점에 활성화.
+**선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com`, `secretmanager.googleapis.com` (수동 활성화 — `google_project_service` 미사용).
 
-접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 현재 Terraform state의 `random_password`에만 존재하며, Secret Manager 저장·조회는 #5 GKE app 소비 시점에 추가한다.
+접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 `random_password`로 생성되어 SQL user에 주입되며, #5에서 Secret Manager(`output.db_app_password_secret_id`)에도 저장한다.
+
+## dev GKE (#5)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Cluster | `autoresearch-dev-gke` | Standard, zonal `asia-northeast3-a` |
+| 모드 | private nodes, public endpoint(authorized) | 노드 공인 IP 없음, 마스터는 본인 IP만 |
+| Master CIDR | `var.gke_master_ipv4_cidr` (/28) | dev subnet/private services와 미중복 |
+| Pods/Services 대역 | 서브넷 2차 `gke-pods`/`gke-services` | VPC-native(alias IP) |
+| 노드풀 | `dev-default`, e2-small, pd-standard 30GB | autoscaling min=1/max=2 |
+| 노드 SA | `autoresearch-dev-gke-nodes` | AR reader + logging/metric writer |
+| app SA(WI) | `autoresearch-dev-app` | cloudsql.client + secretAccessor, KSA 매핑 |
+| Egress | Cloud NAT(`autoresearch-dev-nat`) | private 노드 AR(`*.pkg.dev`) pull |
+| deletion_protection | false (dev) | 운영 전환 시 true |
+
+### kubectl 접근
+```bash
+# 1) 본인 IP를 tfvars master_authorized_networks에 추가 후 apply
+# 2) credentials 획득
+gcloud container clusters get-credentials autoresearch-dev-gke \
+  --zone asia-northeast3-a --project <project_id>
+kubectl get nodes
+```
+
+### Workload Identity(app 배포 시)
+app KSA에 annotation 부여 → app GCP SA(`autoresearch-dev-app`) 가장:
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: autoresearch
+  name: autoresearch-app
+  annotations:
+    iam.gke.io/gcp-service-account: autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
+```
+
+### 비용/롤백
+- 예상: e2-small ~$13/월 + disk ~$1.5 + Cloud NAT ~$32(고정비) → 1노드 ~$47/월. Standard control plane 무료.
+- 절감: min=1 고정. 장기 미사용 시 노드풀 count 0 또는 `terraform destroy` 권장.
+- 롤백: `terraform destroy`로 cluster/node pool/NAT/SA 일괄 제거(state local).
 
 ## 필수 GCP API 후보
 
