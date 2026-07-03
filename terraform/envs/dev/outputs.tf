@@ -68,8 +68,3 @@ output "cloud_sql_database_name" {
   value       = google_sql_database.dev.name
 }
 
-output "cloud_sql_db_app_password_secret_id" {
-  description = "Secret Manager secret id holding the dev DB app user password (값 미출력)."
-  value       = google_secret_manager_secret.db_app_password.id
-}
-

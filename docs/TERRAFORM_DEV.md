@@ -78,14 +78,14 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 | 접속 | **private IP only** (`ipv4_enabled=false`) | VPC 내부에서만 접근. `google_service_networking_connection` peering |
 | Private services 대역 | `10.20.0.0/20` | `var.private_services_cidr`, VPC subnet(`10.10.0.0/20`)과 미중복 |
 | DB / User | `autoresearch` / `app` | `var.db_name`, `var.db_app_user` |
-| 비밀번호 | random 24자 → **Secret Manager** | `output.cloud_sql_db_app_password_secret_id`(값 미출력). 향후 GKE app consumer 용 |
+| 비밀번호 | random 24자 → SQL user 주입 | Secret Manager 저장은 #5(GKE app 소비 시점)에 추가 |
 | Backup | 켜짐, point-in-time recovery on | `start_time 17:00` UTC |
 | Maintenance | `stable` track, 일 17:00 UTC(월 02:00 KST) | `day=7`(1=Mon..7=Sun) |
 | deletion_protection | **false** (dev) | `var.sql_deletion_protection`. 운영 전환 시 true |
 
-**선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com`, `secretmanager.googleapis.com` (수동 활성화 — `google_project_service` 미사용).
+**선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com` (수동 활성화 — `google_project_service` 미사용). `secretmanager.googleapis.com`은 #5(Secret Manager 도입) 시점에 활성화.
 
-접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 Secret Manager에서 조회(`secret_id` = `output.cloud_sql_db_app_password_secret_id`).
+접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 현재 Terraform state의 `random_password`에만 존재하며, Secret Manager 저장·조회는 #5 GKE app 소비 시점에 추가한다.
 
 ## 필수 GCP API 후보
 

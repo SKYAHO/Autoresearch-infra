@@ -33,7 +33,6 @@ locals {
 
   ar_repo_id = "${local.resource_prefix}-docker"
 
-  sql_instance_name     = "${local.resource_prefix}-pg"
-  db_password_secret_id = "${local.resource_prefix}-db-password"
+  sql_instance_name = "${local.resource_prefix}-pg"
 }
 
