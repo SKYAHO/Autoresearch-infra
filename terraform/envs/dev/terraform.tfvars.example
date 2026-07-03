@@ -28,5 +28,5 @@ gke_services_cidr              = "__VG_IPV4_b7e1f903__/24"
 gke_machine_type               = "e2-small"
 gke_node_count_min             = 1
 gke_node_count_max             = 2
-master_authorized_networks     = ["203.0.113.10/32"] # kubectl 접속 본인 IP로 교체
+master_authorized_networks     = ["203.0.113.10/32"] # apply 전 kubectl 접속 본인 공인 IP/32로 교체(필수)
 

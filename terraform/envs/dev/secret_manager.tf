@@ -1,5 +1,7 @@
 # #5 DB app 비밀번호를 Secret Manager에 저장 (← #4에서 GKE app 소비 시점으로 미룬 것).
 # random_password.db_app_password 는 cloud_sql.tf(#4)에 이미 존재.
+# ponytail: random_password.result 는 Terraform state 에 평문 저장됨(근본 한계).
+# state 노출 회피는 GCS 원격 backend + 접근제어로 후속 이슈에서 처리. dev 범위에서는 accept.
 resource "google_secret_manager_secret" "db_app_password" {
   secret_id = local.db_password_secret_id
 

@@ -111,6 +111,8 @@ kubectl get nodes
 ```
 
 ### Workload Identity(app 배포 시)
+> Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).
+
 app KSA에 annotation 부여 → app GCP SA(`autoresearch-dev-app`) 가장:
 ```yaml
 apiVersion: v1
@@ -123,8 +125,11 @@ metadata:
 ```
 
 ### 비용/롤백
-- 예상: e2-small ~$13/월 + disk ~$1.5 + Cloud NAT ~$32(고정비) → 1노드 ~$47/월. Standard control plane 무료.
-- 절감: min=1 고정. 장기 미사용 시 노드풀 count 0 또는 `terraform destroy` 권장.
+- 예상: e2-small ~$13/월 + disk ~$1.5 + Cloud NAT ~$32(고정비) → 1노드 ~$47/월. Standard control plane 무료. Cloud NAT 고정비가 dev 최대 항목.
+- 절감: min=1 고정. 장기 미사용 시 노드풀 count 0 또는 `terraform destroy` 권장(NAT 고정비는 노드 0화로 노드 비용만 절감, NAT 자체는 남음).
+- **Cloud Operations**(GKE 기본 On): Logging/Monitoring 비용 발생 가능. 비용 민감 시 클러스터 `logging_service`/`monitoring_service` 비활성화 검토.
+- **State**: 현재 local backend. `random_password.db_app_password.result` 가 state 에 평문 저장됨 → GCS 원격 backend + 접근제어는 후속 이슈에서.
+- 비밀번호 rotation: `random_password` 재생성(수동 `terraform -replace=random_password.db_app_password` 또는 keepers) → SQL user(`cloud_sql.tf`)와 Secret version(`secret_manager.tf`)에 동일 값 반영. 같은 소스라 parity 유지.
 - 롤백: `terraform destroy`로 cluster/node pool/NAT/SA 일괄 제거(state local).
 
 ## 필수 GCP API 후보
