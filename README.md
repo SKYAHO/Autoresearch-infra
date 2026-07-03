@@ -50,7 +50,7 @@
 ```text
 Issue 등록 -> 작업 branch 생성 -> 작업/검증 -> Draft PR 생성 -> 셀프 리뷰 및 설명 보강
 -> Ready for review 전환 -> 에이전트 리뷰 실행 -> 이해도 체크 inline 답변
--> 팀원 리뷰 요청 -> 최소 2명 승인 -> Merge (squash 권장)
+-> 팀원 리뷰 요청 -> 최소 2명 승인 -> Squash merge
 ```
 
 인프라 변경은 권한, 비용, 리전, 롤백 가능성, secret 노출 여부를 반드시 함께 검토합니다. 자세한 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md), GitHub 운영 문서는 [GITHUB_WORKFLOW.md](GITHUB_WORKFLOW.md), label/Project 규칙은 [docs/GITHUB_LABELS_AND_PROJECT.md](docs/GITHUB_LABELS_AND_PROJECT.md)를 참고합니다.
@@ -68,3 +68,13 @@ terraform -chdir=terraform/envs/dev validate
 ```
 
 현재 Terraform 골격과 필요한 GCP API 후보는 [docs/TERRAFORM_DEV.md](docs/TERRAFORM_DEV.md)를 참고합니다.
+
+## Required Checks
+
+PR에서는 GitHub Actions의 `lint` status check를 사용합니다.
+
+로컬에서 같은 검증을 실행하려면:
+
+```bash
+terraform -chdir=terraform/envs/dev fmt -check -recursive
+```

@@ -60,3 +60,44 @@ variable "enable_private_google_access" {
   default     = true
 }
 
+variable "db_database_version" {
+  description = "Cloud SQL database version."
+  type        = string
+  default     = "POSTGRES_15"
+}
+
+variable "db_tier" {
+  description = "Cloud SQL machine tier (dev 최소 비용)."
+  type        = string
+  default     = "db-f1-micro"
+}
+
+variable "db_name" {
+  description = "Name of the dev application database."
+  type        = string
+  default     = "autoresearch"
+}
+
+variable "db_app_user" {
+  description = "Application user for the dev database."
+  type        = string
+  default     = "app"
+}
+
+variable "sql_deletion_protection" {
+  description = "Enable Cloud SQL instance deletion protection (GCP-side). dev는 false 권장."
+  type        = bool
+  default     = false
+}
+
+variable "private_services_cidr" {
+  description = "CIDR for Cloud SQL private services access (VPC peering). Must not overlap dev_subnet_cidr."
+  type        = string
+  default     = "10.20.0.0/20"
+
+  validation {
+    condition     = can(cidrhost(var.private_services_cidr, 0))
+    error_message = "private_services_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}
+

@@ -26,10 +26,13 @@ locals {
     "monitoring.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",
+    "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
     "sts.googleapis.com",
   ])
 
   ar_repo_id = "${local.resource_prefix}-docker"
+
+  sql_instance_name = "${local.resource_prefix}-pg"
 }
 
