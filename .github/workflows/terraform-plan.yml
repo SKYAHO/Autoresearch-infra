@@ -40,6 +40,8 @@ jobs:
           TF_VAR_dev_subnet_cidr: ${{ vars.DEV_SUBNET_CIDR }}
           TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
           TF_VAR_gke_master_ipv4_cidr: ${{ vars.GKE_MASTER_IPV4_CIDR }}
+          TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
+          TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
         run: terraform -chdir=terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
 
       - name: PR 댓글 게시
