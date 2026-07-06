@@ -21,3 +21,12 @@ db_app_user             = "app"
 sql_deletion_protection = false
 private_services_cidr   = "10.20.0.0/20"
 
+# GKE (#5)
+gke_master_ipv4_cidr           = "__VG_IPV4_2f4a6b1c__/28" # private 컨트롤 플레인. dev subnet/private services와 미중복
+gke_pods_cidr                  = "__VG_IPV4_d1c0e8a2__/20"
+gke_services_cidr              = "__VG_IPV4_b7e1f903__/24"
+gke_machine_type               = "e2-small"
+gke_node_count_min             = 1
+gke_node_count_max             = 2
+master_authorized_networks     = ["203.0.113.10/32"] # apply 전 kubectl 접속 본인 공인 IP/32로 교체(필수)
+

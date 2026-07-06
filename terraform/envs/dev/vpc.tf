@@ -12,6 +12,16 @@ resource "google_compute_subnetwork" "dev" {
   region                   = var.region
   network                  = google_compute_network.dev.id
   private_ip_google_access = var.enable_private_google_access
+
+  secondary_ip_range {
+    range_name    = local.gke_pods_range_name
+    ip_cidr_range = var.gke_pods_cidr
+  }
+
+  secondary_ip_range {
+    range_name    = local.gke_services_range_name
+    ip_cidr_range = var.gke_services_cidr
+  }
 }
 
 # ponytail: 최소 ingress — IAP 경유 SSH(22)는 ssh-iap 태그 인스턴스만. 추가 포트는 별도 규칙.

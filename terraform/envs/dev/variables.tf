@@ -101,3 +101,95 @@ variable "private_services_cidr" {
   }
 }
 
+variable "gke_master_ipv4_cidr" {
+  description = "Private GKE 컨트롤 플레인용 /28 CIDR. dev subnet/private services와 미중복."
+  type        = string
+
+  validation {
+    condition     = can(cidrhost(var.gke_master_ipv4_cidr, 0))
+    error_message = "gke_master_ipv4_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}
+
+variable "gke_pods_cidr" {
+  description = "GKE pods용 서브넷 2차 대역. dev subnet/private services/master CIDR과 미중복."
+  type        = string
+  default     = "__VG_IPV4_d1c0e8a2__/20"
+
+  validation {
+    condition     = can(cidrhost(var.gke_pods_cidr, 0))
+    error_message = "gke_pods_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}
+
+variable "gke_services_cidr" {
+  description = "GKE services용 서브넷 2차 대역. 다른 대역과 미중복."
+  type        = string
+  default     = "__VG_IPV4_b7e1f903__/24"
+
+  validation {
+    condition     = can(cidrhost(var.gke_services_cidr, 0))
+    error_message = "gke_services_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}
+
+variable "gke_machine_type" {
+  description = "노드 머신 타입 (dev 최소 비용)."
+  type        = string
+  default     = "e2-small"
+}
+
+variable "gke_node_count_min" {
+  description = "노드풀 autoscaling 최소 노드 수."
+  type        = number
+  default     = 1
+}
+
+variable "gke_node_count_max" {
+  description = "노드풀 autoscaling 최대 노드 수."
+  type        = number
+  default     = 2
+}
+
+variable "gke_node_disk_size" {
+  description = "노드 부트 디스크 크기(GB)."
+  type        = number
+  default     = 30
+}
+
+variable "gke_node_disk_type" {
+  description = "노드 부트 디스크 타입."
+  type        = string
+  default     = "pd-standard"
+}
+
+variable "gke_release_channel" {
+  description = "GKE release channel (관리형 업그레이드)."
+  type        = string
+  default     = "REGULAR"
+}
+
+variable "gke_deletion_protection" {
+  description = "GKE cluster 삭제 보호. dev는 false 권장."
+  type        = bool
+  default     = false
+}
+
+variable "master_authorized_networks" {
+  description = "GKE 마스터 API에 접근 허용할 CIDR 목록. kubectl을 쓰려면 본인 IP를 tfvars에 추가."
+  type        = list(string)
+  default     = []
+}
+
+variable "gke_app_k8s_namespace" {
+  description = "Workload Identity로 매핑할 Kubernetes namespace."
+  type        = string
+  default     = "autoresearch"
+}
+
+variable "gke_app_k8s_service_account" {
+  description = "Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "autoresearch-app"
+}
+
