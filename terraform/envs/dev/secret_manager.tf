@@ -14,3 +14,10 @@ resource "google_secret_manager_secret_version" "db_app_password" {
   secret      = google_secret_manager_secret.db_app_password.id
   secret_data = random_password.db_app_password.result
 }
+
+# 최소 권한: app GCP SA 에 이 secret 에만 접근 권한 부여(프로젝트 전체 secret 아님).
+resource "google_secret_manager_secret_iam_member" "gke_app_db_password" {
+  secret_id = google_secret_manager_secret.db_app_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.gke_app.email}"
+}

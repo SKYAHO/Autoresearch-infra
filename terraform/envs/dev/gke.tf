@@ -29,16 +29,11 @@ resource "google_service_account" "gke_app" {
   display_name = "Autoresearch dev GKE app workload identity SA"
 }
 
-# ponytail: Cloud SQL/Secret 접근은 app pod만(WI). 노드 SA에 주지 않음(최소 권한).
+# ponytail: Cloud SQL 접근은 app pod만(WI). 노드 SA에 주지 않음(최소 권한).
+# Secret 접근 권한은 secret_manager.tf 에서 db_app_password secret 리소스에만 부여(최소 권한).
 resource "google_project_iam_member" "gke_app_cloudsql" {
   project = var.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.gke_app.email}"
-}
-
-resource "google_project_iam_member" "gke_app_secret" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
