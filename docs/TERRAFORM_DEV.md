@@ -7,6 +7,11 @@
 ```text
 terraform/
 ├── README.md
+├── bootstrap/            # #6 1회성: GCS state bucket + WIF + CI SA (local state)
+│   ├── main.tf
+│   ├── outputs.tf
+│   ├── variables.tf
+│   └── versions.tf
 ├── envs/
 │   └── dev/
 │       ├── README.md
@@ -25,13 +30,6 @@ terraform/
 └── modules/
     └── README.md
 ```
-
-## 현재 단계에서 생성하지 않는 것
-
-#1은 Terraform 실행 골격, #2는 dev VPC/subnet/최소 firewall, #3는 Artifact Registry, #4는 Cloud SQL, #5는 GKE 클러스터까지 구성합니다. 아래 리소스는 생성하지 않습니다.
-
-- GitHub OIDC IAM/service account
-- Terraform remote state bucket
 
 ## dev VPC / subnet (#2)
 
@@ -128,7 +126,7 @@ metadata:
 - 예상: e2-small ~$13/월 + disk ~$1.5 + Cloud NAT ~$32(고정비) → 1노드 ~$47/월. Standard control plane 무료. Cloud NAT 고정비가 dev 최대 항목.
 - 절감: min=1 고정. 장기 미사용 시 노드풀 count 0 또는 `terraform destroy` 권장(NAT 고정비는 노드 0화로 노드 비용만 절감, NAT 자체는 남음).
 - **Cloud Operations**(GKE 기본 On): Logging/Monitoring 비용 발생 가능. 비용 민감 시 클러스터 `logging_service`/`monitoring_service` 비활성화 검토.
-- **State**: 현재 local backend. `random_password.db_app_password.result` 가 state 에 평문 저장됨 → GCS 원격 backend + 접근제어는 후속 이슈에서.
+- **State**: dev 루트는 #6에서 GCS 원격 backend(`autoresearch-dev-tfstate`)로 전환(bootstrap apply 후 `init -migrate-state`). 비밀번호 평문 저장은 근본 한계 → 버킷 IAM/UBLA 로 보호.
 - 비밀번호 rotation: `random_password` 재생성(수동 `terraform -replace=random_password.db_app_password` 또는 keepers) → SQL user(`cloud_sql.tf`)와 Secret version(`secret_manager.tf`)에 동일 값 반영. 같은 소스라 parity 유지.
 - 롤백: `terraform destroy`로 cluster/node pool/NAT/SA 일괄 제거(state local).
 
@@ -183,4 +181,15 @@ git diff --check
 ```
 
 `terraform init`은 provider plugin을 내려받기 때문에 네트워크가 필요합니다.
+
+## CI 자동 검증 (#6)
+
+PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자동으로 `terraform fmt/validate/plan` 을 실행하고 결과를 PR 댓글로 게시한다.
+
+- **인증**: SA key 없이 GitHub OIDC + Workload Identity Federation(WIF). CI SA(`terraform-ci`)는 `roles/viewer` + `roles/secretmanager.secretAccessor`(plan 전용 읽기 권한).
+- **state**: GCS 원격 backend(`autoresearch-dev-tfstate`). 부트스트랩 절차는 [docs/TERRAFORM_BOOTSTRAP.md](TERRAFORM_BOOTSTRAP.md) 참조.
+- **제한**: WIF `attribute_condition` 으로 `SKYAHO/Autoresearch-infra` 저장소만 허용.
+- **apply 자동화는 범위 밖**(별도 이슈). 본 워크플로는 plan 만 게시한다.
+
+필요 GitHub variables(4개, secret 아님): `GCP_PROJECT_ID`, `WIF_POOL_ID`, `WIF_PROVIDER_ID`, `CI_SA_EMAIL`.
 
