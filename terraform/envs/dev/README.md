@@ -14,6 +14,8 @@
 - Artifact Registry Docker repository
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장
 - dev 원본 데이터 GCS bucket(YouTube/user/action-log/persona raw)
+- Feast registry/staging GCS bucket
+- dev BigQuery analytics dataset 및 Feast offline store dataset
 - GKE Standard private-node cluster, node pool, node/app service account, Workload Identity binding
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
@@ -42,7 +44,8 @@ terraform -chdir=terraform/envs/dev apply
 | Network | `autoresearch-dev-vpc`, `autoresearch-dev-subnet`, `autoresearch-dev-router`, `autoresearch-dev-nat` |
 | Artifact Registry | `autoresearch-dev-docker` |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
-| GCS | `ar-infra-501607-autoresearch-dev-raw-data` (#18 plan/apply 후) |
+| GCS | `ar-infra-501607-autoresearch-dev-raw-data`, `ar-infra-501607-feast-registry`, `ar-infra-501607-feast-staging` |
+| BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` (#20 plan/apply 후) |
 | Secret Manager | `projects/ar-infra-501607/secrets/autoresearch-dev-db-password` |
 | GKE | `autoresearch-dev-gke`, node pool `dev-default` |
 | IAM | GKE node SA, app SA, Cloud SQL/Secret/Workload Identity 권한 |

@@ -2,7 +2,7 @@
 
 `autoresearch-infra`는 AutoResearch 프로젝트의 GCP 기반 인프라를 관리하는 저장소입니다.
 
-현재 단계에서는 Terraform dev 환경(VPC/subnet, Artifact Registry, Cloud SQL, GKE 클러스터)과 GitHub Actions(OIDC) 기반 Terraform plan 자동 검증(#6)을 구성했습니다. 이후 배포 권한, 애플리케이션 매니페스트, 모니터링 설정을 이 저장소에서 확장 관리합니다.
+현재 단계에서는 Terraform dev 환경(VPC/subnet, Artifact Registry, Cloud SQL, GCS, BigQuery, GKE 클러스터)과 GitHub Actions(OIDC) 기반 Terraform plan 자동 검증(#6)을 구성했습니다. 이후 배포 권한, 애플리케이션 매니페스트, 모니터링 설정을 이 저장소에서 확장 관리합니다.
 
 ## 저장소 목적
 
@@ -22,7 +22,7 @@
 - 에이전트용 문서 체계 (CLAUDE.md, AGENTS.md, .claude/docs/)
 - GitHub label 및 Project 초기 운영값 문서
 - GCP/IaC 작업을 고려한 `.gitignore`
-- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, GCS, GKE)
+- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, GCS, BigQuery, GKE)
 - GCS remote backend 및 GitHub Actions Terraform plan(OIDC/WIF)
 - GCP 리소스/API 운영 문서
 

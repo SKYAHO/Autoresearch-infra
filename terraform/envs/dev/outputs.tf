@@ -118,3 +118,38 @@ output "raw_data_prefixes" {
   description = "원본 데이터 유형별 GCS object prefix 규칙."
   value       = local.raw_data_prefixes
 }
+
+output "bigquery_dataset_id" {
+  description = "dev 분석용 BigQuery dataset id."
+  value       = google_bigquery_dataset.analytics.dataset_id
+}
+
+output "bigquery_dataset_self_link" {
+  description = "dev 분석용 BigQuery dataset self link."
+  value       = google_bigquery_dataset.analytics.self_link
+}
+
+output "feast_offline_store_dataset_id" {
+  description = "Feast offline store BigQuery dataset id."
+  value       = google_bigquery_dataset.feast_offline_store.dataset_id
+}
+
+output "feast_registry_bucket_name" {
+  description = "Feast registry GCS bucket 이름."
+  value       = google_storage_bucket.feast_registry.name
+}
+
+output "feast_registry_bucket_url" {
+  description = "Feast registry GCS bucket URL."
+  value       = google_storage_bucket.feast_registry.url
+}
+
+output "feast_staging_bucket_name" {
+  description = "Feast staging GCS bucket 이름."
+  value       = google_storage_bucket.feast_staging.name
+}
+
+output "feast_staging_bucket_url" {
+  description = "Feast staging GCS bucket URL."
+  value       = google_storage_bucket.feast_staging.url
+}
