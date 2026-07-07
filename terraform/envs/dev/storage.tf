@@ -24,7 +24,6 @@ resource "google_storage_bucket" "raw_data" {
     condition {
       with_state                 = "ARCHIVED"
       days_since_noncurrent_time = var.raw_data_noncurrent_version_retention_days
-      matches_prefix             = values(local.raw_data_prefixes)
     }
   }
 
@@ -38,10 +37,16 @@ resource "google_storage_bucket" "raw_data" {
   }
 }
 
-# GKE app workload가 raw landing zone에 원본 파일을 적재/조회한다.
-resource "google_storage_bucket_iam_member" "raw_data_gke_app_object_user" {
+# GKE app workload는 raw landing zone에 객체 생성/조회만 한다. 삭제/overwrite는 부여하지 않는다.
+resource "google_storage_bucket_iam_member" "raw_data_gke_app_object_creator" {
   bucket = google_storage_bucket.raw_data.name
-  role   = "roles/storage.objectUser"
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
+resource "google_storage_bucket_iam_member" "raw_data_gke_app_object_viewer" {
+  bucket = google_storage_bucket.raw_data.name
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
