@@ -23,6 +23,29 @@ resource "google_bigquery_dataset_iam_member" "analytics_gke_app_data_editor" {
   member     = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
+resource "google_bigquery_dataset" "feast_offline_store" {
+  dataset_id                 = local.feast_dataset_id
+  friendly_name              = "Feast offline store"
+  description                = "Dev BigQuery offline store dataset for Feast feature data."
+  location                   = var.bigquery_location
+  delete_contents_on_destroy = var.bigquery_delete_contents_on_destroy
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-offline-store"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_bigquery_dataset_iam_member" "feast_offline_store_gke_app_data_editor" {
+  dataset_id = google_bigquery_dataset.feast_offline_store.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
 resource "google_project_iam_member" "gke_app_bigquery_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"

@@ -222,3 +222,27 @@ variable "bigquery_delete_contents_on_destroy" {
   type        = bool
   default     = false
 }
+
+variable "feast_bucket_location" {
+  description = "Feast registry/staging GCS bucket location."
+  type        = string
+  default     = "asia-northeast3"
+}
+
+variable "feast_bucket_storage_class" {
+  description = "Feast registry/staging GCS bucket storage class."
+  type        = string
+  default     = "STANDARD"
+}
+
+variable "feast_registry_noncurrent_version_retention_days" {
+  description = "Feast registry bucket noncurrent object version 보존 일수(dev 비용 방지)."
+  type        = number
+  default     = 30
+}
+
+variable "feast_staging_object_retention_days" {
+  description = "Feast staging bucket 임시 object 보존 일수(dev 비용 방지)."
+  type        = number
+  default     = 7
+}
