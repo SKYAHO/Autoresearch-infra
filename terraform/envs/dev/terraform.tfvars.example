@@ -32,3 +32,7 @@ master_authorized_networks     = ["203.0.113.10/32"] # apply 전 kubectl 접속 
 
 raw_data_bucket_location      = "asia-northeast3"
 raw_data_bucket_storage_class = "STANDARD"
+raw_data_noncurrent_version_retention_days = 30
+
+bigquery_location                   = "asia-northeast3"
+bigquery_delete_contents_on_destroy = false

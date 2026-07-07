@@ -118,3 +118,13 @@ output "raw_data_prefixes" {
   description = "원본 데이터 유형별 GCS object prefix 규칙."
   value       = local.raw_data_prefixes
 }
+
+output "bigquery_dataset_id" {
+  description = "dev 분석용 BigQuery dataset id."
+  value       = google_bigquery_dataset.analytics.dataset_id
+}
+
+output "bigquery_dataset_self_link" {
+  description = "dev 분석용 BigQuery dataset self link."
+  value       = google_bigquery_dataset.analytics.self_link
+}

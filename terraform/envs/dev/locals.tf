@@ -17,6 +17,7 @@ locals {
 
   required_services = toset([
     "artifactregistry.googleapis.com",
+    "bigquery.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "compute.googleapis.com",
     "container.googleapis.com",
@@ -44,6 +45,7 @@ locals {
   gke_services_range_name = "gke-services"
   db_password_secret_id   = "${local.resource_prefix}-db-password"
   raw_data_bucket_name    = "${var.project_id}-${local.resource_prefix}-raw-data"
+  bigquery_dataset_id     = replace("${local.resource_prefix}_analytics", "-", "_")
   raw_data_prefixes = {
     youtube_raw     = "youtube/raw/"
     users_raw       = "users/raw/"

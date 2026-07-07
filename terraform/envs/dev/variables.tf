@@ -204,3 +204,21 @@ variable "raw_data_bucket_storage_class" {
   type        = string
   default     = "STANDARD"
 }
+
+variable "raw_data_noncurrent_version_retention_days" {
+  description = "GCS raw bucket noncurrent object version 보존 일수(dev 비용 방지)."
+  type        = number
+  default     = 30
+}
+
+variable "bigquery_location" {
+  description = "dev BigQuery dataset location."
+  type        = string
+  default     = "asia-northeast3"
+}
+
+variable "bigquery_delete_contents_on_destroy" {
+  description = "BigQuery dataset destroy 시 table/view contents 삭제 허용 여부. dev도 기본 false."
+  type        = bool
+  default     = false
+}
