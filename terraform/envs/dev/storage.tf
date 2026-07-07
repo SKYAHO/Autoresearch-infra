@@ -45,7 +45,7 @@ resource "google_storage_bucket_iam_member" "raw_data_gke_app_object_user" {
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
-# Feast registry 상태 파일을 저장한다.
+# Feast registry 상태 파일을 저장한다. registry.db 갱신 이력을 versioning으로 보호한다.
 resource "google_storage_bucket" "feast_registry" {
   name                        = local.feast_registry_bucket
   location                    = var.feast_bucket_location
@@ -54,8 +54,23 @@ resource "google_storage_bucket" "feast_registry" {
   public_access_prevention    = "enforced"
   force_destroy               = false
 
+  versioning {
+    enabled = true
+  }
+
   soft_delete_policy {
     retention_duration_seconds = 0
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      with_state                 = "ARCHIVED"
+      days_since_noncurrent_time = var.feast_registry_noncurrent_version_retention_days
+    }
   }
 
   labels = {
@@ -85,6 +100,16 @@ resource "google_storage_bucket" "feast_staging" {
 
   soft_delete_policy {
     retention_duration_seconds = 0
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      age = var.feast_staging_object_retention_days
+    }
   }
 
   labels = {

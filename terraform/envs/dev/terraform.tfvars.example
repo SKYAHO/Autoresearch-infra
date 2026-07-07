@@ -39,3 +39,5 @@ bigquery_delete_contents_on_destroy              = false
 
 feast_bucket_location                            = "asia-northeast3"
 feast_bucket_storage_class                       = "STANDARD"
+feast_registry_noncurrent_version_retention_days = 30
+feast_staging_object_retention_days              = 7
