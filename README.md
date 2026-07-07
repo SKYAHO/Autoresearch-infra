@@ -16,7 +16,6 @@
 
 - Issue Forms: Feature, Bug, Experiment
 - Pull Request template
-- CODEOWNERS
 - Claude Code PR Review workflow
 - GitHub issue, branch, PR, project 운영 문서 (CONTRIBUTING.md로 통합)
 - 에이전트용 문서 체계 (CLAUDE.md, AGENTS.md, .claude/docs/)
@@ -33,9 +32,9 @@
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
 │   ├── workflows/
-│   ├── CODEOWNERS
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── terraform/
+│   ├── bootstrap/          # 원격 state bucket, WIF, CI SA 부트스트랩
 │   ├── envs/
 │   │   └── dev/            # dev 환경 Terraform root module
 │   └── modules/            # 재사용 module 예정
