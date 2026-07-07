@@ -107,3 +107,76 @@ docs: GCP 운영 가이드 초안 작성
 - Secret 값은 코드, 로그, PR 본문에 포함하지 않습니다.
 - Terraform state, service account key, `.env` 파일은 커밋하지 않습니다.
 - 삭제/교체/권한 확대 변경은 롤백 방법을 PR에 적습니다.
+
+---
+
+## Claude 자동 리뷰
+
+`.github/workflows/claude.yml`은 PR이 처음 열리거나(`opened`) Draft에서 Ready for review로 전환되면(`ready_for_review`) Claude Code 리뷰를 자동 실행합니다. Draft 상태에서는 실행되지 않습니다.
+
+- 에이전트가 남긴 `이해도 확인:` inline comment에는 같은 스레드에서 답변하고, 필요하면 로컬에서 검증한 뒤 resolve합니다.
+- trivial, docs-only, formatting-only 변경에는 이해도 확인 comment를 남기지 않는 정책입니다.
+- 필요한 repository secret: `CLAUDE_CODE_OAUTH_TOKEN`
+- 에이전트 작업 규칙은 `CLAUDE.md`/`AGENTS.md`와 `.claude/docs/`를 기준으로 합니다.
+
+---
+
+## Label 및 Project 운영
+
+label과 Project 상태는 [docs/GITHUB_LABELS_AND_PROJECT.md](docs/GITHUB_LABELS_AND_PROJECT.md)를 기준으로 관리합니다.
+
+- 기본 label: `feature`, `bug`, `experiment`, `documentation`, `chore`, `question`
+- 인프라 분류 label: `gcp`, `terraform`, `iam`, `ci-cd`, `security`, `cost`
+
+Project 기본 상태는 `Todo`, `In Progress`, `Done`을 사용합니다.
+
+| 상태 | 의미 | 전환 |
+|------|------|------|
+| `Todo` | 시작 전 | 이슈/PR 생성 시 자동 추가 |
+| `In Progress` | 작업 중 | 작업 시작 시 직접 이동 |
+| `Done` | 완료 | merge/close 시 자동 전환 |
+
+권장 auto-add filter: `is:issue,pr is:open repo:SKYAHO/Autoresearch-infra`
+
+Project의 `Add item`으로 제목만 추가하면 Issue Form을 우회하게 되므로, 새 작업은 Issues 화면에서 생성합니다.
+
+---
+
+## CI 및 검증
+
+- `.github/workflows/lint.yml` — actionlint. `lint`는 required status check입니다.
+- `.github/workflows/claude.yml` — Claude Code PR 리뷰.
+- Terraform plan OIDC workflow(#6)가 도입되면 required check 지정을 검토합니다.
+
+Terraform 변경 PR의 로컬 검증:
+
+```bash
+terraform -chdir=terraform/envs/dev fmt -check -recursive
+terraform -chdir=terraform/envs/dev init -backend=false
+terraform -chdir=terraform/envs/dev validate
+terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
+```
+
+`terraform plan`은 실제 GCP project id와 인증이 준비된 뒤 실행합니다. 로컬 `terraform.tfvars`와 state/plan 파일은 커밋하지 않습니다.
+
+---
+
+## 문제 해결
+
+**Claude 리뷰가 실행되지 않을 때**: repository secret `CLAUDE_CODE_OAUTH_TOKEN` 등록 여부, PR의 Draft 상태, workflow event(`opened`, `ready_for_review`), GitHub Actions 권한을 확인합니다.
+
+**GCP 인증 workflow가 실패할 때**: GitHub OIDC provider와 service account binding, workflow `permissions`의 `id-token: write`, 대상 GCP project id와 service account email, 최소 권한 IAM role을 확인합니다.
+
+**PR이 merge되지 않을 때**: Draft 상태인지, approve 2명이 있는지, 모든 대화가 resolve되었는지, 충돌이 있는지, required check(`lint`)가 실패했는지 확인합니다.
+
+**이슈가 자동으로 닫히지 않을 때**: PR 본문에 `Closes #이슈번호`가 있는지, PR이 `main`으로 merge되었는지, 이슈 번호가 같은 저장소의 번호인지 확인합니다.
+
+---
+
+## 참고 링크
+
+- Repository: https://github.com/SKYAHO/Autoresearch-infra
+- Issue Forms: `.github/ISSUE_TEMPLATE/*.yml`
+- PR template: `.github/PULL_REQUEST_TEMPLATE.md`
+- main ruleset: `branch_ruleset_main.json`, `docs/BRANCH_RULESET_MAIN.md`
+- 에이전트 가이드: `CLAUDE.md`, `AGENTS.md`, `.claude/docs/`

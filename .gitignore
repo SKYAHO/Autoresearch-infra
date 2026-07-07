@@ -5,12 +5,14 @@
 __pycache__/
 .venv/
 
-# Local-only agent settings
-.claude/
+# Local-only agent settings (.claude/docs/ is committed)
+.claude/*
+!.claude/docs/
 agent.md
 docs/NOTION_PROGRESS_TIMELINE.md
 
 # Local env / secrets
+keys/
 .env
 .env.*
 !.env.example
