@@ -162,8 +162,7 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | Registry bucket | `ar-infra-501607-feast-registry` | `gs://ar-infra-501607-feast-registry`, registry.db 등 메타데이터 |
 | Staging bucket | `ar-infra-501607-feast-staging` | `gs://ar-infra-501607-feast-staging`, materialization/load 임시 파일 |
 | Bucket naming | `${project_id}-feast-registry`, `${project_id}-feast-staging` | 사용자가 지정한 project id 기반 이름 |
-| Registry 보호 | versioning enabled, noncurrent 30일 보존 | registry 갱신 이력 보호와 비용 제어 |
-| Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
+| 자동 보관/청소 | 미설정 | registry versioning, staging lifecycle rule 없음 |
 | 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, GCS bucket `storage.objectUser` |
 
 ## dev GKE (#5)
