@@ -610,7 +610,7 @@ metadata:
 ### 비용/롤백
 - 예상: e2-small ~$13/월 + disk ~$1.5 + Cloud NAT ~$32(고정비) → 1노드 ~$47/월. Standard control plane 무료.
 - 절감: min=1 고정. 장기 미사용 시 노드풀 count 0 또는 `terraform destroy` 권장.
-- 롤백: `terraform destroy`로 cluster/node pool/NAT/SA 일괄 제거(state local).
+- 롤백: `terraform destroy`로 cluster/node pool/NAT/SA 일괄 제거. 현재 dev state는 GCS backend에 저장.
 ```
 
 - [ ] **Step 2: README.md 상태 라인 업데이트**

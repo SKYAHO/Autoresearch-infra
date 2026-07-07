@@ -6,8 +6,9 @@
 
 ```text
 terraform/
+├── bootstrap/      # GCS backend + GitHub WIF/CI SA 1회성 bootstrap
 ├── envs/
-│   └── dev/        # dev 환경 root module
+│   └── dev/        # dev 환경 root module(GCS backend)
 └── modules/        # 재사용 module 예정
 ```
 
@@ -21,7 +22,7 @@ terraform/
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init -backend=false
+terraform -chdir=terraform/envs/dev init
 terraform -chdir=terraform/envs/dev validate
 ```
 
@@ -29,14 +30,17 @@ terraform -chdir=terraform/envs/dev validate
 
 ```bash
 cp terraform/envs/dev/terraform.tfvars.example terraform/envs/dev/terraform.tfvars
-terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
+terraform -chdir=terraform/envs/dev plan
+terraform -chdir=terraform/envs/dev apply
 ```
 
 `terraform.tfvars`, state, plan 파일은 커밋하지 않습니다.
 
 ## Backend
 
-#1 단계에서는 원격 backend bucket을 만들지 않습니다. 따라서 기본 local backend로 검증합니다.
+dev root module은 GCS backend를 사용합니다.
 
-GCS backend를 사용할 준비가 되면 `terraform/envs/dev/backend.tf.example`을 기준으로 `backend.tf`를 만들고, state bucket 생성 및 접근 권한을 별도 작업에서 확정합니다.
+- bucket: `autoresearch-dev-tfstate`
+- prefix: `dev/`
 
+backend bucket과 GitHub Actions plan용 WIF/CI SA는 `terraform/bootstrap`에서 1회성으로 관리합니다. 자세한 내용은 [../docs/TERRAFORM_BOOTSTRAP.md](../docs/TERRAFORM_BOOTSTRAP.md)를 참고합니다.

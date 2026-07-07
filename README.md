@@ -2,7 +2,7 @@
 
 `autoresearch-infra`는 AutoResearch 프로젝트의 GCP 기반 인프라를 관리하는 저장소입니다.
 
-현재 단계에서는 GitHub 협업 초기 세팅을 마치고, Terraform dev 환경(VPC/subnet, Artifact Registry, Cloud SQL, GKE 클러스터)을 단계별로 구성하고 있습니다. 이후 GitHub Actions(OIDC) 배포 자동화, 권한/시크릿/모니터링 설정을 이 저장소에서 관리합니다.
+현재 단계에서는 Terraform dev 환경(VPC/subnet, Artifact Registry, Cloud SQL, GKE 클러스터)과 GitHub Actions(OIDC) 기반 Terraform plan 자동 검증(#6)을 구성했습니다. 이후 배포 권한, 애플리케이션 매니페스트, 모니터링 설정을 이 저장소에서 확장 관리합니다.
 
 ## 저장소 목적
 
@@ -21,8 +21,9 @@
 - GitHub issue, branch, PR, project 운영 문서
 - GitHub label 및 Project 초기 운영값 문서
 - GCP/IaC 작업을 고려한 `.gitignore`
-- Terraform dev 환경 기본 골격
-- 후속 GCP 리소스 작업을 위한 API 후보 문서
+- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, GKE)
+- GCS remote backend 및 GitHub Actions Terraform plan(OIDC/WIF)
+- GCP 리소스/API 운영 문서
 
 ## 저장소 구조
 
@@ -63,15 +64,15 @@ dev 환경 Terraform root module은 [terraform/envs/dev](terraform/envs/dev)에 
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init -backend=false
+terraform -chdir=terraform/envs/dev init
 terraform -chdir=terraform/envs/dev validate
 ```
 
-현재 Terraform 골격과 필요한 GCP API 후보는 [docs/TERRAFORM_DEV.md](docs/TERRAFORM_DEV.md)를 참고합니다.
+현재 Terraform 구성과 필요한 GCP API는 [docs/TERRAFORM_DEV.md](docs/TERRAFORM_DEV.md)를 참고합니다.
 
 ## Required Checks
 
-PR에서는 GitHub Actions의 `lint` status check를 사용합니다.
+PR에서는 GitHub Actions의 `lint`와 Terraform `plan` status check를 사용합니다.
 
 로컬에서 같은 검증을 실행하려면:
 
