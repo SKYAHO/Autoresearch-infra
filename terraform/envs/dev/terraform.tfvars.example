@@ -41,3 +41,12 @@ feast_bucket_location                            = "asia-northeast3"
 feast_bucket_storage_class                       = "STANDARD"
 feast_registry_noncurrent_version_retention_days = 30
 feast_staging_object_retention_days              = 7
+
+# dev proxy Cloud Run (#27)
+proxy_image               = "" # 비우면 dev AR 리포의 proxy:latest. apply 전 이미지 push 필수
+proxy_ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+proxy_max_instances       = 1
+proxy_cpu                 = "1"
+proxy_memory              = "512Mi"
+proxy_invoker_members     = [] # collector SA 확정 시 "serviceAccount:..." 추가
+proxy_deletion_protection = false

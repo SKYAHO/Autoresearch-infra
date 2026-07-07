@@ -25,6 +25,7 @@ locals {
     "iamcredentials.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
+    "run.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",
     "servicenetworking.googleapis.com",
@@ -56,4 +57,9 @@ locals {
     personas_raw    = "personas/raw/"
   }
   gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
+
+  proxy_service_name = "${local.resource_prefix}-proxy"
+  proxy_sa_name      = "${local.resource_prefix}-proxy"
+  # 이미지 미지정 시 기존 dev AR 리포의 proxy:latest 사용
+  proxy_image = var.proxy_image != "" ? var.proxy_image : "${var.region}-docker.pkg.dev/${var.project_id}/${local.ar_repo_id}/proxy:latest"
 }

@@ -246,3 +246,54 @@ variable "feast_staging_object_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "proxy_image" {
+  description = "proxy Cloud Run 컨테이너 이미지 전체 경로. 비어 있으면 dev AR 리포의 proxy:latest를 사용."
+  type        = string
+  default     = ""
+}
+
+variable "proxy_ingress" {
+  description = "proxy Cloud Run ingress 정책. collector가 VPC 밖에서 호출하면 INGRESS_TRAFFIC_ALL로 변경(IAM 인증은 유지)."
+  type        = string
+  default     = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+  validation {
+    condition = contains([
+      "INGRESS_TRAFFIC_ALL",
+      "INGRESS_TRAFFIC_INTERNAL_ONLY",
+      "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
+    ], var.proxy_ingress)
+    error_message = "proxy_ingress must be a valid Cloud Run v2 ingress value."
+  }
+}
+
+variable "proxy_max_instances" {
+  description = "proxy Cloud Run 최대 인스턴스 수. dev 트래픽(일 수 회)에는 1이면 충분."
+  type        = number
+  default     = 1
+}
+
+variable "proxy_cpu" {
+  description = "proxy 컨테이너 vCPU limit (dev 최소 비용)."
+  type        = string
+  default     = "1"
+}
+
+variable "proxy_memory" {
+  description = "proxy 컨테이너 메모리 limit (dev 최소 비용)."
+  type        = string
+  default     = "512Mi"
+}
+
+variable "proxy_invoker_members" {
+  description = "proxy 호출(run.invoker)을 허용할 IAM member 목록 (예: serviceAccount:collector@...). collector 주체 확정 전까지 빈 목록 유지."
+  type        = list(string)
+  default     = []
+}
+
+variable "proxy_deletion_protection" {
+  description = "proxy Cloud Run 서비스 삭제 보호. dev는 false 권장."
+  type        = bool
+  default     = false
+}
