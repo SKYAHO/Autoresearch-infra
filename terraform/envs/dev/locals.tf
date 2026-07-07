@@ -28,6 +28,7 @@ locals {
     "serviceusage.googleapis.com",
     "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
+    "storage.googleapis.com",
     "sts.googleapis.com",
   ])
 
@@ -35,13 +36,19 @@ locals {
 
   sql_instance_name = "${local.resource_prefix}-pg"
 
-  gke_cluster_name                = "${local.resource_prefix}-gke"
-  gke_node_sa_name                = "${local.resource_prefix}-gke-nodes"
-  gke_app_sa_name                 = "${local.resource_prefix}-app"
-  gke_node_pool_name              = "dev-default"
-  gke_pods_range_name             = "gke-pods"
-  gke_services_range_name         = "gke-services"
-  db_password_secret_id           = "${local.resource_prefix}-db-password"
+  gke_cluster_name        = "${local.resource_prefix}-gke"
+  gke_node_sa_name        = "${local.resource_prefix}-gke-nodes"
+  gke_app_sa_name         = "${local.resource_prefix}-app"
+  gke_node_pool_name      = "dev-default"
+  gke_pods_range_name     = "gke-pods"
+  gke_services_range_name = "gke-services"
+  db_password_secret_id   = "${local.resource_prefix}-db-password"
+  raw_data_bucket_name    = "${var.project_id}-${local.resource_prefix}-raw-data"
+  raw_data_prefixes = {
+    youtube_raw     = "youtube/raw/"
+    users_raw       = "users/raw/"
+    action_logs_raw = "action-logs/raw/"
+    personas_raw    = "personas/raw/"
+  }
   gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
 }
-
