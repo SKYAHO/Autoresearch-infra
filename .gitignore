@@ -38,6 +38,9 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# Git worktrees (local)
+.worktrees/
+
 # GCP local files
 application_default_credentials.json
 gcloud-config/
