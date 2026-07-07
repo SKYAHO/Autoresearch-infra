@@ -19,6 +19,8 @@ terraform -chdir=terraform/bootstrap apply -var="project_id=ar-infra-501607"
 
 생성 대상: GCS 버킷(`autoresearch-dev-tfstate`), WIF 풀/프로바이더, CI SA(`terraform-ci`), IAM.
 
+CI SA는 dev root plan을 위해 `roles/viewer`, state bucket `roles/storage.objectAdmin`, custom role `ci_storage_bucket_iam_viewer`를 가진다. custom role은 Cloud Storage bucket IAM member refresh에 필요한 `storage.buckets.getIamPolicy`만 포함한다.
+
 state 버킷은 `force_destroy=false`와 `prevent_destroy=true`로 보호한다. 버킷을 없애야 하는 경우에는 dev state 백업과 destroy 계획을 별도로 세운 뒤 lifecycle을 의도적으로 해제한다.
 
 ## 2. outputs 회수

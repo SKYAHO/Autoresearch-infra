@@ -82,6 +82,23 @@ resource "google_project_iam_member" "ci_viewer" {
   member  = "serviceAccount:${google_service_account.terraform_ci.email}"
 }
 
+# dev root plan은 bucket IAM member refresh 시 storage.buckets.getIamPolicy가 필요하다.
+resource "google_project_iam_custom_role" "ci_storage_bucket_iam_viewer" {
+  project     = var.project_id
+  role_id     = "ci_storage_bucket_iam_viewer"
+  title       = "Terraform CI Storage Bucket IAM Viewer"
+  description = "Allows Terraform CI plan to read Cloud Storage bucket IAM policies."
+  permissions = [
+    "storage.buckets.getIamPolicy",
+  ]
+}
+
+resource "google_project_iam_member" "ci_storage_bucket_iam_viewer" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.ci_storage_bucket_iam_viewer.id
+  member  = "serviceAccount:${google_service_account.terraform_ci.email}"
+}
+
 # GitHub repo -> CI SA 가장 허용 (repository 속성으로 제한)
 resource "google_service_account_iam_member" "ci_wi" {
   service_account_id = google_service_account.terraform_ci.name
