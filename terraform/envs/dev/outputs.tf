@@ -104,3 +104,17 @@ output "db_app_password_secret_id" {
   value       = google_secret_manager_secret.db_app_password.id
 }
 
+output "raw_data_bucket_name" {
+  description = "YouTube/user/action-log/persona 원본 전체를 저장하는 dev GCS bucket 이름."
+  value       = google_storage_bucket.raw_data.name
+}
+
+output "raw_data_bucket_url" {
+  description = "dev 원본 데이터 GCS bucket URL."
+  value       = google_storage_bucket.raw_data.url
+}
+
+output "raw_data_prefixes" {
+  description = "원본 데이터 유형별 GCS object prefix 규칙."
+  value       = local.raw_data_prefixes
+}

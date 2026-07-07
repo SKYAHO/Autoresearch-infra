@@ -7,8 +7,8 @@
 - GCP 프로젝트: `ar-infra-501607`
 - dev root module: `terraform/envs/dev`
 - Terraform backend: GCS `autoresearch-dev-tfstate`, prefix `dev/`
-- 최종 apply: 2026-07-06, `25 added, 0 changed, 0 destroyed`
-- 최종 검증: `terraform plan -detailed-exitcode` 결과 `No changes`
+- 마지막 실제 apply: 2026-07-06, `25 added, 0 changed, 0 destroyed`
+- #18 현재 브랜치 변경: dev 원본 데이터 GCS bucket 추가 예정(plan/apply 전)
 
 ## 구조
 
@@ -31,6 +31,7 @@ terraform/
 │       ├── nat.tf            # #5 Cloud Router + Cloud NAT (private 노드 egress)
 │       ├── outputs.tf
 │       ├── secret_manager.tf # #5 DB 비밀번호 Secret Manager 저장
+│       ├── storage.tf        # #18 dev 원본 데이터 GCS bucket
 │       ├── terraform.tfvars.example
 │       ├── variables.tf
 │       ├── versions.tf
@@ -93,6 +94,31 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 **선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com`, `secretmanager.googleapis.com` (수동 활성화 — `google_project_service` 미사용).
 
 접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 `random_password`로 생성되어 SQL user에 주입되며, #5에서 Secret Manager(`output.db_app_password_secret_id`)에도 저장한다.
+
+## dev 원본 데이터 GCS (#18)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Bucket | `ar-infra-501607-autoresearch-dev-raw-data` | `${project_id}-${resource_prefix}-raw-data`, 전역 unique 이름 |
+| Location | `asia-northeast3` | `var.raw_data_bucket_location` |
+| Storage class | `STANDARD` | dev 원본 적재/검증용 |
+| Public access | 차단 | `public_access_prevention = "enforced"` |
+| IAM 모델 | Uniform bucket-level access | 객체 ACL 대신 bucket IAM만 사용 |
+| Versioning | enabled | 원본 overwrite/삭제 실수 대비 |
+| Destroy 보호 | `force_destroy=false`, `prevent_destroy=true` | 원본 데이터 유실 방지. 삭제 필요 시 lifecycle 해제 후 별도 계획 |
+
+### Prefix 규칙
+
+GCS는 폴더 리소스를 따로 만들지 않고 object name prefix를 폴더처럼 사용한다. 원본 전체 데이터는 아래 prefix로 나눠 적재한다.
+
+| 데이터 | Prefix | 예시 |
+|---|---|---|
+| YouTube raw | `youtube/raw/` | `youtube/raw/dt=2026-07-07/video_id.json` |
+| 유저 원본 | `users/raw/` | `users/raw/dt=2026-07-07/users.jsonl` |
+| 액션 로그 원본 | `action-logs/raw/` | `action-logs/raw/dt=2026-07-07/events.jsonl` |
+| 페르소나 원본 전체 | `personas/raw/` | `personas/raw/dt=2026-07-07/personas.csv` |
+
+원본 bucket은 정형 분석 저장소가 아니라 landing/raw zone이다. BigQuery 적재용 정제 테이블이나 PostgreSQL 서비스 DB와 섞지 않는다.
 
 ## dev GKE (#5)
 
@@ -157,6 +183,7 @@ metadata:
 | `iamcredentials.googleapis.com` | GitHub OIDC 기반 credential 생성 |
 | `sts.googleapis.com` | Workload Identity Federation token exchange |
 | `secretmanager.googleapis.com` | secret 저장 및 참조 |
+| `storage.googleapis.com` | 원본 데이터 GCS bucket |
 | `logging.googleapis.com` | 운영 로그 |
 | `monitoring.googleapis.com` | 모니터링 |
 

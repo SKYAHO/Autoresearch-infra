@@ -22,7 +22,7 @@
 - 에이전트용 문서 체계 (CLAUDE.md, AGENTS.md, .claude/docs/)
 - GitHub label 및 Project 초기 운영값 문서
 - GCP/IaC 작업을 고려한 `.gitignore`
-- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, GKE)
+- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, GCS, GKE)
 - GCS remote backend 및 GitHub Actions Terraform plan(OIDC/WIF)
 - GCP 리소스/API 운영 문서
 

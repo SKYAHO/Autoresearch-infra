@@ -193,3 +193,14 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "raw_data_bucket_location" {
+  description = "원본 데이터 GCS bucket location. dev는 기본 region과 동일한 asia-northeast3."
+  type        = string
+  default     = "asia-northeast3"
+}
+
+variable "raw_data_bucket_storage_class" {
+  description = "원본 데이터 GCS bucket storage class."
+  type        = string
+  default     = "STANDARD"
+}
