@@ -22,7 +22,7 @@ Cloud Run 서비스로 배포해, collector가 **IAM 인증**으로 호출하는
 | 리소스 | `google_cloud_run_v2_service` (GA) | v1 대비 최신 스펙(probe, scaling 블록), google provider GA 지원 |
 | 서비스 이름 | `autoresearch-dev-proxy` | 저장소 네이밍 규칙 `${resource_prefix}-proxy` |
 | 리전 | `asia-northeast3` | 기존 dev 리소스와 동일 |
-| 이미지 경로 | `asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:<tag>` | 기존 AR 리포 재사용. `var.proxy_image`가 비어 있으면 `proxy:latest`로 구성 |
+| 이미지 경로 | `asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:<tag>` 또는 `proxy@sha256:...` | 기존 AR 리포 재사용. `var.proxy_image`가 비어 있으면 버전 태그 예시(`proxy:dev-20260708-001`)로 구성 |
 | 스케일링 | min 0 / max 1 (`var.proxy_max_instances`) | 유휴 비용 0, dev 트래픽(일 수 회)에 충분 |
 | 리소스 크기 | 1 vCPU / 512Mi, `cpu_idle = true` | 최소 비용. CPU는 요청 처리 중에만 과금 |
 | 런타임 SA | 전용 `autoresearch-dev-proxy` SA, **role 없음** | 최소 권한(YAGNI). proxy가 GCP 리소스를 쓰게 되면 그때 리소스 수준으로 부여 |
@@ -39,12 +39,16 @@ CI push 권한은 별도 배포 이슈에서 결정하므로, 이번 범위는 *
 
 ```bash
 # 앱 저장소에서 (인증: gcloud auth configure-docker asia-northeast3-docker.pkg.dev)
-docker build -t asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:latest proxy/
-docker push asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:latest
+docker build -t asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:dev-20260708-001 proxy/
+docker push asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:dev-20260708-001
 ```
 
 **순서 제약**: 이미지가 AR에 존재해야 Cloud Run revision 배포(apply)가 성공한다.
 plan은 이미지 없이도 통과하므로 PR 머지는 가능하고, apply만 push 이후에 한다.
+
+**재배포 원칙**: 같은 `:latest` 태그를 다시 push해도 Terraform 설정의 이미지 문자열은
+변하지 않는다. 새 revision을 Terraform으로 롤아웃하려면 `proxy_image`를 새 버전 태그
+또는 digest로 변경한 뒤 apply한다.
 
 ## 비목표 (Non-goals)
 

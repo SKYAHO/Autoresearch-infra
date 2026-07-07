@@ -43,7 +43,7 @@ feast_registry_noncurrent_version_retention_days = 30
 feast_staging_object_retention_days              = 7
 
 # dev proxy Cloud Run (#27)
-proxy_image               = "" # 비우면 dev AR 리포의 proxy:latest. apply 전 이미지 push 필수
+proxy_image               = "" # 비우면 dev AR 리포의 proxy:dev-20260708-001 예시 태그. 재배포 시 새 tag/digest로 변경
 proxy_ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 proxy_max_instances       = 1
 proxy_cpu                 = "1"

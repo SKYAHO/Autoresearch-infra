@@ -248,9 +248,14 @@ variable "feast_staging_object_retention_days" {
 }
 
 variable "proxy_image" {
-  description = "proxy Cloud Run 컨테이너 이미지 전체 경로. 비어 있으면 dev AR 리포의 proxy:latest를 사용."
+  description = "proxy Cloud Run 컨테이너 이미지 전체 경로. 재배포 시 새 version tag 또는 digest로 변경한다. 비어 있으면 dev AR 리포의 proxy:dev-20260708-001 예시 태그를 사용."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.proxy_image == "" || can(regex("@sha256:[0-9a-f]{64}$", var.proxy_image)) || !can(regex(":latest$", var.proxy_image))
+    error_message = "proxy_image must use a versioned tag or digest. Mutable :latest is not allowed because Terraform cannot detect a new image pushed to the same tag."
+  }
 }
 
 variable "proxy_ingress" {
