@@ -106,7 +106,7 @@ dev 환경에서 Kubernetes 기반 워크로드를 검증할 수 있는 **최소
 
 - **예상 비용(월)**: e2-small ~$13 + pd-standard 30GB ~$1.5(×2대 시 ~$29) + **Cloud NAT ~$32**(고정비, 최대 항목) + Standard control plane **무료** → 1노드 기준 **~$47/월**.
 - **절감**: min=1 고정·e2-small·pd-standard. 장기 미사용 시 노드풀을 count 0 또는 `terraform destroy` 권장(NAT 고정비가 지속됨).
-- **롤백**: `deletion_protection=false` → `terraform destroy`로 cluster/node pool/NAT/router/SA 일괄 제거. state local backend.
+- **롤백**: `deletion_protection=false` → `terraform destroy`로 cluster/node pool/NAT/router/SA 일괄 제거. 현재 dev state는 GCS backend에 저장.
 
 ## 8. 완료조건 매핑 (이슈 #5)
 

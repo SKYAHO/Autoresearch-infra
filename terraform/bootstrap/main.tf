@@ -19,7 +19,7 @@ resource "google_storage_bucket" "tfstate" {
   location                    = var.region
   project                     = var.project_id
   uniform_bucket_level_access = true
-  force_destroy               = true
+  force_destroy               = false
   public_access_prevention    = "enforced"
 
   versioning {
@@ -27,6 +27,10 @@ resource "google_storage_bucket" "tfstate" {
   }
 
   labels = local.default_labels
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # CI SA 가 state read/write 가능하도록(UBLA 이므로 버킷 IAM)
@@ -51,9 +55,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   project                            = var.project_id
 
   attribute_mapping = {
-    "google.subject"        = "assertion.sub"
-    "attribute.repository"  = "assertion.repository"
-    "attribute.owner"       = "assertion.repository_owner"
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+    "attribute.owner"      = "assertion.repository_owner"
   }
 
   attribute_condition = "attribute.repository == \"${var.github_repository}\""
@@ -75,13 +79,6 @@ resource "google_service_account" "terraform_ci" {
 resource "google_project_iam_member" "ci_viewer" {
   project = var.project_id
   role    = "roles/viewer"
-  member  = "serviceAccount:${google_service_account.terraform_ci.email}"
-}
-
-# plan 시 secret 메타데이터/데이터소스 접근
-resource "google_project_iam_member" "ci_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.terraform_ci.email}"
 }
 

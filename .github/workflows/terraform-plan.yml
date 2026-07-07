@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +23,8 @@ jobs:
           service_account: ${{ vars.CI_SA_EMAIL }}
 
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       # backend 없이 init (fmt/validate 용)
       - run: terraform -chdir=terraform/envs/dev init -backend=false
@@ -29,7 +32,7 @@ jobs:
       - run: terraform -chdir=terraform/envs/dev validate -no-color
 
       # backend 포함 init (plan 용, state 참조)
-      - run: terraform -chdir=terraform/envs/dev init -no-color
+      - run: terraform -chdir=terraform/envs/dev init -reconfigure -no-color
 
       - name: terraform plan
         id: plan
@@ -76,3 +79,7 @@ jobs:
               issue_number: context.issue.number,
               body,
             });
+
+      - name: plan 실패 처리
+        if: steps.plan.outcome != 'success'
+        run: exit 1

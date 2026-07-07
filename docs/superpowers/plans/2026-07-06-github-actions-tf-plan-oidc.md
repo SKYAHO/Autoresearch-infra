@@ -4,16 +4,17 @@
 
 **Goal:** PR 오픈 시 GitHub Actions가 Terraform `fmt/validate/plan`을 자동 실행해 PR 댓글로 게시하고, GCP 인증은 SA key 없이 GitHub OIDC + Workload Identity Federation으로 처리한다.
 
-**Architecture:** `terraform/bootstrap/`(local state)에서 GCS state 버킷·WIF 풀/프로바이더·CI SA를 1회성 생성하고, `terraform/envs/dev/`(GCS backend)는 그 버킷을 state로 사용한다. GitHub Actions runner는 OIDC 토큰으로 WIF를 거쳐 CI SA를 가장해 plan만(viewer + secretAccessor) 실행한다.
+**Architecture:** `terraform/bootstrap/`(local state)에서 GCS state 버킷·WIF 풀/프로바이더·CI SA를 1회성 생성하고, `terraform/envs/dev/`(GCS backend)는 그 버킷을 state로 사용한다. GitHub Actions runner는 OIDC 토큰으로 WIF를 거쳐 CI SA를 가장해 plan만(viewer + state bucket 접근) 실행한다.
 
 **Tech Stack:** Terraform >= 1.6 (google provider), GitHub Actions (`google-github-actions/auth@v2`, `hashicorp/setup-terraform@v3`, `actions/github-script@v7`), GCP Workload Identity Federation.
 
 ## Global Constraints
 
-- GCP project id = `ar-infra-501108`(tfvars에만, gitignored)
+- GCP project id = `ar-infra-501607`(tfvars에만, gitignored)
 - 네이밍: `${name_prefix}-*` = `autoresearch-*`. state 버킷 = `autoresearch-dev-tfstate`(dev 고정 리터럴). WIF 풀 = `autoresearch-github`, 프로바이더 = `github`, CI SA = `terraform-ci`
 - Terraform `backend` 블록은 variable/local 참조 불가 → 버킷명 리터럴 고정
 - GitHub variables는 **4개**(OIDC keyless라 secret 불필요): `GCP_PROJECT_ID`, `WIF_POOL_ID`, `WIF_PROVIDER_ID`, `CI_SA_EMAIL`(버킷명은 versions.tf 리터럴이라 제외)
+- Terraform plan workflow는 내부 브랜치 PR에서만 실행한다. fork PR은 `github.event.pull_request.head.repo.full_name == github.repository` guard로 GCP 인증 전에 skip한다.
 - 검증 = pytest 없는 Terraform repo → `terraform fmt -recursive` + `validate`. bootstrap `plan`/`apply`, dev `plan`은 GCP 인증 + bootstrap apply 후
 - 컨벤션: 커밋 `<type>: <한글 설명>` 50자 이내 현재형. 브랜치 `feat/6-tf-plan-oidc`. PR Draft + `Closes #6`, labels terraform/ci-cd/gcp/iam/security, assignee hyeongyu-data, squash merge
 - API 수동 활성화 정책(google_project_service 미사용). secret/state/tfvars 커밋 금지
@@ -122,7 +123,7 @@ resource "google_storage_bucket" "tfstate" {
   location                    = var.region
   project                     = var.project_id
   uniform_bucket_level_access = true
-  force_destroy               = true
+  force_destroy               = false
   public_access_prevention    = "enforced"
 
   versioning {
@@ -130,6 +131,10 @@ resource "google_storage_bucket" "tfstate" {
   }
 
   labels = local.default_labels
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # CI SA 가 state read/write 가능하도록(UBLA 이므로 버킷 IAM)
@@ -189,12 +194,6 @@ resource "google_project_iam_member" "ci_viewer" {
   member  = "serviceAccount:${google_service_account.terraform_ci.email}"
 }
 
-# plan 시 secret 메타데이터/데이터소스 접근
-resource "google_project_iam_member" "ci_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.terraform_ci.email}"
-}
 ```
 
 - [ ] **Step 4: WI binding 추가**
@@ -325,6 +324,7 @@ permissions:
 
 jobs:
   plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -343,7 +343,7 @@ jobs:
       - run: terraform -chdir=terraform/envs/dev validate -no-color
 
       # backend 포함 init (plan 용, state 참조)
-      - run: terraform -chdir=terraform/envs/dev init -no-color
+      - run: terraform -chdir=terraform/envs/dev init -reconfigure -no-color
 
       - name: terraform plan
         id: plan
@@ -406,13 +406,13 @@ jobs:
 
 - GCP 인증 완료(`gcloud auth application-default login`)
 - `container`/`compute`/`iam`/`cloudresourcemanager` 등 API 활성화(이슈 #5 에서 활성화 완료)
-- 활성 `ar-infra-501108` 프로젝트 접근 권한
+- 활성 `ar-infra-501607` 프로젝트 접근 권한
 
 ## 1. bootstrap apply
 
 ```bash
 terraform -chdir=terraform/bootstrap init
-terraform -chdir=terraform/bootstrap apply -var="project_id=ar-infra-501108"
+terraform -chdir=terraform/bootstrap apply -var="project_id=ar-infra-501607"
 ```
 
 생성 대상: GCS 버킷(`autoresearch-dev-tfstate`), WIF 풀/프로바이더, CI SA(`terraform-ci`), IAM.
@@ -431,12 +431,12 @@ GitHub → Settings → Secrets and variables → Actions → **Variables** 에 
 
 | variable | 값 |
 |---|---|
-| `GCP_PROJECT_ID` | `ar-infra-501108` |
+| `GCP_PROJECT_ID` | `ar-infra-501607` |
 | `WIF_POOL_ID` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github` |
 | `WIF_PROVIDER_ID` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github/providers/github` |
-| `CI_SA_EMAIL` | `terraform-ci@ar-infra-501108.iam.gserviceaccount.com` |
+| `CI_SA_EMAIL` | `terraform-ci@ar-infra-501607.iam.gserviceaccount.com` |
 
-`<N>` 은 프로젝트 번호. `gcloud projects describe ar-infra-501108 --format='value(projectNumber)'` 로 확인.
+`<N>` 은 프로젝트 번호. `gcloud projects describe ar-infra-501607 --format='value(projectNumber)'` 로 확인.
 
 ## 4. dev 루트 backend 마이그레이션
 
@@ -444,12 +444,12 @@ GitHub → Settings → Secrets and variables → Actions → **Variables** 에 
 terraform -chdir=terraform/envs/dev init -migrate-state
 ```
 
-dev 는 apply 전이라 state 가 비어있어 즉시 완료된다.
+현재 dev 루트는 GCS backend(`autoresearch-dev-tfstate`, prefix `dev/`)를 사용한다. 새 환경에서 local state로 먼저 apply했다면 이 단계에서 state가 GCS로 이동한다.
 
 ## 롤백
 
 - backend 되돌리기: `terraform/envs/dev/versions.tf` 에서 backend 블록 제거 → `terraform -chdir=terraform/envs/dev init -migrate-state`
-- bootstrap 제거: `terraform -chdir=terraform/bootstrap destroy -var="project_id=ar-infra-501108"` (버킷에 객체 남으면 `force_destroy=true` 로 자동 삭제)
+- bootstrap 제거: state 버킷은 `prevent_destroy=true`로 보호되므로 일반 `terraform destroy`로 삭제되지 않는다. 삭제가 필요하면 state 백업 후 lifecycle을 명시적으로 해제한다.
 - GitHub variables 는 Settings 에서 수동 삭제
 ```
 
@@ -462,9 +462,9 @@ dev 는 apply 전이라 state 가 비어있어 즉시 완료된다.
 
 PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자동으로 `terraform fmt/validate/plan` 을 실행하고 결과를 PR 댓글로 게시한다.
 
-- **인증**: SA key 없이 GitHub OIDC + Workload Identity Federation(WIF). CI SA(`terraform-ci`)는 `roles/viewer` + `roles/secretmanager.secretAccessor`(plan 전용 읽기 권한).
+- **인증**: SA key 없이 GitHub OIDC + Workload Identity Federation(WIF). CI SA(`terraform-ci`)는 `roles/viewer`와 state bucket 접근 권한만 가진다. Secret payload 접근은 부여하지 않는다.
 - **state**: GCS 원격 backend(`autoresearch-dev-tfstate`). 부트스트랩 절차는 `docs/TERRAFORM_BOOTSTRAP.md` 참조.
-- **제한**: WIF `attribute_condition` 으로 `SKYAHO/Autoresearch-infra` 저장소만 허용.
+- **제한**: WIF `attribute_condition` 으로 `SKYAHO/Autoresearch-infra` 저장소만 허용하고, workflow guard로 fork PR의 plan 인증을 막는다.
 - **apply 자동화는 범위 밖**(별도 이슈). 본 워크플로는 plan 만 게시한다.
 
 필요 GitHub variables(4개, secret 아님): `GCP_PROJECT_ID`, `WIF_POOL_ID`, `WIF_PROVIDER_ID`, `CI_SA_EMAIL`.
@@ -523,15 +523,15 @@ Expected: `OK`(YAML 파싱 성공).
 
 ```bash
 terraform -chdir=terraform/bootstrap init
-terraform -chdir=terraform/bootstrap apply -var="project_id=ar-infra-501108"
+terraform -chdir=terraform/bootstrap apply -var="project_id=ar-infra-501607"
 ```
-Expected: 7 리소스 add(bucket, bucket IAM, WIF pool, provider, CI SA, viewer, secretAccessor, WI binding). 에러 시 API/권한 확인.
+Expected: bucket, bucket IAM, WIF pool, provider, CI SA, viewer, WI binding 리소스 add. 에러 시 API/권한 확인.
 
 - [ ] **Step 2: outputs 회수 → GitHub variables 4개 등록**
 
 ```bash
 terraform -chdir=terraform/bootstrap output
-gcloud projects describe ar-infra-501108 --format='value(projectNumber)'
+gcloud projects describe ar-infra-501607 --format='value(projectNumber)'
 ```
 GitHub UI/API 로 variables 등록(또는 `gh variable set` — 사용자 확인 후).
 
