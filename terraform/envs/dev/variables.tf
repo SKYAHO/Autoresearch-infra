@@ -181,6 +181,20 @@ variable "master_authorized_networks" {
   default     = []
 }
 
+variable "gke_kubectl_user_emails" {
+  description = "roles/container.clusterViewer를 부여할 팀원 Google 계정 목록. 로컬 terraform.tfvars에서 관리(repo 노출 방지). user: 접두사 없는 이메일 형식."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for e in var.gke_kubectl_user_emails :
+      can(regex("^[^@]+@[^@]+\\.[^@]+$", e)) && !strcontains(e, ":")
+    ])
+    error_message = "각 항목은 user: 접두사 없는 유효한 이메일 형식이어야 합니다 (예: __VG_EMAIL_5f73e8c3c8e6__)."
+  }
+}
+
 variable "gke_app_k8s_namespace" {
   description = "Workload Identity로 매핑할 Kubernetes namespace."
   type        = string

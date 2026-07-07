@@ -231,13 +231,42 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 | deletion_protection | false (dev) | 운영 전환 시 true |
 
 ### kubectl 접근
+
+팀원 로컬 접근은 #31에서 GCP IAM으로 `roles/container.clusterViewer`를 부여해
+`gcloud container clusters get-credentials`를 실행할 수 있게 한다. 이 권한은 GKE
+클러스터 조회/연결용이며, Kubernetes namespace 내부 작업 권한은 #32의 RBAC에서 별도로
+정한다.
+
+대상 Google 계정은 `var.gke_kubectl_user_emails`(set of string)로 관리하며,
+**실제 이메일은 로컬 `terraform.tfvars`에만 기입**한다(repo 노출 방지).
+`terraform.tfvars.example`에 형식 예시가 있다. CI plan은 `TF_VAR_gke_kubectl_user_emails`
+GitHub variable에서 주입하며, 값이 없으면 빈 리스트로 0개 IAM member만 표시한다.
+
 ```bash
-# 1) 본인 IP를 tfvars master_authorized_networks에 추가 후 apply
-# 2) credentials 획득
+gcloud auth login
+gcloud config set project ar-infra-501607
 gcloud container clusters get-credentials autoresearch-dev-gke \
-  --zone asia-northeast3-a --project <project_id>
-kubectl get nodes
+  --zone asia-northeast3-a \
+  --project ar-infra-501607
+
+kubectl config current-context
+kubectl get ns
 ```
+
+접근이 실패하면 아래를 순서대로 확인한다.
+
+- **IAM 오류**: `roles/container.clusterViewer`가 해당 Google 계정에 부여되어 있는지 확인한다.
+- **네트워크 오류/timeout**: 현재 클러스터는 public endpoint에
+  `master_authorized_networks`를 적용한다. 팀원 공인 IP가 허용 목록에 없으면 API server
+  연결이 실패할 수 있다. 단기적으로는 IP를 추가하고, 중기 접근 경로는 #33(Bastion/VPN)
+  에서 정한다.
+- **Kubernetes RBAC 오류**: kubeconfig를 받았더라도 namespace 안에서 Helm install/update를
+  하려면 Kubernetes RBAC가 필요하다. `airflow` namespace 작업 권한은 #32에서 별도로
+  구성한다.
+- **잘못된 context**: `kubectl config current-context`가
+  `gke_ar-infra-501607_asia-northeast3-a_autoresearch-dev-gke` 계열인지 확인한다.
+
+**Off-boarding**: `var.gke_kubectl_user_emails`에서 이메일을 제거하고 apply하면 `google_project_iam_member`가 해당 member만 제거된다(non-authoritative). 단, 이미 발급받은 access token은 만료(최대 ~1시간)까지 유효하므로 **즉시 차단이 아니다**. 긴급 차단이 필요하면 해당 Google 계정의 GCP 세션을 별도로 종료해야 한다. kubeconfig 자체는 로컬에 남지만 다음 인증 시 403.
 
 ### Workload Identity(app 배포 시)
 > Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).

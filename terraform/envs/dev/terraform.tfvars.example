@@ -29,6 +29,7 @@ gke_machine_type               = "e2-small"
 gke_node_count_min             = 1
 gke_node_count_max             = 2
 master_authorized_networks     = ["203.0.113.10/32"] # apply 전 kubectl 접속 본인 공인 IP/32로 교체(필수)
+gke_kubectl_user_emails        = ["teammate@example.com"]         # #31 팀원 Google 계정. terraform.tfvars(로컬)에 실제 이메일 기입. repo에 커밋 금지
 
 raw_data_bucket_location                         = "asia-northeast3"
 raw_data_bucket_storage_class                    = "STANDARD"

@@ -47,7 +47,12 @@ jobs:
           TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
           TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
           TF_VAR_master_authorized_networks: ${{ vars.MASTER_AUTHORIZED_NETWORKS || '[]' }}
-        run: terraform -chdir=terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
+          TF_VAR_gke_kubectl_user_emails: ${{ vars.GKE_KUBECTL_USER_EMAILS || '[]' }}
+        # ponytail: plan 출력의 user:email PII를 PR 코멘트 노출 전에 마스킹.
+        run: |
+          set -o pipefail
+          terraform -chdir=terraform/envs/dev plan -no-color -input=false 2>&1 \
+            | sed -E 's/(user:)[^"[:space:]]+/\1[REDACTED]/g' > /tmp/plan.out
 
       - name: PR 댓글 게시
         if: always() && github.event_name == 'pull_request'
