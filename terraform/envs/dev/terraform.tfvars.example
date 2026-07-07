@@ -37,6 +37,10 @@ raw_data_noncurrent_version_retention_days       = 30
 bigquery_location                                = "asia-northeast3"
 bigquery_delete_contents_on_destroy              = false
 
+# BigQuery 쿼리 비용 가드 (#22) — 일일 스캔량 커스텀 쿼터, 단위 MiB
+bq_query_usage_per_day_mib          = 204800 # 200 GiB/일 (project 상한)
+bq_query_usage_per_user_per_day_mib = 102400 # 100 GiB/일 (user/SA 상한)
+
 feast_bucket_location                            = "asia-northeast3"
 feast_bucket_storage_class                       = "STANDARD"
 feast_registry_noncurrent_version_retention_days = 30

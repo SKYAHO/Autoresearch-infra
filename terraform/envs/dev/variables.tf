@@ -223,6 +223,18 @@ variable "bigquery_delete_contents_on_destroy" {
   default     = false
 }
 
+variable "bq_query_usage_per_day_mib" {
+  description = "BigQuery 일일 쿼리 스캔량 project 상한(MiB, 커스텀 쿼터). 204800 = 200 GiB/일, on-demand 최악 비용 ~$1.2/일. 초과 시 쿼리 실패."
+  type        = number
+  default     = 204800
+}
+
+variable "bq_query_usage_per_user_per_day_mib" {
+  description = "BigQuery 일일 쿼리 스캔량 per-user 상한(MiB, 커스텀 쿼터). 102400 = 100 GiB/일. 단일 SA/사용자가 project 상한을 소진하지 못하게 제한."
+  type        = number
+  default     = 102400
+}
+
 variable "feast_bucket_location" {
   description = "Feast registry/staging GCS bucket location."
   type        = string
