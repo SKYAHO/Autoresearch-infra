@@ -1,0 +1,85 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  id-token: write        # GitHub OIDC 토큰 발급 (GCP WIF 인증)
+  contents: read         # 코드 체크아웃
+  pull-requests: write   # PR 댓글 게시
+
+jobs:
+  plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.CI_SA_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      # backend 없이 init (fmt/validate 용)
+      - run: terraform -chdir=terraform/envs/dev init -backend=false
+      - run: terraform -chdir=terraform/envs/dev fmt -recursive -check -no-color
+      - run: terraform -chdir=terraform/envs/dev validate -no-color
+
+      # backend 포함 init (plan 용, state 참조)
+      - run: terraform -chdir=terraform/envs/dev init -reconfigure -no-color
+
+      - name: terraform plan
+        id: plan
+        continue-on-error: true
+        env:
+          # tfvars 가 gitignored 라 CI에 변수값이 없다. GitHub variables 에서 주입.
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_dev_subnet_cidr: ${{ vars.DEV_SUBNET_CIDR }}
+          TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
+          TF_VAR_gke_master_ipv4_cidr: ${{ vars.GKE_MASTER_IPV4_CIDR }}
+          TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
+          TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
+        run: terraform -chdir=terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
+
+      - name: PR 댓글 게시
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = '';
+            try {
+              plan = fs.readFileSync('/tmp/plan.out', 'utf8');
+            } catch (e) {
+              plan = '(plan 출력 없음)';
+            }
+            const outcome = process.env.PLAN_OUTCOME;
+            const status = outcome === 'success' ? '✅ plan success' : `⚠️ plan ${outcome}`;
+            const body = [
+              `### Terraform Plan — ${status}`,
+              '',
+              '<details><summary>plan 출력 (최대 60000자)</summary>',
+              '',
+              '```hcl',
+              plan.slice(0, 60000),
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: plan 실패 처리
+        if: steps.plan.outcome != 'success'
+        run: exit 1

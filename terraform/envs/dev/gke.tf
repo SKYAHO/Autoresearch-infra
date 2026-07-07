@@ -41,6 +41,8 @@ resource "google_service_account_iam_member" "gke_app_wi" {
   service_account_id = google_service_account.gke_app.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${local.gke_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
 }
 
 # #5 dev GKE 클러스터 + 노드풀
