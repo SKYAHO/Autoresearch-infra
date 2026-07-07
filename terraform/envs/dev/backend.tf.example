@@ -1,7 +1,0 @@
-terraform {
-  backend "gcs" {
-    bucket = "autoresearch-infra-tfstate-dev"
-    prefix = "terraform/envs/dev"
-  }
-}
-

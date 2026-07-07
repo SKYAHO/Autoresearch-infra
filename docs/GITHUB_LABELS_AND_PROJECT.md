@@ -12,7 +12,7 @@ Issue Forms에서 자동으로 지정하는 label은 실제 repository에 반드
 | `bug` | `d73a4a` | 권한, workflow, 리소스 설정, 자동화 오류 |
 | `experiment` | `5319e7` | GCP 구성, Terraform 방식, 운영 정책 실험 |
 | `documentation` | `0075ca` | README, runbook, 운영 문서 변경 |
-| `chore` | `c2e0c6` | 저장소 설정, label, Project, CODEOWNERS 관리 |
+| `chore` | `c2e0c6` | 저장소 설정, label, Project 관리 |
 | `question` | `d876e3` | 결정이 필요한 질문 또는 확인 요청 |
 
 ## 인프라 분류 Labels

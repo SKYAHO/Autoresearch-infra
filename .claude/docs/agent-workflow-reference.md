@@ -97,7 +97,7 @@ git switch -c feat/12-add-cloud-run-job
 | `docs` | 운영 문서 추가 또는 수정 |
 | `refactor` | 동작 변화 없는 IaC/문서/설정 구조 정리 |
 | `test` | 검증 코드·workflow 테스트 추가 또는 수정 |
-| `chore` | 저장소 기본 설정, CODEOWNERS, 관리 작업 |
+| `chore` | 저장소 기본 설정, 관리 작업 |
 
 **규칙:**
 1. 한 커밋에는 하나의 논리적 변경만 담습니다.

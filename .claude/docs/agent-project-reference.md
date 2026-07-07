@@ -17,6 +17,7 @@
 
 ```
 terraform/
+├── bootstrap/               # 원격 state bucket, WIF pool/provider, CI SA
 ├── envs/
 │   └── dev/                 # dev 환경 root module
 │       ├── versions.tf      # Terraform/provider 버전, provider 설정
@@ -37,7 +38,6 @@ terraform/
 ├── workflows/
 │   ├── lint.yml             # actionlint (required check)
 │   └── claude.yml           # Claude Code PR 리뷰
-├── CODEOWNERS
 └── PULL_REQUEST_TEMPLATE.md
 
 docs/
