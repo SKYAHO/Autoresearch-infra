@@ -134,7 +134,7 @@ variable "gke_services_cidr" {
 }
 
 variable "gke_machine_type" {
-  description = "GKE 워커 노드 머신 타입. dev Airflow/워크로드 검증 기준은 4 vCPU / 16GB."
+  description = "GKE 기본 dev node pool 머신 타입. Airflow/시스템 pod 여유와 live dev-default 기준은 4 vCPU / 16GB."
   type        = string
   default     = "e2-standard-4"
 }
@@ -175,6 +175,42 @@ variable "gke_deletion_protection" {
   default     = false
 }
 
+variable "airflow_gke_node_pool_name" {
+  description = "Airflow dev Helm release를 고정 배치할 GKE node pool 이름."
+  type        = string
+  default     = "airflow-dev"
+}
+
+variable "airflow_gke_machine_type" {
+  description = "Airflow 전용 dev node pool 머신 타입."
+  type        = string
+  default     = "e2-standard-2"
+}
+
+variable "airflow_gke_node_count_min" {
+  description = "Airflow 전용 node pool autoscaling 최소 노드 수."
+  type        = number
+  default     = 1
+}
+
+variable "airflow_gke_node_count_max" {
+  description = "Airflow 전용 node pool autoscaling 최대 노드 수."
+  type        = number
+  default     = 1
+}
+
+variable "airflow_gke_node_disk_size" {
+  description = "Airflow 전용 node pool 부트 디스크 크기(GB)."
+  type        = number
+  default     = 30
+}
+
+variable "airflow_gke_node_disk_type" {
+  description = "Airflow 전용 node pool 부트 디스크 타입."
+  type        = string
+  default     = "pd-standard"
+}
+
 variable "master_authorized_networks" {
   description = "GKE 마스터 API에 접근 허용할 CIDR 목록. kubectl을 쓰려면 본인 IP를 tfvars에 추가."
   type        = list(string)
@@ -191,6 +227,30 @@ variable "gke_app_k8s_service_account" {
   description = "Workload Identity로 매핑할 Kubernetes service account."
   type        = string
   default     = "autoresearch-app"
+}
+
+variable "airflow_k8s_namespace" {
+  description = "Airflow Helm release, Airflow KSA, batch KSA가 배치될 Kubernetes namespace."
+  type        = string
+  default     = "airflow"
+}
+
+variable "airflow_k8s_service_account" {
+  description = "Airflow Workload Identity 매핑용 Kubernetes service account 이름."
+  type        = string
+  default     = "airflow"
+}
+
+variable "airflow_batch_k8s_service_account" {
+  description = "Airflow KubernetesPodOperator batch pod가 사용할 Kubernetes service account."
+  type        = string
+  default     = "autoresearch-batch"
+}
+
+variable "airflow_api_k8s_secret_name" {
+  description = "YouTube/OpenRouter API key를 KPO pod에 주입하는 Kubernetes Secret 이름. Secret payload는 Terraform으로 관리하지 않는다."
+  type        = string
+  default     = "autoresearch-airflow-env"
 }
 
 variable "raw_data_bucket_location" {
@@ -301,16 +361,4 @@ variable "proxy_deletion_protection" {
   description = "proxy Cloud Run 서비스 삭제 보호. dev는 false 권장."
   type        = bool
   default     = false
-}
-
-variable "airflow_k8s_namespace" {
-  description = "Airflow 구성요소가 배포되는 Kubernetes namespace."
-  type        = string
-  default     = "airflow"
-}
-
-variable "airflow_k8s_service_account" {
-  description = "Airflow Workload Identity 매핑용 Kubernetes service account 이름."
-  type        = string
-  default     = "airflow"
 }

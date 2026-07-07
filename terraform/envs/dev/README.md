@@ -2,7 +2,7 @@
 
 `terraform/envs/dev`는 AutoResearch dev GCP 인프라의 Terraform root module입니다.
 
-현재 dev 스택은 GCS 원격 backend를 사용하며, 2026-07-06 기준 GCP 프로젝트 `ar-infra-501607`에 apply 완료되었습니다.
+현재 dev 스택은 GCS 원격 backend를 사용하며, 2026-07-08 기준 GCP 프로젝트 `ar-infra-501607`에 apply 완료되었습니다.
 
 ## 포함 범위
 
@@ -17,6 +17,10 @@
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset
 - GKE Standard private-node cluster, node pool, node/app service account, Workload Identity binding
+- Airflow 전용 GKE node pool(`airflow-dev`)과 batch KSA Workload Identity binding
+- Airflow YouTube/OpenRouter API key용 Secret Manager secret metadata
+- Autoresearch-airflow Cloud Build image push용 최소 IAM
+- Cloud Run proxy state/code 정합성
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
 ## 로컬 실행
@@ -46,8 +50,8 @@ terraform -chdir=terraform/envs/dev apply
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
 | GCS | `ar-infra-501607-autoresearch-dev-raw-data`, `ar-infra-501607-feast-registry`, `ar-infra-501607-feast-staging` |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` (#20 plan/apply 후) |
-| Secret Manager | `projects/ar-infra-501607/secrets/autoresearch-dev-db-password` |
-| GKE | `autoresearch-dev-gke`, node pool `dev-default` |
+| Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` |
+| GKE | `autoresearch-dev-gke`, node pools `dev-default`, `airflow-dev` |
 | IAM | GKE node SA, app SA, Cloud SQL/Secret/Workload Identity 권한 |
 
 ## 기본 리전

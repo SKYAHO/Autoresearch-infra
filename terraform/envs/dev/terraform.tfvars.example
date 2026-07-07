@@ -29,6 +29,13 @@ gke_machine_type               = "e2-standard-4"
 gke_node_count_min             = 1
 gke_node_count_max             = 2
 master_authorized_networks     = ["203.0.113.10/32"] # apply 전 kubectl 접속 본인 공인 IP/32로 교체(필수)
+airflow_gke_node_pool_name     = "airflow-dev"
+airflow_gke_machine_type       = "e2-standard-2"
+airflow_gke_node_count_min     = 1
+airflow_gke_node_count_max     = 1
+airflow_k8s_namespace          = "airflow"
+airflow_batch_k8s_service_account = "autoresearch-batch"
+airflow_api_k8s_secret_name    = "autoresearch-airflow-env"
 
 raw_data_bucket_location                         = "asia-northeast3"
 raw_data_bucket_storage_class                    = "STANDARD"
