@@ -153,3 +153,18 @@ output "feast_staging_bucket_url" {
   description = "Feast staging GCS bucket URL."
   value       = google_storage_bucket.feast_staging.url
 }
+
+output "proxy_service_name" {
+  description = "dev proxy Cloud Run 서비스 이름."
+  value       = google_cloud_run_v2_service.proxy.name
+}
+
+output "proxy_service_uri" {
+  description = "dev proxy Cloud Run 서비스 URI. collector가 호출할 엔드포인트."
+  value       = google_cloud_run_v2_service.proxy.uri
+}
+
+output "proxy_sa_email" {
+  description = "proxy Cloud Run 런타임 service account email."
+  value       = google_service_account.proxy.email
+}

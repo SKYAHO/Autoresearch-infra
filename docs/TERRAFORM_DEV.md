@@ -168,6 +168,52 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
 | 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, Feast GCS bucket `storage.objectAdmin` |
 
+## dev proxy Cloud Run (#27)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Service | `autoresearch-dev-proxy` | `${resource_prefix}-proxy` (`cloud_run.tf`) |
+| Region | `asia-northeast3` | `var.region` |
+| 이미지 | `asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:dev-20260708-001` | `var.proxy_image` 비어 있을 때 예시 기본값. 재배포 시 새 tag/digest로 변경. 소스: 앱 저장소 `proxy/Dockerfile` |
+| 컨테이너 | 포트 `8080`, `uvicorn app:app` | 이슈 #27 전제 |
+| 헬스체크 | startup/liveness probe `GET /health`:8080 | 실패 시 revision 비정상 처리 |
+| 스케일링 | min **0** / max 1 | 유휴 비용 0. `var.proxy_max_instances` |
+| 리소스 | 1 vCPU / 512Mi, `cpu_idle=true` | 요청 처리 중에만 CPU 과금 |
+| 런타임 SA | `autoresearch-dev-proxy@...` | 전용 SA, **role 없음**(최소 권한). GCP 리소스 접근 필요 시 리소스 수준으로 추가 |
+| 인증 | public access 없음, `roles/run.invoker`만 | `var.proxy_invoker_members` 기본 빈 목록 → collector SA 확정 시 추가 |
+| ingress | `INGRESS_TRAFFIC_INTERNAL_ONLY` | collector가 같은 VPC(GKE)에서 호출 가정. VPC 밖 호출 확정 시 `INGRESS_TRAFFIC_ALL`로 변경(IAM 인증 유지) |
+| deletion_protection | false (dev) | `var.proxy_deletion_protection` |
+
+### 이미지 빌드/배포 (수동 — CI 자동화는 별도 이슈)
+
+```bash
+gcloud auth configure-docker asia-northeast3-docker.pkg.dev
+docker build -t asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:dev-20260708-001 proxy/
+docker push asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/proxy:dev-20260708-001
+```
+
+**순서 제약**: 이미지가 AR에 없으면 apply(revision 배포)가 실패한다. plan은 이미지
+없이도 통과하므로 PR 머지는 가능하고, apply는 push 후에 한다. `run.googleapis.com`
+API도 apply 전 수동 활성화가 필요하다.
+
+**재배포 원칙**: 같은 `:latest` 태그를 다시 push해도 Terraform의 `image` 문자열은
+변하지 않아 새 Cloud Run revision이 트리거되지 않는다. 새 proxy 이미지를 배포할 때는
+`proxy_image`를 새 버전 태그(`proxy:dev-YYYYMMDD-N`) 또는 digest(`proxy@sha256:...`)로
+바꾼 뒤 plan/apply한다.
+
+### 호출 방법 (collector)
+
+```bash
+# invoker 권한이 있는 SA의 ID token으로 호출
+curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  "$(terraform -chdir=terraform/envs/dev output -raw proxy_service_uri)/health"
+```
+
+### 비용/롤백
+
+- min 0 + 일 수 회 호출 → 사실상 무과금. 콜드 스타트(수 초)는 dev에서 허용.
+- 롤백: `cloud_run.tf` 리소스 제거 후 apply(또는 `-target` destroy). 상태ful 데이터 없음.
+
 ## dev GKE (#5)
 
 | 항목 | 값 | 비고 |
@@ -228,6 +274,7 @@ metadata:
 | `artifactregistry.googleapis.com` | Docker image repository |
 | `sqladmin.googleapis.com` | Cloud SQL |
 | `container.googleapis.com` | GKE |
+| `run.googleapis.com` | dev proxy Cloud Run 서비스 |
 | `iam.googleapis.com` | service account, IAM binding |
 | `iamcredentials.googleapis.com` | GitHub OIDC 기반 credential 생성 |
 | `sts.googleapis.com` | Workload Identity Federation token exchange |
