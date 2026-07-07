@@ -90,7 +90,7 @@ resource "google_storage_bucket" "feast_registry" {
 
 resource "google_storage_bucket_iam_member" "feast_registry_gke_app_object_user" {
   bucket = google_storage_bucket.feast_registry.name
-  role   = "roles/storage.objectUser"
+  role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
@@ -125,6 +125,6 @@ resource "google_storage_bucket" "feast_staging" {
 
 resource "google_storage_bucket_iam_member" "feast_staging_gke_app_object_user" {
   bucket = google_storage_bucket.feast_staging.name
-  role   = "roles/storage.objectUser"
+  role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
