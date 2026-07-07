@@ -302,3 +302,15 @@ variable "proxy_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "airflow_k8s_namespace" {
+  description = "Airflow 구성요소가 배포되는 Kubernetes namespace."
+  type        = string
+  default     = "airflow"
+}
+
+variable "airflow_k8s_service_account" {
+  description = "Airflow Workload Identity 매핑용 Kubernetes service account 이름."
+  type        = string
+  default     = "airflow"
+}
