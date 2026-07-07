@@ -50,3 +50,7 @@ proxy_cpu                 = "1"
 proxy_memory              = "512Mi"
 proxy_invoker_members     = [] # collector SA 확정 시 "serviceAccount:..." 추가
 proxy_deletion_protection = false
+
+# Airflow (#32) — 기본값으로 충분. namespace/KSA 이름을 바꿀 때만 기입
+# airflow_k8s_namespace        = "airflow"
+# airflow_k8s_service_account  = "airflow"
