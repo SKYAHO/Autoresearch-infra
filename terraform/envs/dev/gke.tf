@@ -1,15 +1,16 @@
 # #5 dev GKE — 서비스 계정 + Workload Identity
-# 노드 SA: 클러스터 전체(AR pull, 로깅, 모니터링). app SA: pod 단위 권한(Cloud SQL, Secret).
+# 노드 SA: AR pull (dev 리포만), 로깅, 모니터링. app SA: pod 단위 권한(Cloud SQL, Secret).
 
 resource "google_service_account" "gke_nodes" {
   account_id   = local.gke_node_sa_name
   display_name = "Autoresearch dev GKE node pool SA"
 }
 
-resource "google_project_iam_member" "gke_nodes_ar" {
-  project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+# ponytail: dev 리포 수준으로 축소(#26). 프로젝트 전체 AR 접근 불필요 — 새 리포 추가 시에만 바인딩 확장.
+resource "google_artifact_registry_repository_iam_member" "gke_nodes_ar" {
+  repository = google_artifact_registry_repository.dev.id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.gke_nodes.email}"
 }
 
 resource "google_project_iam_member" "gke_nodes_logging" {
