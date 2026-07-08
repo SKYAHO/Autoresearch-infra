@@ -61,3 +61,7 @@ proxy_deletion_protection = false
 # Airflow (#32) — 기본값으로 충분. namespace/KSA 이름을 바꿀 때만 기입
 # airflow_k8s_namespace        = "airflow"
 # airflow_k8s_service_account  = "airflow"
+
+# dev Bastion Host (#47) — IAP 터널 전용
+bastion_enabled      = true
+bastion_machine_type = "e2-micro"

@@ -174,6 +174,46 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
 | 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, Feast GCS bucket `storage.objectAdmin` |
 
+## dev Bastion Host (#47)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Instance | `autoresearch-dev-bastion` | `bastion.tf`, `var.bastion_enabled`로 on/off |
+| 머신/디스크 | e2-micro, pd-standard 10GB | 터널 종단 용도 최소 사양 |
+| 네트워크 | dev subnet, **외부 IP 없음** | egress는 Cloud NAT |
+| SSH 진입 | **IAP TCP forwarding만** | 기존 `ssh-iap` 태그 firewall 재사용 (35.235.240.0/20 → 22) |
+| 로그인 | OS Login (`enable-oslogin=TRUE`) | SSH 키 배포 없이 IAM으로 통제 |
+| SA | `autoresearch-dev-bastion` (role 없음) | 최소 권한 |
+| 보안 | Shielded VM (secure boot/vTPM/integrity) | |
+| 팀원 IAM | `iap.tunnelResourceAccessor` + `compute.osLogin` + `compute.viewer` | `terraform/admin/gke-team-access`에서 관리 |
+| 용도 | Airflow UI(#48) 등 VPC 내부 서비스 접근 터널 | kubectl은 #45 DNS 엔드포인트 사용 — bastion 불필요 |
+
+### 사용법 (팀원)
+
+```bash
+# 1) SSH 접속 (IAP 터널 자동)
+gcloud compute ssh autoresearch-dev-bastion \
+  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap
+
+# 2) 포트 포워딩: 내부 서비스 하나를 localhost로 (예: Airflow ILB 8080)
+gcloud compute ssh autoresearch-dev-bastion \
+  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
+  -- -N -L 8080:<내부-IP-또는-DNS>:8080
+# → 브라우저에서 http://localhost:8080
+
+# 3) SOCKS 프록시: 내부 DNS 이름 그대로 브라우저에서 사용 (#48 private DNS 조합)
+gcloud compute ssh autoresearch-dev-bastion \
+  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
+  -- -N -D 1080
+# → 브라우저 SOCKS5 프록시를 localhost:1080으로 설정(원격 DNS 조회 옵션 켜기)
+```
+
+### 비용/롤백
+
+- VM e2-micro 서울 ~$7–9/월 + 디스크 ~$0.5 + **Cloud NAT VM당 몫 ~$32/월 상한**(bastion이 NAT를 쓰는 시간 기준).
+- 장기 미사용 시: `gcloud compute instances stop` 또는 tfvars에서 `bastion_enabled=false` 후 apply.
+- 롤백: `bastion_enabled=false` apply → VM 삭제. 상태ful 데이터 없음.
+
 ## dev proxy Cloud Run (#27)
 
 | 항목 | 값 | 비고 |

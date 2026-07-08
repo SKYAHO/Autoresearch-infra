@@ -238,3 +238,13 @@ output "airflow_logs_bucket_name" {
   description = "Airflow task log 저장 GCS bucket 이름."
   value       = google_storage_bucket.airflow_logs.name
 }
+
+output "bastion_instance_name" {
+  description = "IAP 터널 전용 bastion VM 이름(#47). 비활성화 시 null."
+  value       = var.bastion_enabled ? google_compute_instance.bastion[0].name : null
+}
+
+output "bastion_internal_ip" {
+  description = "bastion 내부 IP. VPC 내부 서비스 접근 터널 종단."
+  value       = var.bastion_enabled ? google_compute_instance.bastion[0].network_interface[0].network_ip : null
+}

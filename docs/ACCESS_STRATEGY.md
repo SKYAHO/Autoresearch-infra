@@ -20,7 +20,12 @@
 
 ## 1차 권장안(dev)
 
-**A + D 조합**으로 dev를 운영한다. Bastion Host(B)와 VPN(C)은 **후속 이슈로 연기**한다.
+**A + D 조합**으로 dev를 운영한다. VPN(C)은 **후속 이슈로 연기**한다.
+
+> **갱신(2026-07-08)**: Airflow UI 상시 접속 요구(전환 조건 충족)로 **Bastion(B)을
+> #47에서 도입**한다. 팀원이 IAP 터널로 bastion을 거쳐 VPC 내부 서비스(#48
+> Airflow ILB + private DNS)에 브라우저로 접근한다. 아래 3번 항목의
+> port-forward는 예비 경로로 남는다.
 
 1. **GKE 마스터 API**: `master_authorized_networks`에 팀원 공인 IP/32 추가(기존 방식, #34로 `roles/container.clusterViewer` 부여와 짝). IP 변경 시 tfvars 갱신 + apply.
 2. **Cloud SQL(private IP)**: 로컬에서 private IP로 직접 접속하지 않는다. 1차
@@ -30,7 +35,9 @@
    private IP로 직접 터널을 만들 수 없다. `gcloud sql connect`류의 공인 IP
    allowlist 방식은 현재 `ipv4_enabled=false`인 private-IP-only 인스턴스에는
    맞지 않는다.
-3. **내부 서비스(Airflow UI 등)**: `kubectl port-forward`로 localhost에서만 접속. 외부 미공개 원칙 준수. 필요 시 Cloud Run proxy(#27) 경유 경로 별도 검토.
+3. **내부 서비스(Airflow UI 등)**: 기본 경로는 **Bastion(#47) 경유** —
+   IAP SSH 터널 + 포트 포워딩/SOCKS 프록시로 내부 ILB(#48)에 접속. 예비
+   경로는 `kubectl port-forward`. 외부 미공개 원칙은 유지(내부 ILB + private DNS).
 4. **GKE 노드 SSH(디버깅)**: IAP tunneling(`gcloud compute ssh ... --tunnel-through-iap`), `roles/iap.tunnelAccessor` 부여.
 
 **선택 근거**:
@@ -51,7 +58,10 @@
 ## Terraform 변경 범위
 
 - **dev 1차(A + D)**: 변경 **0**. `master_authorized_networks`는 기존 변수, IAP tunneling firewall은 `vpc.tf`에 이미 구성. 팀원 IP는 tfvars(로컬, 비커밋)에서 관리.
-- **Bastion(후속 이슈)**: 신규 `bastion.tf` — compute instance + IAP tunneling IAM + (선택) 정지 스케줄. 비용 절감을 위해 토요일/일요일 자동 정지 권장.
+- **Bastion(#47, 도입)**: `terraform/envs/dev/bastion.tf` — e2-micro, 외부 IP 없음,
+  OS Login, IAP 전용. 팀원 IAM 3종(`iap.tunnelResourceAccessor`, `compute.osLogin`,
+  `compute.viewer`)은 `terraform/admin/gke-team-access`에서 관리. 미사용 시
+  `bastion_enabled=false`로 제거 가능. 사용법은 `docs/TERRAFORM_DEV.md` Bastion 섹션.
 - **VPN(후속 이슈)**: `google_compute_vpn_gateway` / `google_compute_ha_vpn_gateway` + 터널 + 라우팅. 피어 측 설정 의존.
 
 ## Airflow UI / 내부 서비스 접근 원칙

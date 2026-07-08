@@ -362,3 +362,27 @@ variable "proxy_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "bastion_enabled" {
+  description = "IAP 터널 전용 bastion VM 생성 여부. 장기 미사용 시 false로 비용 절감."
+  type        = bool
+  default     = true
+}
+
+variable "bastion_machine_type" {
+  description = "bastion VM 머신 타입 (dev 최소 비용, 터널 종단 용도)."
+  type        = string
+  default     = "e2-micro"
+}
+
+variable "bastion_disk_size_gb" {
+  description = "bastion 부트 디스크 크기(GB)."
+  type        = number
+  default     = 10
+}
+
+variable "bastion_image" {
+  description = "bastion 부트 디스크 이미지."
+  type        = string
+  default     = "debian-cloud/debian-12"
+}
