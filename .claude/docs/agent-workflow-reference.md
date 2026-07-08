@@ -1,6 +1,6 @@
 # Agent Workflow Reference
 
-> Last Updated: 2026-07-07
+> Last Updated: 2026-07-08
 
 GitHub 워크플로우 전체 가이드: Issue → Branch → Commit → PR → Review →
 Merge. 모든 인프라 작업의 운영 표준입니다. 사람용 요약은
@@ -18,7 +18,7 @@ Merge. 모든 인프라 작업의 운영 표준입니다. 사람용 요약은
 ```
 Issue 생성 (Project Todo 자동 추가)
     ↓
-Branch 생성 (feat/이슈번호-설명)
+Branch 생성 (이슈의 Create a branch, feat/이슈번호-설명)
     ↓
 작업/검증 (fmt, validate, git diff --check)
     ↓
@@ -71,6 +71,12 @@ GitHub는 `form 선택 → label 자동 적용` 방식으로 동작합니다. Pr
 
 ## Branch Naming
 
+**코드가 변경되는 작업은 반드시 이슈를 먼저 발행하고, 그 이슈에서 브랜치를
+생성합니다.** GitHub 이슈 우측 `Development > Create a branch`를 사용하면
+브랜치가 이슈에 자동 연결(`main` 기준 분기)되어, PR을 `main`으로 머지할 때
+이슈 자동 close와 Project `Done` 전환이 확실해집니다. 로컬에서 임의로 분기하는
+대신 이슈에서 만든 브랜치를 체크아웃해 작업합니다.
+
 **형식:** `<type>/<이슈번호>-<간략한-설명>`
 
 **Type:** `feat/`, `fix/`, `exp/`, `docs/`, `refactor/`, `chore/`
@@ -80,9 +86,9 @@ GitHub는 `form 선택 → label 자동 적용` 방식으로 동작합니다. Pr
 - 한 브랜치에는 하나의 주요 목적만 담습니다.
 
 ```bash
-git switch main
-git pull origin main
-git switch -c feat/12-add-cloud-run-job
+# 이슈에서 Create a branch로 생성(예: feat/12-add-cloud-run-job) 후
+git fetch origin
+git switch feat/12-add-cloud-run-job
 ```
 
 ## Commit Messages
@@ -154,7 +160,8 @@ Closes #12
 **머지 조건:**
 - 팀원 **2명** approve
 - 모든 conversation resolved
-- CI status check (`lint`) 통과
+- CI status check 통과. `branch_ruleset_main.json` 기준 required check는
+  `lint`이며, Terraform plan은 PR check/comment로 함께 확인합니다.
 - Ready for review 상태 (Draft는 approve가 있어도 merge 불가)
 
 **리뷰어 확인 사항:**
@@ -214,10 +221,12 @@ Project는 현재 상태를 보여주는 보드로 사용합니다.
 ## CI
 
 - `.github/workflows/lint.yml` — actionlint. required status check.
+- `.github/workflows/terraform-plan.yml` — 내부 브랜치 PR에서 OIDC/WIF로
+  dev root plan을 실행하고 PR 댓글을 게시합니다.
 - `.github/workflows/claude.yml` — Claude Code PR 리뷰
   (`CLAUDE_CODE_OAUTH_TOKEN` secret 필요).
-- Terraform plan OIDC workflow는 #6에서 진행 중이며, 도입 후 required
-  check 지정을 검토합니다.
+- 현재 ruleset required check는 `lint`만 지정되어 있습니다. Terraform
+  plan 실패는 병합 전 반드시 확인해야 하는 정보성 check로 운용합니다.
 
 ## Special Cases
 

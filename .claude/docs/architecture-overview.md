@@ -1,6 +1,6 @@
 # Architecture Overview
 
-> Last Updated: 2026-07-07
+> Last Updated: 2026-07-08
 
 dev 환경 인프라의 전체 그림과 설계 결정을 담은 문서입니다. 상세 구성은
 `docs/TERRAFORM_DEV.md`, 파일별 책임은 `agent-project-reference.md`를
@@ -15,8 +15,8 @@ dev 환경 인프라의 전체 그림과 설계 결정을 담은 문서입니다
 자동화를 제공합니다.
 
 ```
-GitHub (PR) ──▶ GitHub Actions (lint / Claude review / plan(#6))
-                          │ OIDC/WIF (#6)
+GitHub (PR) ──▶ GitHub Actions (lint / Terraform plan / Claude review)
+                          │ OIDC/WIF
                           ▼
 GCP project (dev, asia-northeast3)
 ├── VPC (custom) ── subnet 10.10.0.0/20 (Private Google Access)
@@ -26,7 +26,9 @@ GCP project (dev, asia-northeast3)
 ├── GKE dev cluster ── 앱 워크로드 실행
 ├── Cloud SQL (PostgreSQL 15, private IP only) ◀── GKE에서 접속
 ├── Artifact Registry (autoresearch-dev-docker) ◀── 이미지 push/pull
-└── Secret Manager ── DB 비밀번호 등 앱 소비 시크릿
+├── GCS / BigQuery ── raw data, analytics, Feast offline store
+├── Cloud Run proxy ── 내부 호출용 인증 gate 후보
+└── Secret Manager ── DB 비밀번호와 API key metadata/IAM
 ```
 
 ## Key Design Decisions
@@ -40,7 +42,7 @@ GCP project (dev, asia-northeast3)
 
 ### 인증: OIDC/WIF 우선
 - GitHub Actions의 GCP 인증은 service account key 파일 대신 OIDC 기반
-  Workload Identity Federation을 사용합니다 (#6 진행 중).
+  Workload Identity Federation을 사용합니다.
 
 ### 비용: dev 최소 기준
 - Cloud SQL `db-f1-micro` ZONAL, GKE 최소 구성 등 dev 리소스는 최소
@@ -61,8 +63,8 @@ GCP project (dev, asia-northeast3)
 
 | 항목 | 현재 (main) | 계획 |
 |---|---|---|
-| Terraform state | 로컬 | GCS remote backend (#6) |
-| CI 검증 | `lint` (actionlint) | + Terraform plan OIDC workflow (#6) |
+| Terraform state | GCS remote backend | 환경별 backend/prefix 분리 유지 |
+| CI 검증 | `lint` + Terraform plan OIDC/WIF + Claude review | apply 자동화 검토 |
 | 환경 | dev 단일 | staging/prod 분리, `modules/` 추출 |
 | 배포 | 수동 | GitHub Actions 기반 apply 파이프라인 검토 |
 
@@ -70,12 +72,15 @@ GCP project (dev, asia-northeast3)
 
 애플리케이션 데이터 흐름에서 이 인프라가 맡는 위치:
 
-- **GCS (데이터 레이크):** YouTube 수집 원본(parquet). 앱 저장소
-  파이프라인이 적재하며, 버킷 구성은 추후 이 저장소로 이관 예정.
+- **GCS (데이터 레이크):** YouTube raw, user raw, action log raw,
+  persona raw, Airflow DAG/log, Feast registry/staging bucket.
 - **Cloud SQL (PostgreSQL):** 운영성 데이터(페르소나, 가상 유저 상태)
   저장소. GKE 워크로드가 private IP로 접속.
 - **Artifact Registry:** 앱 컨테이너 이미지 저장.
-- **BigQuery (예정):** 액션 로그 등 분석용 이벤트 적재.
+- **BigQuery:** `autoresearch_dev_analytics`, `feast_offline_store`.
+- **GKE/Airflow:** Airflow는 `airflow` namespace 경계와 namespace-scoped
+  RBAC로 설치 경로를 제공하며, 팀원 로컬 접근은
+  `docs/GKE_CLUSTER_ACCESS.md`를 따른다.
 
 ## Change Impact Checklist
 

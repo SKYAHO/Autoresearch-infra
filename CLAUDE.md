@@ -1,6 +1,6 @@
 # Coding Guidelines for AI Coding Agents
 
-> Version: 1.0.0 | Last Updated: 2026-07-07
+> Version: 1.0.1 | Last Updated: 2026-07-08
 
 이 문서는 Claude Code 등 AI 코딩 에이전트가 이 저장소에서 작업할 때의 기본
 진입점입니다. 필수 규칙은 짧게 유지하고, 상세 가이드는 `.claude/docs/`를
@@ -16,7 +16,7 @@
 규칙이 충돌하면 다음 순서로 적용합니다:
 
 1. 사용자의 명시적 요청
-2. `CLAUDE.md` 및 `AGENTS.md`
+2. `CLAUDE.md` 및 `AGENT.md`/`AGENTS.md` symlink
 3. `.claude/docs/` 하위 가이드
 4. `README.md`, `CONTRIBUTING.md`, 기타 저장소 문서
 
@@ -48,17 +48,26 @@
   - `artifact_registry.tf` — Docker 저장소 (`autoresearch-dev-docker`)
   - `cloud_sql.tf` — PostgreSQL 15 dev 인스턴스 (private IP only)
   - `gke.tf` — dev GKE 클러스터
-  - `secret_manager.tf` — Secret Manager 리소스
+  - `storage.tf` / `bigquery.tf` — raw data, Feast, analytics 저장소
+  - `cloud_run.tf` — dev proxy Cloud Run
+  - `airflow.tf` / `cloud_build.tf` — Airflow GCP 리소스와 이미지 build 경로
+  - `secret_manager.tf` — Secret Manager 리소스와 resource-level IAM
+- Kubernetes admin root는 `terraform/admin/airflow-k8s/`, 팀원 GKE 접근 IAM은
+  `terraform/admin/gke-team-access/`에서 별도 state로 관리합니다.
 - 재사용 module은 `terraform/modules/` (예정)
 - GitHub Actions는 `.github/workflows/`: `lint.yml`(actionlint, required
-  check), `claude.yml`(Claude PR 리뷰). Terraform plan OIDC workflow는
-  #6에서 진행 중입니다.
+  check), `terraform-plan.yml`(OIDC/WIF 기반 PR plan 및 댓글 게시),
+  `claude.yml`(Claude PR 리뷰).
 - 스펙·플랜 문서는 `docs/superpowers/specs/`, `docs/superpowers/plans/`
+- 팀원 로컬 GKE 접근 절차는 `docs/GKE_CLUSTER_ACCESS.md`를 기준으로 합니다.
 - 애플리케이션 기능 구현은 이 저장소 범위가 아닙니다. 애플리케이션 저장소는
   `SKYAHO/Autoresearch`입니다.
 
 ## Core Rules
 
+- 코드가 변경되는 작업은 반드시 이슈를 먼저 발행하고, 그 이슈의
+  `Create a branch`로 브랜치를 생성합니다(이슈-브랜치 자동 연결). 상세는
+  `.claude/docs/agent-workflow-reference.md`를 참조합니다.
 - 새 추상화보다 기존 저장소 패턴을 우선합니다 (리소스 종류별 `.tf` 파일 분리,
   `variables.tf`/`locals.tf`/`outputs.tf` 규칙).
 - 구조 변경과 동작 변경(리소스 변경)은 분리합니다.

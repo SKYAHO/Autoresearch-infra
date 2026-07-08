@@ -8,13 +8,16 @@
 - dev root module: `terraform/envs/dev`
 - Terraform backend: GCS `autoresearch-dev-tfstate`, prefix `dev/`
 - 마지막 실제 apply: 2026-07-08, Airflow runtime drift state import 및 API key Secret Manager metadata 반영, `4 added, 0 changed, 0 destroyed`
-- #32 현재 브랜치 변경: Airflow GKE runtime drift 코드화 및 운영 smoke 검증
+- 최신 검증: 2026-07-08, `terraform/envs/dev`와 `terraform/admin/airflow-k8s` 모두 최종 plan `No changes`
 
 ## 구조
 
 ```text
 terraform/
 ├── README.md
+├── admin/
+│   ├── airflow-k8s/      # #32 Airflow Kubernetes namespace/RBAC/NetworkPolicy (separate state)
+│   └── gke-team-access/  # #34 팀원 GKE clusterViewer IAM (separate state)
 ├── bootstrap/            # #6 1회성: GCS state bucket + WIF + CI SA (local state)
 │   ├── main.tf
 │   ├── outputs.tf
@@ -29,7 +32,7 @@ terraform/
 │       ├── cloud_build.tf    # #32 Autoresearch-airflow Cloud Build IAM
 │       ├── cloud_run.tf      # #27 Cloud Run proxy state/code 정합성
 │       ├── gke.tf            # #5 dev GKE cluster + 노드풀 + SA/WI
-│       ├── airflow.tf        # #32 Airflow namespace/RBAC + GCP SA/WI + DB/버킷
+│       ├── airflow.tf        # #32 Airflow GCP SA/WI + DB/GCS/IAM
 │       ├── locals.tf
 │       ├── nat.tf            # #5 Cloud Router + Cloud NAT (private 노드 egress)
 │       ├── outputs.tf
@@ -293,8 +296,10 @@ member만 제거된다(non-authoritative). 단, 이미 발급받은 access token
 실제 IAM을 destroy하지 않는다. 이 리소스는 `terraform/admin/gke-team-access`가
 소유하므로 dev root에서는 `terraform state rm`으로 state에서만 분리한다.
 
-dev 내부망 접근 전략(Bastion/VPN 비교, Cloud SQL private IP / 내부 서비스 접근
-경로)은 [docs/ACCESS_STRATEGY.md](ACCESS_STRATEGY.md)를 참조한다.
+팀원에게 공유할 실제 로컬 설정 절차는
+[docs/GKE_CLUSTER_ACCESS.md](GKE_CLUSTER_ACCESS.md)를 참조한다. dev 내부망 접근
+전략(Bastion/VPN 비교, Cloud SQL private IP / 내부 서비스 접근 경로)은
+[docs/ACCESS_STRATEGY.md](ACCESS_STRATEGY.md)를 참조한다.
 
 ### Workload Identity(app 배포 시)
 > Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).
@@ -512,6 +517,10 @@ helm install airflow airflow/airflow -n airflow -f values.yaml
 ```
 
 KSA(`airflow`)와 WI 매핑은 Terraform이 생성하므로 Helm values에서 별도 ServiceAccount 생성은 끄고, 위 KSA를 `existingServiceAccountName`로 지정한다.
+
+2026-07-08 최초 apply 때 `airflow` namespace는 클러스터에 이미 존재했다. 삭제/재생성하지 않고
+`terraform -chdir=terraform/admin/airflow-k8s import kubernetes_namespace_v1.airflow airflow`
+로 state에 편입한 뒤 나머지 RBAC/ResourceQuota/LimitRange/NetworkPolicy를 적용했다.
 
 ### 비용/롤백
 

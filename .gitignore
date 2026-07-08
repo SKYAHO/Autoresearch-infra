@@ -8,7 +8,7 @@ __pycache__/
 # Local-only agent settings (.claude/docs/ is committed)
 .claude/*
 !.claude/docs/
-agent.md
+agent.local.md
 docs/NOTION_PROGRESS_TIMELINE.md
 
 # Local env / secrets

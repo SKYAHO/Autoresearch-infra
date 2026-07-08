@@ -1,6 +1,6 @@
 # Agent Project Reference
 
-> Last Updated: 2026-07-07
+> Last Updated: 2026-07-08
 
 프로젝트 구조, 폴더 책임, 팀 소유권을 빠르게 찾기 위한 문서입니다.
 "X는 어디에 있는가?", "Y는 누가 소유하는가?" 질문에 답합니다.
@@ -18,6 +18,9 @@
 ```
 terraform/
 ├── bootstrap/               # 원격 state bucket, WIF pool/provider, CI SA
+├── admin/
+│   ├── airflow-k8s/          # Airflow namespace/RBAC/NetworkPolicy (separate state)
+│   └── gke-team-access/      # 팀원 GKE clusterViewer IAM (separate state)
 ├── envs/
 │   └── dev/                 # dev 환경 root module
 │       ├── versions.tf      # Terraform/provider 버전, provider 설정
@@ -29,6 +32,11 @@ terraform/
 │       ├── artifact_registry.tf  # Docker 저장소
 │       ├── cloud_sql.tf     # PostgreSQL dev 인스턴스 (private IP)
 │       ├── gke.tf           # dev GKE 클러스터
+│       ├── storage.tf       # raw data, Feast, Airflow DAG/log GCS bucket
+│       ├── bigquery.tf      # analytics / Feast offline store dataset
+│       ├── cloud_run.tf     # dev proxy Cloud Run
+│       ├── airflow.tf       # Airflow GCP SA/WI/DB/GCS/IAM
+│       ├── cloud_build.tf   # Autoresearch-airflow image build/push IAM
 │       ├── secret_manager.tf     # Secret Manager
 │       └── terraform.tfvars.example  # 변수 예시 (실값 커밋 금지)
 └── modules/                 # 재사용 module (예정)
@@ -37,11 +45,14 @@ terraform/
 ├── ISSUE_TEMPLATE/          # Issue Forms (feature/bug/experiment)
 ├── workflows/
 │   ├── lint.yml             # actionlint (required check)
+│   ├── terraform-plan.yml   # PR Terraform plan (OIDC/WIF + PR comment)
 │   └── claude.yml           # Claude Code PR 리뷰
 └── PULL_REQUEST_TEMPLATE.md
 
 docs/
 ├── TERRAFORM_DEV.md         # dev 환경 구성과 필요 GCP API
+├── GKE_CLUSTER_ACCESS.md    # 팀원 로컬 kubeconfig/kubectl 접근 절차
+├── ACCESS_STRATEGY.md       # dev 내부망 접근 전략
 ├── BRANCH_RULESET_MAIN.md   # main ruleset 설명
 ├── GITHUB_LABELS_AND_PROJECT.md  # label/Project 운영 기준
 └── superpowers/
@@ -52,15 +63,11 @@ CONTRIBUTING.md              # 사람용 협업 규칙 (워크플로우 전체)
 branch_ruleset_main.json     # main branch ruleset 정의
 ```
 
-진행 중(별도 브랜치, main 미반영):
-
-```
-.github/workflows/terraform-plan.yml   # Terraform plan OIDC workflow (#6)
-terraform/envs/dev/backend.tf          # GCS remote backend (#6)
-```
-
-로컬 전용(커밋하지 않음): `agent.md`, `docs/NOTION_PROGRESS_TIMELINE.md`,
+로컬 전용(커밋하지 않음): `agent.local.md`, `docs/NOTION_PROGRESS_TIMELINE.md`,
 `.claude/settings.local.json`
+
+에이전트 호환 진입점으로 `AGENT.md -> CLAUDE.md`, `AGENTS.md -> CLAUDE.md`,
+`.agent -> .claude`, `.agents -> .claude` symlink를 둔다.
 
 ## Team Ownership & Domains
 
@@ -102,9 +109,9 @@ terraform/envs/dev/backend.tf          # GCS remote backend (#6)
 - **GCP:** 리전 `asia-northeast3`(서울), dev 환경 — VPC, Cloud NAT,
   Artifact Registry, Cloud SQL(PostgreSQL 15, private IP), GKE,
   Secret Manager
-- **State:** 로컬 state (GCS remote backend는 #6에서 진행 중)
+- **State:** GCS remote backend(`autoresearch-dev-tfstate`)
 - **CI:** GitHub Actions — `lint`(actionlint, required check),
-  Claude Code PR Review. Terraform plan workflow는 #6에서 진행 중
+  Terraform plan(OIDC/WIF, PR 댓글 게시), Claude Code PR Review
 - **정책:** GCP API는 수동 활성화 (`google_project_service` 미사용),
   GCR 대신 Artifact Registry 사용
 

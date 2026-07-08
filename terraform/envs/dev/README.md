@@ -17,8 +17,10 @@
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset
 - GKE Standard private-node cluster, node pool, node/app service account, Workload Identity binding
+- Airflow GCP 리소스: 전용 GCP SA/WI IAM, metadata DB, DAG/log bucket, BigQuery/GCS IAM
 - Airflow 전용 GKE node pool(`airflow-dev`)과 batch KSA Workload Identity binding
 - Airflow YouTube/OpenRouter API key용 Secret Manager secret metadata
+- Airflow Kubernetes namespace/RBAC/NetworkPolicy는 `terraform/admin/airflow-k8s`에서 별도 state로 관리
 - Autoresearch-airflow Cloud Build image push용 최소 IAM
 - Cloud Run proxy state/code 정합성
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
@@ -48,11 +50,11 @@ terraform -chdir=terraform/envs/dev apply
 | Network | `autoresearch-dev-vpc`, `autoresearch-dev-subnet`, `autoresearch-dev-router`, `autoresearch-dev-nat` |
 | Artifact Registry | `autoresearch-dev-docker` |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
-| GCS | `ar-infra-501607-autoresearch-dev-raw-data`, `ar-infra-501607-feast-registry`, `ar-infra-501607-feast-staging` |
+| GCS | `ar-infra-501607-autoresearch-dev-raw-data`, `ar-infra-501607-feast-registry`, `ar-infra-501607-feast-staging`, `ar-infra-501607-autoresearch-dev-airflow-dags`, `ar-infra-501607-autoresearch-dev-airflow-logs` |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` (#20 plan/apply 후) |
 | Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` |
 | GKE | `autoresearch-dev-gke`, node pools `dev-default`, `airflow-dev` |
-| IAM | GKE node SA, app SA, Cloud SQL/Secret/Workload Identity 권한 |
+| IAM | GKE node SA, app SA, Airflow SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
 
 ## 기본 리전
 
