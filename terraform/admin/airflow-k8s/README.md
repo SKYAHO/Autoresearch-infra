@@ -36,3 +36,16 @@ applying removes that RoleBinding.
 
 The matching Google Cloud resources, including the Airflow GCP service account
 and IAM binding for Workload Identity, are managed by `terraform/envs/dev`.
+
+## Initial Apply Note
+
+On 2026-07-08 the `airflow` namespace already existed in the cluster. It was
+imported into this root instead of being deleted and recreated:
+
+```bash
+terraform import kubernetes_namespace_v1.airflow airflow
+```
+
+After the import, the admin root applied the remaining service account, RBAC,
+quota, limit range, and network policy resources. The final plan reported no
+changes.

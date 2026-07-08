@@ -102,6 +102,20 @@ terraform -chdir=terraform/admin/airflow-k8s apply
 `terraform/admin/airflow-k8s/terraform.tfvars`에는 실제 팀원 이메일과 CIDR을 넣지만
 커밋하지 않는다.
 
+## Apply Result
+
+- `terraform/envs/dev apply`: `16 added, 0 changed, 7 destroyed`
+  - Airflow GCP SA/IAM, metadata DB, DAG/log bucket, BigQuery/GCS/Secret 권한 생성
+  - legacy Cloud Build default compute SA 권한, legacy `airflow-dev` node pool,
+    legacy Airflow batch WI, 기존 app SA의 Airflow API secret accessor 정리
+- 이후 #43에서 Airflow GKE runtime drift를 코드화하고 state/import를 맞췄다.
+- `terraform/admin/airflow-k8s apply`: 기존 `airflow` namespace가 있어 최초 apply가
+  namespace already exists로 중단됨
+  - 삭제/재생성 대신 `terraform import kubernetes_namespace_v1.airflow airflow`로
+    기존 namespace를 state에 편입
+  - 재실행 결과: `11 added, 1 changed, 0 destroyed`
+- 최종 검증: `terraform/envs/dev`와 `terraform/admin/airflow-k8s` 모두 `No changes`
+
 ## 롤백
 
 1. admin root에서 Kubernetes 리소스를 제거 후 apply한다.
