@@ -4,7 +4,7 @@
 
 ## 현재 아키텍처 전제
 
-- GKE `autoresearch-dev-gke`: private nodes + **public endpoint**(`enable_private_endpoint=false`), `master_authorized_networks`로 특정 공인 IP만 마스터 API 허용.
+- GKE `autoresearch-dev-gke`: private nodes + **public endpoint**(`enable_private_endpoint=false`). 마스터 API 접근은 **DNS 기반 엔드포인트(IAM 검증, #45)가 기본**이고, `master_authorized_networks`(IP allowlist)는 예비 경로로 병행 유지.
 - Cloud SQL `autoresearch-dev-pg`: **private IP only**. VPC 내부에서만 접근.
 - VPC `autoresearch-dev-vpc`: IAP 경유 SSH(22/TCP) firewall rule 존재(`ssh-iap` 태그 VM).
 - Cloud Run proxy(#27): VPC 내부 전용(`INGRESS_TRAFFIC_INTERNAL_ONLY`), invoker IAM 인증.
@@ -22,7 +22,10 @@
 
 **A + D 조합**으로 dev를 운영한다. Bastion Host(B)와 VPN(C)은 **후속 이슈로 연기**한다.
 
-1. **GKE 마스터 API**: `master_authorized_networks`에 팀원 공인 IP/32 추가(기존 방식, #34로 `roles/container.clusterViewer` 부여와 짝). IP 변경 시 tfvars 갱신 + apply.
+1. **GKE 마스터 API**: **DNS 기반 컨트롤 플레인 엔드포인트(#45)가 기본 경로**.
+   Google 프런트엔드에서 IAM(`container.clusters.connect`, `roles/container.viewer`)으로
+   검증되므로 팀원 IP 등록이 필요 없다. `master_authorized_networks`(IP allowlist)는
+   예비 경로로 병행 유지하고, 안정화 후 IP 엔드포인트 축소는 별도 이슈로 검토한다.
 2. **Cloud SQL(private IP)**: 로컬에서 private IP로 직접 접속하지 않는다. 1차
    경로는 GKE 내부에서 Cloud SQL Auth Proxy 또는 Connector를 실행하고
    `kubectl port-forward`로 localhost에 연결하는 방식이다. IAP TCP forwarding은

@@ -78,6 +78,11 @@ output "gke_cluster_endpoint" {
   value       = google_container_cluster.dev.endpoint
 }
 
+output "gke_dns_endpoint" {
+  description = "GKE 컨트롤 플레인 DNS 엔드포인트. IP 등록 없이 IAM으로 kubectl 접속하는 주소(#45)."
+  value       = google_container_cluster.dev.control_plane_endpoints_config[0].dns_endpoint_config[0].endpoint
+}
+
 output "gke_cluster_ca_certificate" {
   description = "dev GKE 클러스터 CA 인증서(base64)."
   value       = google_container_cluster.dev.master_auth[0].cluster_ca_certificate
