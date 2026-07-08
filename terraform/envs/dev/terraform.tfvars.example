@@ -65,3 +65,6 @@ proxy_deletion_protection = false
 # dev Bastion Host (#47) — IAP 터널 전용
 bastion_enabled      = true
 bastion_machine_type = "e2-micro"
+
+# Airflow UI 내부 노출 (#48)
+internal_dns_domain = "dev.autoresearch.internal"

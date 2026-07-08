@@ -253,3 +253,13 @@ output "bastion_internal_ip" {
   description = "bastion 내부 IP. VPC 내부 서비스 접근 터널 종단."
   value       = var.bastion_enabled ? google_compute_instance.bastion[0].network_interface[0].network_ip : null
 }
+
+output "airflow_ilb_ip" {
+  description = "Airflow webserver internal LB 고정 IP(#48). Helm values loadBalancerIP로 사용."
+  value       = google_compute_address.airflow_ilb.address
+}
+
+output "airflow_internal_fqdn" {
+  description = "Airflow UI 내부 도메인(#48). Bastion 터널 상태에서 브라우저 접속 주소."
+  value       = trimsuffix(google_dns_record_set.airflow.name, ".")
+}
