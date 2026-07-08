@@ -263,3 +263,13 @@ output "airflow_internal_fqdn" {
   description = "Airflow UI 내부 도메인(#48). Bastion 터널 상태에서 브라우저 접속 주소."
   value       = trimsuffix(google_dns_record_set.airflow.name, ".")
 }
+
+output "airflow_oauth_client_id_secret_id" {
+  description = "Airflow Google OAuth client ID Secret Manager secret id(#54). Payload is managed outside Terraform."
+  value       = google_secret_manager_secret.airflow_oauth_client_id.secret_id
+}
+
+output "airflow_oauth_client_secret_secret_id" {
+  description = "Airflow Google OAuth client secret Secret Manager secret id(#54). Payload is managed outside Terraform."
+  value       = google_secret_manager_secret.airflow_oauth_client_secret.secret_id
+}
