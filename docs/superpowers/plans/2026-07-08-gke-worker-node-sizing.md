@@ -48,5 +48,18 @@ machine type change can disrupt running workloads.
 Latest reviewed plan:
 
 - `0 to add`, `1 to change`, `0 to destroy`
-- `google_container_node_pool.dev` updates in-place
+- plan refreshed the already-applied remote `dev-default` node pool state
+- `google_container_node_pool.dev` updates in-place at the Terraform resource
+  level
 - `node_config.machine_type`: `e2-small` -> `e2-standard-4`
+
+Operational impact:
+
+- GKE may recreate or roll the underlying node VM even though Terraform reports
+  no node pool resource destroy.
+- With a single node pool and min 1 node, Pods can be evicted and rescheduled;
+  if no suitable node is temporarily available, Pods can remain Pending or
+  become unavailable.
+- Apply before Airflow is installed when possible. If workloads already run on
+  the cluster, coordinate a maintenance window or add spare capacity before the
+  change.

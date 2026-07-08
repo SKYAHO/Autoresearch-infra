@@ -36,10 +36,18 @@ Rationale:
 
 ## Impact
 
-- Cost increases versus `e2-small`; confirm current pricing before apply.
-- Terraform may replace or roll the GKE node pool depending on provider/GKE
-  behavior. Review plan output before apply.
-- Workloads running on the node pool can be rescheduled during the update.
+- Cost increases versus `e2-small`. In `asia-northeast3`, `e2-standard-4` is
+  roughly USD 95-100 per month per always-on node before discounts, disk, NAT,
+  and price changes. Confirm current pricing before apply.
+- The reviewed Terraform plan is based on the already-applied remote
+  `dev-default` node pool state and reports `0 to add`, `1 to change`,
+  `0 to destroy`.
+- Terraform updates the node pool resource in-place, but GKE can still recreate
+  or roll the underlying node VM to apply the new machine type.
+- Because dev currently has a single node pool with min 1 node, workloads can be
+  evicted, rescheduled, temporarily Pending, or temporarily unavailable during
+  the update. If Airflow or another workload is already running, schedule a
+  maintenance window before apply.
 - No secrets, service account keys, state files, or real tfvars values are
   required in the repository.
 

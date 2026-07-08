@@ -299,10 +299,17 @@ metadata:
 ```
 
 ### 비용/롤백
-- 예상: e2-standard-4 워커 노드 비용 + disk + Cloud NAT 고정비. Standard
-  control plane은 직접 과금/사양 지정 대상이 아니다. 정확한 월 비용은 apply
-  전 Google Cloud Pricing Calculator로 확인한다.
+- 예상: e2-standard-4 워커 노드는 asia-northeast3 on-demand 기준 대략
+  $95~100/월/노드 수준(할인, 환율, 가격 변경 제외) + disk + Cloud NAT 고정비.
+  `gke_node_count_min = 1`이라 미사용 시에도 최소 1노드는 상시 과금된다.
+  Standard control plane은 직접 과금/사양 지정 대상이 아니다. 정확한 비용은
+  apply 전 Google Cloud Pricing Calculator로 확인한다.
 - 절감: min=1 고정. 장기 미사용 시 노드풀 count 0 또는 `terraform destroy` 권장(NAT 고정비는 노드 0화로 노드 비용만 절감, NAT 자체는 남음).
+- 변경 영향: Terraform plan은 node pool 리소스 `0 destroy` / `1 change`
+  in-place로 표시되지만, GKE는 실제 노드 VM을 새 machine type으로 교체/재생성할
+  수 있다. 단일 노드풀(min=1)만 있는 상태에서는 Pod가 evict 후 재스케줄되거나
+  일시적으로 Pending/Unavailable이 될 수 있으므로 Airflow 등 워크로드가 올라간
+  뒤에는 작업 시간을 조율한다.
 - **Cloud Operations**(GKE 기본 On): Logging/Monitoring 비용 발생 가능. 비용 민감 시 클러스터 `logging_service`/`monitoring_service` 비활성화 검토.
 - **State**: dev 루트는 GCS 원격 backend(`autoresearch-dev-tfstate`)를 사용한다. 비밀번호 평문 저장은 Terraform state의 근본 한계 → 버킷 IAM/UBLA 로 보호.
 - 비밀번호 rotation: `random_password` 재생성(수동 `terraform -replace=random_password.db_app_password` 또는 keepers) → SQL user(`cloud_sql.tf`)와 Secret version(`secret_manager.tf`)에 동일 값 반영. 같은 소스라 parity 유지.
