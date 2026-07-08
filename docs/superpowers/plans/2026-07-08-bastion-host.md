@@ -4,7 +4,7 @@
 
 ## 작업 순서
 
-1. `terraform/envs/dev/bastion.tf`: 전용 SA(role 없음) + `google_compute_instance`
+1. `terraform/envs/dev/bastion.tf`: `google_compute_instance` (SA attach 없음)
    (e2-micro, 외부 IP 없음, OS Login, Shielded, `ssh-iap` 태그, `bastion_enabled` count)
 2. `locals.tf`(`bastion_name`), `variables.tf`(+4), `outputs.tf`(+2), `terraform.tfvars.example`
 3. `terraform/admin/gke-team-access/main.tf`: 팀원 IAM 3종 추가
@@ -17,7 +17,7 @@
 ## 검증 체크리스트
 
 - [ ] fmt/validate 통과 (envs/dev + admin/gke-team-access)
-- [ ] dev plan: 2 to add (SA, instance), 기존 리소스 변경 없음
+- [ ] dev plan: 1 to add (instance), 기존 리소스 변경 없음
 - [ ] gke-team-access plan: 팀원 수 × 3 binding 추가
 - [ ] 외부 IP 미보유(access_config 없음) 확인
 - [ ] 문서 갱신

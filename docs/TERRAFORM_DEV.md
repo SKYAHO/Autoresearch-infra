@@ -183,7 +183,7 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | 네트워크 | dev subnet, **외부 IP 없음** | egress는 Cloud NAT |
 | SSH 진입 | **IAP TCP forwarding만** | 기존 `ssh-iap` 태그 firewall 재사용 (35.235.240.0/20 → 22) |
 | 로그인 | OS Login (`enable-oslogin=TRUE`) | SSH 키 배포 없이 IAM으로 통제 |
-| SA | `autoresearch-dev-bastion` (role 없음) | 최소 권한 |
+| SA | **없음** | GCP API 호출 없음. SA를 붙이면 SSH에 serviceAccountUser가 추가로 필요 |
 | 보안 | Shielded VM (secure boot/vTPM/integrity) | |
 | 팀원 IAM | `iap.tunnelResourceAccessor` + `compute.osLogin` + `compute.viewer` | `terraform/admin/gke-team-access`에서 관리 |
 | 용도 | Airflow UI(#48) 등 VPC 내부 서비스 접근 터널 | kubectl은 #45 DNS 엔드포인트 사용 — bastion 불필요 |

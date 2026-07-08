@@ -17,7 +17,7 @@ VPN/Bastion 경유)의 Bastion 경로다.
 | 네트워크 | dev subnet, **외부 IP 없음** | 공격면 최소화. egress는 Cloud NAT |
 | SSH 진입 | IAP TCP forwarding만 (`ssh-iap` 태그) | 기존 firewall 재사용, 공인 SSH 포트 없음 |
 | 로그인 | OS Login | SSH 키 배포/관리 제거, IAM으로 접속 통제·회수 |
-| VM SA | 전용 SA, role 없음 | 최소 권한. bastion이 GCP API를 쓸 일 없음 |
+| VM SA | **없음** (attach 안 함) | bastion은 GCP API 호출 없음. SA를 붙이면 OS Login SSH에 팀원의 `iam.serviceAccountUser`가 추가로 필요해져 오히려 권한이 늘어남(리뷰 반영) |
 | 팀원 IAM | `iap.tunnelResourceAccessor` + `compute.osLogin` + `compute.viewer` (project) | 터널 통과 + SSH 로그인 + instance 조회. 모두 읽기/접속용 |
 | IAM 위치 | `terraform/admin/gke-team-access` | 팀원 이메일을 dev plan에서 분리하는 기존 패턴 유지 |
 | on/off | `var.bastion_enabled` (count) | 장기 미사용 시 false apply로 비용 0 |

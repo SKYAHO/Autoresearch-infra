@@ -5,11 +5,10 @@
 #
 # 접속 권한(팀원): terraform/admin/gke-team-access에서 IAM으로 관리
 # (roles/iap.tunnelResourceAccessor + roles/compute.osLogin + roles/compute.viewer).
-
-resource "google_service_account" "bastion" {
-  account_id   = local.bastion_name
-  display_name = "Autoresearch dev bastion SA (role 없음)"
-}
+#
+# 리뷰 반영: service account를 붙이지 않는다. SA가 attach된 인스턴스에
+# OS Login으로 SSH하려면 팀원에게 해당 SA의 iam.serviceAccountUser가 추가로
+# 필요해지고, bastion은 GCP API를 호출할 일이 없어 SA 자체가 불필요하다.
 
 resource "google_compute_instance" "bastion" {
   count = var.bastion_enabled ? 1 : 0
@@ -36,11 +35,6 @@ resource "google_compute_instance" "bastion" {
   # SSH 키 배포 대신 OS Login: 접속 가능 계정을 IAM으로 통제.
   metadata = {
     enable-oslogin = "TRUE"
-  }
-
-  service_account {
-    email  = google_service_account.bastion.email
-    scopes = ["cloud-platform"]
   }
 
   shielded_instance_config {
