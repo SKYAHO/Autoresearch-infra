@@ -31,6 +31,20 @@
 실제 이메일과 공인 IP는 로컬 `terraform.tfvars`에만 넣고 커밋하지 않는다. 개인
 정보와 임시 접근 값을 PR diff, issue 댓글, 문서에 남기지 않는다.
 
+## 권한 범위 요약
+
+팀원 권한은 `클러스터 접속`과 `namespace 내부 작업`을 분리한다.
+
+| 권한 구분 | 대상 | 부여 권한 | 가능한 작업 | 제한되는 작업 |
+|---|---|---|---|---|
+| GCP IAM | 팀원 Google 계정 | `roles/container.clusterViewer` | `get-credentials`, 클러스터 정보 조회 | GCP 리소스 생성/수정, 클러스터 설정 변경 |
+| Kubernetes RBAC | 팀원 Google 계정 | `airflow` namespace 안의 `admin` RoleBinding | Airflow Helm install/upgrade, Deployment/Service/Secret/ConfigMap/Job/PVC 관리 | 새 namespace 생성, CRD 설치, ClusterRole/ClusterRoleBinding 생성, node/storageclass/persistentvolume 수정, 다른 namespace 작업 |
+| Workload Identity | `airflow` namespace의 KSA | Airflow GCP SA 가장 | Airflow pod가 Cloud SQL, GCS, BigQuery, Secret Manager에 필요한 범위로 접근 | 팀원 개인 계정이 직접 secret payload를 읽거나 GCP 데이터 리소스를 관리하는 권한 |
+
+즉, 팀원은 `airflow` namespace 안에서 Airflow를 설치하고 운영할 수 있지만 클러스터 전체
+관리자는 아니다. Airflow 외 다른 작업이 필요하면 작업별 namespace와 RoleBinding을 별도
+이슈로 추가한다.
+
 ## 팀원 로컬 준비물
 
 - Google Cloud CLI

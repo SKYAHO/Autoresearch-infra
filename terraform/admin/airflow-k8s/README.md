@@ -34,6 +34,11 @@ Kubernetes authorization to create namespace-scoped resources.
 `admin` ClusterRole within only the `airflow` namespace. Removing an email and
 applying removes that RoleBinding.
 
+This is not cluster-admin access. Installers can manage typical Airflow Helm
+resources inside the `airflow` namespace, but they cannot create namespaces,
+install CRDs, create ClusterRoles/ClusterRoleBindings, edit nodes, or work in
+other namespaces unless a separate RBAC binding is added.
+
 The matching Google Cloud resources, including the Airflow GCP service account
 and IAM binding for Workload Identity, are managed by `terraform/envs/dev`.
 
