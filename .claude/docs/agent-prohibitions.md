@@ -42,5 +42,5 @@
 - 규칙 문서(`CLAUDE.md`, `CONTRIBUTING.md`, `.claude/docs/`) 간에
   충돌하는 내용을 새로 만들지 않습니다. 충돌을 발견하면 사용자에게
   보고합니다.
-- 로컬 전용 문서(`agent.md`, `docs/NOTION_PROGRESS_TIMELINE.md`)를
+- 로컬 전용 문서(`agent.local.md`, `docs/NOTION_PROGRESS_TIMELINE.md`)를
   커밋하지 않습니다.

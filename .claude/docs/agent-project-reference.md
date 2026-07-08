@@ -63,8 +63,11 @@ CONTRIBUTING.md              # 사람용 협업 규칙 (워크플로우 전체)
 branch_ruleset_main.json     # main branch ruleset 정의
 ```
 
-로컬 전용(커밋하지 않음): `agent.md`, `docs/NOTION_PROGRESS_TIMELINE.md`,
+로컬 전용(커밋하지 않음): `agent.local.md`, `docs/NOTION_PROGRESS_TIMELINE.md`,
 `.claude/settings.local.json`
+
+에이전트 호환 진입점으로 `AGENT.md -> CLAUDE.md`, `AGENTS.md -> CLAUDE.md`,
+`.agent -> .claude`, `.agents -> .claude` symlink를 둔다.
 
 ## Team Ownership & Domains
 

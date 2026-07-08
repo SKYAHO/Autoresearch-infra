@@ -16,7 +16,7 @@
 규칙이 충돌하면 다음 순서로 적용합니다:
 
 1. 사용자의 명시적 요청
-2. `CLAUDE.md` 및 `AGENTS.md`
+2. `CLAUDE.md` 및 `AGENT.md`/`AGENTS.md` symlink
 3. `.claude/docs/` 하위 가이드
 4. `README.md`, `CONTRIBUTING.md`, 기타 저장소 문서
 

@@ -126,7 +126,7 @@ docs: GCP 운영 가이드 초안 작성
 - 에이전트가 남긴 `이해도 확인:` inline comment에는 같은 스레드에서 답변하고, 필요하면 로컬에서 검증한 뒤 resolve합니다.
 - trivial, docs-only, formatting-only 변경에는 이해도 확인 comment를 남기지 않는 정책입니다.
 - 필요한 repository secret: `CLAUDE_CODE_OAUTH_TOKEN`
-- 에이전트 작업 규칙은 `CLAUDE.md`/`AGENTS.md`와 `.claude/docs/`를 기준으로 합니다.
+- 에이전트 작업 규칙은 `CLAUDE.md`/`AGENT.md`/`AGENTS.md`와 `.claude/docs/`를 기준으로 합니다.
 
 ---
 
@@ -189,4 +189,4 @@ terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
 - Issue Forms: `.github/ISSUE_TEMPLATE/*.yml`
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
 - main ruleset: `branch_ruleset_main.json`, `docs/BRANCH_RULESET_MAIN.md`
-- 에이전트 가이드: `CLAUDE.md`, `AGENTS.md`, `.claude/docs/`
+- 에이전트 가이드: `CLAUDE.md`, `AGENT.md`, `AGENTS.md`, `.claude/docs/`
