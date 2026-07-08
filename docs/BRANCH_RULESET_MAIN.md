@@ -41,4 +41,7 @@ gh api \
 
 - `bypass_actors`가 비어 있어 관리자 포함 모든 사용자에게 동일하게 적용됩니다.
 - `lint` check는 GitHub Actions workflow 문법을 actionlint로 확인합니다.
+- Terraform `plan` workflow는 PR마다 실행되고 댓글을 게시하지만, 현재
+  ruleset required status check에는 포함하지 않습니다. 실패 시 머지 전
+  원인을 확인하고 수정합니다.
 - merge method는 `squash`만 허용합니다.

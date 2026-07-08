@@ -34,6 +34,7 @@
 │   ├── workflows/
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── terraform/
+│   ├── admin/              # 운영자 전용 별도 state root(gke-team-access, airflow-k8s)
 │   ├── bootstrap/          # 원격 state bucket, WIF, CI SA 부트스트랩
 │   ├── envs/
 │   │   └── dev/            # dev 환경 Terraform root module
