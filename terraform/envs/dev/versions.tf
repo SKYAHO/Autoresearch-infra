@@ -17,10 +17,6 @@ terraform {
       version = ">= 3.0"
     }
 
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = ">= 2.20"
-    }
   }
 
   backend "gcs" {
@@ -43,13 +39,4 @@ provider "google-beta" {
   zone    = var.zone
 
   default_labels = local.default_labels
-}
-
-data "google_client_config" "default" {}
-
-# ponytail: apply 시점 ADC/WIF로 cluster 접근. 별도 kubeconfig 불필요.
-provider "kubernetes" {
-  host                   = "https://${google_container_cluster.dev.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(google_container_cluster.dev.master_auth.0.cluster_ca_certificate)
 }
