@@ -4,6 +4,9 @@
 
 **Goal:** dev 환경에 최소 비용·보안 기본기를 갖춘 Standard GKE 클러스터를 Terraform으로 추가한다 (이슈 #5).
 
+> 2026-07-08 update: 이 문서는 #5 최초 최소 비용 구현 계획 기록이다.
+> 워커 노드 머신 타입 기준은 #41에서 `e2-standard-4`로 변경한다.
+
 **Architecture:** Standard zonal 클러스터 + 노드풀 autoscaling(1~2). private nodes + master authorized networks. 노드 SA(AR pull/로깅/모니터링)와 app GCP SA(Workload Identity, Cloud SQL Client + Secret Accessor) 분리. private 노드 egress용 Cloud NAT. #4에서 미뤄둔 DB 비밀번호 Secret Manager 저장을 같이 추가.
 
 **Tech Stack:** Terraform, Google provider(`>=5.0,<8.0`, 현재 7.39.0), google-beta, random. 검증 = `terraform fmt/validate` + `git diff --check` (이 repo는 pytest 없음).

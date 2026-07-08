@@ -16,14 +16,20 @@
 | **A. master_authorized_networks(IP allowlist)** | **$0** | 중(IP 노출/변경 시 재등록). 마스터 API만 | 낮음(IP 1줄 추가 apply) | 팀원 공인 IP가 자주 바뀌면 관리 비용 증가. kubectl은 가능하지만 Cloud SQL private IP / 내부 서비스 직접 접근은 별도 경로 필요 |
 | B. Bastion Host(단일 VM) | ~$10-15(e2-micro + disk) + Cloud NAT 공유 | 중-고(IAP tunneling으로 SSH만). 미사용 시 비용 누적 | 중(VM 패치/키 관리). IAP tunneling 필수 | private Cloud SQL / 내부 서비스 직접 접근 가능. 단일 장애점. 장기 실행 비용 |
 | C. GCP Cloud VPN / HA VPN(site-to-site) | ~$25+(고정비) + 피어 측 VPN 장비 | 고(전사 네트워크와 VPC 터널) | 높음(피어 측 설정, 라우팅, 키 rotation) | dev 단일 팀 규모엔 과잉. 사내 VPN 인프라 전제 |
-| D. Identity-Aware Proxy(IAP) tunneling(기존 firewall) | **$0**(IAP 자체 무료, 터널 대역폭 과금 미미) | 고(Google 계정 + `roles/iap.tunnelAccessor` gating) | 낮음(IAP 데스크톱 클라이언트) | Cloud SQL Auth Proxy, GKE 노드 SSH, 내부 서비스 접근 모두 커버. Bastion/VPN 없이 private 리소스 도달 가능 |
+| D. Identity-Aware Proxy(IAP) tunneling(기존 firewall) | **$0**(IAP 자체 무료, 터널 대역폭 과금 미미) | 고(Google 계정 + `roles/iap.tunnelAccessor` gating) | 낮음(IAP 데스크톱 클라이언트) | IAP TCP forwarding은 Compute VM 또는 GKE 노드의 특정 포트가 종단이어야 한다. 임의의 VPC private IP로 직접 터널링하지 않는다 |
 
 ## 1차 권장안(dev)
 
 **A + D 조합**으로 dev를 운영한다. Bastion Host(B)와 VPN(C)은 **후속 이슈로 연기**한다.
 
 1. **GKE 마스터 API**: `master_authorized_networks`에 팀원 공인 IP/32 추가(기존 방식, #34로 `roles/container.clusterViewer` 부여와 짝). IP 변경 시 tfvars 갱신 + apply.
-2. **Cloud SQL(private IP)**: 로컬에서 `cloud-sql-connect --insecure` 또는 Cloud SQL Auth Proxy를 **IAP tunneling**으로 실행. Bastion 불필요.
+2. **Cloud SQL(private IP)**: 로컬에서 private IP로 직접 접속하지 않는다. 1차
+   경로는 GKE 내부에서 Cloud SQL Auth Proxy 또는 Connector를 실행하고
+   `kubectl port-forward`로 localhost에 연결하는 방식이다. IAP TCP forwarding은
+   터널 종단이 될 Compute VM/GKE 노드의 특정 포트가 필요하므로, 임의의 Cloud SQL
+   private IP로 직접 터널을 만들 수 없다. `gcloud sql connect`류의 공인 IP
+   allowlist 방식은 현재 `ipv4_enabled=false`인 private-IP-only 인스턴스에는
+   맞지 않는다.
 3. **내부 서비스(Airflow UI 등)**: `kubectl port-forward`로 localhost에서만 접속. 외부 미공개 원칙 준수. 필요 시 Cloud Run proxy(#27) 경유 경로 별도 검토.
 4. **GKE 노드 SSH(디버깅)**: IAP tunneling(`gcloud compute ssh ... --tunnel-through-iap`), `roles/iap.tunnelAccessor` 부여.
 
