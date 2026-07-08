@@ -168,3 +168,48 @@ output "proxy_sa_email" {
   description = "proxy Cloud Run 런타임 service account email."
   value       = google_service_account.proxy.email
 }
+
+output "airflow_k8s_namespace" {
+  description = "Airflow가 배포되는 Kubernetes namespace."
+  value       = var.airflow_k8s_namespace
+}
+
+output "airflow_k8s_service_account" {
+  description = "Airflow Workload Identity 매핑용 KSA 이름."
+  value       = var.airflow_k8s_service_account
+}
+
+output "airflow_gcp_service_account_email" {
+  description = "Airflow Workload Identity용 GCP 서비스 계정(Cloud SQL, BigQuery, GCS 최소 권한)."
+  value       = google_service_account.airflow.email
+}
+
+output "airflow_workload_identity_principal" {
+  description = "Airflow KSA가 가장할 principal 식별자."
+  value       = local.airflow_workload_identity_principal
+}
+
+output "airflow_metadata_database_name" {
+  description = "Airflow metadata DB(Cloud SQL 내 database 이름)."
+  value       = google_sql_database.airflow.name
+}
+
+output "airflow_youtube_api_key_secret_id" {
+  description = "Airflow YouTube API key Secret Manager secret id. Payload is managed outside Terraform."
+  value       = google_secret_manager_secret.airflow_youtube_api_key.secret_id
+}
+
+output "airflow_openrouter_api_key_secret_id" {
+  description = "Airflow OpenRouter API key Secret Manager secret id. Payload is managed outside Terraform."
+  value       = google_secret_manager_secret.airflow_openrouter_api_key.secret_id
+}
+
+output "airflow_dags_bucket_name" {
+  description = "Airflow DAG 저장 GCS bucket 이름."
+  value       = google_storage_bucket.airflow_dags.name
+}
+
+output "airflow_logs_bucket_name" {
+  description = "Airflow task log 저장 GCS bucket 이름."
+  value       = google_storage_bucket.airflow_logs.name
+}

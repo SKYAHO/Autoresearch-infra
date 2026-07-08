@@ -27,6 +27,7 @@ terraform/
 │       ├── backend.tf.example
 │       ├── cloud_sql.tf      # #4 dev Cloud SQL (PostgreSQL, private IP)
 │       ├── gke.tf            # #5 dev GKE cluster + 노드풀 + SA/WI
+│       ├── airflow.tf        # #32 Airflow namespace/RBAC + GCP SA/WI + DB/버킷
 │       ├── locals.tf
 │       ├── nat.tf            # #5 Cloud Router + Cloud NAT (private 노드 egress)
 │       ├── outputs.tf
@@ -284,6 +285,10 @@ member만 제거된다(non-authoritative). 단, 이미 발급받은 access token
 유효하므로 **즉시 차단이 아니다**. 긴급 차단이 필요하면 해당 Google 계정의 GCP 세션을 별도로
 종료해야 한다. kubeconfig 자체는 로컬에 남지만 다음 인증 시 403.
 
+기존 dev state에 `google_project_iam_member.gke_kubectl_users[...]`가 남아 있으면
+실제 IAM을 destroy하지 않는다. 이 리소스는 `terraform/admin/gke-team-access`가
+소유하므로 dev root에서는 `terraform state rm`으로 state에서만 분리한다.
+
 dev 내부망 접근 전략(Bastion/VPN 비교, Cloud SQL private IP / 내부 서비스 접근
 경로)은 [docs/ACCESS_STRATEGY.md](ACCESS_STRATEGY.md)를 참조한다.
 
@@ -317,6 +322,60 @@ metadata:
 - **State**: dev 루트는 GCS 원격 backend(`autoresearch-dev-tfstate`)를 사용한다. 비밀번호 평문 저장은 Terraform state의 근본 한계 → 버킷 IAM/UBLA 로 보호.
 - 비밀번호 rotation: `random_password` 재생성(수동 `terraform -replace=random_password.db_app_password` 또는 keepers) → SQL user(`cloud_sql.tf`)와 Secret version(`secret_manager.tf`)에 동일 값 반영. 같은 소스라 parity 유지.
 - 롤백: `terraform destroy`로 dev stack 제거. state는 GCS backend에 남으며, 비용 리소스(Cloud SQL/GKE/NAT) 삭제 여부를 반드시 확인한다.
+
+## dev Airflow (#32)
+
+Airflow 구성요소가 배포되는 GKE namespace 경계와, 거기에 물릴 GCP 권한(Cloud SQL / GCS / BigQuery)을 IaC로 관리한다. Airflow Helm chart values, executor, fernet key 등 앱 설정은 이 저장소 범위 밖(앱 저장소 `SKYAHO/Autoresearch`)이다.
+
+Airflow는 두 Terraform root로 나눈다.
+
+- `terraform/envs/dev`: GCP 리소스만 관리한다. GCP SA, Workload Identity IAM member, Cloud SQL database, GCS bucket/IAM, BigQuery IAM이 여기 있다.
+- `terraform/admin/airflow-k8s`: Kubernetes namespace/RBAC/ResourceQuota/LimitRange/NetworkPolicy만 관리한다. GKE API 서버가 `master_authorized_networks`로 제한되어 있어, GitHub Actions PR plan이 이 root를 실행하지 않는다. apply는 허용된 관리자 네트워크에서 수행한다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Namespace | `airflow` | `var.airflow_k8s_namespace`. GKE 클러스터 내 신규 namespace |
+| KSA | `airflow` | `var.airflow_k8s_service_account`. `iam.gke.io/gcp-service-account` annotation으로 GCP SA 매핑 |
+| GCP SA | `autoresearch-dev-airflow` | `${resource_prefix}-airflow`. WI 전용, JSON 키 미발급 |
+| WI principal | `ar-infra-501607.svc.id.goog[airflow/airflow]` | KSA annotation으로 사용 |
+| RBAC(Role) | `airflow-components` (namespace-scoped) | pods/configmaps/secrets/services, apps, batch 전 동사. KSA에 바인딩 |
+| 설치자 RBAC | `installer-admin`(for_each) | `terraform/admin/airflow-k8s/terraform.tfvars`의 `installer_user_emails` 팀원에게 namespace 내 `admin` ClusterRole 바인딩. Helm 설치 경로 |
+| ResourceQuota | cpu 4 / mem 8Gi / pods 20 / pvc 4 | namespace 자원 한도 |
+| LimitRange | default 500m/512Mi, request 250m/256Mi | Container 기본 request/limit |
+| NetworkPolicy(ingress) | 같은 namespace + kube-system만 | deny-by-default |
+| NetworkPolicy(egress) | DNS(53), Cloud SQL(private_services_cidr 5432), GKE metadata server(169.254.169.254:80), HTTPS(443) | WI 토큰 교환은 metadata server HTTP 80 필요. 외부 API/googleapis 호출은 443로 |
+| Cloud SQL DB | `airflow` | 기존 dev 인스턴스 내 신규 database(metadata DB) |
+| Secret Manager | `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` | secret payload는 Terraform 밖에서 주입. secret metadata와 Airflow SA accessor만 Terraform 관리 |
+| GCS buckets | `ar-infra-501607-autoresearch-dev-airflow-dags`, `...-airflow-logs` | DAG 버전관리 / task log 영속화. `prevent_destroy=true` |
+| 접근 권한 | Cloud SQL client, Secret Manager accessor(Airflow API secrets), BigQuery jobUser(project), GCS objectAdmin(dags/logs/feast_registry/feast_staging), GCS objectViewer+objectCreator(raw_data), BigQuery dataEditor(feast_offline_store) | raw_data는 읽기+새 객체 생성만 허용해 기존 원본 삭제/덮어쓰기를 차단 |
+
+### 설치 담당자 Helm 적용 경로
+
+`terraform/admin/airflow-k8s`의 `installer-admin` RoleBinding이 팀원에게 `airflow` namespace 내 `admin` 권한을 준다. 이 root는 GKE API 서버에 접근 가능한 관리자 네트워크에서만 apply한다. 절차:
+
+```bash
+# 1) 본인 IP가 master_authorized_networks에 포함되어 있고 roles/container.clusterViewer가 있는지 확인
+# 2) credentials 획득
+gcloud container clusters get-credentials autoresearch-dev-gke \
+  --zone asia-northeast3-a --project ar-infra-501607
+# 3) K8s 경계 root 적용(관리자만)
+cd terraform/admin/airflow-k8s
+terraform init
+terraform apply
+# 4) namespace 확인
+kubectl -n airflow get all
+# 5) Helm으로 Airflow 설치(values/executor는 앱 저장소에서 관리)
+helm install airflow airflow/airflow -n airflow -f values.yaml
+```
+
+KSA(`airflow`)와 WI 매핑은 Terraform이 생성하므로 Helm values에서 별도 ServiceAccount 생성은 끄고, 위 KSA를 `existingServiceAccountName`로 지정한다.
+
+### 비용/롤백
+
+- namespace/RBAC/NetworkPolicy 자체는 비용 발생 안 함. GCS 버킷 2개(DAG/log)는 객체 크기에 따라 과금.
+- `prevent_destroy=true`: dev 전체 destroy에서도 버킷 삭제 차단. 삭제 필요 시 lifecycle 해제 후 별도 apply.
+- Cloud SQL database `airflow`는 기존 인스턴스 비용에 포함(db-f1-micro 공유).
+- 롤백: `terraform/envs/dev/airflow.tf`의 GCP 리소스와 `terraform/admin/airflow-k8s`의 K8s 리소스를 각각 제거 후 apply. 단 GCS 버킷은 prevent_destroy로 보호됨.
 
 ## 필수 GCP API
 
