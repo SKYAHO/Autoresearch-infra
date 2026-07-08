@@ -14,7 +14,8 @@ Observed drift:
 - `google_storage_bucket_iam_member.cloud_build_compute_bucket_object_viewer`
 - `google_container_node_pool.airflow`
 - `google_service_account_iam_member.gke_app_airflow_batch_wi`
-- an extra GKE `master_authorized_networks` CIDR, `222.237.245.219/32`
+- an extra GKE `master_authorized_networks` CIDR not present in the current
+  managed input (`<unmanaged-extra-operator-ip>/32`)
 
 ## Decision
 
@@ -27,14 +28,30 @@ Rationale:
 - Git history does not show these resources as an intended merged design.
 - The Cloud Build IAM bindings grant write/logging/bucket permissions to the
   default compute service account without a current workflow owner.
+- Current owner checks before cleanup:
+  - repository search found no Cloud Build trigger, Cloud Deploy pipeline, or
+    default compute service account owner in `.github/`, `terraform/`, or
+    `docs/`;
+  - `gcloud builds triggers list --project ar-infra-501607` returned no
+    triggers;
+  - Cloud Deploy API is disabled in `ar-infra-501607`, so no Cloud Deploy
+    delivery pipeline can currently depend on the removed default compute
+    service account binding;
+  - GKE nodes use the dedicated `autoresearch-dev-gke-nodes` service account,
+    not the project default compute service account.
 - The `airflow-dev` node pool creates ongoing GKE cost and is superseded by the
   #32 direction: create an Airflow installation boundary, not a dedicated legacy
   node pool.
 - The `gke_app_airflow_batch_wi` binding lets an Airflow namespace principal
   impersonate the application GCP service account. #32 uses a dedicated Airflow
   service account instead.
-- `MASTER_AUTHORIZED_NETWORKS` currently contains only `222.108.125.33/32`; the
-  extra `222.237.245.219/32` entry is unmanaged network access.
+- `MASTER_AUTHORIZED_NETWORKS` currently contains only the managed operator
+  CIDR (`<managed-operator-ip>/32`); the extra
+  `<unmanaged-extra-operator-ip>/32` entry is unmanaged network access.
+- The exact source of the extra CIDR is not provable from Terraform state alone.
+  It may have come from a previous local tfvars apply or a manual console edit.
+  The cleanup criterion is that the CIDR is not present in the current managed
+  input and has no documented owner.
 
 ## Security Notes
 
@@ -42,6 +59,8 @@ Rationale:
   would hide security and cost exposure from Terraform.
 - Use a targeted Terraform plan/apply only for the drift cleanup. Do not mix
   this with unrelated resource changes.
+- Do not commit real operator IPs from local tfvars or plan output. Use
+  placeholders in docs and PR text.
 - Confirm the final full `terraform/envs/dev plan` no longer contains unrelated
   destroy or replace actions.
 
