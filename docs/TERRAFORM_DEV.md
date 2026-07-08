@@ -237,10 +237,21 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 클러스터 조회/연결용이며, Kubernetes namespace 내부 작업 권한은 #32의 RBAC에서 별도로
 정한다.
 
-대상 Google 계정은 `var.gke_kubectl_user_emails`(set of string)로 관리하며,
-**실제 이메일은 로컬 `terraform.tfvars`에만 기입**한다(repo 노출 방지).
-`terraform.tfvars.example`에 형식 예시가 있다. CI plan은 `TF_VAR_gke_kubectl_user_emails`
-GitHub variable에서 주입하며, 값이 없으면 빈 리스트로 0개 IAM member만 표시한다.
+대상 Google 계정은 dev 루트가 아니라 `terraform/admin/gke-team-access`에서 별도 state로
+관리한다. 실제 이메일은 해당 경로의 로컬 `terraform.tfvars`에만 기입하며(repo 노출 방지),
+일반 PR Terraform plan에는 팀원 이메일과 사람 IAM 변경이 나오지 않게 분리한다.
+
+관리자 적용 절차:
+
+```bash
+cd terraform/admin/gke-team-access
+cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars에 실제 팀원 Google 계정 입력(repo에 커밋 금지)
+
+terraform init
+terraform plan
+terraform apply
+```
 
 ```bash
 gcloud auth login
@@ -266,7 +277,11 @@ kubectl get ns
 - **잘못된 context**: `kubectl config current-context`가
   `gke_ar-infra-501607_asia-northeast3-a_autoresearch-dev-gke` 계열인지 확인한다.
 
-**Off-boarding**: `var.gke_kubectl_user_emails`에서 이메일을 제거하고 apply하면 `google_project_iam_member`가 해당 member만 제거된다(non-authoritative). 단, 이미 발급받은 access token은 만료(최대 ~1시간)까지 유효하므로 **즉시 차단이 아니다**. 긴급 차단이 필요하면 해당 Google 계정의 GCP 세션을 별도로 종료해야 한다. kubeconfig 자체는 로컬에 남지만 다음 인증 시 403.
+**Off-boarding**: `terraform/admin/gke-team-access/terraform.tfvars`의
+`team_member_emails`에서 이메일을 제거하고 apply하면 `google_project_iam_member`가 해당
+member만 제거된다(non-authoritative). 단, 이미 발급받은 access token은 만료(최대 ~1시간)까지
+유효하므로 **즉시 차단이 아니다**. 긴급 차단이 필요하면 해당 Google 계정의 GCP 세션을 별도로
+종료해야 한다. kubeconfig 자체는 로컬에 남지만 다음 인증 시 403.
 
 ### Workload Identity(app 배포 시)
 > Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).

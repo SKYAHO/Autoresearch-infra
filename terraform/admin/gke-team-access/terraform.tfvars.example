@@ -1,0 +1,10 @@
+project_id = "your-gcp-project-id"
+region     = "asia-northeast3"
+
+team_member_emails = [
+  "teammate-1@example.com",
+  "teammate-2@example.com",
+  "teammate-3@example.com",
+  "teammate-4@example.com",
+  "teammate-5@example.com",
+]
