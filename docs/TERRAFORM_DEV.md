@@ -239,6 +239,8 @@ gcloud container clusters get-credentials autoresearch-dev-gke \
 kubectl get nodes
 ```
 
+> dev 내부망 접근 전략(Bastion/VPN 비교, Cloud SQL private IP / 내부 서비스 접근 경로)은 [docs/ACCESS_STRATEGY.md](ACCESS_STRATEGY.md) 참조.
+
 ### Workload Identity(app 배포 시)
 > Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).
 
