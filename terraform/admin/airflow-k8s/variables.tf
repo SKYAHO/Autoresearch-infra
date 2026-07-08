@@ -68,3 +68,14 @@ variable "installer_user_emails" {
     error_message = "Each item must be an email without a user: prefix."
   }
 }
+
+variable "ui_ingress_source_cidr" {
+  description = "Airflow webserver(8080)로 ingress를 허용할 VPC 내부 CIDR (#48). dev subnet 기본."
+  type        = string
+  default     = "10.10.0.0/20"
+
+  validation {
+    condition     = can(cidrhost(var.ui_ingress_source_cidr, 0))
+    error_message = "ui_ingress_source_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}

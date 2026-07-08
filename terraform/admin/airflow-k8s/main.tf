@@ -159,6 +159,22 @@ resource "kubernetes_network_policy_v1" "airflow_ingress" {
         }
       }
     }
+
+    # #48 Airflow UI 내부 노출: dev subnet(Bastion 등 VPC 내부)에서
+    # webserver 8080으로 오는 트래픽만 추가 허용. internal LB(pass-through)는
+    # 클라이언트 source IP를 보존하므로 subnet CIDR 기준으로 제한한다.
+    ingress {
+      from {
+        ip_block {
+          cidr = var.ui_ingress_source_cidr
+        }
+      }
+
+      ports {
+        port     = "8080"
+        protocol = "TCP"
+      }
+    }
   }
 
   depends_on = [kubernetes_namespace_v1.airflow]

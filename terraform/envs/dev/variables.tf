@@ -386,3 +386,14 @@ variable "bastion_image" {
   type        = string
   default     = "debian-cloud/debian-12"
 }
+
+variable "internal_dns_domain" {
+  description = "VPC 내부 전용 private DNS 도메인 (trailing dot 없이). Airflow UI는 airflow.<domain>."
+  type        = string
+  default     = "dev.autoresearch.internal"
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+[a-z]$", var.internal_dns_domain))
+    error_message = "internal_dns_domain must be a bare domain without trailing dot."
+  }
+}

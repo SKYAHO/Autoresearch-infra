@@ -17,3 +17,6 @@ installer_user_emails = [
   "teammate-1@example.com",
   "teammate-2@example.com",
 ]
+
+# Airflow UI 내부 노출 (#48)
+ui_ingress_source_cidr = "10.10.0.0/20"
