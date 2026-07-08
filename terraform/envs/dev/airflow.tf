@@ -41,7 +41,7 @@ resource "google_sql_database" "airflow" {
 # --- Secret Manager (Airflow API key placeholders; payloads are managed out of Terraform) ---
 
 resource "google_secret_manager_secret" "airflow_youtube_api_key" {
-  secret_id = "${local.resource_prefix}-youtube-api-key"
+  secret_id = local.airflow_youtube_api_key_secret_id
 
   replication {
     auto {}
@@ -53,7 +53,7 @@ resource "google_secret_manager_secret" "airflow_youtube_api_key" {
 }
 
 resource "google_secret_manager_secret" "airflow_openrouter_api_key" {
-  secret_id = "${local.resource_prefix}-openrouter-api-key"
+  secret_id = local.airflow_openrouter_api_secret_id
 
   replication {
     auto {}

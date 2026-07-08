@@ -99,6 +99,31 @@ output "gke_workload_identity_principal" {
   value       = local.gke_workload_identity_principal
 }
 
+output "airflow_gke_node_pool_name" {
+  description = "Airflow Helm component 전용 dev GKE node pool 이름."
+  value       = google_container_node_pool.airflow.name
+}
+
+output "airflow_batch_workload_identity_principal" {
+  description = "Airflow batch KSA가 app GSA를 가장할 Workload Identity principal."
+  value       = local.airflow_batch_workload_identity_principal
+}
+
+output "cloud_build_compute_service_account_email" {
+  description = "Autoresearch-airflow Cloud Build가 image build/push에 사용하는 Compute default service account."
+  value       = local.cloud_build_compute_service_account_email
+}
+
+output "cloud_build_bucket_name" {
+  description = "Cloud Build default staging bucket name used by Autoresearch-airflow builds."
+  value       = local.cloud_build_bucket_name
+}
+
+output "airflow_api_k8s_secret_name" {
+  description = "Airflow KPO pods에 YouTube/OpenRouter API key를 주입하는 Kubernetes Secret 이름."
+  value       = local.airflow_api_k8s_secret_name
+}
+
 output "db_app_password_secret_id" {
   description = "DB app 비밀번호 Secret Manager secret id."
   value       = google_secret_manager_secret.db_app_password.id

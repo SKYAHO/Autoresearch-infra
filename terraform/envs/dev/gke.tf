@@ -46,6 +46,14 @@ resource "google_service_account_iam_member" "gke_app_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
+resource "google_service_account_iam_member" "gke_app_airflow_batch_wi" {
+  service_account_id = google_service_account.gke_app.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.airflow_batch_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
 # #5 dev GKE 클러스터 + 노드풀
 # Standard zonal, private nodes + master authorized networks. autoscaling min1/max2.
 resource "google_container_cluster" "dev" {
@@ -118,6 +126,33 @@ resource "google_container_node_pool" "dev" {
   }
 
   # autoscaler가 노드 수를 바꿔도 Terraform이 되돌리지 않도록.
+  lifecycle {
+    ignore_changes = [node_count]
+  }
+}
+
+resource "google_container_node_pool" "airflow" {
+  name       = local.airflow_gke_node_pool_name
+  cluster    = google_container_cluster.dev.name
+  location   = var.zone
+  node_count = var.airflow_gke_node_count_min
+
+  autoscaling {
+    min_node_count = var.airflow_gke_node_count_min
+    max_node_count = var.airflow_gke_node_count_max
+  }
+
+  node_config {
+    machine_type    = var.airflow_gke_machine_type
+    disk_size_gb    = var.airflow_gke_node_disk_size
+    disk_type       = var.airflow_gke_node_disk_type
+    service_account = google_service_account.gke_nodes.email
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
+
   lifecycle {
     ignore_changes = [node_count]
   }
