@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "GCP project id where team members need GKE clusterViewer access."
+  description = "GCP project id where team members need GKE 접근(container.viewer) access."
   type        = string
 }
 
@@ -10,7 +10,7 @@ variable "region" {
 }
 
 variable "team_member_emails" {
-  description = "Google accounts granted roles/container.clusterViewer. Keep real values in local terraform.tfvars only."
+  description = "Google accounts granted roles/container.viewer (kubectl DNS 엔드포인트 접속 포함). Keep real values in local terraform.tfvars only."
   type        = set(string)
   default     = []
 

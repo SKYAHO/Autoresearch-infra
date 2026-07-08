@@ -19,7 +19,7 @@ terraform plan
 terraform apply
 ```
 
-The role is granted at project level with `roles/container.clusterViewer`.
+The role is granted at project level with `roles/container.viewer` (#45: DNS 엔드포인트 접속용 `container.clusters.connect` 포함).
 That is acceptable while `ar-infra-501607` has a single dev GKE cluster. If more
 clusters are added to the project, narrow the binding with an IAM condition or
 move cluster access into a dedicated project.
