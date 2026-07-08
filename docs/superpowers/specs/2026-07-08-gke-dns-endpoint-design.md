@@ -23,7 +23,7 @@
 | 활성화 방식 | `control_plane_endpoints_config { dns_endpoint_config { allow_external_traffic = true } }` | google provider 7.39(현재 lock)에서 지원. in-place update |
 | IP 엔드포인트 | **유지** (병행 운영) | 전환기 예비 경로. CI plan 등 기존 경로 영향 없음. 축소는 안정화 후 별도 이슈 |
 | `master_authorized_networks` | 유지 | IP 경로 예비용. DNS 경로에는 적용되지 않음 |
-| 팀원 IAM | `clusterViewer` → 커스텀 role `gkeDnsEndpointConnect`(`clusters.get`+`connect`) | connect가 clusterViewer에 없음. viewer는 클러스터 전역 k8s 오브젝트 읽기까지 부여해 과잉(리뷰 반영) |
+| 팀원 IAM | `roles/container.clusterViewer` → `roles/container.viewer` | `container.clusters.connect`가 clusterViewer에 없음. viewer는 여전히 읽기 전용 GCP role |
 | 접속 명령 | `gcloud container clusters get-credentials ... --dns-endpoint` | kubeconfig가 DNS 주소를 가리키게 발급 |
 | output | `gke_dns_endpoint` 추가 | 팀원 안내/문서화용 |
 
@@ -32,7 +32,7 @@
 - 엔드포인트가 네트워크상 도달 가능해지는 대신 IAM이 유일한 관문. Google API
   프런트엔드가 앞단이므로 무인증 트래픽은 클러스터에 닿지 않는다.
 - 계정 보안(2FA)이 사실상 방어선. dev 규모에서 수용, 운영 전환 시 재평가.
-- k8s 내부 권한은 기존 RBAC(#32) 그대로 — 커스텀 role은 k8s 오브젝트 권한을 일절 포함하지 않는다.
+- k8s 내부 권한은 기존 RBAC(#32) 그대로 — viewer 승격은 GCP 조회 범위만 넓힌다.
 
 ## 비목표
 

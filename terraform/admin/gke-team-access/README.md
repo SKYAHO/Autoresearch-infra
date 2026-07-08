@@ -19,7 +19,7 @@ terraform plan
 terraform apply
 ```
 
-The role is granted at project level with 커스텀 role `gkeDnsEndpointConnect` (#45: `container.clusters.get` + `container.clusters.connect`만 — viewer의 클러스터 전역 k8s 읽기 없이 DNS 엔드포인트 접속).
+The role is granted at project level with `roles/container.viewer` (#45: DNS 엔드포인트 접속용 `container.clusters.connect` 포함).
 That is acceptable while `ar-infra-501607` has a single dev GKE cluster. If more
 clusters are added to the project, narrow the binding with an IAM condition or
 move cluster access into a dedicated project.

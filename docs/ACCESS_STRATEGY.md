@@ -23,7 +23,7 @@
 **A + D 조합**으로 dev를 운영한다. Bastion Host(B)와 VPN(C)은 **후속 이슈로 연기**한다.
 
 1. **GKE 마스터 API**: **DNS 기반 컨트롤 플레인 엔드포인트(#45)가 기본 경로**.
-   Google 프런트엔드에서 IAM(`container.clusters.connect`, 커스텀 role `gkeDnsEndpointConnect`)으로
+   Google 프런트엔드에서 IAM(`container.clusters.connect`, `roles/container.viewer`)으로
    검증되므로 팀원 IP 등록이 필요 없다. `master_authorized_networks`(IP allowlist)는
    예비 경로로 병행 유지하고, 안정화 후 IP 엔드포인트 축소는 별도 이슈로 검토한다.
 2. **Cloud SQL(private IP)**: 로컬에서 private IP로 직접 접속하지 않는다. 1차

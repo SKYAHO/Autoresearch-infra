@@ -21,8 +21,8 @@
 
 1. 팀원 Google 계정이 GCP 프로젝트에 초대되어 있어야 한다.
 2. `terraform/admin/gke-team-access`에서 해당 계정에
-   커스텀 role `gkeDnsEndpointConnect`가 부여되어 있어야 한다 (#45:
-   `container.clusters.get` + `connect`만 — DNS 엔드포인트 접속에 필요한 최소 권한).
+   `roles/container.viewer`가 부여되어 있어야 한다 (#45: DNS 엔드포인트 접속에
+   필요한 `container.clusters.connect` 포함).
 3. 공인 IP 등록은 **더 이상 필요 없다** (#45 DNS 기반 엔드포인트). IP 기반
    엔드포인트를 예비 경로로 쓸 때만 `terraform/envs/dev`의
    `master_authorized_networks`에 `/32` CIDR 등록이 필요하다.
@@ -39,7 +39,7 @@
 
 | 권한 구분 | 대상 | 부여 권한 | 가능한 작업 | 제한되는 작업 |
 |---|---|---|---|---|
-| GCP IAM | 팀원 Google 계정 | 커스텀 role `gkeDnsEndpointConnect` | `get-credentials`(DNS 엔드포인트 포함) | GCP 리소스 조회/생성/수정, k8s 오브젝트 접근(RBAC 별도) |
+| GCP IAM | 팀원 Google 계정 | `roles/container.viewer` | `get-credentials`(DNS 엔드포인트 포함), 클러스터 정보 조회 | GCP 리소스 생성/수정, 클러스터 설정 변경 |
 | Kubernetes RBAC | 팀원 Google 계정 | `airflow` namespace 안의 `admin` RoleBinding | Airflow Helm install/upgrade, Deployment/Service/Secret/ConfigMap/Job/PVC 관리 | 새 namespace 생성, CRD 설치, ClusterRole/ClusterRoleBinding 생성, node/storageclass/persistentvolume 수정, 다른 namespace 작업 |
 | Workload Identity | `airflow` namespace의 KSA | Airflow GCP SA 가장 | Airflow pod가 Cloud SQL, GCS, BigQuery, Secret Manager에 필요한 범위로 접근 | 팀원 개인 계정이 직접 secret payload를 읽거나 GCP 데이터 리소스를 관리하는 권한 |
 
@@ -148,7 +148,7 @@ kubectl -n airflow get svc
 |---|---|---|
 | `get-credentials`에서 permission denied | GCP IAM 미부여 또는 다른 Google 계정으로 로그인 | `gcloud auth list` 확인, 관리자에게 `gke-team-access` 적용 여부 확인 |
 | `kubectl` timeout 또는 API server 연결 실패 | IP 기반 kubeconfig 사용 중인데 공인 IP가 `master_authorized_networks`에 없음 | `--dns-endpoint`로 credentials 재발급(기본 경로), 또는 IP 등록 요청 |
-| DNS 엔드포인트 접속 시 permission denied | `container.clusters.connect` 권한 없음 (구 clusterViewer role) | 관리자에게 `gke-team-access`의 커스텀 role(#45) 반영 여부 확인 |
+| DNS 엔드포인트 접속 시 permission denied | `container.clusters.connect` 권한 없음 (구 clusterViewer role) | 관리자에게 `gke-team-access`의 `container.viewer` 반영(#45) 여부 확인 |
 | `You must be logged in to the server` 또는 auth plugin 오류 | `gke-gcloud-auth-plugin` 미설치/구버전 | auth plugin 설치 후 `gcloud components update` |
 | `Forbidden` | Kubernetes RBAC 미부여 | Airflow 설치자는 `terraform/admin/airflow-k8s`의 `installer_user_emails` 반영 필요 |
 | 의도와 다른 클러스터에 명령 실행 | kubeconfig context 혼동 | `kubectl config current-context` 확인 후 전환 |
