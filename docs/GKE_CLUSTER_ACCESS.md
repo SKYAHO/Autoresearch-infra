@@ -21,9 +21,11 @@
 
 1. 팀원 Google 계정이 GCP 프로젝트에 초대되어 있어야 한다.
 2. `terraform/admin/gke-team-access`에서 해당 계정에
-   `roles/container.clusterViewer`가 부여되어 있어야 한다.
-3. 팀원의 현재 공인 IP가 `terraform/envs/dev`의
-   `master_authorized_networks`에 `/32` CIDR로 반영되어 있어야 한다.
+   `roles/container.viewer`가 부여되어 있어야 한다 (#45: DNS 엔드포인트 접속에
+   필요한 `container.clusters.connect` 포함).
+3. 공인 IP 등록은 **더 이상 필요 없다** (#45 DNS 기반 엔드포인트). IP 기반
+   엔드포인트를 예비 경로로 쓸 때만 `terraform/envs/dev`의
+   `master_authorized_networks`에 `/32` CIDR 등록이 필요하다.
 4. Airflow 설치를 맡은 팀원은 `terraform/admin/airflow-k8s`의
    `installer_user_emails`에 포함되어 `airflow` namespace 안에서만 admin 권한을
    받아야 한다.
@@ -37,7 +39,7 @@
 
 | 권한 구분 | 대상 | 부여 권한 | 가능한 작업 | 제한되는 작업 |
 |---|---|---|---|---|
-| GCP IAM | 팀원 Google 계정 | `roles/container.clusterViewer` | `get-credentials`, 클러스터 정보 조회 | GCP 리소스 생성/수정, 클러스터 설정 변경 |
+| GCP IAM | 팀원 Google 계정 | `roles/container.viewer` | `get-credentials`(DNS 엔드포인트 포함), 클러스터 정보 조회 | GCP 리소스 생성/수정, 클러스터 설정 변경 |
 | Kubernetes RBAC | 팀원 Google 계정 | `airflow` namespace 안의 `admin` RoleBinding | Airflow Helm install/upgrade, Deployment/Service/Secret/ConfigMap/Job/PVC 관리 | 새 namespace 생성, CRD 설치, ClusterRole/ClusterRoleBinding 생성, node/storageclass/persistentvolume 수정, 다른 namespace 작업 |
 | Workload Identity | `airflow` namespace의 KSA | Airflow GCP SA 가장 | Airflow pod가 Cloud SQL, GCS, BigQuery, Secret Manager에 필요한 범위로 접근 | 팀원 개인 계정이 직접 secret payload를 읽거나 GCP 데이터 리소스를 관리하는 권한 |
 
@@ -71,10 +73,17 @@ gcloud components install gke-gcloud-auth-plugin
 gcloud auth login
 gcloud config set project ar-infra-501607
 
+# 기본 경로 (#45): DNS 기반 엔드포인트 — IP 등록 불필요, 어디서든 접속 가능
 gcloud container clusters get-credentials autoresearch-dev-gke \
   --zone asia-northeast3-a \
-  --project ar-infra-501607
+  --project ar-infra-501607 \
+  --dns-endpoint
 ```
+
+`--dns-endpoint` 옵션이 없는 구버전 gcloud라면 `gcloud components update` 후
+재시도한다. 예비 경로(IP 기반 엔드포인트)를 쓸 때만 본인 공인 IP가
+`master_authorized_networks`에 등록되어 있어야 하며, 이때는 `--dns-endpoint`
+없이 같은 명령을 실행한다.
 
 정상 연결 여부를 확인한다.
 
@@ -138,7 +147,8 @@ kubectl -n airflow get svc
 | 증상 | 주된 원인 | 확인/조치 |
 |---|---|---|
 | `get-credentials`에서 permission denied | GCP IAM 미부여 또는 다른 Google 계정으로 로그인 | `gcloud auth list` 확인, 관리자에게 `gke-team-access` 적용 여부 확인 |
-| `kubectl` timeout 또는 API server 연결 실패 | 현재 공인 IP가 `master_authorized_networks`에 없음 | 본인 공인 IP를 관리자에게 전달하고 dev root apply 요청 |
+| `kubectl` timeout 또는 API server 연결 실패 | IP 기반 kubeconfig 사용 중인데 공인 IP가 `master_authorized_networks`에 없음 | `--dns-endpoint`로 credentials 재발급(기본 경로), 또는 IP 등록 요청 |
+| DNS 엔드포인트 접속 시 permission denied | `container.clusters.connect` 권한 없음 (구 clusterViewer role) | 관리자에게 `gke-team-access`의 `container.viewer` 반영(#45) 여부 확인 |
 | `You must be logged in to the server` 또는 auth plugin 오류 | `gke-gcloud-auth-plugin` 미설치/구버전 | auth plugin 설치 후 `gcloud components update` |
 | `Forbidden` | Kubernetes RBAC 미부여 | Airflow 설치자는 `terraform/admin/airflow-k8s`의 `installer_user_emails` 반영 필요 |
 | 의도와 다른 클러스터에 명령 실행 | kubeconfig context 혼동 | `kubectl config current-context` 확인 후 전환 |

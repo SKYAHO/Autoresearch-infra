@@ -97,6 +97,16 @@ resource "google_container_cluster" "dev" {
     }
   }
 
+  # #45 DNS 기반 컨트롤 플레인 엔드포인트. Google 프런트엔드에서
+  # IAM(container.clusters.connect)으로 검증되므로 팀원은 IP 등록 없이
+  # 구글 계정만으로 kubectl 접근 가능. 기존 IP 엔드포인트와
+  # master_authorized_networks는 전환기 동안 병행 유지한다.
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = true
+    }
+  }
+
   deletion_protection = var.gke_deletion_protection
 
   depends_on = [google_compute_router_nat.dev]
