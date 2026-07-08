@@ -241,9 +241,9 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 
 ### kubectl 접근
 
-팀원 로컬 접근은 GCP IAM으로 `roles/container.viewer`를 부여해(#31, #45에서
-clusterViewer→viewer로 확대) `gcloud container clusters get-credentials`를 실행할
-수 있게 한다. #45부터 기본 접속 경로는 **DNS 기반 컨트롤 플레인 엔드포인트**로,
+팀원 로컬 접근은 커스텀 role `gkeDnsEndpointConnect`(`container.clusters.get` +
+`connect`만)를 부여해(#31의 clusterViewer를 #45에서 교체) `gcloud container
+clusters get-credentials`를 실행할 수 있게 한다. #45부터 기본 접속 경로는 **DNS 기반 컨트롤 플레인 엔드포인트**로,
 `container.clusters.connect` 권한만 있으면 IP 등록 없이 어디서든 접속된다.
 이 권한은 GKE 클러스터 조회/연결용이며, Kubernetes namespace 내부 작업 권한은
 #32의 RBAC에서 별도로 정한다.
@@ -279,8 +279,8 @@ kubectl get ns
 
 접근이 실패하면 아래를 순서대로 확인한다.
 
-- **IAM 오류**: `roles/container.viewer`가 해당 Google 계정에 부여되어 있는지 확인한다
-  (DNS 엔드포인트는 `container.clusters.connect` 필요 — 구 clusterViewer에는 없음).
+- **IAM 오류**: 커스텀 role `gkeDnsEndpointConnect`가 해당 Google 계정에 부여되어 있는지
+  확인한다 (DNS 엔드포인트는 `container.clusters.connect` 필요 — 구 clusterViewer에는 없음).
 - **네트워크 오류/timeout**: `--dns-endpoint` 없이 IP 기반 kubeconfig를 쓰는 경우에만
   `master_authorized_networks` 등록이 필요하다. 기본 경로는 `--dns-endpoint`로 재발급.
 - **Kubernetes RBAC 오류**: kubeconfig를 받았더라도 namespace 안에서 Helm install/update를
@@ -505,7 +505,7 @@ Airflow는 두 Terraform root로 나눈다.
 `terraform/admin/airflow-k8s`의 `installer-admin` RoleBinding이 팀원에게 `airflow` namespace 내 `admin` 권한을 준다. 이 root는 GKE API 서버에 접근 가능한 관리자 네트워크에서만 apply한다. 절차:
 
 ```bash
-# 1) roles/container.viewer가 있는지 확인 (#45: DNS 엔드포인트면 IP 등록 불필요)
+# 1) 커스텀 role gkeDnsEndpointConnect가 있는지 확인 (#45: DNS 엔드포인트면 IP 등록 불필요)
 # 2) credentials 획득
 gcloud container clusters get-credentials autoresearch-dev-gke \
   --zone asia-northeast3-a --project ar-infra-501607 --dns-endpoint
