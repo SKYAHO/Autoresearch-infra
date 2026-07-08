@@ -285,7 +285,15 @@ webserver:
     ports:
       - name: airflow-ui
         port: 8080
+    # 필수: 클라이언트 source IP 보존. 기본값(Cluster)이면 노드 IP로 SNAT되어
+    # NetworkPolicy의 소스 CIDR 제한이 실효를 잃는다 (리뷰 반영).
+    externalTrafficPolicy: Local
 ```
+
+> `externalTrafficPolicy: Local`에서는 webserver pod가 있는 노드만 LB 헬스체크를
+> 통과한다. webserver replica가 1이어도 동작하지만, pod 재스케줄 직후 수 초간
+> 연결이 끊길 수 있다(dev 허용). `ui_ingress_source_cidr`를 Bastion IP `/32`로
+> 좁히는 것도 이 정책일 때만 의미가 있다.
 
 ### 접속 방법 (팀원)
 
