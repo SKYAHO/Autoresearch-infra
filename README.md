@@ -45,7 +45,8 @@
 ├── .claude/
 │   └── docs/               # 에이전트 상세 가이드
 ├── CLAUDE.md               # AI 에이전트 진입점
-├── AGENTS.md               # AI 에이전트 진입점 (CLAUDE.md와 동일)
+├── AGENTS.md               # CLAUDE.md로 연결되는 symlink
+├── .agents                 # .claude로 연결되는 symlink
 ├── CONTRIBUTING.md
 └── README.md
 ```
