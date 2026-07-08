@@ -134,9 +134,9 @@ variable "gke_services_cidr" {
 }
 
 variable "gke_machine_type" {
-  description = "노드 머신 타입 (dev 최소 비용)."
+  description = "GKE 워커 노드 머신 타입. dev Airflow/워크로드 검증 기준은 4 vCPU / 16GB."
   type        = string
-  default     = "e2-small"
+  default     = "e2-standard-4"
 }
 
 variable "gke_node_count_min" {
