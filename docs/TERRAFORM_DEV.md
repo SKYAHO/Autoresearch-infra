@@ -284,6 +284,9 @@ member만 제거된다(non-authoritative). 단, 이미 발급받은 access token
 유효하므로 **즉시 차단이 아니다**. 긴급 차단이 필요하면 해당 Google 계정의 GCP 세션을 별도로
 종료해야 한다. kubeconfig 자체는 로컬에 남지만 다음 인증 시 403.
 
+dev 내부망 접근 전략(Bastion/VPN 비교, Cloud SQL private IP / 내부 서비스 접근
+경로)은 [docs/ACCESS_STRATEGY.md](ACCESS_STRATEGY.md)를 참조한다.
+
 ### Workload Identity(app 배포 시)
 > Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).
 
