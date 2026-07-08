@@ -17,6 +17,7 @@ Airflow 웹서버(8080)를 VPC 내부망에서 도메인으로 접근할 수 있
 | DNS | Cloud DNS **private zone** `dev.autoresearch.internal` + `airflow.` A 레코드 | VPC 내부에서만 조회. `var.internal_dns_domain`으로 변경 가능 |
 | NetworkPolicy | `airflow` ns ingress에 dev subnet(10.10.0.0/20)→8080 허용 추가 | source IP 보존은 Service `externalTrafficPolicy: Local` 전제(Helm values 필수 항목, 리뷰 반영). 기존 same-ns/kube-system 규칙 유지 |
 | Helm values | 앱 저장소 관리. 인프라는 IP/DNS/경계만 제공 | 기존 역할 분리 원칙(#32) 유지 |
+| 가용성 | webserver **replica 2 + PDB + soft anti-affinity** (values 가이드 필수 항목) | `Local` 정책의 pod 재시작 단절 창 제거. replica>1이면 `webserverSecretKey` 고정 필요 |
 | 필요 API | `dns.googleapis.com` (수동 활성화) | `google_project_service` 미사용 정책 |
 
 ## 접근 흐름
@@ -45,6 +46,10 @@ Airflow 웹서버(8080)를 VPC 내부망에서 도메인으로 접근할 수 있
   Service `externalTrafficPolicy: Local`일 때만 성립 — 기본값(Cluster)이면 SNAT로
   노드 IP가 소스가 되어 CIDR을 좁혀도 실효가 없고, Local 없이 /32로 좁히면 접근이
   조용히 끊긴다. Helm values에 Local을 필수로 명시한다(리뷰 반영).
+- `Local`의 단절 창은 replica 2 + PDB로 제거한다. 단 airflow 노드풀 1대 구성에서는
+  노드 업그레이드 시 짧은 단절이 남는다(dev 허용, 제거하려면 노드풀 max=2).
+  운영 전환 시에는 L7 internal ALB(NEG, 노드 경유 제거) + 인증 계층(IAP/OAuth)을
+  주 방어로 전환한다 — Envoy 고정비로 dev 미적용.
 - 참고: 예약 IP `purpose=SHARED_LOADBALANCER_VIP`는 GKE 공식 문서의 ILB 예약 IP
   패턴으로 단일 Service에서도 유효하다(최대 10개 forwarding rule 공유 가능).
 - 롤백: `dns.tf` 제거 + NetworkPolicy 블록 제거 apply. Helm Service를 ClusterIP로
