@@ -223,7 +223,8 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 | 모드 | private nodes, public endpoint(authorized) | 노드 공인 IP 없음, 마스터는 본인 IP만 |
 | Master CIDR | `172.16.0.0/28` | 현재 dev apply 값. dev subnet/private services와 미중복 |
 | Pods/Services 대역 | `172.16.64.0/20` / `172.16.128.0/24` | 서브넷 2차 대역, VPC-native(alias IP) |
-| 노드풀 | `dev-default`, e2-small, pd-standard 30GB | autoscaling min=1/max=2 |
+| Control plane | GKE 관리형 | CPU/RAM 직접 지정 불가. Google이 control plane을 관리 |
+| 노드풀 | `dev-default`, e2-standard-4, pd-standard 30GB | autoscaling min=1/max=2 |
 | 노드 SA | `autoresearch-dev-gke-nodes@ar-infra-501607.iam.gserviceaccount.com` | AR reader + logging/metric writer |
 | app SA(WI) | `autoresearch-dev-app@ar-infra-501607.iam.gserviceaccount.com` | cloudsql.client + secretAccessor, KSA 매핑 |
 | WI principal | `ar-infra-501607.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
@@ -298,7 +299,9 @@ metadata:
 ```
 
 ### 비용/롤백
-- 예상: e2-small ~$13/월 + disk ~$1.5 + Cloud NAT ~$32(고정비) → 1노드 ~$47/월. Standard control plane 무료. Cloud NAT 고정비가 dev 최대 항목.
+- 예상: e2-standard-4 워커 노드 비용 + disk + Cloud NAT 고정비. Standard
+  control plane은 직접 과금/사양 지정 대상이 아니다. 정확한 월 비용은 apply
+  전 Google Cloud Pricing Calculator로 확인한다.
 - 절감: min=1 고정. 장기 미사용 시 노드풀 count 0 또는 `terraform destroy` 권장(NAT 고정비는 노드 0화로 노드 비용만 절감, NAT 자체는 남음).
 - **Cloud Operations**(GKE 기본 On): Logging/Monitoring 비용 발생 가능. 비용 민감 시 클러스터 `logging_service`/`monitoring_service` 비활성화 검토.
 - **State**: dev 루트는 GCS 원격 backend(`autoresearch-dev-tfstate`)를 사용한다. 비밀번호 평문 저장은 Terraform state의 근본 한계 → 버킷 IAM/UBLA 로 보호.
