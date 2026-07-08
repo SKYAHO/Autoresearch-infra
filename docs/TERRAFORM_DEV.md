@@ -712,6 +712,8 @@ Build API를 enable하지 않고, API 활성화와 기본 bucket 생성 후 필�
 | `sqladmin.googleapis.com` | Cloud SQL |
 | `container.googleapis.com` | GKE |
 | `dns.googleapis.com` | 내부 private DNS zone (#48) |
+| `iap.googleapis.com` | bastion IAP TCP forwarding (#47) |
+| `oslogin.googleapis.com` | bastion OS Login SSH (#47) — 미활성 시 publickey 거부(#57) |
 | `run.googleapis.com` | dev proxy Cloud Run 서비스 |
 | `iam.googleapis.com` | service account, IAM binding |
 | `iamcredentials.googleapis.com` | GitHub OIDC 기반 credential 생성 |
