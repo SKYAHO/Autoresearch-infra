@@ -78,6 +78,48 @@ resource "google_secret_manager_secret_iam_member" "airflow_openrouter_api_key_a
   member    = "serviceAccount:${google_service_account.airflow.email}"
 }
 
+# #54 Airflow 웹 로그인 Google OAuth 클라이언트 자격증명.
+# 콘솔에서 수동 생성한 client ID/secret의 저장소만 Terraform으로 관리하고,
+# payload(실값)는 관리자가 gcloud secrets versions add로 등록한다.
+# 소비 주체는 Airflow webserver(airflow SA)뿐이므로 accessor는 airflow SA에만 부여.
+resource "google_secret_manager_secret" "airflow_oauth_client_id" {
+  secret_id = local.airflow_oauth_client_id_secret_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret" "airflow_oauth_client_secret" {
+  secret_id = local.airflow_oauth_client_secret_secret_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "airflow_oauth_client_id_accessor" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.airflow_oauth_client_id.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "airflow_oauth_client_secret_accessor" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.airflow_oauth_client_secret.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.airflow.email}"
+}
+
 # --- GCS 버킷 (DAG 버전관리, 로그 영속화) ---
 
 resource "google_storage_bucket" "airflow_dags" {
