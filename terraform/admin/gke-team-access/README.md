@@ -27,3 +27,8 @@ move cluster access into a dedicated project.
 Removing an email from `team_member_emails` and applying removes only that IAM
 member. Existing access tokens can remain valid until they expire, usually up to
 about one hour.
+
+Share the teammate-facing local setup steps from
+[`docs/GKE_CLUSTER_ACCESS.md`](../../../docs/GKE_CLUSTER_ACCESS.md). Do not share
+committed examples with real personal emails, public IPs, kubeconfig files, or
+service account keys.

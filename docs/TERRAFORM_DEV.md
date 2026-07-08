@@ -296,8 +296,10 @@ member만 제거된다(non-authoritative). 단, 이미 발급받은 access token
 실제 IAM을 destroy하지 않는다. 이 리소스는 `terraform/admin/gke-team-access`가
 소유하므로 dev root에서는 `terraform state rm`으로 state에서만 분리한다.
 
-dev 내부망 접근 전략(Bastion/VPN 비교, Cloud SQL private IP / 내부 서비스 접근
-경로)은 [docs/ACCESS_STRATEGY.md](ACCESS_STRATEGY.md)를 참조한다.
+팀원에게 공유할 실제 로컬 설정 절차는
+[docs/GKE_CLUSTER_ACCESS.md](GKE_CLUSTER_ACCESS.md)를 참조한다. dev 내부망 접근
+전략(Bastion/VPN 비교, Cloud SQL private IP / 내부 서비스 접근 경로)은
+[docs/ACCESS_STRATEGY.md](ACCESS_STRATEGY.md)를 참조한다.
 
 ### Workload Identity(app 배포 시)
 > Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).

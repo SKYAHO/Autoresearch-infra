@@ -72,6 +72,8 @@ terraform -chdir=terraform/envs/dev validate
 ```
 
 현재 Terraform 구성과 필요한 GCP API는 [docs/TERRAFORM_DEV.md](docs/TERRAFORM_DEV.md)를 참고합니다.
+팀원이 로컬에서 dev GKE 클러스터에 접근하는 절차는
+[docs/GKE_CLUSTER_ACCESS.md](docs/GKE_CLUSTER_ACCESS.md)를 참고합니다.
 
 ## Required Checks
 

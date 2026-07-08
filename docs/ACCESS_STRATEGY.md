@@ -65,4 +65,5 @@
 - PR #34: 팀원 GKE kubectl 접근 IAM(`roles/container.clusterViewer`)
 - Issue #32 / PR #37: Airflow namespace + NetworkPolicy(내부망 접근 경계)
 - PR #27: dev proxy Cloud Run(내부 서비스 인증 gate 후보)
+- `docs/GKE_CLUSTER_ACCESS.md`: 팀원 로컬 kubeconfig / kubectl 접근 절차
 - `docs/TERRAFORM_DEV.md` GKE 섹션: kubectl 접근 절차
