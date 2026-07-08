@@ -327,16 +327,46 @@ webserver:
 
 ### 접속 방법 (팀원)
 
+**표준: SOCKS 프록시 + 원격 DNS** — FQDN을 이름 그대로 사용한다.
+
 ```bash
-# Bastion(#47) SOCKS 프록시를 연 상태에서 (원격 DNS 조회 옵션 필수)
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
   -- -N -D 1080
-# 브라우저 SOCKS5 프록시 localhost:1080 → http://airflow.dev.autoresearch.internal:8080
-
-# 또는 포트 포워딩 (DNS 없이)
-#   -L 8080:airflow.dev.autoresearch.internal:8080 → http://localhost:8080
+# 브라우저 SOCKS5 프록시를 localhost:1080으로 설정하고 "원격 DNS" 옵션을 켠다.
+# 접속: http://airflow.dev.autoresearch.internal:8080/login/
 ```
+
+> 원격 DNS가 핵심이다. private zone(`dev.autoresearch.internal`)은 VPC 내부에서만
+> 조회되므로, 브라우저가 이름 해석을 Bastion 쪽에 위임해야 FQDN이 풀린다.
+> curl 검증:
+> `curl -x socks5h://localhost:1080 http://airflow.dev.autoresearch.internal:8080/health`
+> (`socks5h`의 `h`가 원격 DNS. `socks5`는 로컬 DNS라 NXDOMAIN으로 실패한다.)
+
+> **주의(OAuth):** FQDN으로 접속하면 redirect_uri가
+> `http://airflow.dev.autoresearch.internal:8080/oauth-authorized/google`로
+> 생성된다(Airflow `enable_proxy_fix=True`, 요청 Host 기준). Google OAuth client의
+> Authorized redirect URIs에 이 값이 등록돼야 로그인이 된다(미등록 시
+> `redirect_uri_mismatch`).
+
+**Fallback: 포트 포워딩 + localhost** — SOCKS/브라우저 설정 없이 쓴다.
+
+```bash
+gcloud compute ssh autoresearch-dev-bastion \
+  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
+  -- -N -L 8080:airflow.dev.autoresearch.internal:8080
+# 접속: http://localhost:8080/login/  (redirect_uri = localhost:8080)
+```
+
+### 향후 확장 (B안, 미래 옵션)
+
+브라우저 SOCKS로 부족해지면(팀 확대, 브라우저 외 접근 필요) 진짜 VPN으로 확장한다.
+
+- Bastion에 WireGuard 설치, 클라이언트에 VPC CIDR(`10.10.0.0/20`) 라우팅.
+- Cloud DNS inbound forwarding 정책으로 VPN 클라이언트가 private zone을 조회.
+- 방화벽/라우팅 조정, Terraform으로 관리.
+
+상세 설계·Terraform 스케치는 전환을 실제로 결정할 때 별도 spec으로 작성한다.
 
 ### 비용/롤백
 
