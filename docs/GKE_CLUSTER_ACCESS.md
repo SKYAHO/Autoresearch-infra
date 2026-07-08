@@ -39,12 +39,12 @@
 
 | 권한 구분 | 대상 | 부여 권한 | 가능한 작업 | 제한되는 작업 |
 |---|---|---|---|---|
-| GCP IAM | 팀원 Google 계정 | `roles/container.viewer` | `get-credentials`(DNS 엔드포인트 포함), 클러스터 정보 조회 | GCP 리소스 생성/수정, 클러스터 설정 변경 |
+| GCP IAM | 팀원 Google 계정 | `roles/container.viewer` | `get-credentials`(DNS 엔드포인트 포함), 클러스터 정보 조회, **전체 namespace k8s 오브젝트 읽기(secrets 제외 — 의도된 방침)** | GCP 리소스 생성/수정, 클러스터 설정 변경, k8s 오브젝트 생성/수정(RBAC 별도) |
 | Kubernetes RBAC | 팀원 Google 계정 | `airflow` namespace 안의 `admin` RoleBinding | Airflow Helm install/upgrade, Deployment/Service/Secret/ConfigMap/Job/PVC 관리 | 새 namespace 생성, CRD 설치, ClusterRole/ClusterRoleBinding 생성, node/storageclass/persistentvolume 수정, 다른 namespace 작업 |
 | Workload Identity | `airflow` namespace의 KSA | Airflow GCP SA 가장 | Airflow pod가 Cloud SQL, GCS, BigQuery, Secret Manager에 필요한 범위로 접근 | 팀원 개인 계정이 직접 secret payload를 읽거나 GCP 데이터 리소스를 관리하는 권한 |
 
-즉, 팀원은 `airflow` namespace 안에서 Airflow를 설치하고 운영할 수 있지만 클러스터 전체
-관리자는 아니다. Airflow 외 다른 작업이 필요하면 작업별 namespace와 RoleBinding을 별도
+즉, 팀원은 클러스터 전체를 **읽을** 수 있고(상호 가시성 목적), **변경**은 `airflow`
+namespace 안(RBAC 부여자)에서만 가능하다. 클러스터 전체 관리자는 아니다. Airflow 외 다른 작업이 필요하면 작업별 namespace와 RoleBinding을 별도
 이슈로 추가한다.
 
 ## 팀원 로컬 준비물
