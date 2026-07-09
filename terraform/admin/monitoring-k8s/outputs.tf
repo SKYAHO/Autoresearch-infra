@@ -12,3 +12,8 @@ output "kube_prometheus_stack_chart_version" {
   description = "Pinned kube-prometheus-stack Helm chart version."
   value       = helm_release.kube_prometheus_stack.version
 }
+
+output "grafana_viewer_role_binding_names" {
+  description = "Monitoring namespace RoleBinding names for Grafana port-forward users."
+  value       = [for binding in kubernetes_role_binding_v1.grafana_viewer : binding.metadata[0].name]
+}

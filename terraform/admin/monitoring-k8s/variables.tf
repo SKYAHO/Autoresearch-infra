@@ -61,3 +61,17 @@ variable "grafana_admin_password_key" {
   type        = string
   default     = "admin-password"
 }
+
+variable "grafana_viewer_user_emails" {
+  description = "Google accounts granted minimal monitoring namespace access for Grafana port-forward. Keep real values in local terraform.tfvars only."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for e in var.grafana_viewer_user_emails :
+      can(regex("^[^@]+@[^@]+\\.[^@]+$", e)) && !strcontains(e, ":")
+    ])
+    error_message = "Each item must be an email without a user: prefix."
+  }
+}
