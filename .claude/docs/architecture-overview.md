@@ -9,8 +9,9 @@ dev 환경 인프라의 전체 그림과 설계 결정을 담은 문서입니다
 ## 시스템 맥락
 
 이 저장소는 AutoResearch(YouTube 트렌딩 데이터 기반 CTR 모델링
-프로젝트)의 GCP 인프라를 관리합니다. 애플리케이션 코드는
-`SKYAHO/Autoresearch`에 있으며, 이 저장소는 그 애플리케이션이 실행될
+프로젝트)의 GCP 인프라를 관리합니다. 일반 애플리케이션 코드는
+`SKYAHO/Autoresearch`, Airflow DAG/Helm/image 코드는
+`SKYAHO/Autoresearch-airflow`에 있으며, 이 저장소는 해당 워크로드가 실행될
 기반(네트워크, 저장소, 데이터베이스, 클러스터, 시크릿)과 검증·배포
 자동화를 제공합니다.
 
@@ -84,7 +85,7 @@ GCP project (dev, asia-northeast3)
 - **BigQuery:** `autoresearch_dev_analytics`, `feast_offline_store`.
 - **GKE/Airflow:** Airflow는 `airflow` namespace 경계와 namespace-scoped
   RBAC로 설치 경로를 제공하며, 팀원 로컬 접근은
-  `docs/GKE_CLUSTER_ACCESS.md`를 따른다.
+  `docs/TEAM_OPERATIONS_RUNBOOK.md`를 따른다.
 
 ## 변경 영향 체크리스트
 
@@ -92,5 +93,5 @@ GCP project (dev, asia-northeast3)
 
 - [ ] 네트워크 경계(private/public, peering, firewall)가 바뀌는가
 - [ ] 다른 리소스가 소비하는 output이 바뀌는가
-- [ ] 앱 저장소(`SKYAHO/Autoresearch`)의 배포·접속 설정에 영향이 있는가
+- [ ] 앱 저장소(`SKYAHO/Autoresearch`) 또는 Airflow 저장소(`SKYAHO/Autoresearch-airflow`)의 배포·접속 설정에 영향이 있는가
 - [ ] `docs/TERRAFORM_DEV.md`와 이 문서의 갱신이 필요한가

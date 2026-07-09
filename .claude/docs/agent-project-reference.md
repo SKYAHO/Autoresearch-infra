@@ -52,15 +52,15 @@ terraform/
 └── PULL_REQUEST_TEMPLATE.md
 
 docs/
+├── README.md                # 운영 문서 진입점
+├── TEAM_OPERATIONS_RUNBOOK.md  # 팀원 GKE/Bastion/Airflow UI 접근 절차와 권한 기록
 ├── TERRAFORM_DEV.md         # dev 환경 구성과 필요 GCP API
 ├── TERRAFORM_BOOTSTRAP.md   # bootstrap root (state bucket/WIF/CI SA) 절차
-├── GKE_CLUSTER_ACCESS.md    # 팀원 로컬 kubeconfig/kubectl 접근 절차
-├── ACCESS_STRATEGY.md       # dev 내부망 접근 전략
+├── CHANGE_HISTORY.md        # 완료된 주요 인프라 변경 결정 요약
 ├── BRANCH_RULESET_MAIN.md   # main ruleset 설명
 ├── GITHUB_LABELS_AND_PROJECT.md  # label/Project 운영 기준
 └── superpowers/
-    ├── specs/               # 설계 문서 (YYYY-MM-DD-<slug>-design.md)
-    └── plans/               # 구현 계획 (YYYY-MM-DD-<slug>.md)
+    └── README.md            # 작업 중 spec/plan 사용 기준
 
 CONTRIBUTING.md              # 사람용 협업 규칙 (워크플로우 전체)
 branch_ruleset_main.json     # main branch ruleset 정의
@@ -69,8 +69,8 @@ branch_ruleset_main.json     # main branch ruleset 정의
 로컬 전용(커밋하지 않음): `agent.local.md`, `docs/NOTION_PROGRESS_TIMELINE.md`,
 `.claude/settings.local.json`
 
-에이전트 호환 진입점으로 `AGENT.md -> CLAUDE.md`, `AGENTS.md -> CLAUDE.md`,
-`.agent -> .claude`, `.agents -> .claude` symlink를 둔다.
+에이전트 호환 진입점으로 `AGENTS.md -> CLAUDE.md`,
+`.agents -> .claude` symlink를 둔다.
 
 ## Team Ownership & Domains
 
@@ -78,7 +78,7 @@ branch_ruleset_main.json     # main branch ruleset 정의
 |---|---|---|---|
 | **GCP Infrastructure** | hyeongyu-data | Terraform/IaC, 네트워크, IAM, 시크릿, 배포 자동화 | `terraform/`, `.github/workflows/`, `docs/` |
 | **Model Training** | waieiches, hyochangsung | 모델·학습 파이프라인 (앱 저장소) | `SKYAHO/Autoresearch` |
-| **Airflow Orchestration** | bbungjun | DAG·오케스트레이션 (앱 저장소) | `SKYAHO/Autoresearch` |
+| **Airflow Orchestration** | bbungjun | DAG·오케스트레이션, Helm values, Airflow image | `SKYAHO/Autoresearch-airflow` |
 
 이 저장소의 주 담당은 GCP Infrastructure 도메인입니다. 인프라 변경이
 애플리케이션(수집 파이프라인, DAG, 모델 서빙)에 영향을 주면 해당 도메인
@@ -130,8 +130,9 @@ branch_ruleset_main.json     # main branch ruleset 정의
    함께 추가합니다.
 4. **검증:** `fmt -check`, `validate`를 통과시키고, 리소스 변경이면
    `plan` 결과를 PR에 요약합니다.
-5. **설계 결정 기록:** 아키텍처에 영향이 있으면 `docs/superpowers/specs/`에
-   spec을 남기거나 관련 `.claude/docs/` 가이드를 갱신합니다.
+5. **설계 결정 기록:** 아키텍처에 영향이 있으면 작업 중 `docs/superpowers/`에
+   spec/plan을 남기고, 완료 후 핵심 결정은 `docs/CHANGE_HISTORY.md`에 요약하거나
+   관련 `.claude/docs/` 가이드를 갱신합니다.
 
 ## Verification Checklist
 
