@@ -19,12 +19,12 @@ db_tier                 = "db-f1-micro"
 db_name                 = "autoresearch"
 db_app_user             = "app"
 sql_deletion_protection = false
-private_services_cidr   = "10.20.0.0/20"
+private_services_cidr   = "192.168.0.0/20" # 현재 dev apply 값. dev subnet/GKE 대역과 미중복
 
 # GKE (#5)
-gke_master_ipv4_cidr           = "__VG_IPV4_2f4a6b1c__/28" # private 컨트롤 플레인. dev subnet/private services와 미중복
-gke_pods_cidr                  = "__VG_IPV4_d1c0e8a2__/20"
-gke_services_cidr              = "__VG_IPV4_b7e1f903__/24"
+gke_master_ipv4_cidr           = "172.16.0.0/28" # private 컨트롤 플레인. dev subnet/private services와 미중복
+gke_pods_cidr                  = "172.16.64.0/20"
+gke_services_cidr              = "172.16.128.0/24"
 gke_machine_type               = "e2-standard-4"
 gke_node_count_min             = 1
 gke_node_count_max             = 2
