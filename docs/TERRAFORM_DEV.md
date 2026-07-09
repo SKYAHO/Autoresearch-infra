@@ -460,6 +460,11 @@ GSA(`autoresearch-dev-airflow-batch`)를 가장한다. 따라서 dev root apply 
 Workload Identity binding과 Airflow API key accessor가 제거되면 batch pod는
 토큰 교환 또는 secret 접근 단계에서 403으로 실패할 수 있다.
 
+batch GSA에는 Cloud SQL client와 Airflow DAG/log bucket objectAdmin을 부여하지
+않는다. Airflow metadata DB 접근과 remote log 업로드는 Airflow component
+pod(`airflow` KSA → `autoresearch-dev-airflow` GSA)가 담당하고, batch pod는
+원본 데이터·Feast·API key secret만 소비한다.
+
 API key secret:
 
 Terraform은 Secret Manager secret metadata와 resource-level IAM만 관리한다.

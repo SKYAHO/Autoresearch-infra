@@ -108,6 +108,10 @@ batch 전용 GSA(`autoresearch-dev-airflow-batch`)를 가장한다. 실제 apply
 KSA annotation을 batch GSA 이메일로 맞춰야 하며, app GSA의 Airflow API key
 secret accessor는 유지하지 않는다.
 
+batch GSA는 Cloud SQL client와 Airflow DAG/log bucket objectAdmin을 받지 않는다.
+metadata DB 접근과 remote log 업로드는 Airflow component pod의 `airflow` KSA/GSA가
+담당하고, batch pod는 원본 데이터·Feast·API key secret만 소비한다.
+
 ## 운영 절차
 
 1. `terraform/envs/dev`에서 GCP 리소스를 plan/apply한다.
