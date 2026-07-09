@@ -47,6 +47,8 @@
 
 - [x] **단계 1: `google_container_node_pool.airflow`를 추가한다.**
 - [x] **단계 2: `google_service_account_iam_member.gke_app_airflow_batch_wi`를 추가한다.**
+  - 후속 #62에서 `google_service_account.airflow_batch`와
+    `google_service_account_iam_member.airflow_batch_wi`로 대체한다.
 - [x] **단계 3: Cloud Build compute SA IAM member 3개를 추가한다.**
   - Artifact Registry writer
   - Cloud Build bucket objectViewer
@@ -122,6 +124,10 @@ Secret Manager metadata/IAM `4 to add, 0 to change, 0 to destroy`만
 밖에서 추가했으며 version 2가 enabled, 줄바꿈이 들어간 초기 version 1은
 disabled 상태로 정리했다. 후속 `terraform plan -detailed-exitcode`는
 `No changes`로 종료됐다.
+
+후속 #62에서는 위 과도기 app GSA batch binding과 app GSA의 Airflow API key
+accessor를 제거하고, batch 전용 GSA(`autoresearch-dev-airflow-batch`)에
+Workload Identity 및 batch 실행용 최소 권한을 부여한다.
 
 - [x] **단계 3: GCS 입력과 Airflow smoke를 확인한다.**
 

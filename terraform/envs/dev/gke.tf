@@ -46,14 +46,6 @@ resource "google_service_account_iam_member" "gke_app_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
-resource "google_service_account_iam_member" "gke_app_airflow_batch_wi" {
-  service_account_id = google_service_account.gke_app.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${local.airflow_batch_workload_identity_principal}"
-
-  depends_on = [google_container_cluster.dev]
-}
-
 # #5 dev GKE 클러스터 + 노드풀
 # Standard zonal, private nodes. kubectl 기본 경로는 DNS 엔드포인트(#45),
 # master authorized networks(IP 엔드포인트)는 예비. autoscaling min1/max2.

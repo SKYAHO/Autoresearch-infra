@@ -1,4 +1,4 @@
-# Airflow image build/push path for Autoresearch-airflow Cloud Build.
+# Autoresearch-airflow Cloud Build의 Airflow 이미지 build/push 경로.
 # API enablement remains manual; this file only manages least-privilege IAM.
 data "google_project" "current" {
   project_id = var.project_id

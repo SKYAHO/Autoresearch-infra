@@ -110,17 +110,22 @@ output "airflow_gke_node_pool_name" {
 }
 
 output "airflow_batch_workload_identity_principal" {
-  description = "Airflow batch KSA가 app GSA를 가장할 Workload Identity principal."
+  description = "Airflow batch KSA가 batch GSA를 가장할 Workload Identity principal."
   value       = local.airflow_batch_workload_identity_principal
 }
 
+output "airflow_batch_gcp_service_account_email" {
+  description = "Airflow batch Workload Identity용 GCP 서비스 계정(API key, raw_data, Feast 최소 권한)."
+  value       = google_service_account.airflow_batch.email
+}
+
 output "cloud_build_compute_service_account_email" {
-  description = "Autoresearch-airflow Cloud Build가 image build/push에 사용하는 Compute default service account."
+  description = "Autoresearch-airflow Cloud Build가 image build/push에 사용하는 Compute 기본 service account."
   value       = local.cloud_build_compute_service_account_email
 }
 
 output "cloud_build_bucket_name" {
-  description = "Cloud Build default staging bucket name used by Autoresearch-airflow builds."
+  description = "Autoresearch-airflow build가 사용하는 Cloud Build 기본 staging bucket 이름."
   value       = local.cloud_build_bucket_name
 }
 
@@ -225,12 +230,12 @@ output "airflow_metadata_database_name" {
 }
 
 output "airflow_youtube_api_key_secret_id" {
-  description = "Airflow YouTube API key Secret Manager secret id. Payload is managed outside Terraform."
+  description = "Airflow YouTube API key Secret Manager secret id. Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_youtube_api_key.secret_id
 }
 
 output "airflow_openrouter_api_key_secret_id" {
-  description = "Airflow OpenRouter API key Secret Manager secret id. Payload is managed outside Terraform."
+  description = "Airflow OpenRouter API key Secret Manager secret id. Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_openrouter_api_key.secret_id
 }
 
@@ -265,11 +270,11 @@ output "airflow_internal_fqdn" {
 }
 
 output "airflow_oauth_client_id_secret_id" {
-  description = "Airflow Google OAuth client ID Secret Manager secret id(#54). Payload is managed outside Terraform."
+  description = "Airflow Google OAuth client ID Secret Manager secret id(#54). Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_oauth_client_id.secret_id
 }
 
 output "airflow_oauth_client_secret_secret_id" {
-  description = "Airflow Google OAuth client secret Secret Manager secret id(#54). Payload is managed outside Terraform."
+  description = "Airflow Google OAuth client secret Secret Manager secret id(#54). Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_oauth_client_secret.secret_id
 }
