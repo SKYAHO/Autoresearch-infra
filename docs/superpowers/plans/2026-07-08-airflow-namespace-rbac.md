@@ -1,20 +1,20 @@
-# Airflow 운영 인프라 경계 구현 Plan (#32)
+# Airflow 운영 인프라 경계 구현 계획 (#32)
 
-> **For agentic workers:** Follow repository templates and security guidelines before
-> editing. Keep real emails, tfvars, state, plans, and credentials out of git.
+> **에이전트 작업자 안내:** 수정 전에 저장소 템플릿과 보안 가이드를 따릅니다. 실제
+> 이메일, tfvars, state, plan, 자격 증명은 git에 넣지 않습니다.
 
-**Goal:** dev GKE 클러스터에 Airflow를 설치할 수 있도록 GCP 리소스와 Kubernetes
+**목표:** dev GKE 클러스터에 Airflow를 설치할 수 있도록 GCP 리소스와 Kubernetes
 namespace 경계를 Terraform으로 구성한다.
 
-**Architecture:** PR review 반영 후 root를 분리한다. `terraform/envs/dev`는 GitHub
+**아키텍처:** PR review 반영 후 root를 분리한다. `terraform/envs/dev`는 GitHub
 Actions PR plan 대상이므로 GCP 리소스만 관리한다. `terraform/admin/airflow-k8s`는
 GKE API 접근이 필요한 Kubernetes 리소스만 관리하며, `master_authorized_networks`에
 허용된 관리자 네트워크에서 수동 apply한다.
 
-**Tech Stack:** Terraform, Google provider, Kubernetes provider(admin root only),
+**기술 스택:** Terraform, Google provider, Kubernetes provider(admin root only),
 GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
 
-## Global Constraints
+## 전역 제약
 
 - 커밋/PR/이슈는 저장소 템플릿을 따른다.
 - 모든 인프라 변경은 관련 `.md` 문서를 같이 갱신한다.
@@ -29,7 +29,7 @@ GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
 - Airflow API secret payload는 Terraform으로 관리하지 않는다. Terraform은 secret
   metadata와 Airflow SA accessor만 관리한다.
 
-## File Structure
+## 파일 구조
 
 | 파일 | 책임 | 상태 |
 |---|---|---|
@@ -40,7 +40,7 @@ GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
 | `docs/TERRAFORM_DEV.md` | 운영 runbook과 root 분리 설명 | 수정 |
 | `docs/superpowers/specs/2026-07-08-airflow-namespace-rbac-design.md` | 설계 최신화 | 수정 |
 
-## Task 1: dev root GCP 리소스 정리
+## 작업 1: dev root GCP 리소스 정리
 
 - [x] Airflow GCP service account 생성
 - [x] Workload Identity IAM member 생성
@@ -57,7 +57,7 @@ GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
       `roles/bigquery.jobUser` 부여
 - [x] dev root에서 Kubernetes provider와 data source 제거
 
-## Task 2: admin root K8s 리소스 추가
+## 작업 2: admin root K8s 리소스 추가
 
 - [x] `terraform/admin/airflow-k8s` root 추가
 - [x] 별도 GCS backend prefix `admin/airflow-k8s/` 사용
@@ -71,7 +71,7 @@ GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
 - [x] NetworkPolicy egress: DNS 53, Cloud SQL private CIDR 5432,
       metadata server `169.254.169.254:80`, HTTPS 443
 
-## Task 3: 문서와 리뷰 반영
+## 작업 3: 문서와 리뷰 반영
 
 - [x] `docs/TERRAFORM_DEV.md`에 두 root 운영 절차 추가
 - [x] design spec을 root 분리 구조로 갱신
@@ -102,7 +102,7 @@ terraform -chdir=terraform/admin/airflow-k8s apply
 `terraform/admin/airflow-k8s/terraform.tfvars`에는 실제 팀원 이메일과 CIDR을 넣지만
 커밋하지 않는다.
 
-## Apply Result
+## Apply 결과
 
 - `terraform/envs/dev apply`: `16 added, 0 changed, 7 destroyed`
   - Airflow GCP SA/IAM, metadata DB, DAG/log bucket, BigQuery/GCS/Secret 권한 생성

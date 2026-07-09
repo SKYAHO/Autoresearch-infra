@@ -1,4 +1,4 @@
-# Agent Prohibitions
+# 에이전트 금지 사항
 
 > Last Updated: 2026-07-07
 
@@ -17,7 +17,7 @@
 - 이미 push된 브랜치를 사용자 동의 없이 force push하지 않습니다
   (rebase 후 `--force-with-lease`는 예외).
 
-## Infrastructure
+## 인프라
 
 - 사용자가 명확히 요청하지 않는 한 `terraform apply`/`destroy`를
   실행하지 않습니다. 검증은 `fmt`/`validate`/`plan`까지입니다.

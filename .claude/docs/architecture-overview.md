@@ -1,4 +1,4 @@
-# Architecture Overview
+# 아키텍처 개요
 
 > Last Updated: 2026-07-08
 
@@ -6,7 +6,7 @@ dev 환경 인프라의 전체 그림과 설계 결정을 담은 문서입니다
 `docs/TERRAFORM_DEV.md`, 파일별 책임은 `agent-project-reference.md`를
 참고합니다.
 
-## System Context
+## 시스템 맥락
 
 이 저장소는 AutoResearch(YouTube 트렌딩 데이터 기반 CTR 모델링
 프로젝트)의 GCP 인프라를 관리합니다. 애플리케이션 코드는
@@ -35,7 +35,7 @@ GCP project (dev, asia-northeast3)
 └── Secret Manager ── DB 비밀번호와 API key metadata/IAM
 ```
 
-## Key Design Decisions
+## 주요 설계 결정
 
 ### 네트워크: private 우선
 - Cloud SQL은 `ipv4_enabled=false`(private IP only)로 두고 service
@@ -63,7 +63,7 @@ GCP project (dev, asia-northeast3)
   artifactregistry, sqladmin, servicenetworking, container 등)를 수동
   활성화합니다. 목록은 `docs/TERRAFORM_DEV.md`에 유지합니다.
 
-## Current vs Planned
+## 현재와 계획
 
 | 항목 | 현재 (main) | 계획 |
 |---|---|---|
@@ -72,7 +72,7 @@ GCP project (dev, asia-northeast3)
 | 환경 | dev 단일 | staging/prod 분리, `modules/` 추출 |
 | 배포 | 수동 | GitHub Actions 기반 apply 파이프라인 검토 |
 
-## Data Flow (앱 관점)
+## 데이터 흐름 (앱 관점)
 
 애플리케이션 데이터 흐름에서 이 인프라가 맡는 위치:
 
@@ -86,7 +86,7 @@ GCP project (dev, asia-northeast3)
   RBAC로 설치 경로를 제공하며, 팀원 로컬 접근은
   `docs/GKE_CLUSTER_ACCESS.md`를 따른다.
 
-## Change Impact Checklist
+## 변경 영향 체크리스트
 
 아키텍처에 영향을 주는 변경 시 확인합니다:
 

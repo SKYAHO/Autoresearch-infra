@@ -1,59 +1,57 @@
-# Airflow Kubernetes Boundary
+# Airflow Kubernetes 경계
 
-This admin Terraform root manages the Kubernetes-side Airflow installation
-boundary in the dev GKE cluster:
+이 admin Terraform root는 dev GKE 클러스터에서 Airflow 설치에 필요한
+Kubernetes 측 경계를 관리합니다.
 
 - `airflow` namespace
-- Airflow Kubernetes service account with Workload Identity annotation
-- namespace-scoped Role/RoleBinding for Airflow components
-- optional namespace-scoped installer admin RoleBindings
-- ResourceQuota, LimitRange, and NetworkPolicy
+- Workload Identity annotation이 붙은 Airflow Kubernetes service account
+- Airflow 구성요소용 namespace 범위 Role/RoleBinding
+- 선택적인 설치 담당자용 namespace 범위 admin RoleBinding
+- ResourceQuota, LimitRange, NetworkPolicy
 
-It is separated from `terraform/envs/dev` to keep Kubernetes resources in
-their own state and provider boundary: routine PR plans of the dev root never
-need direct access to the GKE API server, and Kubernetes-side changes are
-applied deliberately by an operator. (Historically the CI plan runner was also
-blocked by `master_authorized_networks`; the control plane is now reachable via
-its DNS endpoint with IAM (#45), but the separation is kept for the state and
-provider isolation above.)
+이 root는 Kubernetes 리소스를 별도 state와 provider 경계에 두기 위해
+`terraform/envs/dev`와 분리되어 있습니다. dev root의 일반 PR plan은 GKE API
+server에 직접 접근할 필요가 없고, Kubernetes 측 변경은 운영자가 의도적으로
+적용합니다. 과거에는 CI plan runner가 `master_authorized_networks`에도 막혔지만,
+현재 control plane은 IAM 기반 DNS endpoint(#45)로 접근할 수 있습니다. 그럼에도
+state와 provider 격리를 위해 이 분리 구조를 유지합니다.
 
-## Usage
+## 사용법
 
 ```bash
 cd terraform/admin/airflow-k8s
 cp terraform.tfvars.example terraform.tfvars
-# Fill terraform.tfvars with real values. Do not commit it.
+# terraform.tfvars에 실제 값을 입력합니다. 이 파일은 커밋하지 않습니다.
 
 terraform init
 terraform plan
 terraform apply
 ```
 
-Run this from an operator network already allowed by the GKE
-`master_authorized_networks` setting. The active Google account also needs
-Kubernetes authorization to create namespace-scoped resources.
+이 명령은 GKE `master_authorized_networks`에 이미 허용된 운영자 네트워크에서
+실행합니다. 현재 활성 Google 계정에는 namespace 범위 리소스를 만들 수 있는
+Kubernetes 권한도 필요합니다.
 
-`installer_user_emails` grants each listed Google account the Kubernetes
-`admin` ClusterRole within only the `airflow` namespace. Removing an email and
-applying removes that RoleBinding.
+`installer_user_emails`는 목록에 있는 각 Google 계정에 `airflow` namespace 안에서만
+Kubernetes `admin` ClusterRole을 부여합니다. 이메일을 제거하고 apply하면 해당
+RoleBinding이 제거됩니다.
 
-This is not cluster-admin access. Installers can manage typical Airflow Helm
-resources inside the `airflow` namespace, but they cannot create namespaces,
-install CRDs, create ClusterRoles/ClusterRoleBindings, edit nodes, or work in
-other namespaces unless a separate RBAC binding is added.
+이 권한은 cluster-admin 권한이 아닙니다. 설치 담당자는 `airflow` namespace 안의
+일반적인 Airflow Helm 리소스를 관리할 수 있지만, 별도 RBAC binding을 추가하지
+않는 한 namespace 생성, CRD 설치, ClusterRole/ClusterRoleBinding 생성, node 수정,
+다른 namespace 작업은 할 수 없습니다.
 
-The matching Google Cloud resources, including the Airflow GCP service account
-and IAM binding for Workload Identity, are managed by `terraform/envs/dev`.
+Airflow GCP service account와 Workload Identity IAM binding을 포함한 대응 GCP
+리소스는 `terraform/envs/dev`에서 관리합니다.
 
-## Initial Apply Note
+## 최초 Apply 기록
 
-On 2026-07-08 the `airflow` namespace already existed in the cluster. It was
-imported into this root instead of being deleted and recreated:
+2026-07-08 기준 `airflow` namespace는 클러스터에 이미 존재했습니다. 삭제 후
+재생성하지 않고 이 root의 state로 import했습니다.
 
 ```bash
 terraform import kubernetes_namespace_v1.airflow airflow
 ```
 
-After the import, the admin root applied the remaining service account, RBAC,
-quota, limit range, and network policy resources. The final plan reported no
-changes.
+import 이후 admin root에서 나머지 service account, RBAC, quota, limit range,
+network policy 리소스를 적용했습니다. 최종 plan은 변경 없음으로 종료되었습니다.

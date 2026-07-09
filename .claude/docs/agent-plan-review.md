@@ -1,18 +1,18 @@
-# Plan Review Execution Guide
+# Plan Review 실행 가이드
 
 > Last Updated: 2026-07-07
 
 구현 전 계획(plan) 문서를 리뷰할 때 사용하는 가이드입니다. 코드나
 diff 리뷰는 `agent-peer-review.md`를 사용합니다.
 
-## When To Use This Doc
+## 이 문서를 볼 때
 
 - 신규 GCP 리소스 추가 또는 대규모 다중 파일 변경
 - 네트워크, IAM, backend 구성 변경 또는 마이그레이션
 - CI workflow, OIDC, 배포처럼 운영 리스크가 있는 변경
 - "계획 리뷰"나 모호성 점검이 명시적으로 요청된 경우
 
-## Review Questions
+## 리뷰 질문
 
 계획을 다음 질문으로 평가합니다:
 
@@ -29,7 +29,7 @@ diff 리뷰는 `agent-peer-review.md`를 사용합니다.
    가능한가?
 9. 요청된 결과에 비해 과잉 설계된 단계는 없는가? (dev 최소 비용 원칙)
 
-## Output Shape
+## 출력 형식
 
 다음 순서로 반환합니다:
 

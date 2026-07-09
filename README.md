@@ -77,7 +77,7 @@ terraform -chdir=terraform/envs/dev validate
 팀원이 로컬에서 dev GKE 클러스터에 접근하는 절차는
 [docs/GKE_CLUSTER_ACCESS.md](docs/GKE_CLUSTER_ACCESS.md)를 참고합니다.
 
-## Required Checks
+## 필수 Check
 
 PR에서는 GitHub Actions의 `lint`와 Terraform `plan` status check를 사용합니다.
 

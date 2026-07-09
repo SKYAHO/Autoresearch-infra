@@ -1,4 +1,4 @@
-# Agent Security Guidelines
+# 에이전트 보안 가이드
 
 > Last Updated: 2026-07-07
 

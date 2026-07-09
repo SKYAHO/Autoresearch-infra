@@ -1,4 +1,4 @@
-# Terraform Modules
+# Terraform Module
 
 재사용 가능한 Terraform module을 두는 디렉터리입니다.
 
