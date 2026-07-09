@@ -352,7 +352,7 @@ variable "proxy_memory" {
 }
 
 variable "proxy_invoker_members" {
-  description = "proxy 호출(run.invoker)을 허용할 IAM member 목록 (예: serviceAccount:collector@...). collector 주체 확정 전까지 빈 목록 유지."
+  description = "Airflow batch 외에 proxy 호출(run.invoker)을 추가 허용할 IAM member 목록 (예: serviceAccount:collector@...)."
   type        = list(string)
   default     = []
 }

@@ -24,6 +24,9 @@
 - min instances 0, internal ingress, invoker IAM 기반으로 시작했다.
 - 이미지 재배포는 `:latest` 재사용이 아니라 새 tag 또는 digest로 `proxy_image`를
   바꾸고 apply하는 방식을 표준으로 삼았다.
+- Issue #73, PR #74에서 Airflow batch GSA
+  `autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com`에
+  `autoresearch-dev-proxy` 서비스 단위 `roles/run.invoker`를 부여했다.
 
 ## 2026-07-08: Airflow 운영 경계
 

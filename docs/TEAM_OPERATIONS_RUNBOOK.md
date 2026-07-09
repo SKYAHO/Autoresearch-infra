@@ -202,7 +202,7 @@ Airflow 기본 component와 batch pod는 서로 다른 GCP service account를 �
 | Kubernetes service account | GCP service account | 목적 |
 |---|---|---|
 | `airflow/airflow` | `autoresearch-dev-airflow@ar-infra-501607.iam.gserviceaccount.com` | Airflow metadata DB, DAG/log bucket, OAuth secret |
-| `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery |
+| `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery, Cloud Run proxy invoker |
 
 `autoresearch-batch` annotation은 아래 값이어야 한다.
 
@@ -215,6 +215,14 @@ iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@ar-infra-501607.ia
 ```bash
 kubectl -n airflow get serviceaccount autoresearch-batch -o yaml
 ```
+
+Cloud Run proxy 호출은 `autoresearch-dev-airflow-batch` GSA에
+`autoresearch-dev-proxy` 서비스 단위 `roles/run.invoker`가 있어야 한다. 이
+권한은 #74에서 적용했다. 단, 권한만으로 호출이 완성되지는 않는다. DAG/job
+코드는 Cloud Run URL을 audience로 하는 ID token을 발급해 `Authorization`
+헤더에 넣고, YouTube API key는 `X-Goog-Api-Key` 헤더로 전달해야 한다. 또한
+`INGRESS_TRAFFIC_INTERNAL_ONLY` 설정 때문에 batch pod는 GKE/VPC 내부 경로에서
+호출해야 한다.
 
 ## 자주 나는 오류
 

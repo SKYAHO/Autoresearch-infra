@@ -65,7 +65,7 @@
 | OAuth | 외부 계정 로그인을 위임하는 인증 표준 | Airflow Google 로그인에 사용 |
 | KPO | KubernetesPodOperator | Airflow DAG에서 Kubernetes pod를 띄우는 operator |
 | Proxy | 호출을 대신 받아 내부 서비스로 전달하거나 중계하는 컴포넌트 | dev Cloud Run proxy |
-| Invoker | Cloud Run을 호출할 수 있는 IAM 권한 주체 | collector service account가 될 예정 |
+| Invoker | Cloud Run을 호출할 수 있는 IAM 권한 주체 | Airflow batch GSA가 dev proxy를 호출 |
 | Image tag | 컨테이너 이미지 버전 이름 | `proxy:dev-YYYYMMDD-N` 같은 재배포 단위 |
 | Digest | 컨테이너 이미지 내용 기반 고정 식별자 | `sha256:...` 형식, 같은 내용이면 값이 고정 |
 | Metadata DB | 시스템 내부 상태를 저장하는 DB | Airflow scheduler/webserver 상태 저장 |
@@ -362,21 +362,26 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    collector["collector<br/>future caller"]
+    batch["Airflow batch pod<br/>autoresearch-batch"]
+    batchgsa["GSA<br/>autoresearch-dev-airflow-batch"]
     iam["Cloud Run invoker IAM"]
     proxy["Cloud Run<br/>autoresearch-dev-proxy"]
     image["Artifact Registry image<br/>proxy:dev-* or digest"]
 
     image --> proxy
-    collector --> iam --> proxy
+    batch --> batchgsa --> iam --> proxy
 ```
 
 - Cloud Run proxy는 내부 전용 ingress와 invoker IAM을 기준으로 만든 dev service다.
 - min instances는 0이라 유휴 비용을 줄인다.
 - 이미지는 `:latest` 재사용 대신 새 tag 또는 digest로 바꿔 Terraform apply가 새
   revision을 만들도록 한다.
-- collector 호출 주체가 확정되면 해당 service account에만 `roles/run.invoker`를
-  부여하는 방식으로 열어야 한다.
+- `autoresearch-dev-airflow-batch` GSA에는 `autoresearch-dev-proxy` 서비스 단위
+  `roles/run.invoker`를 부여했다.
+- 이 권한은 호출 성공의 충분조건이 아니라 필요조건이다. 실제 호출에는
+  `airflow/autoresearch-batch` KSA의 Workload Identity 매핑, Cloud Run URL을
+  audience로 하는 ID token, `Authorization` 헤더, `X-Goog-Api-Key` 헤더,
+  `YOUTUBE_PROXY_URL`, GKE/VPC 내부 호출 경로가 함께 필요하다.
 
 주요 설정 상세:
 
@@ -384,7 +389,7 @@ flowchart LR
 |---|---|---|
 | Service | `autoresearch-dev-proxy` | dev proxy용 Cloud Run service다. |
 | Ingress | internal only | VPC 내부 호출을 기본 가정한다. 외부 인터넷 직접 호출은 열지 않는다. |
-| Auth | IAM invoker | 호출 주체 service account에 `roles/run.invoker`가 있어야 한다. |
+| Auth | IAM invoker | Airflow batch GSA에 서비스 단위 `roles/run.invoker`를 부여한다. |
 | Min instances | 0 | 요청이 없을 때 instance를 0으로 줄여 유휴 비용을 줄인다. |
 | Image strategy | version tag 또는 digest | 같은 `latest` 문자열 재사용은 Terraform 재배포 트리거가 약하므로 쓰지 않는다. |
 | Runtime SA | `autoresearch-dev-proxy` | proxy 전용 service account다. 필요한 권한은 추후 리소스 단위로만 추가한다. |
