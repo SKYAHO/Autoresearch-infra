@@ -23,8 +23,8 @@ Airflow 웹서버(8080)를 VPC 내부망에서 도메인으로 접근할 수 있
 ## 접근 흐름
 
 ```
-팀원 로컬 ──(IAP 터널, #47 Bastion, SOCKS -D 1080)──▶ Bastion
-                └─ http://airflow.dev.autoresearch.internal:8080 (private DNS 조회)
+팀원 로컬 ──(IAP 터널, #47 Bastion, -L 8080 포트 포워딩)──▶ Bastion
+                └─ http://localhost:8080 (Bastion이 private DNS 조회)
                                    │
                                    ▼
               ILB 예약 내부 IP (dev subnet) ──▶ airflow ns webserver:8080
@@ -36,6 +36,10 @@ Airflow 웹서버(8080)를 VPC 내부망에서 도메인으로 접근할 수 있
 - 인터넷 노출, HTTPS/인증서 (내부 HTTP. 필요해지면 별도 이슈)
 - Google OAuth 로그인 (#49(close, #54로 대체))
 - Helm values 실제 적용 (앱 저장소 작업)
+
+SOCKS(`-D 1080`)로 `http://airflow.dev.autoresearch.internal:8080`을 여는 경로는
+내부 DNS·비로그인 확인용 보조 경로다. Google OAuth redirect URI는 #54 기준
+localhost만 사용한다.
 
 ## 비용 / 리스크 / 롤백
 

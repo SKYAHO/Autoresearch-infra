@@ -192,27 +192,10 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 
 ### 사용법 (팀원)
 
-```bash
-# 1) SSH 접속 (IAP 터널 자동)
-gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap
-
-# 2) 포트 포워딩(기본): Airflow UI 표준 접속
-gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
-  -- -N -L 8080:airflow.dev.autoresearch.internal:8080
-# → 브라우저에서 http://localhost:8080
-# OAuth 로그인은 localhost 경로 기준(#54): Google redirect URI가
-# http://localhost:8080/oauth-authorized/google 이라 로그인은 이 경로에서만 동작
-
-# 3) SOCKS 프록시(보조): 내부 DNS 이름 그대로 브라우저에서 사용 (#48 private DNS 조합)
-gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
-  -- -N -D 1080
-# → 브라우저에 SOCKS5 프록시 localhost:1080 + 원격 DNS 조회 옵션 설정 필요
-# http://airflow.dev.autoresearch.internal:8080 열람은 가능하나 OAuth 로그인 불가
-# (비로그인 확인·내부 DNS 검증용)
-```
+팀원에게 공유할 실제 명령은
+[`docs/GKE_CLUSTER_ACCESS.md`](GKE_CLUSTER_ACCESS.md)를 단일 원본으로 한다.
+요약하면 SSH 단독 접속은 점검용, Airflow UI 로그인은 `-L 8080` 포트 포워딩 후
+`http://localhost:8080`, SOCKS 프록시는 내부 DNS 비로그인 확인용 보조 경로다.
 
 ### 비용/롤백
 
@@ -339,20 +322,11 @@ webserver:
 
 ### 접속 방법 (팀원)
 
-```bash
-# 기본: Bastion(#47) 포트 포워딩 → http://localhost:8080 (OAuth 로그인 가능)
-gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
-  -- -N -L 8080:airflow.dev.autoresearch.internal:8080
-# Google OAuth redirect URI가 http://localhost:8080/oauth-authorized/google
-# 기준(#54, Google이 .internal을 redirect URI로 거부)이라 로그인은 이 경로에서만 동작
-
-# 보조: SOCKS 프록시 → http://airflow.dev.autoresearch.internal:8080 (비로그인 확인용)
-gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
-  -- -N -D 1080
-# 브라우저 SOCKS5 프록시 localhost:1080 + 원격 DNS 조회 옵션 필요. OAuth 로그인 불가
-```
+팀원에게 공유할 실제 접속 명령은
+[`docs/GKE_CLUSTER_ACCESS.md`](GKE_CLUSTER_ACCESS.md)를 따른다. 운영 기준은
+Bastion(#47) 포트 포워딩 → `http://localhost:8080`이며, Google OAuth 로그인은
+localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내부 DNS 비로그인
+확인용 보조 경로다.
 
 ### 비용/롤백
 

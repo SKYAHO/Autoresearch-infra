@@ -28,7 +28,7 @@
 2. airflow-k8s root apply (관리자 네트워크에서)
 3. 앱 저장소에서 Helm values 적용 (LoadBalancer + internal 어노테이션 + `terraform output airflow_ilb_ip` 기반 `loadBalancerIP` + `externalTrafficPolicy: Local`)
 4. Bastion(#47)에서 `curl http://airflow.dev.autoresearch.internal:8080/health` 성공
-5. 로컬 브라우저: Bastion SOCKS(`-D 1080`, 원격 DNS) 상태에서 UI 접속 확인
+5. 로컬 브라우저: Bastion 포트 포워딩(`-L 8080:airflow.dev.autoresearch.internal:8080`) 후 `http://localhost:8080` UI 접속 확인
 
 ## 선행/후속
 
