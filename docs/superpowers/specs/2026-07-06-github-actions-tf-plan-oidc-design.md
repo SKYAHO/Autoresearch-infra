@@ -2,7 +2,7 @@
 
 - **이슈**: [#6 [FEAT] GitHub Actions Terraform plan 및 GCP OIDC 인증 구성](https://github.com/SKYAHO/Autoresearch-infra/issues/6)
 - **날짜**: 2026-07-06
-- **상태**: 구현 완료, PR #15 검토/머지 대기
+- **상태**: 구현 완료, PR #15 merge 완료
 - **선행**: #1 ~ #5 (main 머지 완료, 이후 dev stack apply 완료)
 
 ---

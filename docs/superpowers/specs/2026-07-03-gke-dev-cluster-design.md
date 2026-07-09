@@ -3,7 +3,7 @@
 - 이슈: [#5 [FEAT] dev GKE 소형 클러스터 Terraform 구성](https://github.com/SKYAHO/Autoresearch-infra/issues/5)
 - 분기 전략: **A** — PR #13(#4 Cloud SQL) 머지 후 갱신된 `main`에서 `feat/5-gke` 분기
 - 작성일: 2026-07-03
-- 상태: 설계 승인됨(사용자), 구현 대기
+- 상태: 설계 승인됨(사용자), 구현 완료(PR #14)
 
 > 2026-07-08 update: 이 문서는 #5 최초 최소 비용 설계 기록이다.
 > 워커 노드 머신 타입 기준은 #41에서 `e2-standard-4`로 변경한다.

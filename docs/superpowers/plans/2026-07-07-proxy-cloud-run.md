@@ -1,6 +1,6 @@
 # dev proxy Cloud Run 구현 계획 (#27)
 
-> Status: In Progress | Issue: #27 | Spec: `../specs/2026-07-07-proxy-cloud-run-design.md`
+> Status: Done (PR #30 merged, apply 완료) | Issue: #27 | Spec: `../specs/2026-07-07-proxy-cloud-run-design.md`
 
 ## 작업 순서
 
@@ -22,11 +22,11 @@
 
 ## 검증 체크리스트
 
-- [ ] fmt/validate 통과
-- [ ] plan: 2 to add (SA, service), 기존 리소스 변경 없음
-- [ ] 서비스 스펙: port 8080, `GET /health` probe, min 0/max 1, internal ingress
-- [ ] invoker 기본 빈 목록 → 아무도 호출 불가 상태 확인
-- [ ] `docs/TERRAFORM_DEV.md` 갱신
+- [x] fmt/validate 통과
+- [x] plan: 2 to add (SA, service), 기존 리소스 변경 없음
+- [x] 서비스 스펙: port 8080, `GET /health` probe, min 0/max 1, internal ingress
+- [x] invoker 기본 빈 목록 → 아무도 호출 불가 상태 확인
+- [x] `docs/TERRAFORM_DEV.md` 갱신
 
 ## Apply 전 선행 조건 (머지 후)
 

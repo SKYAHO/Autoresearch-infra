@@ -1,6 +1,6 @@
 # GKE DNS 기반 엔드포인트 설계 (#45)
 
-> Status: Draft | Issue: #45 | Last Updated: 2026-07-08
+> Status: Done (구현·apply 완료) | Issue: #45 | Last Updated: 2026-07-09
 
 ## 목적
 
