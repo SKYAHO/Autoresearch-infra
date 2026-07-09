@@ -28,6 +28,7 @@ terraform apply
 이미 발급된 access token은 만료될 때까지, 보통 최대 약 1시간 동안 유효할 수
 있습니다.
 
-팀원에게는 [`docs/GKE_CLUSTER_ACCESS.md`](../../../docs/GKE_CLUSTER_ACCESS.md)의
-로컬 설정 절차를 공유합니다. 실제 개인 이메일, 공인 IP, kubeconfig 파일, service
-account key가 들어간 예시 파일은 공유하거나 커밋하지 않습니다.
+팀원에게는
+[`docs/TEAM_OPERATIONS_RUNBOOK.md`](../../../docs/TEAM_OPERATIONS_RUNBOOK.md)의
+로컬 설정 절차를 공유합니다. 실제 공인 IP, kubeconfig 파일, service account key가
+들어간 예시 파일은 공유하거나 커밋하지 않습니다.
