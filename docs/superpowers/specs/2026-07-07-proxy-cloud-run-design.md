@@ -1,6 +1,6 @@
 # dev proxy Cloud Run 서비스 설계 (#27)
 
-> Status: Draft | Issue: #27 | Last Updated: 2026-07-07
+> Status: Done (구현·apply 완료) | Issue: #27 | Last Updated: 2026-07-09
 
 ## 목적
 

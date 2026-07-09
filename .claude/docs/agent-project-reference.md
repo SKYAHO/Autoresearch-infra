@@ -20,7 +20,7 @@ terraform/
 ├── bootstrap/               # 원격 state bucket, WIF pool/provider, CI SA
 ├── admin/
 │   ├── airflow-k8s/          # Airflow namespace/RBAC/NetworkPolicy (separate state)
-│   └── gke-team-access/      # 팀원 GKE clusterViewer IAM (separate state)
+│   └── gke-team-access/      # 팀원 GKE container.viewer IAM (전역 k8s 읽기, secrets 제외 — 의도된 방침) + bastion 접속 IAM (separate state)
 ├── envs/
 │   └── dev/                 # dev 환경 root module
 │       ├── versions.tf      # Terraform/provider 버전, provider 설정
@@ -38,6 +38,8 @@ terraform/
 │       ├── airflow.tf       # Airflow GCP SA/WI/DB/GCS/IAM
 │       ├── cloud_build.tf   # Autoresearch-airflow image build/push IAM
 │       ├── secret_manager.tf     # Secret Manager
+│       ├── bastion.tf       # IAP 전용 bastion host (#47)
+│       ├── dns.tf           # Airflow ILB 고정 IP + private DNS zone (#48)
 │       └── terraform.tfvars.example  # 변수 예시 (실값 커밋 금지)
 └── modules/                 # 재사용 module (예정)
 
@@ -51,6 +53,7 @@ terraform/
 
 docs/
 ├── TERRAFORM_DEV.md         # dev 환경 구성과 필요 GCP API
+├── TERRAFORM_BOOTSTRAP.md   # bootstrap root (state bucket/WIF/CI SA) 절차
 ├── GKE_CLUSTER_ACCESS.md    # 팀원 로컬 kubeconfig/kubectl 접근 절차
 ├── ACCESS_STRATEGY.md       # dev 내부망 접근 전략
 ├── BRANCH_RULESET_MAIN.md   # main ruleset 설명
@@ -108,7 +111,8 @@ branch_ruleset_main.json     # main branch ruleset 정의
   random provider
 - **GCP:** 리전 `asia-northeast3`(서울), dev 환경 — VPC, Cloud NAT,
   Artifact Registry, Cloud SQL(PostgreSQL 15, private IP), GKE,
-  Secret Manager
+  Secret Manager, GCS, BigQuery, Cloud Run(내부 proxy),
+  Cloud DNS(private zone `dev.autoresearch.internal`), bastion host(IAP 전용)
 - **State:** GCS remote backend(`autoresearch-dev-tfstate`)
 - **CI:** GitHub Actions — `lint`(actionlint, required check),
   Terraform plan(OIDC/WIF, PR 댓글 게시), Claude Code PR Review

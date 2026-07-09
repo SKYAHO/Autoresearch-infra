@@ -1,6 +1,6 @@
 # Airflow UI 내부 노출 구현 계획 (#48)
 
-> Status: In Progress | Issue: #48 | Spec: `../specs/2026-07-08-airflow-internal-dns-design.md`
+> Status: Done (PR #51 merged, 2026-07-08 apply 완료) | Issue: #48 | Spec: `../specs/2026-07-08-airflow-internal-dns-design.md`
 
 ## 작업 순서
 
@@ -17,10 +17,10 @@
 
 ## 검증 체크리스트
 
-- [ ] fmt/validate 통과 (envs/dev + admin/airflow-k8s)
-- [ ] dev plan: 3 to add (address, zone, record), 기존 리소스 변경 없음
-- [ ] airflow-k8s plan: NetworkPolicy in-place update 1건
-- [ ] 문서 갱신
+- [x] fmt/validate 통과 (envs/dev + admin/airflow-k8s)
+- [x] dev plan: 3 to add (address, zone, record), 기존 리소스 변경 없음
+- [x] airflow-k8s plan: NetworkPolicy in-place update 1건
+- [x] 문서 갱신
 
 ## Apply 후 확인 (머지 후, 사용자 승인 하에)
 
@@ -33,4 +33,4 @@
 ## 선행/후속
 
 - 선행: #47 Bastion (브라우저 경로), #32 Airflow namespace (적용 대상)
-- 후속: #49 Google OAuth allowlist (redirect URI = `http://airflow.dev.autoresearch.internal:8080` 기준)
+- 후속: #54/#55 OAuth 자격증명 Secret Manager 저장 완료 (#49는 close — redirect URI는 `http://localhost:8080` 기준, Google이 `.internal` 거부)

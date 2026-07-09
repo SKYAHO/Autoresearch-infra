@@ -107,7 +107,7 @@ docs: GCP 운영 가이드 초안 작성
 - **PR 통과 후 머지**: 설정한 필수 체크가 모두 통과해야 머지할 수 있습니다.
 - **머지 방식**: squash만 허용.
 
-> GitHub 레포 설정 → Settings → Branches → Branch protection rules 에서 확인할 수 있습니다.
+> GitHub 레포 설정 → Settings → Rules → Rulesets 에서 확인할 수 있습니다.
 
 ## 인프라 변경 리뷰 원칙
 

@@ -35,7 +35,7 @@
 | 코드 리뷰 | `.claude/docs/agent-peer-review.md` | `.claude/docs/agent-workflow-reference.md` |
 | 계획 리뷰 | `.claude/docs/agent-plan-review.md` | `.claude/docs/agent-peer-review.md` |
 
-각 문서는 현재 구현과 계획(별도 브랜치 진행 중)을 구분해 표기합니다.
+각 문서는 현재 구현과 계획을 구분해 표기합니다.
 
 ## Project Context
 
@@ -52,6 +52,8 @@
   - `cloud_run.tf` — dev proxy Cloud Run
   - `airflow.tf` / `cloud_build.tf` — Airflow GCP 리소스와 이미지 build 경로
   - `secret_manager.tf` — Secret Manager 리소스와 resource-level IAM
+  - `bastion.tf` — #47 IAP 전용 bastion host
+  - `dns.tf` — #48 Airflow ILB 고정 IP + private DNS zone
 - Kubernetes admin root는 `terraform/admin/airflow-k8s/`, 팀원 GKE 접근 IAM은
   `terraform/admin/gke-team-access/`에서 별도 state로 관리합니다.
 - 재사용 module은 `terraform/modules/` (예정)
