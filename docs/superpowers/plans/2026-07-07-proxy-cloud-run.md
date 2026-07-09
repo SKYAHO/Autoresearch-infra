@@ -25,7 +25,8 @@
 - [x] fmt/validate 통과
 - [x] plan: 2 to add (SA, service), 기존 리소스 변경 없음
 - [x] 서비스 스펙: port 8080, `GET /health` probe, min 0/max 1, internal ingress
-- [x] invoker 기본 빈 목록 → 아무도 호출 불가 상태 확인
+- [x] 초기 배포는 invoker 기본 빈 목록으로 접근 차단
+- [ ] Airflow batch GSA에 서비스 단위 Cloud Run invoker 부여(#73)
 - [x] `docs/TERRAFORM_DEV.md` 갱신
 
 ## Apply 전 선행 조건 (머지 후)
@@ -33,4 +34,5 @@
 1. `gcloud services enable run.googleapis.com --project=<project>`
 2. 앱 저장소에서 proxy 이미지 빌드 → AR push (`proxy:dev-YYYYMMDD-N` 또는 digest)
 3. `proxy_image`를 배포할 tag/digest로 맞춘 뒤 `terraform apply` (사용자 승인 후)
-4. collector SA 확정 시: `proxy_invoker_members`에 추가 → apply
+4. Airflow batch GSA는 기본 invoker로 부여하고, 추가 collector SA가 확정되면
+   `proxy_invoker_members`에 추가 → apply

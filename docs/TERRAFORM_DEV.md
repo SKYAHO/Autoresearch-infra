@@ -226,7 +226,7 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | 스케일링 | min **0** / max 1 | 유휴 비용 0. `var.proxy_max_instances` |
 | 리소스 | 1 vCPU / 512Mi, `cpu_idle=true` | 요청 처리 중에만 CPU 과금 |
 | 런타임 SA | `autoresearch-dev-proxy@...` | 전용 SA, **role 없음**(최소 권한). GCP 리소스 접근 필요 시 리소스 수준으로 추가 |
-| 인증 | public access 없음, `roles/run.invoker`만 | `var.proxy_invoker_members` 기본 빈 목록 → collector SA 확정 시 추가 |
+| 인증 | public access 없음, `roles/run.invoker`만 | Airflow batch GSA는 기본 허용, 추가 호출 주체는 `var.proxy_invoker_members`로 확장 |
 | ingress | `INGRESS_TRAFFIC_INTERNAL_ONLY` | collector가 같은 VPC(GKE)에서 호출 가정. VPC 밖 호출 확정 시 `INGRESS_TRAFFIC_ALL`로 변경(IAM 인증 유지) |
 | deletion_protection | false (dev) | `var.proxy_deletion_protection` |
 
@@ -247,7 +247,12 @@ API도 apply 전 수동 활성화가 필요하다.
 `proxy_image`를 새 버전 태그(`proxy:dev-YYYYMMDD-N`) 또는 digest(`proxy@sha256:...`)로
 바꾼 뒤 plan/apply한다.
 
-### 호출 방법 (collector)
+### 호출 방법 (Airflow batch / collector)
+
+현재 기본 호출 주체는 Airflow KubernetesPodOperator batch pod가 가장하는
+`autoresearch-dev-airflow-batch@...` GSA다. 이 GSA에는 `autoresearch-dev-proxy`
+Cloud Run 서비스 단위 `roles/run.invoker`만 부여한다. 프로젝트 전체 Cloud Run
+권한이나 public access는 열지 않는다.
 
 ```bash
 # invoker 권한이 있는 SA의 ID token으로 호출
