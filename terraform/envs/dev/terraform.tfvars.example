@@ -22,27 +22,36 @@ sql_deletion_protection = false
 private_services_cidr   = "192.168.0.0/20" # 현재 dev apply 값. dev subnet/GKE 대역과 미중복
 
 # GKE (#5)
-gke_master_ipv4_cidr           = "172.16.0.0/28" # private 컨트롤 플레인. dev subnet/private services와 미중복
-gke_pods_cidr                  = "172.16.64.0/20"
-gke_services_cidr              = "172.16.128.0/24"
-gke_machine_type               = "e2-standard-4"
-gke_node_count_min             = 1
-gke_node_count_max             = 2
-master_authorized_networks     = ["203.0.113.10/32"] # IP 엔드포인트 예비 경로용(선택). 기본 kubectl 접속은 --dns-endpoint(#45)
-airflow_gke_node_pool_name     = "airflow-dev"
-airflow_gke_machine_type       = "e2-standard-2"
-airflow_gke_node_count_min     = 1
-airflow_gke_node_count_max     = 1
-airflow_k8s_namespace          = "airflow"
+gke_master_ipv4_cidr              = "172.16.0.0/28" # private 컨트롤 플레인. dev subnet/private services와 미중복
+gke_pods_cidr                     = "172.16.64.0/20"
+gke_services_cidr                 = "172.16.128.0/24"
+gke_machine_type                  = "e2-standard-4"
+gke_node_count_min                = 1
+gke_node_count_max                = 2
+gke_node_disk_size                = 30
+gke_node_disk_type                = "pd-standard"
+gke_release_channel               = "REGULAR"
+gke_deletion_protection           = false
+master_authorized_networks        = ["203.0.113.10/32"] # IP 엔드포인트 예비 경로용(선택). 기본 kubectl 접속은 --dns-endpoint(#45)
+airflow_gke_node_pool_name        = "airflow-dev"
+airflow_gke_machine_type          = "e2-standard-2"
+airflow_gke_node_count_min        = 1
+airflow_gke_node_count_max        = 1
+airflow_gke_node_disk_size        = 30
+airflow_gke_node_disk_type        = "pd-standard"
+gke_app_k8s_namespace             = "autoresearch"
+gke_app_k8s_service_account       = "autoresearch-app"
+airflow_k8s_namespace             = "airflow"
+airflow_k8s_service_account       = "airflow"
 airflow_batch_k8s_service_account = "autoresearch-batch"
-airflow_api_k8s_secret_name    = "autoresearch-airflow-env"
+airflow_api_k8s_secret_name       = "autoresearch-airflow-env"
 
-raw_data_bucket_location                         = "asia-northeast3"
-raw_data_bucket_storage_class                    = "STANDARD"
-raw_data_noncurrent_version_retention_days       = 30
+raw_data_bucket_location                   = "asia-northeast3"
+raw_data_bucket_storage_class              = "STANDARD"
+raw_data_noncurrent_version_retention_days = 30
 
-bigquery_location                                = "asia-northeast3"
-bigquery_delete_contents_on_destroy              = false
+bigquery_location                   = "asia-northeast3"
+bigquery_delete_contents_on_destroy = false
 
 feast_bucket_location                            = "asia-northeast3"
 feast_bucket_storage_class                       = "STANDARD"
