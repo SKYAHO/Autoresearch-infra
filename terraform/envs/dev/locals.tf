@@ -60,6 +60,10 @@ locals {
   feast_registry_bucket                 = "${var.project_id}-feast-registry"
   feast_staging_bucket                  = "${var.project_id}-feast-staging"
   raw_data_prefixes = {
+    youtube_raw            = "data_lake/youtube_trending_kr/"
+    users_raw              = "asset/virtual_user/"
+    action_logs_raw        = "data_lake/action_log/"
+    personas_raw           = "data/raw/personas/"
     youtube_trending_kr    = "data_lake/youtube_trending_kr/"
     action_logs            = "data_lake/action_log/"
     action_log_quarantine  = "data_lake/action_log_quarantine/"
