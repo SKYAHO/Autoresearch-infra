@@ -67,10 +67,6 @@ proxy_memory              = "512Mi"
 proxy_invoker_members     = [] # airflow-batch는 코드에서 부여. 추가 호출 주체만 "serviceAccount:..."로 추가
 proxy_deletion_protection = false
 
-# Airflow (#32) — 기본값으로 충분. KSA 이름을 바꿀 때만 기입
-# (airflow_k8s_namespace는 위 GKE 블록에서 지정)
-# airflow_k8s_service_account  = "airflow"
-
 # dev Bastion Host (#47) — IAP 터널 전용
 bastion_enabled      = true
 bastion_machine_type = "e2-micro"
