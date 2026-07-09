@@ -103,3 +103,5 @@
   Secret 이름과 key만 Helm values로 참조한다.
 - Issue #80에서 Grafana UI를 `ClusterIP` + `kubectl port-forward` 내부 접근으로
   정리하고, monitoring namespace의 port-forward 전용 최소 RBAC를 추가했다.
+- Issue #81에서 GKE node, Pod CPU/memory, PVC, Airflow, 앱/배치 상태를 Grafana로
+  확인하는 운영 runbook을 추가했다.

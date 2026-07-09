@@ -192,6 +192,9 @@ Grafana admin 계정과 비밀번호는 `monitoring` namespace의
 `grafana-admin-credentials` Secret payload로 관리한다. 실제 비밀번호를 문서, PR,
 채팅에 남기지 않는다.
 
+로그인 후 어떤 dashboard를 볼지는
+[`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md)를 기준으로 한다.
+
 ## SOCKS 프록시 보조 경로
 
 내부 DNS 이름 자체를 브라우저에서 확인해야 할 때만 SOCKS 프록시를 쓴다.
