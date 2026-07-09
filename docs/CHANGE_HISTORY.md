@@ -81,3 +81,13 @@
 
 - Issue #71에서 팀원 접근 runbook, Terraform 운영 문서, 변경 이력을 분리했다.
 - 완료된 spec/plan 상세 문서는 이 파일의 요약 이력으로 압축했다.
+
+## 2026-07-10: 운영 모니터링 설계
+
+- Issue #77에서 Prometheus/Grafana 운영 모니터링 기준을 문서화했다.
+- 실제 설치 전 설계 결정으로, `kube-prometheus-stack`을 우선 검토 대상으로 둔다.
+- Grafana는 외부 공개하지 않고 Bastion 또는 `kubectl port-forward` 기반 내부 접근을
+  기본으로 한다.
+- dev 기준 Prometheus retention은 7일, PVC는 30Gi에서 시작하고 사용량에 따라 조정한다.
+- Cloud Monitoring은 GCP managed resource 기본 관측, Prometheus/Grafana는
+  Kubernetes와 application metric dashboard 담당으로 분리한다.
