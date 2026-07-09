@@ -1,4 +1,4 @@
-# Dev Terraform Environment
+# Dev Terraform 환경
 
 `terraform/envs/dev`는 AutoResearch dev GCP 인프라의 Terraform root module입니다.
 

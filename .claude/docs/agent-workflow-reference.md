@@ -1,4 +1,4 @@
-# Agent Workflow Reference
+# 에이전트 워크플로우 참조
 
 > Last Updated: 2026-07-08
 
@@ -6,14 +6,14 @@ GitHub 워크플로우 전체 가이드: Issue → Branch → Commit → PR → 
 Merge. 모든 인프라 작업의 운영 표준입니다. 사람용 요약은
 `CONTRIBUTING.md`에 있으며, 두 문서의 규칙은 항상 일치해야 합니다.
 
-## When To Use This Doc
+## 이 문서를 볼 때
 
 - 새 인프라 작업을 시작하며 전체 워크플로우가 필요할 때
 - 커밋 메시지나 PR 본문을 작성할 때
 - PR이 워크플로우를 따르는지 검증할 때
 - 브랜치 이름, 머지 방식, Project 운영이 헷갈릴 때
 
-## Workflow Overview
+## 워크플로우 개요
 
 ```
 Issue 생성 (Project Todo 자동 추가)
@@ -33,7 +33,7 @@ Approve 2명 + 대화 resolve → Squash Merge
 Issue 자동 close → Project Done
 ```
 
-## Agent Ground Rules
+## 에이전트 기본 규칙
 
 - GitHub 원격에 영향을 주는 작업은 항상 사용자에게 먼저 확인받습니다:
   issue 생성·수정·close, label 변경, PR 생성·수정·merge, 원격 branch
@@ -44,7 +44,7 @@ Issue 자동 close → Project Done
   (Terraform/IaC: `terraform`+`gcp`, 문서: `documentation`, 자동화:
   `ci-cd`/`chore`, 보안·IAM: `security`/`iam`, 비용 영향: `cost`).
 
-## Issue Creation
+## 이슈 생성
 
 **이슈를 만드는 경우:**
 - GCP 리소스 추가, 수정, 삭제
@@ -69,7 +69,7 @@ GitHub는 `form 선택 → label 자동 적용` 방식으로 동작합니다. Pr
 `Add item`으로 제목만 추가하면 form을 우회하므로, 새 작업은 Issues
 화면에서 생성합니다.
 
-## Branch Naming
+## 브랜치 이름
 
 **코드가 변경되는 작업은 반드시 이슈를 먼저 발행하고, 그 이슈에서 브랜치를
 생성합니다.** GitHub 이슈 우측 `Development > Create a branch`를 사용하면
@@ -91,7 +91,7 @@ git fetch origin
 git switch feat/12-add-cloud-run-job
 ```
 
-## Commit Messages
+## 커밋 메시지
 
 **형식:** `<type>: <한국어 설명>`
 
@@ -116,7 +116,7 @@ fix: Secret Manager 접근 권한 수정
 docs: GCP 운영 가이드 갱신
 ```
 
-## PR Creation
+## PR 생성
 
 **PR 생성 전 체크:**
 - [ ] `terraform -chdir=terraform/envs/dev fmt -check -recursive` 통과
@@ -155,7 +155,7 @@ Closes #12
   처음부터 끝까지 읽고 설명을 보강한 뒤 Ready로 전환합니다.
 - Ready: 정식 리뷰를 요청할 때. 에이전트 리뷰가 이때 실행됩니다.
 
-## Review & Approval
+## 리뷰와 승인
 
 **머지 조건:**
 - 팀원 **2명** approve
@@ -186,7 +186,7 @@ Closes #12
 - required status check: `lint`
 - approve 후 새 커밋이 push되면 approve가 초기화될 수 있습니다.
 
-## Merging
+## 머지
 
 **Squash and merge만 사용합니다.** 저장소 설정에서 merge commit과
 rebase merge는 비활성화되어 있습니다.

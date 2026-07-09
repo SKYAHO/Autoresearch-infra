@@ -39,7 +39,7 @@ terraform -chdir=terraform/envs/dev apply
 
 `terraform.tfvars`, state, plan 파일은 커밋하지 않습니다.
 
-## Backend
+## Backend 구성
 
 dev root module은 GCS backend를 사용합니다.
 

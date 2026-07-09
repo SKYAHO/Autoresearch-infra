@@ -1,17 +1,17 @@
-# dev GKE 클러스터 구성 Implementation Plan
+# dev GKE 클러스터 구성 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **에이전트 작업자 안내:** 이 계획은 작업 단위로 추적합니다. 단계는 체크박스(`- [ ]`) 형식을 사용합니다.
 
-**Goal:** dev 환경에 최소 비용·보안 기본기를 갖춘 Standard GKE 클러스터를 Terraform으로 추가한다 (이슈 #5).
+**목표:** dev 환경에 최소 비용·보안 기본기를 갖춘 Standard GKE 클러스터를 Terraform으로 추가한다 (이슈 #5).
 
 > 2026-07-08 update: 이 문서는 #5 최초 최소 비용 구현 계획 기록이다.
 > 워커 노드 머신 타입 기준은 #41에서 `e2-standard-4`로 변경한다.
 
-**Architecture:** Standard zonal 클러스터 + 노드풀 autoscaling(1~2). private nodes + master authorized networks. 노드 SA(AR pull/로깅/모니터링)와 app GCP SA(Workload Identity, Cloud SQL Client + Secret Accessor) 분리. private 노드 egress용 Cloud NAT. #4에서 미뤄둔 DB 비밀번호 Secret Manager 저장을 같이 추가.
+**아키텍처:** Standard zonal 클러스터 + 노드풀 autoscaling(1~2). private nodes + master authorized networks. 노드 SA(AR pull/로깅/모니터링)와 app GCP SA(Workload Identity, Cloud SQL Client + Secret Accessor) 분리. private 노드 egress용 Cloud NAT. #4에서 미뤄둔 DB 비밀번호 Secret Manager 저장을 같이 추가.
 
-**Tech Stack:** Terraform, Google provider(`>=5.0,<8.0`, 현재 7.39.0), google-beta, random. 검증 = `terraform fmt/validate` + `git diff --check` (이 repo는 pytest 없음).
+**기술 스택:** Terraform, Google provider(`>=5.0,<8.0`, 현재 7.39.0), google-beta, random. 검증 = `terraform fmt/validate` + `git diff --check` (이 repo는 pytest 없음).
 
-## Global Constraints
+## 전역 제약
 
 - root module: `terraform/envs/dev` (단일 dev 환경)
 - 네이밍: `${name_prefix}-${environment}-*` = `autoresearch-dev-*`
@@ -23,32 +23,32 @@
 - 브랜치: `feat/5-gke` (영어 소문자+하이픈, 이슈번호 포함) — 이미 생성됨
 - merge: squash only
 
-## File Structure
+## 파일 구조
 
-- **Create** `terraform/envs/dev/gke.tf` — 노드 SA, app SA(WI binding), GKE cluster, node pool
-- **Create** `terraform/envs/dev/nat.tf` — Cloud Router + Router NAT
-- **Create** `terraform/envs/dev/secret_manager.tf` — DB 비밀번호 Secret + version (←#4 미룬 것)
-- **Modify** `terraform/envs/dev/vpc.tf` — 서브넷 2차 대역(pods/services) additive
-- **Modify** `terraform/envs/dev/variables.tf` — GKE/NAT/secret 변수 +13
-- **Modify** `terraform/envs/dev/locals.tf` — GKE 이름 locals
-- **Modify** `terraform/envs/dev/outputs.tf` — GKE/secret 출력 +7
-- **Modify** `terraform/envs/dev/terraform.tfvars.example` — 신규 변수 예시
-- **Modify** `docs/TERRAFORM_DEV.md` — GKE 섹션 + kubectl 접근/비용/롤백
-- **Modify** `README.md` — 저장소 구조/상태 한 줄
-- **Local-only(미커밋)** `agent.md`, `docs/NOTION_PROGRESS_TIMELINE.md`
+- **생성** `terraform/envs/dev/gke.tf` — 노드 SA, app SA(WI binding), GKE cluster, node pool
+- **생성** `terraform/envs/dev/nat.tf` — Cloud Router + Router NAT
+- **생성** `terraform/envs/dev/secret_manager.tf` — DB 비밀번호 Secret + version (←#4 미룬 것)
+- **수정** `terraform/envs/dev/vpc.tf` — 서브넷 2차 대역(pods/services) additive
+- **수정** `terraform/envs/dev/variables.tf` — GKE/NAT/secret 변수 +13
+- **수정** `terraform/envs/dev/locals.tf` — GKE 이름 locals
+- **수정** `terraform/envs/dev/outputs.tf` — GKE/secret 출력 +7
+- **수정** `terraform/envs/dev/terraform.tfvars.example` — 신규 변수 예시
+- **수정** `docs/TERRAFORM_DEV.md` — GKE 섹션 + kubectl 접근/비용/롤백
+- **수정** `README.md` — 저장소 구조/상태 한 줄
+- **로컬 전용(미커밋)** `agent.md`, `docs/NOTION_PROGRESS_TIMELINE.md`
 
 ---
 
-### Task 1: 변수 및 locals 추가
+### 작업 1: 변수 및 locals 추가
 
-**Files:**
-- Modify: `terraform/envs/dev/variables.tf` (append)
-- Modify: `terraform/envs/dev/locals.tf` (append into `locals {}` block)
+**파일:**
+- 수정: `terraform/envs/dev/variables.tf` (append)
+- 수정: `terraform/envs/dev/locals.tf` (append into `locals {}` block)
 
 **Interfaces:**
-- Produces: 변수 `var.gke_*`, `var.master_authorized_networks`, `var.gke_app_k8s_*`; locals `local.gke_cluster_name`, `local.gke_node_sa_name`, `local.gke_app_sa_name`, `local.gke_node_pool_name`, `local.gke_pods_range_name`, `local.gke_services_range_name`, `local.db_password_secret_id`, `local.gke_workload_identity_principal`
+- 산출물: 변수 `var.gke_*`, `var.master_authorized_networks`, `var.gke_app_k8s_*`; locals `local.gke_cluster_name`, `local.gke_node_sa_name`, `local.gke_app_sa_name`, `local.gke_node_pool_name`, `local.gke_pods_range_name`, `local.gke_services_range_name`, `local.db_password_secret_id`, `local.gke_workload_identity_principal`
 
-- [x] **Step 1: variables.tf 끝에 신규 변수 추가**
+- [x] **단계 1: variables.tf 끝에 신규 변수 추가**
 
 `terraform/envs/dev/variables.tf` 맨 끝에 append:
 
@@ -146,7 +146,7 @@ variable "gke_app_k8s_service_account" {
 }
 ```
 
-- [x] **Step 2: locals.tf에 GKE locals 추가**
+- [x] **단계 2: locals.tf에 GKE locals 추가**
 
 `terraform/envs/dev/locals.tf`의 `locals {}` 블록 안(`sql_instance_name = ...` 라인 아래)에 append:
 
@@ -161,30 +161,30 @@ variable "gke_app_k8s_service_account" {
   gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
 ```
 
-- [x] **Step 3: 검증**
+- [x] **단계 3: 검증**
 
-Run:
+실행:
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
 terraform -chdir=terraform/envs/dev init -backend=false
 terraform -chdir=terraform/envs/dev validate
 git diff --check
 ```
-Expected: validate 성공. (신규 변수/locals만 추가해 리소스 변화 없음.)
+예상 결과: validate 성공. (신규 변수/locals만 추가해 리소스 변화 없음.)
 
 ---
 
-### Task 2: 서브넷 2차 대역 + Cloud NAT
+### 작업 2: 서브넷 2차 대역 + Cloud NAT
 
-**Files:**
-- Modify: `terraform/envs/dev/vpc.tf:9-15` (`google_compute_subnetwork.dev`에 secondary_ip_range 추가)
-- Create: `terraform/envs/dev/nat.tf`
+**파일:**
+- 수정: `terraform/envs/dev/vpc.tf:9-15` (`google_compute_subnetwork.dev`에 secondary_ip_range 추가)
+- 생성: `terraform/envs/dev/nat.tf`
 
 **Interfaces:**
-- Consumes: `var.gke_pods_cidr`, `var.gke_services_cidr`, `local.gke_pods_range_name`, `local.gke_services_range_name`, `google_compute_network.dev`
-- Produces: 서브넷 2차 대역(Task 4 cluster ip_allocation_policy 참조), `google_compute_router.dev`, `google_compute_router_nat.dev`
+- 입력: `var.gke_pods_cidr`, `var.gke_services_cidr`, `local.gke_pods_range_name`, `local.gke_services_range_name`, `google_compute_network.dev`
+- 산출물: 서브넷 2차 대역(작업 4 cluster ip_allocation_policy 참조), `google_compute_router.dev`, `google_compute_router_nat.dev`
 
-- [x] **Step 1: vpc.tf 서브넷에 2차 대역 추가**
+- [x] **단계 1: vpc.tf 서브넷에 2차 대역 추가**
 
 `google_compute_subnetwork.dev` 리소스에 `secondary_ip_range` 블록 2개 추가:
 
@@ -208,7 +208,7 @@ resource "google_compute_subnetwork" "dev" {
 }
 ```
 
-- [x] **Step 2: nat.tf 생성**
+- [x] **단계 2: nat.tf 생성**
 
 `terraform/envs/dev/nat.tf`:
 
@@ -232,17 +232,17 @@ resource "google_compute_router_nat" "dev" {
 }
 ```
 
-- [x] **Step 3: 검증**
+- [x] **단계 3: 검증**
 
-Run:
+실행:
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
 terraform -chdir=terraform/envs/dev validate
 git diff --check
 ```
-Expected: validate 성공.
+예상 결과: validate 성공.
 
-- [x] **Step 4: 커밋**
+- [x] **단계 4: 커밋**
 
 ```bash
 git add terraform/envs/dev/vpc.tf terraform/envs/dev/nat.tf
@@ -251,16 +251,16 @@ git commit -m "feat: dev 서브넷 2차 대역 및 Cloud NAT 추가"
 
 ---
 
-### Task 3: 서비스 계정 + Workload Identity
+### 작업 3: 서비스 계정 + Workload Identity
 
-**Files:**
-- Create: `terraform/envs/dev/gke.tf` (이 태스크에서 파일 생성, cluster는 다음 태스크에 추가)
+**파일:**
+- 생성: `terraform/envs/dev/gke.tf` (이 태스크에서 파일 생성, cluster는 다음 태스크에 추가)
 
 **Interfaces:**
-- Consumes: `var.project_id`, `local.gke_node_sa_name`, `local.gke_app_sa_name`, `local.gke_workload_identity_principal`
-- Produces: `google_service_account.gke_nodes`, `google_service_account.gke_app`, IAM members, WI binding (Task 4 cluster가 WI pool 사용)
+- 입력: `var.project_id`, `local.gke_node_sa_name`, `local.gke_app_sa_name`, `local.gke_workload_identity_principal`
+- 산출물: `google_service_account.gke_nodes`, `google_service_account.gke_app`, IAM members, WI binding (작업 4 cluster가 WI pool 사용)
 
-- [x] **Step 1: gke.tf 생성 — SA + IAM**
+- [x] **단계 1: gke.tf 생성 — SA + IAM**
 
 `terraform/envs/dev/gke.tf`:
 
@@ -316,28 +316,28 @@ resource "google_service_account_iam_member" "gke_app_wi" {
 }
 ```
 
-- [x] **Step 2: 검증**
+- [x] **단계 2: 검증**
 
-Run:
+실행:
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
 terraform -chdir=terraform/envs/dev validate
 git diff --check
 ```
-Expected: validate 성공.
+예상 결과: validate 성공.
 
 ---
 
-### Task 4: GKE 클러스터 + 노드풀
+### 작업 4: GKE 클러스터 + 노드풀
 
-**Files:**
-- Modify: `terraform/envs/dev/gke.tf` (cluster + node pool append)
+**파일:**
+- 수정: `terraform/envs/dev/gke.tf` (cluster + node pool append)
 
 **Interfaces:**
-- Consumes: `google_compute_network.dev`, `google_compute_subnetwork.dev`(2차 대역), `google_service_account.gke_nodes`, `var.gke_*`, `var.master_authorized_networks`, `local.*`
-- Produces: `google_container_cluster.dev`, `google_container_node_pool.dev` → outputs(Task 7)
+- 입력: `google_compute_network.dev`, `google_compute_subnetwork.dev`(2차 대역), `google_service_account.gke_nodes`, `var.gke_*`, `var.master_authorized_networks`, `local.*`
+- 산출물: `google_container_cluster.dev`, `google_container_node_pool.dev` → outputs(작업 7)
 
-- [x] **Step 1: gke.tf에 cluster + node pool 추가**
+- [x] **단계 1: gke.tf에 cluster + node pool 추가**
 
 `terraform/envs/dev/gke.tf` 맨 끝에 append:
 
@@ -418,17 +418,17 @@ resource "google_container_node_pool" "dev" {
 }
 ```
 
-- [x] **Step 2: 검증**
+- [x] **단계 2: 검증**
 
-Run:
+실행:
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
 terraform -chdir=terraform/envs/dev validate
 git diff --check
 ```
-Expected: validate 성공.
+예상 결과: validate 성공.
 
-- [x] **Step 3: 커밋**
+- [x] **단계 3: 커밋**
 
 ```bash
 git add terraform/envs/dev/gke.tf
@@ -437,16 +437,16 @@ git commit -m "feat: dev GKE 클러스터 및 노드 서비스 계정 추가"
 
 ---
 
-### Task 5: Secret Manager (DB 비밀번호 저장)
+### 작업 5: Secret Manager (DB 비밀번호 저장)
 
-**Files:**
-- Create: `terraform/envs/dev/secret_manager.tf`
+**파일:**
+- 생성: `terraform/envs/dev/secret_manager.tf`
 
 **Interfaces:**
-- Consumes: `random_password.db_app_password`(← cloud_sql.tf, #4), `local.db_password_secret_id`
-- Produces: `google_secret_manager_secret.db_app_password`, `_version` → output(Task 7), app SA가 accessor로 접근
+- 입력: `random_password.db_app_password`(← cloud_sql.tf, #4), `local.db_password_secret_id`
+- 산출물: `google_secret_manager_secret.db_app_password`, `_version` → output(작업 7), app SA가 accessor로 접근
 
-- [x] **Step 1: secret_manager.tf 생성**
+- [x] **단계 1: secret_manager.tf 생성**
 
 `terraform/envs/dev/secret_manager.tf`:
 
@@ -467,28 +467,28 @@ resource "google_secret_manager_secret_version" "db_app_password" {
 }
 ```
 
-- [x] **Step 2: 검증**
+- [x] **단계 2: 검증**
 
-Run:
+실행:
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
 terraform -chdir=terraform/envs/dev validate
 git diff --check
 ```
-Expected: validate 성공.
+예상 결과: validate 성공.
 
 ---
 
-### Task 6: outputs + tfvars 예시
+### 작업 6: outputs + tfvars 예시
 
-**Files:**
-- Modify: `terraform/envs/dev/outputs.tf` (append)
-- Modify: `terraform/envs/dev/terraform.tfvars.example` (append)
+**파일:**
+- 수정: `terraform/envs/dev/outputs.tf` (append)
+- 수정: `terraform/envs/dev/terraform.tfvars.example` (append)
 
 **Interfaces:**
-- Produces: outputs — `gke_cluster_name`, `gke_cluster_endpoint`, `gke_cluster_ca_certificate`(sensitive), `gke_node_service_account_email`, `gke_app_service_account_email`, `gke_workload_identity_principal`, `db_app_password_secret_id`
+- 산출물: outputs — `gke_cluster_name`, `gke_cluster_endpoint`, `gke_cluster_ca_certificate`(sensitive), `gke_node_service_account_email`, `gke_app_service_account_email`, `gke_workload_identity_principal`, `db_app_password_secret_id`
 
-- [x] **Step 1: outputs.tf 끝에 출력 추가**
+- [x] **단계 1: outputs.tf 끝에 출력 추가**
 
 `terraform/envs/dev/outputs.tf` 맨 끝에 append:
 
@@ -530,7 +530,7 @@ output "db_app_password_secret_id" {
 }
 ```
 
-- [x] **Step 2: terraform.tfvars.example에 신규 변수 예시 추가**
+- [x] **단계 2: terraform.tfvars.example에 신규 변수 예시 추가**
 
 `terraform/envs/dev/terraform.tfvars.example` 맨 끝에 append:
 
@@ -545,17 +545,17 @@ gke_node_count_max   = 2
 master_authorized_networks = ["203.0.113.10/32"] # kubectl 접속 본인 IP로 교체
 ```
 
-- [x] **Step 3: 검증**
+- [x] **단계 3: 검증**
 
-Run:
+실행:
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
 terraform -chdir=terraform/envs/dev validate
 git diff --check
 ```
-Expected: validate 성공.
+예상 결과: validate 성공.
 
-- [x] **Step 4: 커밋**
+- [x] **단계 4: 커밋**
 
 ```bash
 git add terraform/envs/dev/secret_manager.tf terraform/envs/dev/outputs.tf terraform/envs/dev/variables.tf terraform/envs/dev/locals.tf terraform/envs/dev/terraform.tfvars.example
@@ -564,13 +564,13 @@ git commit -m "feat: DB 비밀번호 Secret Manager 저장 및 GKE 출력 추가
 
 ---
 
-### Task 7: 운영 문서 업데이트
+### 작업 7: 운영 문서 업데이트
 
-**Files:**
-- Modify: `docs/TERRAFORM_DEV.md` (GKE 섹션 + kubectl/비용/롤백, "생성하지 않는 것"에서 GKE 제거)
-- Modify: `README.md` (상태 한 줄)
+**파일:**
+- 수정: `docs/TERRAFORM_DEV.md` (GKE 섹션 + kubectl/비용/롤백, "생성하지 않는 것"에서 GKE 제거)
+- 수정: `README.md` (상태 한 줄)
 
-- [x] **Step 1: docs/TERRAFORM_DEV.md 수정**
+- [x] **단계 1: docs/TERRAFORM_DEV.md 수정**
 
 `## 현재 단계에서 생성하지 않는 것` 목록에서 `- GKE cluster` 라인 삭제. `## dev Cloud SQL (#4)` 섹션 뒤에 새 섹션 추가:
 
@@ -616,11 +616,11 @@ metadata:
 - 롤백: `terraform destroy`로 cluster/node pool/NAT/SA 일괄 제거. 현재 dev state는 GCS backend에 저장.
 ```
 
-- [x] **Step 2: README.md 상태 라인 업데이트**
+- [x] **단계 2: README.md 상태 라인 업데이트**
 
 README "현재 단계" 문장을 GKE까지 구성 진행 중으로 반영(한 줄).
 
-- [x] **Step 3: 검증 + 커밋**
+- [x] **단계 3: 검증 + 커밋**
 
 ```bash
 git diff --check
@@ -630,46 +630,46 @@ git commit -m "docs: GKE 클러스터 운영 문서 업데이트"
 
 ---
 
-### Task 8: 전체 검증 (GCP 인증 필요)
+### 작업 8: 전체 검증 (GCP 인증 필요)
 
 > `terraform plan`은 실제 GCP project + 인증 + `container.googleapis.com` API 활성화가 필요. 사용자 승인 후 실행.
 
-- [x] **Step 1: API 활성화 확인/활성화**
+- [x] **단계 1: API 활성화 확인/활성화**
 
 ```bash
 gcloud services enable container.googleapis.com --project <project_id>
 ```
 (`container.googleapis.com`은 `locals.required_services`에 포함되지만 수동 활성화 정책)
 
-- [x] **Step 2: plan 실행**
+- [x] **단계 2: plan 실행**
 
 ```bash
 terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
 ```
-Expected: GKE cluster, node pool, 2 SAs + IAM, WI binding, Cloud Router/NAT, subnet 2차 대역(in-place), Secret + version 리소스가 추가 계획에 나타남. (로컬 tfvars에 `gke_master_ipv4_cidr` 등 필수 입력.)
+예상 결과: GKE cluster, node pool, 2 SAs + IAM, WI binding, Cloud Router/NAT, subnet 2차 대역(in-place), Secret + version 리소스가 추가 계획에 나타남. (로컬 tfvars에 `gke_master_ipv4_cidr` 등 필수 입력.)
 
-- [x] **Step 3: 최종 fmt/validate**
+- [x] **단계 3: 최종 fmt/validate**
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -check -recursive
 terraform -chdir=terraform/envs/dev validate
 git diff --check
 ```
-Expected: 모두 통과.
+예상 결과: 모두 통과.
 
 ---
 
-### Task 9: Draft PR (템플릿 적용, 원격 작업은 사용자 확인 후)
+### 작업 9: Draft PR (템플릿 적용, 원격 작업은 사용자 확인 후)
 
 > branch push / PR 생성은 GitHub 원격 작업이므로 **사용자 확인 후** 진행.
 
-- [x] **Step 1: branch push (확인 후)**
+- [x] **단계 1: branch push (확인 후)**
 
 ```bash
 git push -u origin feat/5-gke
 ```
 
-- [x] **Step 2: Draft PR 생성 (PR 템플릿 기준)**
+- [x] **단계 2: Draft PR 생성 (PR 템플릿 기준)**
 
 본문(`.github/PULL_REQUEST_TEMPLATE.md` 채움):
 
@@ -706,10 +706,10 @@ Closes #5
 - 롤백: deletion_protection=false → terraform destroy.
 ```
 
-- [x] **Step 3: PR 메타 설정 (확인 후)**
+- [x] **단계 3: PR 메타 설정 (확인 후)**
 - Assignees: `hyeongyu-data`
 - Labels: `terraform`, `gcp`, `iam`, `cost`, `security`
 - Draft 상태로 시작 → 셀프 리뷰 → Ready 전환
 
-- [x] **Step 4: 이후 워크플로우 (11단계)**
+- [x] **단계 4: 이후 워크플로우 (11단계)**
 Ready 전환 → Claude Code 리뷰 → 이해도 확인 inline 답변 → 팀원 2명 승인 → squash merge.
