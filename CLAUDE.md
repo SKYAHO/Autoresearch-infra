@@ -53,7 +53,7 @@
   - `airflow.tf` / `cloud_build.tf` — Airflow GCP 리소스와 이미지 build 경로
   - `secret_manager.tf` — Secret Manager 리소스와 resource-level IAM
   - `bastion.tf` — #47 IAP 전용 bastion host
-  - `dns.tf` — #48 Airflow ILB 고정 IP + private DNS zone
+  - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
 - Kubernetes admin root는 `terraform/admin/airflow-k8s/`, 팀원 GKE 접근 IAM은
   `terraform/admin/gke-team-access/`에서 별도 state로 관리합니다.
 - 재사용 module은 `terraform/modules/` (예정)

@@ -25,7 +25,7 @@
 - Cloud Run proxy state/code 정합성
 - GKE 컨트롤 플레인 DNS 엔드포인트 — IAM 기반 kubectl 접속 (#45/#46)
 - IAP 전용 bastion host(`bastion.tf`, 외부 IP 없음) (#47/#50)
-- Airflow internal ILB 고정 IP(`10.10.0.12`)와 private DNS zone `dev.autoresearch.internal`(`dns.tf`) (#48/#51)
+- Airflow internal ILB 예약 내부 IP(`terraform output airflow_ilb_ip`)와 private DNS zone `dev.autoresearch.internal`(`dns.tf`) (#48/#51)
 - Airflow Google OAuth client 자격증명용 Secret Manager secret metadata (#54/#55)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
@@ -59,7 +59,7 @@ terraform -chdir=terraform/envs/dev apply
 | Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key`, `autoresearch-dev-airflow-oauth-client-id`, `autoresearch-dev-airflow-oauth-client-secret` |
 | GKE | `autoresearch-dev-gke`, node pools `dev-default`, `airflow-dev`, 컨트롤 플레인 DNS 엔드포인트(#45/#46) |
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
-| DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 고정 IP `10.10.0.12` (#48/#51) |
+| DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
 | IAM | GKE node SA, app SA, Airflow SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
 
 ## 기본 리전

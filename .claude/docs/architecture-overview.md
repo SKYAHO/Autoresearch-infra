@@ -27,7 +27,7 @@ GCP project (dev, asia-northeast3)
 │   └── private services range 192.168.0.0/20 (service networking peering)
 ├── GKE dev cluster ── 앱 워크로드 실행
 │   ├── 컨트롤 플레인 DNS 엔드포인트 ── IAM 기반 kubectl 접속 (#45)
-│   └── Airflow internal ILB 10.10.0.12 ── VPC 내부 전용 UI (#48)
+│   └── Airflow internal ILB (`airflow_ilb_ip` output) ── VPC 내부 전용 UI (#48)
 ├── Cloud SQL (PostgreSQL 15, private IP only) ◀── GKE에서 접속
 ├── Artifact Registry (autoresearch-dev-docker) ◀── 이미지 push/pull
 ├── GCS / BigQuery ── raw data, analytics, Feast offline store

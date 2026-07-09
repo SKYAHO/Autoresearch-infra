@@ -32,7 +32,7 @@ terraform/
 │       ├── cloud_sql.tf      # #4 dev Cloud SQL (PostgreSQL, private IP)
 │       ├── cloud_build.tf    # #32 Autoresearch-airflow Cloud Build IAM
 │       ├── cloud_run.tf      # #27 Cloud Run proxy state/code 정합성
-│       ├── dns.tf            # #48 Airflow ILB 고정 IP + private DNS zone
+│       ├── dns.tf            # #48 Airflow ILB 예약 내부 IP + private DNS zone
 │       ├── gke.tf            # #5 dev GKE cluster + 노드풀 + SA/WI
 │       ├── airflow.tf        # #32 Airflow GCP SA/WI + DB/GCS/IAM
 │       ├── locals.tf
@@ -270,7 +270,7 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| ILB 고정 IP | `autoresearch-dev-airflow-ilb` | dev subnet 내부 예약, `output.airflow_ilb_ip` |
+| ILB 예약 내부 IP | `autoresearch-dev-airflow-ilb` | dev subnet 내부 예약, `output.airflow_ilb_ip` |
 | Private DNS zone | `dev.autoresearch.internal` | `var.internal_dns_domain`. VPC 내부에서만 조회 가능 |
 | 레코드 | `airflow.dev.autoresearch.internal` → ILB IP | A, TTL 300 |
 | NetworkPolicy | dev subnet(10.10.0.0/20) → 8080 허용 추가 | `terraform/admin/airflow-k8s`, `var.ui_ingress_source_cidr` |
@@ -278,8 +278,8 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 
 ### Airflow Helm values 가이드 (앱 저장소에서 설정)
 
-webserver Service를 internal LB로 만들고 예약 IP를 지정한다. values는 앱 저장소가
-관리하며, 인프라는 IP/DNS/방화벽 경계만 제공한다.
+webserver Service를 internal LB로 만들고 Terraform output의 예약 IP를 지정한다.
+values는 앱 저장소가 관리하며, 인프라는 IP/DNS/방화벽 경계만 제공한다.
 
 ```yaml
 webserver:
@@ -326,6 +326,12 @@ webserver:
 > `ui_ingress_source_cidr`를 Bastion IP `/32`로 좁히는 것도 Local 정책일 때만
 > 의미가 있다.
 >
+> `google_compute_address.airflow_ilb`는 현재 dev subnet에서 예약된 내부 IP를
+> output으로 제공한다. `address` 인자를 하드코딩하지 않았으므로 주소 리소스가
+> 삭제·재생성되면 같은 숫자 IP가 다시 배정된다고 가정하지 않는다. Helm
+> `loadBalancerIP`와 운영 문서는 항상 `terraform output airflow_ilb_ip` 값을
+> 기준으로 맞춘다.
+>
 > **운영 전환 시**: passthrough ILB 대신 container-native(L7 internal ALB + NEG)로
 > 전환해 노드 경유(SNAT/Local 딜레마)를 구조적으로 제거하고, IP 기반 제한 대신
 > 인증 계층(IAP/OAuth)을 주 방어로 둔다. Envoy proxy 고정비 때문에 dev에는
@@ -350,7 +356,7 @@ gcloud compute ssh autoresearch-dev-bastion \
 
 ### 비용/롤백
 
-- 내부 고정 IP·private DNS zone: 무시 가능한 수준(zone $0.20/월 + 쿼리 과금 미미).
+- 예약 내부 IP·private DNS zone: 무시 가능한 수준(zone $0.20/월 + 쿼리 과금 미미).
   internal passthrough LB 자체는 무과금(트래픽 처리 요금만).
 - 롤백: `dns.tf` 리소스 제거 + NetworkPolicy ingress 블록 제거 후 apply.
   Helm Service를 ClusterIP로 되돌리면 ILB도 제거된다.

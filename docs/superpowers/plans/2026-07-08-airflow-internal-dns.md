@@ -4,7 +4,7 @@
 
 ## 작업 순서
 
-1. `terraform/envs/dev/dns.tf` 신설: 내부 고정 IP(`SHARED_LOADBALANCER_VIP`) +
+1. `terraform/envs/dev/dns.tf` 신설: 예약 내부 IP(`SHARED_LOADBALANCER_VIP`) +
    private zone(`dev.autoresearch.internal`) + `airflow.` A 레코드
 2. `variables.tf`(`internal_dns_domain`), `locals.tf`(`dns.googleapis.com` API),
    `outputs.tf`(`airflow_ilb_ip`, `airflow_internal_fqdn`), tfvars.example
@@ -26,7 +26,7 @@
 
 1. dev root apply → `airflow_ilb_ip`, `airflow_internal_fqdn` output 확인
 2. airflow-k8s root apply (관리자 네트워크에서)
-3. 앱 저장소에서 Helm values 적용 (LoadBalancer + internal 어노테이션 + `loadBalancerIP` + `externalTrafficPolicy: Local`)
+3. 앱 저장소에서 Helm values 적용 (LoadBalancer + internal 어노테이션 + `terraform output airflow_ilb_ip` 기반 `loadBalancerIP` + `externalTrafficPolicy: Local`)
 4. Bastion(#47)에서 `curl http://airflow.dev.autoresearch.internal:8080/health` 성공
 5. 로컬 브라우저: Bastion SOCKS(`-D 1080`, 원격 DNS) 상태에서 UI 접속 확인
 
