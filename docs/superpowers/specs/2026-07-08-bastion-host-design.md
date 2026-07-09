@@ -1,6 +1,6 @@
 # dev Bastion Host 설계 (#47)
 
-> Status: Draft | Issue: #47 | Last Updated: 2026-07-08
+> Status: Done (구현·apply 완료) | Issue: #47 | Last Updated: 2026-07-09
 
 ## 목적
 
@@ -37,7 +37,7 @@ VPN/Bastion 경유)의 Bastion 경로다.
 ## 비목표
 
 - Airflow ILB/DNS 구성 (#48)
-- Google OAuth allowlist (#49)
+- Google OAuth allowlist (#49(close, #54로 대체))
 - VPN, 자동 정지 스케줄, prod 구성
 
 ## 비용 / 리스크 / 롤백

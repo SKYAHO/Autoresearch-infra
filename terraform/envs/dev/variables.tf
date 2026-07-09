@@ -212,7 +212,7 @@ variable "airflow_gke_node_disk_type" {
 }
 
 variable "master_authorized_networks" {
-  description = "GKE 마스터 API에 접근 허용할 CIDR 목록. kubectl을 쓰려면 본인 IP를 tfvars에 추가."
+  description = "GKE 마스터 IP 엔드포인트 접근 허용 CIDR 목록(예비 경로). 기본 kubectl 경로는 DNS 엔드포인트(#45)라 IP 등록 불필요."
   type        = list(string)
   default     = []
 }

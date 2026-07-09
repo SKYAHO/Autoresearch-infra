@@ -20,7 +20,10 @@
 
 ## 1차 권장안(dev)
 
-**A + D 조합**으로 dev를 운영한다. VPN(C)은 **후속 이슈로 연기**한다.
+**A + D 조합에 Bastion(B, #47)을 더해** dev를 운영한다. VPN(C)은 **후속 이슈로
+연기**한다. 현행 기본 경로는 다음과 같다: Airflow UI 등 VPC 내부 서비스는
+**Bastion 터널 포트 포워딩(`-L`, 기본)·SOCKS 프록시(보조)**, kubectl은 **DNS
+기반 컨트롤 플레인 엔드포인트(#45)**.
 
 > **갱신(2026-07-08)**: Airflow UI 상시 접속 요구(전환 조건 충족)로 **Bastion(B)을
 > #47에서 도입**한다. 팀원이 IAP 터널로 bastion을 거쳐 VPC 내부 서비스(#48
@@ -48,9 +51,10 @@
 - 보안: IAP는 Google 계정 + IAM gating으로 IP allowlist보다 정교. VPN은 과잉(전사 네트워크 연결).
 - 운영: Bastion VM 패치/키 관리/단일 장애점 부담. 팀원 수가 소수(dev)인 현재는 allowlist + IAP로 충분.
 
-## 중기 전환 기준(Bastion/VPN 재검토)
+## 중기 전환 기준(VPN 재검토)
 
-아래 임계치를 넘으면 Bastion 또는 VPN 도입을 별도 이슈에서 다시 평가한다.
+Bastion(B)은 전환 조건 충족(Airflow UI 상시 접속 요구)으로 #47에서 이미
+도입했다. 아래 임계치를 넘으면 VPN 도입을 별도 이슈에서 다시 평가한다.
 
 - 팀원 수 5명 초과, 또는 공인 IP 변경 주기가 주 1회 이하로 빈번해 tfvars apply 운영 부담이 역전할 때
 - private 서비스(Airflow UI, DB 콘솔) 접속 빈도/지속 시간이 port-forward 단위로 비효율일 때
@@ -69,13 +73,16 @@
 
 ## Airflow UI / 내부 서비스 접근 원칙
 
-- **외부 미공개가 기본**. Ingress/LoadBalancer를 통한 공개 노출은 dev에서도 금지.
-- 접근은 `kubectl port-forward`(localhost) 또는 인증 gate(Cloud Run proxy + IAM) 경로로만.
+- **외부 미공개가 기본**. Ingress/LoadBalancer를 통한 공개 노출은 dev에서도 금지
+  (내부 ILB #48은 VPC 내부 전용이라 허용).
+- Airflow UI 등 내부 서비스 접근은 **Bastion(#47) 터널 포트 포워딩(`-L`, 기본)
+  또는 SOCKS 프록시(보조)** 경로를 사용하고, `kubectl port-forward`는 예비
+  경로로 남긴다. kubectl 자체는 DNS 엔드포인트(#45)로 접속한다.
 - `airflow` namespace(#32) NetworkPolicy ingress는 같은 namespace + `kube-system`만 허용. 외부는 차단.
 
 ## 참조
 
-- PR #34: 팀원 GKE kubectl 접근 IAM(`roles/container.clusterViewer`)
+- PR #34: 팀원 GKE kubectl 접근 IAM(`roles/container.clusterViewer`, #46에서 `roles/container.viewer`로 확대)
 - Issue #32 / PR #37: Airflow namespace + NetworkPolicy(내부망 접근 경계)
 - PR #27: dev proxy Cloud Run(내부 서비스 인증 gate 후보)
 - `docs/GKE_CLUSTER_ACCESS.md`: 팀원 로컬 kubeconfig / kubectl 접근 절차

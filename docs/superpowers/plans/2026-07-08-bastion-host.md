@@ -1,6 +1,6 @@
 # dev Bastion Host 구현 계획 (#47)
 
-> Status: In Progress | Issue: #47 | Spec: `../specs/2026-07-08-bastion-host-design.md`
+> Status: Done (PR #50 merged, 2026-07-08 apply 완료) | Issue: #47 | Spec: `../specs/2026-07-08-bastion-host-design.md`
 
 ## 작업 순서
 
@@ -16,11 +16,11 @@
 
 ## 검증 체크리스트
 
-- [ ] fmt/validate 통과 (envs/dev + admin/gke-team-access)
-- [ ] dev plan: 1 to add (instance), 기존 리소스 변경 없음
-- [ ] gke-team-access plan: 팀원 수 × 3 binding 추가
-- [ ] 외부 IP 미보유(access_config 없음) 확인
-- [ ] 문서 갱신
+- [x] fmt/validate 통과 (envs/dev + admin/gke-team-access)
+- [x] dev plan: 1 to add (instance), 기존 리소스 변경 없음
+- [x] gke-team-access plan: 팀원 수 × 3 binding 추가
+- [x] 외부 IP 미보유(access_config 없음) 확인
+- [x] 문서 갱신
 
 ## Apply 후 확인 (머지 후, 사용자 승인 하에)
 

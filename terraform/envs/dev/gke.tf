@@ -55,7 +55,8 @@ resource "google_service_account_iam_member" "gke_app_airflow_batch_wi" {
 }
 
 # #5 dev GKE 클러스터 + 노드풀
-# Standard zonal, private nodes + master authorized networks. autoscaling min1/max2.
+# Standard zonal, private nodes. kubectl 기본 경로는 DNS 엔드포인트(#45),
+# master authorized networks(IP 엔드포인트)는 예비. autoscaling min1/max2.
 resource "google_container_cluster" "dev" {
   name     = local.gke_cluster_name
   location = var.zone
@@ -80,7 +81,8 @@ resource "google_container_cluster" "dev" {
     services_secondary_range_name = local.gke_services_range_name
   }
 
-  # private nodes. 엔드포인트는 public(master_authorized_networks로 본인 IP만 허용) — 노트북 kubectl용.
+  # private nodes. 마스터 접근 기본 경로는 DNS 엔드포인트(#45, IAM 검증)이고,
+  # public IP 엔드포인트 + master_authorized_networks는 예비 경로로 병행 유지.
   private_cluster_config {
     enable_private_nodes    = true
     enable_private_endpoint = false

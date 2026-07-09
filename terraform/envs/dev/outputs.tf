@@ -255,7 +255,7 @@ output "bastion_internal_ip" {
 }
 
 output "airflow_ilb_ip" {
-  description = "Airflow webserver internal LB 고정 IP(#48). Helm values loadBalancerIP로 사용."
+  description = "Airflow webserver internal LB 예약 내부 IP(#48). Helm values loadBalancerIP로 사용."
   value       = google_compute_address.airflow_ilb.address
 }
 

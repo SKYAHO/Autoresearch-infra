@@ -1,5 +1,5 @@
 # #4 dev Cloud SQL (PostgreSQL, private IP)
-# password: random 생성 → SQL user 주입. (Secret Manager 저장은 #5 GKE app 소비 시점)
+# password: random 생성 → SQL user 주입. Secret Manager 저장은 secret_manager.tf(#5)에 구현.
 # private IP: VPC 전용 대역 할당 후 servicenetworking peering.
 
 resource "google_compute_global_address" "private_sql_range" {
@@ -17,8 +17,8 @@ resource "google_service_networking_connection" "private_sql" {
   reserved_peering_ranges = [google_compute_global_address.private_sql_range.name]
 }
 
-# ponytail: 비밀번호는 random_password 로만 생성해 SQL user 에 주입.
-# Secret Manager 저장은 소비자(GKE app, #5)가 생기는 시점에 추가 — 지금은 orphan secret 가 됨.
+# ponytail: 비밀번호는 random_password 로 생성해 SQL user 에 주입하고,
+# GKE app(#5) 소비용 Secret Manager 저장은 secret_manager.tf 에 구현되어 있다.
 resource "random_password" "db_app_password" {
   length  = 24
   special = true

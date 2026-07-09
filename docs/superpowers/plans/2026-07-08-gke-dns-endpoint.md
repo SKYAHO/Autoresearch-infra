@@ -1,6 +1,6 @@
 # GKE DNS 기반 엔드포인트 구현 계획 (#45)
 
-> Status: In Progress | Issue: #45 | Spec: `../specs/2026-07-08-gke-dns-endpoint-design.md`
+> Status: Done (PR #46 merged, 2026-07-08 apply 완료) | Issue: #45 | Spec: `../specs/2026-07-08-gke-dns-endpoint-design.md`
 
 ## 작업 순서
 
@@ -15,10 +15,10 @@
 
 ## 검증 체크리스트
 
-- [ ] fmt/validate 통과
-- [ ] dev plan: `google_container_cluster.dev` **in-place update 1건**(destroy/replace 없음)
-- [ ] gke-team-access plan: 팀원 수만큼 IAM binding 교체(clusterViewer 제거 + viewer 추가)
-- [ ] 문서 3종 + spec/plan 반영
+- [x] fmt/validate 통과
+- [x] dev plan: `google_container_cluster.dev` **in-place update 1건**(destroy/replace 없음)
+- [x] gke-team-access plan: 팀원 수만큼 IAM binding 교체(clusterViewer 제거 + viewer 추가)
+- [x] 문서 3종 + spec/plan 반영
 
 ## Apply 후 확인 (머지 후, 사용자 승인 하에)
 

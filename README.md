@@ -2,7 +2,7 @@
 
 `autoresearch-infra`는 AutoResearch 프로젝트의 GCP 기반 인프라를 관리하는 저장소입니다.
 
-현재 단계에서는 Terraform dev 환경(VPC/subnet, Artifact Registry, Cloud SQL, GCS, BigQuery, GKE 클러스터)과 GitHub Actions(OIDC) 기반 Terraform plan 자동 검증(#6)을 구성했습니다. 이후 배포 권한, 애플리케이션 매니페스트, 모니터링 설정을 이 저장소에서 확장 관리합니다.
+현재 dev 인프라 전반(VPC/subnet, Cloud SQL, GKE, Artifact Registry, GCS, BigQuery, Cloud Run proxy, Airflow 네트워크 경계, bastion, 내부 DNS)과 GitHub Actions(OIDC) 기반 Terraform plan 자동 검증(CI)이 구축 완료되어 apply까지 반영된 상태입니다. 이후 배포 권한, 애플리케이션 매니페스트, 모니터링 설정을 이 저장소에서 확장 관리합니다.
 
 ## 저장소 목적
 
@@ -21,7 +21,7 @@
 - 에이전트용 문서 체계 (CLAUDE.md, AGENT.md/AGENTS.md symlink, .claude/docs/)
 - GitHub label 및 Project 초기 운영값 문서
 - GCP/IaC 작업을 고려한 `.gitignore`
-- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, GCS, BigQuery, GKE)
+- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, GCS, BigQuery, GKE, Cloud Run proxy, bastion, 내부 DNS)
 - GCS remote backend 및 GitHub Actions Terraform plan(OIDC/WIF)
 - GCP 리소스/API 운영 문서
 
@@ -39,9 +39,7 @@
 │   ├── envs/
 │   │   └── dev/            # dev 환경 Terraform root module
 │   └── modules/            # 재사용 module 예정
-├── gcp/                    # GCP 운영 스크립트/설정 예정
 ├── docs/                   # 인프라/GitHub 운영 문서
-├── scripts/                # 검증/배포 보조 스크립트 예정
 ├── .claude/
 │   └── docs/               # 에이전트 상세 가이드
 ├── CLAUDE.md               # AI 에이전트 진입점
@@ -71,7 +69,7 @@ dev 환경 Terraform root module은 [terraform/envs/dev](terraform/envs/dev)에 
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init
+terraform -chdir=terraform/envs/dev init -backend=false
 terraform -chdir=terraform/envs/dev validate
 ```
 
