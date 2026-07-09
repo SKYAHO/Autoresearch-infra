@@ -27,7 +27,7 @@ GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
 - raw_data bucket은 `objectViewer` + `objectCreator`만 허용하고 `objectAdmin`은 주지
   않는다.
 - Airflow API secret payload는 Terraform으로 관리하지 않는다. Terraform은 secret
-  metadata와 Airflow SA accessor만 관리한다.
+  metadata와 Airflow SA/batch SA accessor만 관리한다.
 
 ## 파일 구조
 
@@ -46,7 +46,7 @@ GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
 - [x] Workload Identity IAM member 생성
 - [x] Cloud SQL `airflow` database 생성
 - [x] Airflow API key Secret Manager metadata 보존
-- [x] Airflow API key accessor를 전용 Airflow SA로 축소
+- [x] Airflow API key accessor를 전용 Airflow SA와 batch SA로 축소
 - [x] DAG/log GCS bucket 생성 및 `prevent_destroy` 적용
 - [x] Airflow SA에 DAG/log bucket-scoped `roles/storage.objectAdmin` 부여
 - [x] raw_data bucket 권한을 `roles/storage.objectViewer` +
@@ -56,6 +56,8 @@ GKE, Cloud SQL, GCS, BigQuery, Workload Identity, Kubernetes RBAC/NetworkPolicy.
 - [x] BigQuery `feast_offline_store` dataset `roles/bigquery.dataEditor`와 project-level
       `roles/bigquery.jobUser` 부여
 - [x] dev root에서 Kubernetes provider와 data source 제거
+- [x] 후속 #62에서 batch KSA용 전용 GSA를 만들고 app GSA의 Airflow API key
+      accessor를 제거
 
 ## 작업 2: admin root K8s 리소스 추가
 

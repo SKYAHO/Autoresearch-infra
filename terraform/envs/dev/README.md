@@ -17,7 +17,7 @@
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset
 - GKE Standard private-node cluster, node pool, node/app service account, Workload Identity binding
-- Airflow GCP 리소스: 전용 GCP SA/WI IAM, metadata DB, DAG/log bucket, BigQuery/GCS IAM
+- Airflow GCP 리소스: 전용 GCP SA/WI IAM, batch 전용 GCP SA, metadata DB, DAG/log bucket, BigQuery/GCS IAM
 - Airflow 전용 GKE node pool(`airflow-dev`)과 batch KSA Workload Identity binding
 - Airflow YouTube/OpenRouter API key용 Secret Manager secret metadata
 - Airflow Kubernetes namespace/RBAC/NetworkPolicy는 `terraform/admin/airflow-k8s`에서 별도 state로 관리
@@ -60,7 +60,7 @@ terraform -chdir=terraform/envs/dev apply
 | GKE | `autoresearch-dev-gke`, node pools `dev-default`, `airflow-dev`, 컨트롤 플레인 DNS 엔드포인트(#45/#46) |
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
 | DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
-| IAM | GKE node SA, app SA, Airflow SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
+| IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
 
 ## 기본 리전
 

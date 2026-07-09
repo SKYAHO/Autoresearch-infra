@@ -9,10 +9,23 @@ resource "google_service_account" "airflow" {
   display_name = "Autoresearch dev Airflow workload identity SA"
 }
 
+resource "google_service_account" "airflow_batch" {
+  account_id   = local.airflow_batch_sa_name
+  display_name = "Autoresearch dev Airflow batch workload identity SA"
+}
+
 resource "google_service_account_iam_member" "airflow_wi" {
   service_account_id = google_service_account.airflow.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${local.airflow_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
+resource "google_service_account_iam_member" "airflow_batch_wi" {
+  service_account_id = google_service_account.airflow_batch.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.airflow_batch_workload_identity_principal}"
 
   depends_on = [google_container_cluster.dev]
 }
@@ -29,6 +42,12 @@ resource "google_project_iam_member" "airflow_bigquery_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_project_iam_member" "airflow_batch_bigquery_job_user" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 
 # --- Cloud SQL metadata DB ---
@@ -76,6 +95,20 @@ resource "google_secret_manager_secret_iam_member" "airflow_openrouter_api_key_a
   secret_id = google_secret_manager_secret.airflow_openrouter_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "airflow_batch_youtube_api_key_accessor" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.airflow_youtube_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "airflow_batch_openrouter_api_key_accessor" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.airflow_openrouter_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 
 # #54 Airflow 웹 로그인 Google OAuth 클라이언트 자격증명.
@@ -180,8 +213,8 @@ resource "google_storage_bucket_iam_member" "airflow_logs_admin" {
   member = "serviceAccount:${google_service_account.airflow.email}"
 }
 
-# Airflow can read raw landing data and append new raw objects, but cannot delete
-# or overwrite existing raw data.
+# Airflow는 raw landing 데이터를 읽고 새 raw 객체를 추가할 수 있지만,
+# 기존 원본 데이터 삭제나 덮어쓰기는 할 수 없다.
 resource "google_storage_bucket_iam_member" "airflow_raw_data_viewer" {
   bucket = google_storage_bucket.raw_data.name
   role   = "roles/storage.objectViewer"
@@ -194,8 +227,20 @@ resource "google_storage_bucket_iam_member" "airflow_raw_data_creator" {
   member = "serviceAccount:${google_service_account.airflow.email}"
 }
 
-# Feast registry/staging need object mutation for registry updates and temporary
-# staging files. Keep this bucket-scoped rather than project-wide.
+resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_viewer" {
+  bucket = google_storage_bucket.raw_data.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
+resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
+  bucket = google_storage_bucket.raw_data.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
+# Feast registry/staging은 registry 갱신과 임시 staging 파일 처리에 객체 변경이 필요하다.
+# 프로젝트 전체가 아니라 bucket 단위 권한으로 제한한다.
 resource "google_storage_bucket_iam_member" "airflow_feast_registry_admin" {
   bucket = google_storage_bucket.feast_registry.name
   role   = "roles/storage.objectAdmin"
@@ -208,10 +253,28 @@ resource "google_storage_bucket_iam_member" "airflow_feast_staging_admin" {
   member = "serviceAccount:${google_service_account.airflow.email}"
 }
 
+resource "google_storage_bucket_iam_member" "airflow_batch_feast_registry_admin" {
+  bucket = google_storage_bucket.feast_registry.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
+resource "google_storage_bucket_iam_member" "airflow_batch_feast_staging_admin" {
+  bucket = google_storage_bucket.feast_staging.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
 # --- BigQuery dataset IAM ---
 
 resource "google_bigquery_dataset_iam_member" "airflow_feast_data_editor" {
   dataset_id = google_bigquery_dataset.feast_offline_store.dataset_id
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "airflow_batch_feast_data_editor" {
+  dataset_id = google_bigquery_dataset.feast_offline_store.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.airflow_batch.email}"
 }

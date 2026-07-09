@@ -46,6 +46,7 @@ locals {
   gke_node_sa_name                      = "${local.resource_prefix}-gke-nodes"
   gke_app_sa_name                       = "${local.resource_prefix}-app"
   gke_node_pool_name                    = "dev-default"
+  airflow_batch_sa_name                 = "${local.resource_prefix}-airflow-batch"
   airflow_youtube_api_key_secret_id     = "${local.resource_prefix}-youtube-api-key"
   airflow_openrouter_api_secret_id      = "${local.resource_prefix}-openrouter-api-key"
   airflow_oauth_client_id_secret_id     = "${local.resource_prefix}-airflow-oauth-client-id"

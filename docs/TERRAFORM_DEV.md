@@ -348,9 +348,10 @@ localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내
 | 노드풀 | `dev-default`, e2-standard-4, pd-standard 30GB | autoscaling min=1/max=2. GKE system/GMP pod 여유를 위해 live resize 값을 Terraform에 반영 |
 | Airflow 노드풀 | `airflow-dev`, e2-standard-2, pd-standard 30GB | autoscaling min=1/max=1. Airflow Helm component 전용 |
 | 노드 SA | `autoresearch-dev-gke-nodes@ar-infra-501607.iam.gserviceaccount.com` | AR reader + logging/metric writer |
-| app SA(WI) | `autoresearch-dev-app@ar-infra-501607.iam.gserviceaccount.com` | cloudsql.client + secretAccessor, KSA 매핑 |
-| WI principal | `ar-infra-501607.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
-| Airflow batch WI principal | `ar-infra-501607.svc.id.goog[airflow/autoresearch-batch]` | Airflow KPO batch pod가 app SA를 가장 |
+| app SA(WI) | `autoresearch-dev-app@ar-infra-501607.iam.gserviceaccount.com` | app KSA 전용. Cloud SQL client + DB password secret accessor |
+| app WI principal | `ar-infra-501607.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
+| Airflow batch SA(WI) | `autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com` | batch KSA 전용. API key secrets, raw_data, Feast 권한 |
+| Airflow batch WI principal | `ar-infra-501607.svc.id.goog[airflow/autoresearch-batch]` | Airflow batch KSA가 batch GSA를 가장 |
 | Egress | Cloud NAT(`autoresearch-dev-nat`) | private 노드 AR(`*.pkg.dev`) pull |
 | deletion_protection | false (dev) | 운영 전환 시 true |
 
@@ -448,9 +449,21 @@ Terraform은 GCP-side 리소스(node pool, IAM, Workload Identity binding)를
 kubectl create namespace airflow --dry-run=client -o yaml | kubectl apply -f -
 kubectl create serviceaccount autoresearch-batch -n airflow --dry-run=client -o yaml | kubectl apply -f -
 kubectl annotate serviceaccount autoresearch-batch -n airflow \
-  iam.gke.io/gcp-service-account=autoresearch-dev-app@ar-infra-501607.iam.gserviceaccount.com \
+  iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com \
   --overwrite
 ```
+
+`#62`부터 `airflow/autoresearch-batch` KSA는 app GSA가 아니라 batch 전용
+GSA(`autoresearch-dev-airflow-batch`)를 가장한다. 따라서 dev root apply 전에
+실제 클러스터의 `autoresearch-batch` KSA annotation이 위 값으로 바뀌어 있어야
+한다. annotation이 여전히 app GSA를 가리키는 상태에서 기존 app GSA
+Workload Identity binding과 Airflow API key accessor가 제거되면 batch pod는
+토큰 교환 또는 secret 접근 단계에서 403으로 실패할 수 있다.
+
+batch GSA에는 Cloud SQL client와 Airflow DAG/log bucket objectAdmin을 부여하지
+않는다. Airflow metadata DB 접근과 remote log 업로드는 Airflow component
+pod(`airflow` KSA → `autoresearch-dev-airflow` GSA)가 담당하고, batch pod는
+원본 데이터·Feast·API key secret만 소비한다.
 
 API key secret:
 
@@ -611,9 +624,10 @@ Airflow는 두 Terraform root로 나눈다.
 | NetworkPolicy(ingress) | 같은 namespace + kube-system만 | deny-by-default |
 | NetworkPolicy(egress) | DNS(53), Cloud SQL(private_services_cidr 5432), GKE metadata server(169.254.169.254:80), HTTPS(443) | WI 토큰 교환은 metadata server HTTP 80 필요. 외부 API/googleapis 호출은 443로 |
 | Cloud SQL DB | `airflow` | 기존 dev 인스턴스 내 신규 database(metadata DB) |
-| Secret Manager | `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` | secret payload는 Terraform 밖에서 주입. secret metadata와 Airflow SA accessor만 Terraform 관리 |
+| Secret Manager | `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` | secret payload는 Terraform 밖에서 주입. secret metadata와 Airflow SA/batch SA accessor만 Terraform 관리 |
 | GCS buckets | `ar-infra-501607-autoresearch-dev-airflow-dags`, `...-airflow-logs` | DAG 버전관리 / task log 영속화. `prevent_destroy=true` |
-| 접근 권한 | Cloud SQL client, Secret Manager accessor(Airflow API secrets), BigQuery jobUser(project), GCS objectAdmin(dags/logs/feast_registry/feast_staging), GCS objectViewer+objectCreator(raw_data), BigQuery dataEditor(feast_offline_store) | raw_data는 읽기+새 객체 생성만 허용해 기존 원본 삭제/덮어쓰기를 차단 |
+| Airflow SA 접근 권한 | Cloud SQL client, Secret Manager accessor(Airflow API/OAuth secrets), BigQuery jobUser(project), GCS objectAdmin(dags/logs/feast_registry/feast_staging), GCS objectViewer+objectCreator(raw_data), BigQuery dataEditor(feast_offline_store) | raw_data는 읽기+새 객체 생성만 허용해 기존 원본 삭제/덮어쓰기를 차단 |
+| Airflow batch SA 접근 권한 | Secret Manager accessor(YouTube/OpenRouter), BigQuery jobUser(project), GCS objectViewer+objectCreator(raw_data), GCS objectAdmin(feast_registry/feast_staging), BigQuery dataEditor(feast_offline_store) | app GSA에서 Airflow API key 접근권을 제거하고 batch 실행에 필요한 권한만 분리 |
 
 ### 설치 담당자 Helm 적용 경로
 

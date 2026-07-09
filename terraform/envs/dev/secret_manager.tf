@@ -21,18 +21,3 @@ resource "google_secret_manager_secret_iam_member" "gke_app_db_password" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.gke_app.email}"
 }
-
-# 현재 KubernetesPodOperator batch pod는 airflow/autoresearch-batch KSA로
-# app GSA를 가장해 실행되므로 app GSA에도 accessor가 필요하다.
-# Airflow batch 전용 GSA 분리(#62) 전까지 live IAM과 일치하게 유지한다.
-resource "google_secret_manager_secret_iam_member" "gke_app_airflow_youtube_api_key" {
-  secret_id = google_secret_manager_secret.airflow_youtube_api_key.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.gke_app.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "gke_app_airflow_openrouter_api_key" {
-  secret_id = google_secret_manager_secret.airflow_openrouter_api_key.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.gke_app.email}"
-}
