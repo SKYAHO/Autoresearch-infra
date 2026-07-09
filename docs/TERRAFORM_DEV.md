@@ -17,7 +17,8 @@ terraform/
 ├── README.md
 ├── admin/
 │   ├── airflow-k8s/      # #32 Airflow Kubernetes namespace/RBAC/NetworkPolicy (separate state)
-│   └── gke-team-access/  # #34/#46 팀원 GKE container.viewer + bastion 접속 IAM (separate state)
+│   ├── gke-team-access/  # #34/#46 팀원 GKE container.viewer + bastion 접속 IAM (separate state)
+│   └── monitoring-k8s/   # #78 Prometheus/Grafana monitoring namespace + Helm values (separate state)
 ├── bootstrap/            # #6 1회성: GCS state bucket + WIF + CI SA (local state)
 │   ├── main.tf
 │   ├── outputs.tf

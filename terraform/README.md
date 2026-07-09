@@ -6,7 +6,7 @@
 
 ```text
 terraform/
-├── admin/          # 운영자 전용 별도 state root(gke-team-access, airflow-k8s)
+├── admin/          # 운영자 전용 별도 state root(gke-team-access, airflow-k8s, monitoring-k8s)
 ├── bootstrap/      # GCS backend + GitHub WIF/CI SA 1회성 bootstrap
 ├── envs/
 │   └── dev/        # dev 환경 root module(GCS backend)
@@ -20,6 +20,7 @@ terraform/
 | dev | `terraform/envs/dev` | AutoResearch dev 인프라 검증 및 초기 운영 |
 | admin | `terraform/admin/gke-team-access` | 팀원 Google 계정의 GKE `container.viewer` + bastion 접속 IAM |
 | admin | `terraform/admin/airflow-k8s` | Airflow Kubernetes namespace/RBAC/NetworkPolicy |
+| admin | `terraform/admin/monitoring-k8s` | Prometheus/Grafana monitoring namespace와 Helm values 기반 |
 
 ## 기본 명령
 
