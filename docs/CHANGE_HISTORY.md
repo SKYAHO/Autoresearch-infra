@@ -98,4 +98,6 @@
   분리했다.
 - dev root는 GCP 리소스, monitoring admin root는 Kubernetes namespace와 Helm values
   경계를 담당한다.
-- 실제 `kube-prometheus-stack` Helm release 생성은 후속 이슈에서 진행한다.
+- Issue #79에서 `kube-prometheus-stack` Helm release를 추가했다.
+- Grafana admin credential은 Terraform state에 저장하지 않고 기존 Kubernetes
+  Secret 이름과 key만 Helm values로 참조한다.

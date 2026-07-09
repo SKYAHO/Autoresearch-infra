@@ -26,5 +26,6 @@ alertmanager:
   enabled: true
 
 prometheusOperator:
+  internalPort: 10250
   admissionWebhooks:
     enabled: true
