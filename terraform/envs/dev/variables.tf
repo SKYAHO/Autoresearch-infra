@@ -93,7 +93,7 @@ variable "sql_deletion_protection" {
 variable "private_services_cidr" {
   description = "CIDR for Cloud SQL private services access (VPC peering). Must not overlap dev_subnet_cidr."
   type        = string
-  default     = "10.20.0.0/20"
+  default     = "192.168.0.0/20"
 
   validation {
     condition     = can(cidrhost(var.private_services_cidr, 0))
@@ -114,7 +114,7 @@ variable "gke_master_ipv4_cidr" {
 variable "gke_pods_cidr" {
   description = "GKE pods용 서브넷 2차 대역. dev subnet/private services/master CIDR과 미중복."
   type        = string
-  default     = "__VG_IPV4_d1c0e8a2__/20"
+  default     = "172.16.64.0/20"
 
   validation {
     condition     = can(cidrhost(var.gke_pods_cidr, 0))
@@ -125,7 +125,7 @@ variable "gke_pods_cidr" {
 variable "gke_services_cidr" {
   description = "GKE services용 서브넷 2차 대역. 다른 대역과 미중복."
   type        = string
-  default     = "__VG_IPV4_b7e1f903__/24"
+  default     = "172.16.128.0/24"
 
   validation {
     condition     = can(cidrhost(var.gke_services_cidr, 0))
