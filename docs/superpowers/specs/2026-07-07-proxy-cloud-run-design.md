@@ -26,7 +26,7 @@ Cloud Run 서비스로 배포해, collector가 **IAM 인증**으로 호출하는
 | 스케일링 | min 0 / max 1 (`var.proxy_max_instances`) | 유휴 비용 0, dev 트래픽(일 수 회)에 충분 |
 | 리소스 크기 | 1 vCPU / 512Mi, `cpu_idle = true` | 최소 비용. CPU는 요청 처리 중에만 과금 |
 | 런타임 SA | 전용 `autoresearch-dev-proxy` SA, **role 없음** | 최소 권한(YAGNI). proxy가 GCP 리소스를 쓰게 되면 그때 리소스 수준으로 부여 |
-| 인증 | public access 없음. `roles/run.invoker`를 `var.proxy_invoker_members`에만 부여 | collector 주체 미확정 → 기본값 빈 목록(아무도 호출 불가). 확정 시 tfvars에 추가 |
+| 인증 | public access 없음. Airflow batch GSA에 서비스 단위 `roles/run.invoker` 부여 | YouTube batch 호출 주체는 `autoresearch-dev-airflow-batch`; 추가 주체는 `var.proxy_invoker_members`로 확장 |
 | ingress | 기본 `INGRESS_TRAFFIC_INTERNAL_ONLY` (`var.proxy_ingress`) | collector가 같은 프로젝트 VPC(GKE)에서 호출한다고 가정. 외부 호출이 확정되면 `INGRESS_TRAFFIC_ALL`로 변경(IAM 인증은 유지) |
 | 헬스체크 | startup/liveness probe `GET /health`:8080 | 이슈 완료 조건 |
 | deletion_protection | `false` (dev) | 다른 dev 리소스와 동일 정책. PR에 명시 |
@@ -64,6 +64,6 @@ plan은 이미지 없이도 통과하므로 PR 머지는 가능하고, apply만 
 ## 리스크 / 롤백
 
 - **이미지 미존재 상태 apply 실패** → 위 순서 제약 문서화로 대응
-- **invoker 미확정** → 기본 접근 불가 상태로 배포되므로 안전. collector SA 확정 시 tfvars 추가 후 apply
+- **invoker 최소화** → Airflow batch GSA에만 서비스 단위로 허용. 후속 collector가 생기면 `proxy_invoker_members`에 추가 후 apply
 - **internal ingress로 인한 호출 불가** — collector가 VPC 밖이라면 `proxy_ingress`를 `INGRESS_TRAFFIC_ALL`로 변경 (IAM 인증 유지)
 - 롤백: 리소스 삭제(`terraform destroy -target` 또는 코드 제거 후 apply). 상태ful 데이터 없음

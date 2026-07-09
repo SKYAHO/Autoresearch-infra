@@ -55,7 +55,7 @@ proxy_ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 proxy_max_instances       = 1
 proxy_cpu                 = "1"
 proxy_memory              = "512Mi"
-proxy_invoker_members     = [] # collector SA 확정 시 "serviceAccount:..." 추가
+proxy_invoker_members     = [] # airflow-batch는 코드에서 부여. 추가 호출 주체만 "serviceAccount:..."로 추가
 proxy_deletion_protection = false
 
 # Airflow (#32) — 기본값으로 충분. KSA 이름을 바꿀 때만 기입
