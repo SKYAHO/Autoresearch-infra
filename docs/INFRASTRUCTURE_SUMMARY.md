@@ -16,6 +16,81 @@
 | 일반 애플리케이션 저장소 | `SKYAHO/Autoresearch` |
 | Airflow 저장소 | `SKYAHO/Autoresearch-airflow` |
 
+## 운영 관점 한 장 요약
+
+아래 다이어그램은 팀원이 실제로 접속하거나, CI가 plan을 돌리거나, Airflow batch가
+데이터를 적재할 때의 큰 흐름을 한 장으로 압축한 것이다. 세부 리소스 설명은 뒤의
+인프라별 상세 구조를 기준으로 본다.
+
+```mermaid
+flowchart TB
+    member["팀원 로컬<br/>kubectl / browser / gcloud"]
+    github["GitHub<br/>Autoresearch-infra PR"]
+    apprepo["앱 저장소<br/>Autoresearch / Autoresearch-airflow"]
+    oauth["Google OAuth<br/>redirect: localhost:8080"]
+
+    subgraph gcp["GCP project<br/>ar-infra-501607"]
+        iap["IAP TCP forwarding"]
+        wif["GitHub OIDC / WIF"]
+        state["GCS Terraform state"]
+
+        subgraph vpc["VPC<br/>autoresearch-dev-vpc"]
+            bastion["Bastion<br/>no external IP"]
+            dns["Private DNS<br/>dev.autoresearch.internal"]
+            ilb["Airflow internal LB<br/>10.10.0.12"]
+            nat["Cloud NAT"]
+
+            subgraph gke["GKE<br/>autoresearch-dev-gke"]
+                app["App pods<br/>KSA autoresearch-app"]
+                airflow["Airflow components<br/>KSA airflow"]
+                batch["KPO batch pods<br/>KSA autoresearch-batch"]
+            end
+        end
+
+        sql["Cloud SQL<br/>private IP only"]
+        gcs["GCS buckets<br/>raw / Feast / Airflow"]
+        bq["BigQuery<br/>analytics / Feast offline store"]
+        sm["Secret Manager<br/>payload는 Terraform 외부 주입"]
+        ar["Artifact Registry"]
+        run["Cloud Run proxy<br/>internal + IAM"]
+
+        appgsa["GSA<br/>autoresearch-dev-app"]
+        airflowgsa["GSA<br/>autoresearch-dev-airflow"]
+        batchgsa["GSA<br/>autoresearch-dev-airflow-batch"]
+    end
+
+    member -->|"Airflow UI: -L 8080"| iap --> bastion --> dns --> ilb --> airflow
+    airflow --> oauth
+    member -->|"kubectl: GKE DNS endpoint"| gke
+    github --> wif --> state
+
+    app --> appgsa
+    airflow --> airflowgsa
+    batch --> batchgsa
+
+    appgsa --> sql
+    appgsa --> gcs
+    airflowgsa --> sql
+    airflowgsa --> gcs
+    batchgsa --> sm
+    batchgsa --> gcs
+    batchgsa --> bq
+    batchgsa -->|"roles/run.invoker<br/>service-level"| run
+
+    apprepo --> ar
+    gke --> ar
+    gke --> nat
+```
+
+접근 흐름 요약:
+
+| 구분 | 경로 | 인증/권한 |
+|---|---|---|
+| Airflow UI | 로컬 `gcloud compute ssh --tunnel-through-iap -L 8080:airflow.dev.autoresearch.internal:8080` → `http://localhost:8080` | IAP, OS Login, Google OAuth |
+| kubectl | `gcloud container clusters get-credentials ... --dns-endpoint` | `roles/container.viewer` + GKE auth plugin |
+| PR plan | GitHub Actions → OIDC/WIF → CI service account → GCS state/dev plan | service account key 없음 |
+| Cloud Run proxy | Airflow batch pod → Workload Identity → batch GSA → Cloud Run ID token → proxy | `roles/run.invoker`는 필요조건. ID token, `YOUTUBE_PROXY_URL`, `X-Goog-Api-Key`, VPC 내부 경로가 함께 필요 |
+
 ## 이 문서에서 쓰는 기본 용어
 
 새로운 용어가 나오면 아래 정의를 먼저 기준으로 읽는다. 더 구체적인 설정값은 각
@@ -466,6 +541,52 @@ flowchart TB
   접근한다.
 - 팀원 개인 계정에는 Secret Manager payload 직접 읽기 권한을 부여하지 않는다.
 - Secret payload, Terraform state, 로컬 `terraform.tfvars` 실값은 커밋하지 않는다.
+
+## 월 비용 추정
+
+dev 환경은 최소 비용 원칙으로 구성했지만, GKE와 Cloud NAT는 고정 비용이 생긴다.
+아래 값은 대략적인 운영 감각을 위한 추정치이며 실제 청구액은 사용량, 환율,
+할인, 로그/스토리지 증가에 따라 달라질 수 있다.
+
+| 항목 | 대략 |
+|---|---|
+| GKE `dev-default` node pool (`e2-standard-4` x 1 기준) | 약 $100/월 |
+| GKE `airflow-dev` node pool (`e2-standard-2` x 1 기준) | 약 $50/월 |
+| Cloud NAT | 약 $68/월 |
+| Cloud SQL `db-f1-micro` | 약 $12/월 |
+| Bastion `e2-micro` | 약 $8/월 |
+| 디스크, DNS zone, GCS, BigQuery 저장소, 기타 | 약 $15-30/월 |
+| 합계 | 정상 최소 상태 약 $260-270/월, autoscaling 상한 사용 시 더 증가 |
+
+비용을 줄일 때는 Bastion 미사용 시 `bastion_enabled=false`, GKE node pool 크기와
+최소 노드 수, Cloud SQL tier, 로그 보관량을 우선 검토한다. 다만 네트워크/IAM
+경계를 낮춰 비용을 줄이는 방식은 기본 선택지가 아니다.
+
+## 주요 결정 이력과 백로그
+
+상세 이력은 `CHANGE_HISTORY.md`를 기준으로 하며, 여기에는 아키텍처를 이해할 때
+중요한 결정만 요약한다.
+
+| 시기 | 결정 | 근거 |
+|---|---|---|
+| #2-#6 | VPC, Artifact Registry, Cloud SQL, GKE, CI-OIDC 기반 구축 | dev 최소 비용, keyless CI |
+| #27/#30 | Cloud Run proxy를 internal ingress + IAM invoker 기준으로 배포 | 외부 공개 없이 선택적 proxy 경로 제공 |
+| #32-#38 | Airflow GCP 리소스와 Kubernetes admin root 분리 | dev root plan과 Kubernetes apply 경계 분리 |
+| #45/#46 | GKE DNS endpoint를 기본 kubectl 경로로 채택 | 팀원 IP allowlist 없이 IAM 기반 접속 |
+| #47/#50 | 외부 IP 없는 IAP 전용 Bastion 도입 | Airflow UI 등 VPC 내부 서비스 접근 경로 |
+| #48/#51 | Airflow UI internal LB, private DNS, NetworkPolicy 구성 | UI 외부 공개 방지 |
+| #54/#55 | Airflow OAuth secret metadata를 Secret Manager로 관리 | payload는 Terraform 밖에서 주입해 state 노출 방지 |
+| #62 | Airflow batch 전용 GSA 분리 | app GSA의 API key/배치 권한을 축소 |
+| #73/#74 | Airflow batch GSA에 Cloud Run 서비스 단위 invoker 부여 | YouTube proxy 경유 호출을 위한 infra 측 필요조건 |
+
+남은 백로그:
+
+| 항목 | 이유 |
+|---|---|
+| `YOUTUBE_PROXY_URL` 주입과 Cloud Run ID token 호출 구현 | infra 권한은 준비됐지만 앱/Airflow 호출 로직이 필요 |
+| raw data prefix 최종 표준화 | 인프라 prefix와 앱 DAG 경로가 모두 문서화되어 있어 앱 저장소 기준 결정 필요 |
+| Cloud SQL `airflow` DB 전환 여부 | 현재 제공은 되어 있으나 실제 Airflow metadata DB 전환은 Airflow 저장소 결정 |
+| 운영 전환 시 deletion protection 상향 | dev에서는 낮게 두었지만 운영 전환 시 삭제 방지 강화 필요 |
 
 ## 저장소 책임 경계
 
