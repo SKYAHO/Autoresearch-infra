@@ -14,6 +14,7 @@
 | bootstrap state bucket, WIF, CI service account 확인 | [`TERRAFORM_BOOTSTRAP.md`](TERRAFORM_BOOTSTRAP.md) |
 | GitHub label, Project 운영 기준 확인 | [`GITHUB_LABELS_AND_PROJECT.md`](GITHUB_LABELS_AND_PROJECT.md) |
 | main branch ruleset 확인 | [`BRANCH_RULESET_MAIN.md`](BRANCH_RULESET_MAIN.md) |
+| ArgoCD GitOps 도입 전 운영 경계 확인 | [`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md) |
 | 완료된 인프라 변경의 결정 이력 확인 | [`CHANGE_HISTORY.md`](CHANGE_HISTORY.md) |
 
 ## 문서 작성 기준

@@ -81,3 +81,11 @@
 
 - Issue #71에서 팀원 접근 runbook, Terraform 운영 문서, 변경 이력을 분리했다.
 - 완료된 spec/plan 상세 문서는 이 파일의 요약 이력으로 압축했다.
+
+## 2026-07-10: ArgoCD GitOps 운영 설계
+
+- Issue #82에서 Terraform과 ArgoCD의 책임 경계를 정리했다.
+- 초기 ArgoCD sync 정책은 manual sync로 시작하고, prune/self-heal은 안정화 후
+  Application별로 검토한다.
+- Secret payload는 Git과 Terraform state에 저장하지 않고 Secret Manager 또는
+  운영자 주입 경로를 사용한다.
