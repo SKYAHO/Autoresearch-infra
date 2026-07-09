@@ -60,10 +60,15 @@ locals {
   feast_registry_bucket                 = "${var.project_id}-feast-registry"
   feast_staging_bucket                  = "${var.project_id}-feast-staging"
   raw_data_prefixes = {
-    youtube_raw     = "youtube/raw/"
-    users_raw       = "users/raw/"
-    action_logs_raw = "action-logs/raw/"
-    personas_raw    = "personas/raw/"
+    youtube_raw            = "data_lake/youtube_trending_kr/"
+    users_raw              = "asset/virtual_user/"
+    action_logs_raw        = "data_lake/action_log/"
+    personas_raw           = "data/raw/personas/"
+    youtube_trending_kr    = "data_lake/youtube_trending_kr/"
+    action_logs            = "data_lake/action_log/"
+    action_log_quarantine  = "data_lake/action_log_quarantine/"
+    virtual_users          = "asset/virtual_user/"
+    personas_raw_snapshots = "data/raw/personas/"
   }
   gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
 
