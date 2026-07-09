@@ -105,3 +105,11 @@
   정리하고, monitoring namespace의 port-forward 전용 최소 RBAC를 추가했다.
 - Issue #81에서 GKE node, Pod CPU/memory, PVC, Airflow, 앱/배치 상태를 Grafana로
   확인하는 운영 runbook을 추가했다.
+
+## 2026-07-10: ArgoCD GitOps 운영 설계
+
+- Issue #82에서 Terraform과 ArgoCD의 책임 경계를 정리했다.
+- 초기 ArgoCD sync 정책은 manual sync로 시작하고, prune/self-heal은 안정화 후
+  Application별로 검토한다.
+- Secret payload는 Git과 Terraform state에 저장하지 않고 Secret Manager 또는
+  운영자 주입 경로를 사용한다.
