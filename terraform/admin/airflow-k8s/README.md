@@ -9,10 +9,13 @@ boundary in the dev GKE cluster:
 - optional namespace-scoped installer admin RoleBindings
 - ResourceQuota, LimitRange, and NetworkPolicy
 
-It is separated from `terraform/envs/dev` because the GitHub Actions Terraform
-plan runner is not in `master_authorized_networks`. Keeping Kubernetes resources
-out of the dev root prevents routine PR plans from needing direct access to the
-GKE API server.
+It is separated from `terraform/envs/dev` to keep Kubernetes resources in
+their own state and provider boundary: routine PR plans of the dev root never
+need direct access to the GKE API server, and Kubernetes-side changes are
+applied deliberately by an operator. (Historically the CI plan runner was also
+blocked by `master_authorized_networks`; the control plane is now reachable via
+its DNS endpoint with IAM (#45), but the separation is kept for the state and
+provider isolation above.)
 
 ## Usage
 

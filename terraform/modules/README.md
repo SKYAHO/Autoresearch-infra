@@ -2,15 +2,9 @@
 
 재사용 가능한 Terraform module을 두는 디렉터리입니다.
 
-초기 계획:
+현재 module은 없습니다. 초기에 module화를 검토했던 network/artifact-registry/
+cloud-sql/gke/github-oidc(#2~#6)는 모두 `terraform/envs/dev` root에 직접
+구현하는 것으로 종결되었습니다.
 
-| 예정 module | 담당 이슈 | 목적 |
-|---|---|---|
-| `network` | `#2` | dev VPC, subnet, 네트워크 기본값 |
-| `artifact-registry` | `#3` | Docker image repository |
-| `cloud-sql` | `#4` | 최소 비용 dev database |
-| `gke` | `#5` | 작은 dev Kubernetes cluster |
-| `github-oidc` | `#6` | GitHub Actions OIDC 인증 기반 |
-
-#1에서는 module 디렉터리만 준비하고 실제 resource는 추가하지 않습니다.
-
+staging/prod 환경 분리 등으로 동일 구성을 재사용할 필요가 생기면 그 시점에
+dev root에서 module을 추출합니다.

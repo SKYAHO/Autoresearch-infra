@@ -142,7 +142,7 @@ resource "google_container_node_pool" "dev" {
 }
 
 resource "google_container_node_pool" "airflow" {
-  name       = local.airflow_gke_node_pool_name
+  name       = var.airflow_gke_node_pool_name
   cluster    = google_container_cluster.dev.name
   location   = var.zone
   node_count = var.airflow_gke_node_count_min

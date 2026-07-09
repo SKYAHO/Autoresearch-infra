@@ -126,7 +126,7 @@ output "cloud_build_bucket_name" {
 
 output "airflow_api_k8s_secret_name" {
   description = "Airflow KPO pods에 YouTube/OpenRouter API key를 주입하는 Kubernetes Secret 이름."
-  value       = local.airflow_api_k8s_secret_name
+  value       = var.airflow_api_k8s_secret_name
 }
 
 output "db_app_password_secret_id" {
