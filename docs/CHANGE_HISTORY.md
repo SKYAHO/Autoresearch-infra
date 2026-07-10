@@ -166,3 +166,6 @@
   GITOPS_STRATEGY 초기 원칙). cluster-wide 리소스는 AppProject 기본 거부를
   유지한다.
 - 샘플은 sync/diff/rollback 흐름 검증용이며, 실제 repo 연결 시 제거한다.
+- Issue #86에서 접속, 상태 확인, diff/sync/rollback, credential 주입, 장애
+  대응 절차를 `docs/ARGOCD_OPERATIONS_RUNBOOK.md`로 문서화했다. 절차 명령은
+  #85 검증에서 실행해 확인한 것을 기준으로 한다.
