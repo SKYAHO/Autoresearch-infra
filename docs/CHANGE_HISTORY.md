@@ -113,3 +113,5 @@
   Application별로 검토한다.
 - Secret payload는 Git과 Terraform state에 저장하지 않고 Secret Manager 또는
   운영자 주입 경로를 사용한다.
+- Issue #83에서 ArgoCD 설치 기반을 `terraform/admin/argocd-k8s`로 분리하고
+  `argocd` namespace와 Helm values scaffold 위치를 정했다.
