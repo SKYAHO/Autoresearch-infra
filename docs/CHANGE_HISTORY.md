@@ -91,3 +91,11 @@
 - dev 기준 Prometheus retention은 7일, PVC는 30Gi에서 시작하고 사용량에 따라 조정한다.
 - Cloud Monitoring은 GCP managed resource 기본 관측, Prometheus/Grafana는
   Kubernetes와 application metric dashboard 담당으로 분리한다.
+
+## 2026-07-10: monitoring Kubernetes admin root
+
+- Issue #78에서 Prometheus/Grafana 설치 기반을 `terraform/admin/monitoring-k8s`로
+  분리했다.
+- dev root는 GCP 리소스, monitoring admin root는 Kubernetes namespace와 Helm values
+  경계를 담당한다.
+- 실제 `kube-prometheus-stack` Helm release 생성은 후속 이슈에서 진행한다.
