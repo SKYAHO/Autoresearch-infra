@@ -115,3 +115,15 @@
   운영자 주입 경로를 사용한다.
 - Issue #83에서 ArgoCD 설치 기반을 `terraform/admin/argocd-k8s`로 분리하고
   `argocd` namespace와 Helm values scaffold 위치를 정했다.
+
+## 2026-07-10: ArgoCD 최소 설치
+
+- Issue #84에서 argo-cd Helm chart `10.1.3`(ArgoCD v3.4.5)을
+  `terraform/admin/argocd-k8s`에 pin해 설치했다.
+- server Service는 `ClusterIP`로 유지하고 UI는 `kubectl port-forward` 내부
+  접근만 허용한다. 외부 공개 리소스(LoadBalancer/Ingress)는 만들지 않는다.
+- dex(SSO), notifications, applicationSet controller는 최소 설치 원칙으로
+  비활성화하고 사용 시점의 이슈에서 활성화한다.
+- 초기 admin 비밀번호는 chart가 생성하는 `argocd-initial-admin-secret`으로
+  회수한 뒤 변경하고 secret을 삭제한다. payload는 Git/Terraform state에
+  저장하지 않는다.

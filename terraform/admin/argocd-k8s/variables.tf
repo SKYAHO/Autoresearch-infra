@@ -33,7 +33,19 @@ variable "argocd_namespace" {
 }
 
 variable "argocd_values_file_path" {
-  description = "Repository-relative path for the ArgoCD Helm values scaffold used by the follow-up install issue."
+  description = "Module-relative path for the ArgoCD Helm values file consumed by helm_release.argo_cd."
   type        = string
   default     = "helm-values/argo-cd.values.yaml"
+}
+
+variable "argo_cd_release_name" {
+  description = "Helm release name for Argo CD."
+  type        = string
+  default     = "argo-cd"
+}
+
+variable "argo_cd_chart_version" {
+  description = "Pinned argo-cd Helm chart version."
+  type        = string
+  default     = "10.1.3"
 }
