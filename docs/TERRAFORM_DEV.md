@@ -695,7 +695,7 @@ Airflow는 두 Terraform root로 나눈다.
 | ResourceQuota | cpu 4 / mem 8Gi / pods 20 / pvc 4 | namespace 자원 한도 |
 | LimitRange | default 500m/512Mi, request 250m/256Mi | Container 기본 request/limit |
 | NetworkPolicy(ingress) | 같은 namespace + kube-system만 | deny-by-default |
-| NetworkPolicy(egress) | 같은 namespace(#116), **services CIDR VIP 53/5432(#122)**, DNS(53), Cloud SQL(private_services_cidr 5432), GKE metadata server(169.254.169.254:80), HTTPS(443) | WI 토큰 교환은 metadata server HTTP 80 필요. 외부 API/googleapis 호출은 443로 |
+| NetworkPolicy(egress) | 같은 namespace(#116), **services CIDR VIP 53/5432(#122)**, DNS(53), Cloud SQL(private_services_cidr 5432), GKE metadata server(169.254.169.254:80, 169.254.169.252:987/988), HTTPS(443) | 현재 Standard + Calico의 WI 토큰 교환은 169.254.169.252:987/988을 사용한다. Dataplane V2 metadata endpoint 경로인 169.254.169.254:80도 유지한다. 외부 API/googleapis 호출은 443으로 허용한다. |
 | NetworkPolicy enforcement | #116부터 Calico로 실제 강제 | 그 이전에는 enforcement가 꺼져 있어 위 정책들이 선언만 된 상태였다 |
 | egress 규칙 주의(#122) | service VIP 트래픽은 selector가 아니라 **services CIDR ipBlock**으로 허용 | 이 클러스터의 Calico는 egress를 DNAT 이전(VIP 기준)에 평가한다 |
 | Cloud SQL DB | `airflow` | 기존 dev 인스턴스 내 신규 database(metadata DB) |

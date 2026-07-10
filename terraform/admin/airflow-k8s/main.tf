@@ -265,7 +265,7 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
       }
     }
 
-    # GKE metadata server for Workload Identity token exchange.
+    # Existing GKE metadata endpoint allowance used by Dataplane V2.
     egress {
       to {
         ip_block {
@@ -276,6 +276,26 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
       ports {
         protocol = "TCP"
         port     = "80"
+      }
+    }
+
+    # GKE Standard with Calico uses the link-local metadata proxy ports for
+    # Workload Identity Federation token exchange.
+    egress {
+      to {
+        ip_block {
+          cidr = "169.254.169.252/32"
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "987"
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "988"
       }
     }
 
