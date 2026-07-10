@@ -12,3 +12,8 @@ output "kube_prometheus_stack_chart_version" {
   description = "Pinned kube-prometheus-stack Helm chart version."
   value       = helm_release.kube_prometheus_stack.version
 }
+
+output "monitoring_port_forward_role_binding_names" {
+  description = "Monitoring namespace RoleBinding names for allowlisted port-forward users."
+  value       = [for binding in kubernetes_role_binding_v1.monitoring_port_forward : binding.metadata[0].name]
+}
