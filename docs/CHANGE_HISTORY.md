@@ -153,3 +153,16 @@
   달성했다. ApplicationSet CR을 사용하는 시점에 replicas를 복원한다.
 - dex/notifications의 `enabled: false`는 chart에서 지원되는 키로 정상 동작
   중임을 함께 확인했다.
+
+## 2026-07-10: ArgoCD AppProject/Application 샘플
+
+- Issue #85에서 AppProject `autoresearch-dev`와 샘플 Application
+  `sample-guestbook`(공개 repo guestbook → `argocd-sample` namespace)을
+  추가했다.
+- AppProject는 최소 허용 원칙으로 샘플 repo와 `argocd-sample` destination만
+  열었다. 실제 repo(`SKYAHO/Autoresearch-airflow` 등)는 해당 Application을
+  만드는 이슈에서 추가한다.
+- sync 정책은 manual만 사용한다(auto-sync/prune/self-heal 미사용 —
+  GITOPS_STRATEGY 초기 원칙). cluster-wide 리소스는 AppProject 기본 거부를
+  유지한다.
+- 샘플은 sync/diff/rollback 흐름 검증용이며, 실제 repo 연결 시 제거한다.

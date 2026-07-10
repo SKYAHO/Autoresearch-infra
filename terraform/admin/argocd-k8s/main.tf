@@ -144,3 +144,83 @@ resource "helm_release" "argo_cd" {
     file("${path.module}/${var.argocd_values_file_path}")
   ]
 }
+
+# #85 AppProject/Application 샘플. 실제 Airflow/앱 연결 전에 ArgoCD의
+# sync/diff/rollback 흐름을 무해한 공개 샘플(guestbook)로 검증한다.
+# 검증이 끝나고 실제 repo를 연결하는 이슈에서 샘플 리소스는 제거한다.
+
+# 샘플 워크로드 전용 namespace. 검증용이라 prevent_destroy를 두지 않는다.
+resource "kubernetes_namespace_v1" "argocd_sample" {
+  metadata {
+    name = "argocd-sample"
+
+    labels = {
+      "app.kubernetes.io/name"    = "argocd-sample"
+      "app.kubernetes.io/part-of" = "gitops"
+    }
+  }
+}
+
+# 주의(부트스트랩 순서): kubernetes_manifest는 plan 단계에서 대상 CRD의
+# 스키마를 클러스터에서 조회하므로, ArgoCD CRD가 없는 빈 클러스터에서는
+# depends_on과 무관하게 초기 plan이 실패한다. 완전 재구성 시에는
+#   terraform apply -target=helm_release.argo_cd
+# 로 chart(CRD 포함)를 먼저 설치한 뒤 전체 plan/apply를 실행한다(README 참조).
+
+# AppProject: Application이 접근할 수 있는 repo/destination을 제한하는 경계.
+# - sourceRepos: 공개 샘플 repo만 허용. Airflow 저장소는 실제 Application을
+#   만드는 이슈에서 추가한다(미리 열어두지 않음 — 최소 허용).
+# - destinations: argocd-sample namespace만.
+# - cluster-wide 리소스: AppProject 기본값이 거부(clusterResourceWhitelist
+#   미지정 = 빈 목록)라 별도 필드를 넣지 않는다. 빈 목록을 명시하면
+#   kubernetes_manifest가 서버 정규화와 충돌해 영구 diff가 생길 수 있다.
+resource "kubernetes_manifest" "appproject_autoresearch_dev" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "AppProject"
+    metadata = {
+      name      = "autoresearch-dev"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      description = "AutoResearch dev GitOps boundary (#85 sample scope)"
+      sourceRepos = [
+        "https://github.com/argoproj/argocd-example-apps.git",
+      ]
+      destinations = [
+        {
+          server    = "https://kubernetes.default.svc"
+          namespace = kubernetes_namespace_v1.argocd_sample.metadata[0].name
+        },
+      ]
+    }
+  }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+# 샘플 Application. syncPolicy를 지정하지 않아 manual sync로만 동작한다
+# (auto-sync/prune/self-heal 없음 — GITOPS_STRATEGY 초기 원칙).
+resource "kubernetes_manifest" "application_sample_guestbook" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "sample-guestbook"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL = "https://github.com/argoproj/argocd-example-apps.git"
+        path    = "guestbook"
+        # 외부 repo HEAD 추적 대신 커밋 SHA pin — 검증 재현성 확보 (리뷰 반영).
+        targetRevision = "8088f4c0d970abb09e250248cc97e35623447cb5"
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = kubernetes_namespace_v1.argocd_sample.metadata[0].name
+      }
+    }
+  }
+}
