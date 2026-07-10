@@ -21,7 +21,8 @@ terraform/
 ├── admin/
 │   ├── airflow-k8s/          # Airflow namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/      # 팀원 GKE container.viewer IAM (전역 k8s 읽기, secrets 제외 — 의도된 방침) + bastion 접속 IAM (separate state)
-│   └── monitoring-k8s/       # Prometheus/Grafana monitoring namespace + Helm values (separate state)
+│   ├── monitoring-k8s/       # Prometheus/Grafana monitoring namespace + Helm values (separate state)
+│   └── argocd-k8s/           # ArgoCD namespace + Helm values scaffold (separate state)
 ├── envs/
 │   └── dev/                 # dev 환경 root module
 │       ├── versions.tf      # Terraform/provider 버전, provider 설정

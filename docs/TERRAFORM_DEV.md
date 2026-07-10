@@ -18,7 +18,8 @@ terraform/
 ├── admin/
 │   ├── airflow-k8s/      # #32 Airflow Kubernetes namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/  # #34/#46 팀원 GKE container.viewer + bastion 접속 IAM (separate state)
-│   └── monitoring-k8s/   # #78 Prometheus/Grafana monitoring namespace + Helm values (separate state)
+│   ├── monitoring-k8s/   # #78 Prometheus/Grafana monitoring namespace + Helm values (separate state)
+│   └── argocd-k8s/       # #83 ArgoCD namespace + Helm values scaffold (separate state)
 ├── bootstrap/            # #6 1회성: GCS state bucket + WIF + CI SA (local state)
 │   ├── main.tf
 │   ├── outputs.tf
@@ -203,6 +204,19 @@ Prometheus/Grafana는 dev GCP root가 아니라 `terraform/admin/monitoring-k8s`
 | Prometheus retention | 7일 | values 파일 기준 |
 | Prometheus PVC | 30Gi | dev 최소 운영 기준 |
 | Grafana service | `ClusterIP` | 외부 공개 금지. 접근 경로는 #80/#81에서 정리 |
+
+## ArgoCD Kubernetes root (#83)
+
+ArgoCD 설치 기반은 dev GCP root가 아니라 `terraform/admin/argocd-k8s`에서 별도
+state로 관리한다. #83 범위는 `argocd` namespace와 Helm values scaffold까지이며,
+실제 ArgoCD Helm release와 Application 리소스는 후속 이슈에서 추가한다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Namespace | `argocd` | `kubernetes_namespace_v1.argocd` |
+| Values path | `helm-values/argo-cd.values.yaml` | #84 Helm release에서 사용할 scaffold |
+| Secret payload | Terraform/Git 밖에서 관리 | repo credential, admin password, webhook secret 등 |
+| Install method | Helm chart 기준 | 실제 chart version pin은 #84에서 결정 |
 | Grafana admin credential | 기존 Kubernetes Secret 참조 | payload는 Terraform state에 저장하지 않음 |
 
 Grafana admin Secret은 apply 전에 운영자가 `monitoring` namespace에 직접 만든다.
@@ -656,6 +670,7 @@ Airflow는 두 Terraform root로 나눈다.
 
 - `terraform/envs/dev`: GCP 리소스만 관리한다. GCP SA, Workload Identity IAM member, Cloud SQL database, GCS bucket/IAM, BigQuery IAM이 여기 있다.
 - `terraform/admin/airflow-k8s`: Kubernetes namespace/RBAC/ResourceQuota/LimitRange/NetworkPolicy만 관리한다. GKE API 서버가 `master_authorized_networks`로 제한되어 있어, GitHub Actions PR plan이 이 root를 실행하지 않는다. apply는 허용된 관리자 네트워크에서 수행한다.
+- `terraform/admin/argocd-k8s`: ArgoCD namespace와 Helm values scaffold만 관리한다. 실제 ArgoCD server/controller 설치는 후속 root 변경에서 진행한다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|

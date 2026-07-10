@@ -89,7 +89,7 @@ root 또는 별도 platform AppProject에서 관리한다.
 
 | 이슈 | 입력값 |
 |---|---|
-| #83 argocd namespace 및 설치 기반 | namespace `argocd`, admin root 분리, values 위치 |
+| #83 argocd namespace 및 설치 기반 | `terraform/admin/argocd-k8s`, namespace `argocd`, values 위치 |
 | #84 ArgoCD 최소 설치 및 내부 접근 | 외부 공개 금지, port-forward 또는 internal 접근 |
 | #85 AppProject/Application 샘플 | `autoresearch-dev` AppProject, Airflow Application manual sync |
 | #86 ArgoCD 운영 runbook | sync, rollback, drift 확인, secret 주입 절차 |

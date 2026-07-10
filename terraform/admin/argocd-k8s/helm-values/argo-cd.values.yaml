@@ -1,0 +1,20 @@
+# ArgoCD Helm values scaffold for the follow-up install issue.
+# Keep secret payloads out of this file. Repository credentials, admin password,
+# webhook secrets, and OAuth client secrets must be injected through Kubernetes
+# Secret payloads managed outside Terraform/Git.
+
+global:
+  domain: ""
+
+configs:
+  params:
+    server.insecure: false
+
+server:
+  service:
+    type: ClusterIP
+
+controller: {}
+repoServer: {}
+applicationSet: {}
+notifications: {}
