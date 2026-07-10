@@ -38,6 +38,17 @@ variable "argocd_values_file_path" {
   default     = "helm-values/argo-cd.values.yaml"
 }
 
+variable "cluster_services_cidr" {
+  description = "GKE services 2차 대역 (#122). service VIP 경유 egress(DNS/redis/repo-server)를 ipBlock으로 허용하는 데 사용. dev root의 gke_services_cidr와 일치해야 한다."
+  type        = string
+  default     = "172.16.128.0/24"
+
+  validation {
+    condition     = can(cidrhost(var.cluster_services_cidr, 0))
+    error_message = "cluster_services_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}
+
 variable "ui_ingress_source_cidr" {
   description = "argocd-server(8080)로 ingress를 허용할 VPC 내부 CIDR (#116). kubectl port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet 기본."
   type        = string

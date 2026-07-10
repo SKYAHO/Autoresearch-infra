@@ -169,3 +169,19 @@
 - Issue #86에서 접속, 상태 확인, diff/sync/rollback, credential 주입, 장애
   대응 절차를 `docs/ARGOCD_OPERATIONS_RUNBOOK.md`로 문서화했다. 절차 명령은
   #85 검증에서 실행해 확인한 것을 기준으로 한다.
+
+## 2026-07-10: egress 규칙 service VIP 대응 (#122)
+
+- #116 enforcement 활성화 직후 selector 기반 egress DNS 허용 규칙이 동작하지
+  않아 airflow/argocd namespace의 DNS가 차단되는 인시던트가 발생했다
+  (Airflow 약 2시간 Init 정체, 완화로 egress 정책 임시 삭제).
+- 격리 실험으로 원인을 확정했다: 이 클러스터의 Calico dataplane은 egress를
+  DNAT 이전(service VIP 기준)에 평가하므로 namespaceSelector/podSelector가
+  VIP 경유 트래픽에 매칭되지 않는다. `ipBlock(services CIDR)` 규칙은 동작한다.
+- 두 admin root의 egress에 services CIDR(`cluster_services_cidr`,
+  기본 172.16.128.0/24) ipBlock 규칙을 추가했다 — airflow: 53/5432,
+  argocd: 53/6379/8081. kubernetes API VIP(443)는 기존 0.0.0.0/0:443이 커버한다.
+- 기존 selector 기반 규칙은 post-DNAT 평가 dataplane(예: Dataplane V2)으로
+  바뀌는 경우를 대비해 유지한다.
+- 교훈: NetworkPolicy는 선언 검증만으로 부족하며, enforcement 활성화 시
+  실제 트래픽 검증(차단·허용 양방향)을 반드시 수행한다.
