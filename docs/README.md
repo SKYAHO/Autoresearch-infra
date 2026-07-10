@@ -11,6 +11,7 @@
 | 지금까지 만든 dev 인프라 전체 구성을 빠르게 파악 | [`INFRASTRUCTURE_SUMMARY.md`](INFRASTRUCTURE_SUMMARY.md) |
 | 팀원에게 GKE, Bastion, Airflow UI 접속 방법을 안내 | [`TEAM_OPERATIONS_RUNBOOK.md`](TEAM_OPERATIONS_RUNBOOK.md) |
 | dev Terraform 리소스, 변수, output, apply 절차 확인 | [`TERRAFORM_DEV.md`](TERRAFORM_DEV.md) |
+| Prometheus/Grafana 운영 모니터링 설계 확인 | [`OBSERVABILITY_STRATEGY.md`](OBSERVABILITY_STRATEGY.md) |
 | bootstrap state bucket, WIF, CI service account 확인 | [`TERRAFORM_BOOTSTRAP.md`](TERRAFORM_BOOTSTRAP.md) |
 | GitHub label, Project 운영 기준 확인 | [`GITHUB_LABELS_AND_PROJECT.md`](GITHUB_LABELS_AND_PROJECT.md) |
 | main branch ruleset 확인 | [`BRANCH_RULESET_MAIN.md`](BRANCH_RULESET_MAIN.md) |
