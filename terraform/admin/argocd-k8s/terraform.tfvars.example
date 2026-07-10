@@ -5,3 +5,6 @@ gke_cluster_name = "autoresearch-dev-gke"
 
 argocd_namespace        = "argocd"
 argocd_values_file_path = "helm-values/argo-cd.values.yaml"
+
+# argocd-server(8080) ingress 허용 CIDR (#116). port-forward 노드 트래픽용 dev subnet.
+ui_ingress_source_cidr = "10.10.0.0/20"
