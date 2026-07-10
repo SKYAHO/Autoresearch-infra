@@ -1,8 +1,8 @@
 # ArgoCD Kubernetes Admin Root
 
 이 root는 dev GKE의 ArgoCD 설치를 별도 state로 관리한다. #83에서 `argocd`
-namespace와 values 위치를 준비했고, #84에서 argo-cd Helm release를 추가했다.
-AppProject/Application 리소스는 후속 이슈 #85에서 추가한다.
+namespace와 values 위치를 준비했고, #84에서 argo-cd Helm release를, #85에서
+AppProject와 샘플 Application을 추가했다.
 
 ## 책임 범위
 
@@ -11,7 +11,9 @@ AppProject/Application 리소스는 후속 이슈 #85에서 추가한다.
 | `argocd` namespace | 예 | `prevent_destroy`로 실수 삭제 방지 |
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
-| AppProject/Application | 아니오 | 후속 이슈 #85 |
+| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85) |
+| 샘플 Application `sample-guestbook` | 예 | manual sync 검증용 (#85). 실제 repo 연결 시 제거 |
+| `argocd-sample` namespace | 예 | 샘플 워크로드 전용, 검증 후 폐기 가능 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 
 ## 설치 구성 (#84)
@@ -103,6 +105,49 @@ kubectl -n argocd delete secret argocd-initial-admin-secret
 
 변경한 admin 비밀번호는 팀 비밀번호 관리 경로로만 공유한다. Git, PR,
 Terraform state, values 파일에 저장하지 않는다.
+
+## 샘플 sync/diff/rollback 검증 (#85)
+
+`sample-guestbook` Application은 공개 샘플 repo
+(`argoproj/argocd-example-apps`의 `guestbook`)를 `argocd-sample` namespace에
+manual sync로 연결한다. auto-sync/prune/self-heal은 켜지 않는다.
+
+UI 기준 절차 (port-forward 후 `https://localhost:8443`):
+
+1. **diff**: Applications → sample-guestbook → 최초 상태가 `OutOfSync`인지
+   확인하고 `APP DIFF`로 미적용 manifest를 확인한다.
+2. **sync**: `SYNC` 버튼으로 수동 sync → `Synced`/`Healthy` 전환과
+   `argocd-sample` namespace의 guestbook Deployment/Service 생성을 확인한다.
+3. **rollback**: `HISTORY AND ROLLBACK`에서 이전 revision으로 rollback을
+   실행해 이전 상태로 되돌아가는지 확인한다.
+
+kubectl로 상태만 볼 때:
+
+```bash
+kubectl -n argocd get application sample-guestbook \
+  -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}'
+kubectl -n argocd-sample get all
+```
+
+## 실제 repo 연결 전 주의사항 (#85)
+
+- **AppProject 허용 목록은 그때 넓힌다**: `SKYAHO/Autoresearch-airflow` 등
+  실제 repo와 대상 namespace는 해당 Application을 만드는 이슈에서
+  `sourceRepos`/`destinations`에 추가한다. 미리 열어두지 않는다.
+- **sync 정책은 manual부터**: auto-sync/prune/self-heal은 GITOPS_STRATEGY의
+  단계 기준을 따라 안정화 후 Application별로 켠다. prune은 리소스 삭제를
+  유발하므로 특히 신중히 다룬다.
+- **private repo credential**: Kubernetes Secret payload로 주입하고 Git,
+  Terraform 변수/state에 남기지 않는다.
+- **Application 삭제 시 잔존물**: finalizer
+  (`resources-finalizer.argocd.argoproj.io`) 없이 Application CR만 지우면
+  배포된 리소스는 남는다. 샘플 폐기는 Application 제거 후 `argocd-sample`
+  namespace 삭제로 정리한다.
+- **ApplicationSet CR을 쓰려면** controller replicas 복원이 선행돼야 한다
+  (#115, 현재 0).
+- **NetworkPolicy enforcement(#116)가 apply되기 전에는** argocd namespace
+  경계가 선언 상태다. 실제 repo credential 도입 전에 enforcement 적용을
+  권장한다.
 
 ## Secret 처리 원칙
 
