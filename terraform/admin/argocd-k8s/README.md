@@ -24,7 +24,7 @@ AppProject/Application 리소스는 후속 이슈 #85에서 추가한다.
 | NetworkPolicy | deny-by-default ingress/egress (#116) | 아래 네트워크 경계 참조 |
 | dex (SSO) | disabled | SSO 도입 시 별도 이슈에서 활성화 |
 | notifications | disabled | 알림 채널 결정 후 활성화 |
-| applicationSet | disabled | ApplicationSet CR 사용 시 활성화 |
+| applicationSet | replicas 0 (중지) | chart 8.0부터 enabled 키가 제거됨(#115). ApplicationSet CR 사용 시 1로 복원 |
 
 ## 네트워크 경계 (#116)
 

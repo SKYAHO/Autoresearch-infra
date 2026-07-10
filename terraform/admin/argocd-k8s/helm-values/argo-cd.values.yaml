@@ -20,5 +20,7 @@ dex:
 notifications:
   enabled: false
 
+# chart 8.0부터 applicationSet.enabled 키가 제거되어(core 컴포넌트 승격)
+# replicas 0으로 중지한다(#115). ApplicationSet CR 사용 시 1로 되돌린다.
 applicationSet:
-  enabled: false
+  replicas: 0

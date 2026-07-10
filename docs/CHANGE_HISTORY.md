@@ -142,3 +142,14 @@
 - enforcement 활성화 apply는 노드풀 롤링 재생성을 수반한다(dev 단절 허용).
   monitoring namespace는 NetworkPolicy가 없어 영향이 없고, 경계 추가는 별도
   이슈로 검토한다.
+
+## 2026-07-10: ArgoCD applicationSet 비활성 방식 정정
+
+- Issue #115: #84에서 사용한 `applicationSet.enabled: false`는 argo-cd chart
+  8.0부터 제거된 키로, chart `10.1.3`에서 무시되어 applicationset-controller가
+  기동되고 있었다(apply 후 검증에서 발견).
+- chart가 enabled 플래그를 제공하지 않으므로(core 컴포넌트 승격)
+  `applicationSet.replicas: 0`으로 중지해 원래 문서화한 최소 설치 상태를
+  달성했다. ApplicationSet CR을 사용하는 시점에 replicas를 복원한다.
+- dex/notifications의 `enabled: false`는 chart에서 지원되는 키로 정상 동작
+  중임을 함께 확인했다.
