@@ -14,7 +14,7 @@ grafana_admin_user_key             = "admin-user"
 grafana_admin_password_key         = "admin-password"
 
 # Keep real Google accounts in local terraform.tfvars only.
-grafana_viewer_user_emails = [
+monitoring_port_forward_user_emails = [
   "teammate-1@example.com",
   "teammate-2@example.com",
 ]
