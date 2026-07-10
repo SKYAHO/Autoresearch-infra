@@ -188,6 +188,35 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
 | 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, Feast GCS bucket `storage.objectAdmin` |
 
+## Monitoring Kubernetes root (#78/#79)
+
+Prometheus/Grafana는 dev GCP root가 아니라 `terraform/admin/monitoring-k8s`에서
+별도 state로 관리한다. 이 root는 GKE API server와 Helm chart lifecycle을 직접
+다루므로 운영자가 의도적으로 실행한다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Namespace | `monitoring` | `kubernetes_namespace_v1.monitoring` |
+| Helm chart | `kube-prometheus-stack` | prometheus-community chart |
+| Chart version | `87.12.1` | `var.kube_prometheus_stack_chart_version` |
+| Release name | `kube-prometheus-stack` | `var.kube_prometheus_stack_release_name` |
+| Prometheus retention | 7일 | values 파일 기준 |
+| Prometheus PVC | 30Gi | dev 최소 운영 기준 |
+| Grafana service | `ClusterIP` | 외부 공개 금지. 접근 경로는 #80/#81에서 정리 |
+| Grafana admin credential | 기존 Kubernetes Secret 참조 | payload는 Terraform state에 저장하지 않음 |
+
+Grafana admin Secret은 apply 전에 운영자가 `monitoring` namespace에 직접 만든다.
+
+```bash
+kubectl create secret generic grafana-admin-credentials \
+  -n monitoring \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password='<강한 임시 비밀번호>'
+```
+
+secret payload는 Git, PR, Terraform state에 남기지 않는다. Helm release는 Secret
+이름과 key만 참조한다.
+
 ## dev Bastion Host (#47)
 
 | 항목 | 값 | 비고 |
