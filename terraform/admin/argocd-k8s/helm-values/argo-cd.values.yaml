@@ -1,20 +1,24 @@
-# ArgoCD Helm values scaffold for the follow-up install issue.
+# #84 ArgoCD 최소 설치 values. helm_release.argo_cd가 이 파일을 읽는다.
 # Keep secret payloads out of this file. Repository credentials, admin password,
 # webhook secrets, and OAuth client secrets must be injected through Kubernetes
 # Secret payloads managed outside Terraform/Git.
-
-global:
-  domain: ""
 
 configs:
   params:
     server.insecure: false
 
+# UI 외부 공개 금지. 접근은 kubectl port-forward만 사용한다.
 server:
   service:
     type: ClusterIP
 
-controller: {}
-repoServer: {}
-applicationSet: {}
-notifications: {}
+# 최소 설치: SSO(dex), 알림(notifications), ApplicationSet controller는
+# 사용 시점(후속 이슈)에 활성화한다.
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
+
+applicationSet:
+  enabled: false
