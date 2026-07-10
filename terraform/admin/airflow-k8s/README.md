@@ -44,6 +44,42 @@ RoleBinding이 제거됩니다.
 Airflow GCP service account와 Workload Identity IAM binding을 포함한 대응 GCP
 리소스는 `terraform/envs/dev`에서 관리합니다.
 
+## NetworkPolicy와 Workload Identity
+
+현재 dev 클러스터는 GKE Standard + Calico를 사용합니다. 엄격한 egress
+NetworkPolicy에서 Workload Identity Federation이 동작하려면 GKE metadata
+server의 `169.254.169.252/32` TCP 987/988을 허용해야 합니다. Dataplane V2
+metadata endpoint인 `169.254.169.254/32` TCP 80 경로도 유지합니다. 두 경로 모두
+link-local `/32`와 필요한 TCP 포트만 허용하며 IAM 권한 자체를 변경하지 않습니다.
+
+변경 전에는 다음 검증을 수행합니다.
+
+```bash
+terraform -chdir=terraform/admin/airflow-k8s fmt -check
+terraform -chdir=terraform/admin/airflow-k8s init -backend=false
+terraform -chdir=terraform/admin/airflow-k8s validate
+
+# 실제 backend와 관리자 인증이 준비된 환경에서만 실행합니다.
+terraform -chdir=terraform/admin/airflow-k8s init -reconfigure
+terraform -chdir=terraform/admin/airflow-k8s plan -lock=false \
+  -var-file=terraform.tfvars
+```
+
+plan은 `kubernetes_network_policy_v1.airflow_egress` 한 개의 in-place 변경과
+`0 to add, 1 to change, 0 to destroy`만 보여야 합니다. add/delete/replace, IAM,
+Secret Manager 또는 GKE cluster 변경이 보이면 apply하지 않습니다.
+
+별도 적용 승인 후에는 live NetworkPolicy에서 두 metadata CIDR과 포트를 확인하고,
+실제 batch KSA를 사용하는 Pod에서 metadata token endpoint가 HTTP 200을 반환하는지
+확인합니다. token 본문은 파일이나 로그에 남기지 않습니다. 이어서 격리된 QA GCS
+prefix 읽기/쓰기와 1-micro-work smoke test를 수행합니다.
+
+문제가 발생하면 이 변경에서 추가한 `169.254.169.252/32` TCP 987/988 egress
+블록만 제거하고 admin root를 다시 plan/apply합니다. 이 롤백은 NetworkPolicy의
+in-place 갱신이어야 하며 노드 재생성을 유발하지 않습니다. 롤백 후에는 Calico
+Pod의 Workload Identity 인증이 다시 차단될 수 있으므로 metadata HTTP 상태와
+Airflow task 상태를 즉시 확인합니다.
+
 ## 최초 Apply 기록
 
 2026-07-08 기준 `airflow` namespace는 클러스터에 이미 존재했습니다. 삭제 후
