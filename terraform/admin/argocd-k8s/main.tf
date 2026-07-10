@@ -161,6 +161,12 @@ resource "kubernetes_namespace_v1" "argocd_sample" {
   }
 }
 
+# 주의(부트스트랩 순서): kubernetes_manifest는 plan 단계에서 대상 CRD의
+# 스키마를 클러스터에서 조회하므로, ArgoCD CRD가 없는 빈 클러스터에서는
+# depends_on과 무관하게 초기 plan이 실패한다. 완전 재구성 시에는
+#   terraform apply -target=helm_release.argo_cd
+# 로 chart(CRD 포함)를 먼저 설치한 뒤 전체 plan/apply를 실행한다(README 참조).
+
 # AppProject: Application이 접근할 수 있는 repo/destination을 제한하는 경계.
 # - sourceRepos: 공개 샘플 repo만 허용. Airflow 저장소는 실제 Application을
 #   만드는 이슈에서 추가한다(미리 열어두지 않음 — 최소 허용).
@@ -206,9 +212,10 @@ resource "kubernetes_manifest" "application_sample_guestbook" {
     spec = {
       project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
       source = {
-        repoURL        = "https://github.com/argoproj/argocd-example-apps.git"
-        path           = "guestbook"
-        targetRevision = "HEAD"
+        repoURL = "https://github.com/argoproj/argocd-example-apps.git"
+        path    = "guestbook"
+        # 외부 repo HEAD 추적 대신 커밋 SHA pin — 검증 재현성 확보 (리뷰 반영).
+        targetRevision = "8088f4c0d970abb09e250248cc97e35623447cb5"
       }
       destination = {
         server    = "https://kubernetes.default.svc"
