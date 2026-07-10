@@ -1,6 +1,6 @@
 # AI 코딩 에이전트 작업 지침
 
-> Version: 1.0.1 | Last Updated: 2026-07-08
+> Version: 1.1.0 | Last Updated: 2026-07-10
 
 이 문서는 Claude Code 등 AI 코딩 에이전트가 이 저장소에서 작업할 때의 기본
 진입점입니다. 필수 규칙은 짧게 유지하고, 상세 가이드는 `.claude/docs/`를
@@ -84,6 +84,18 @@
   않습니다.
 - IAM은 최소 권한 원칙을 따르고, dev 리소스는 최소 비용 기준으로 시작합니다.
 - 동작, 명령어, 설정, 운영 방식이 바뀌면 문서를 갱신합니다.
+- 커밋 메시지, PR 본문, 이슈 본문은 작성 전에 반드시 `.github/`의 템플릿
+  (`PULL_REQUEST_TEMPLATE.md`, `ISSUE_TEMPLATE/*.yml`)과
+  `CONTRIBUTING.md`의 컨벤션을 읽고 그 구조를 그대로 따릅니다. 임의 형식을
+  사용하지 않습니다.
+- 모든 작업은 관련 `.md` 문서(README, runbook, 운영 문서) 갱신을 같은
+  변경(PR)에 포함합니다.
+- 보안을 항상 최우선으로 검토합니다: secret/state/tfvars 노출, IAM 권한 확대,
+  외부 노출 리소스(public IP/LB/Ingress) 생성 여부를 커밋 전에 diff에서
+  확인합니다.
+- 학습용 dev 환경이라도 실제 회사 운영 기준으로 작업합니다: 이슈→브랜치→
+  Draft PR→리뷰→squash merge 워크플로우를 생략하지 않고, 변경마다 검증·롤백
+  방법·비용 영향을 기록합니다.
 
 ## 로컬 개발
 
