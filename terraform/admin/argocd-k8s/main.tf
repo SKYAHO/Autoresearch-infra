@@ -201,12 +201,15 @@ resource "kubernetes_namespace_v1" "argocd_sample" {
 # 로 chart(CRD 포함)를 먼저 설치한 뒤 전체 plan/apply를 실행한다(README 참조).
 
 # AppProject: Application이 접근할 수 있는 repo/destination을 제한하는 경계.
-# - sourceRepos: 공개 샘플 repo만 허용. Airflow 저장소는 실제 Application을
-#   만드는 이슈에서 추가한다(미리 열어두지 않음 — 최소 허용).
-# - destinations: argocd-sample namespace만.
+# - sourceRepos: 공개 샘플 repo(#85)와 Airflow 저장소(#124). Airflow
+#   Application 자체는 umbrella chart(Autoresearch-airflow#17) 준비 후
+#   후속 이슈에서 생성한다.
+# - destinations: argocd-sample(#85)과 airflow(#124) namespace만.
 # - cluster-wide 리소스: AppProject 기본값이 거부(clusterResourceWhitelist
 #   미지정 = 빈 목록)라 별도 필드를 넣지 않는다. 빈 목록을 명시하면
 #   kubernetes_manifest가 서버 정규화와 충돌해 영구 diff가 생길 수 있다.
+# - namespaced kind whitelist 하드닝은 Airflow Application 이슈에서 chart
+#   렌더링 결과 기준으로 결정한다.
 resource "kubernetes_manifest" "appproject_autoresearch_dev" {
   manifest = {
     apiVersion = "argoproj.io/v1alpha1"
@@ -216,14 +219,20 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
       namespace = kubernetes_namespace_v1.argocd.metadata[0].name
     }
     spec = {
-      description = "AutoResearch dev GitOps boundary (#85 sample scope)"
+      description = "AutoResearch dev GitOps boundary"
       sourceRepos = [
         "https://github.com/argoproj/argocd-example-apps.git",
+        "https://github.com/SKYAHO/Autoresearch-airflow.git",
       ]
       destinations = [
         {
           server    = "https://kubernetes.default.svc"
           namespace = kubernetes_namespace_v1.argocd_sample.metadata[0].name
+        },
+        {
+          # airflow namespace는 terraform/admin/airflow-k8s가 소유한다.
+          server    = "https://kubernetes.default.svc"
+          namespace = "airflow"
         },
       ]
     }

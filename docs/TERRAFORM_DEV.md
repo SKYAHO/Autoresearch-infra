@@ -234,7 +234,7 @@ Application(`sample-guestbook`, manual sync)을 추가했다.
 | NetworkPolicy | deny-by-default ingress/egress (#116) | 같은 namespace + kube-system + 노드 대역(8080, port-forward)만 ingress 허용. egress는 같은 namespace + DNS + 443 |
 | dex / notifications | disabled | 최소 설치. 사용 시점(후속 이슈)에 활성화 |
 | applicationSet | replicas 0 (중지) | chart 8.0부터 enabled 키 제거(#115). ApplicationSet CR 사용 시 복원 |
-| AppProject | `autoresearch-dev` (#85) | sourceRepos 샘플 repo만, destination `argocd-sample`만, cluster-wide 리소스 기본 거부 |
+| AppProject | `autoresearch-dev` (#85/#124) | sourceRepos: 샘플 repo + `SKYAHO/Autoresearch-airflow`, destinations: `argocd-sample` + `airflow`, cluster-wide 리소스 기본 거부 |
 | 샘플 Application | `sample-guestbook` (#85) | guestbook, manual sync (auto-sync/prune/self-heal 없음). 실제 repo 연결 시 제거 |
 | Secret payload | Terraform/Git 밖에서 관리 | repo credential, admin password, webhook secret 등 |
 

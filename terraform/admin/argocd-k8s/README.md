@@ -11,7 +11,7 @@ AppProject와 샘플 Application을 추가했다.
 | `argocd` namespace | 예 | `prevent_destroy`로 실수 삭제 방지 |
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
-| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85) |
+| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85, #124에서 Airflow repo·namespace 추가) |
 | 샘플 Application `sample-guestbook` | 예 | manual sync 검증용 (#85). 실제 repo 연결 시 제거 |
 | `argocd-sample` namespace | 예 | 샘플 워크로드 전용, 검증 후 폐기 가능 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
@@ -141,11 +141,12 @@ kubectl -n argocd-sample get all
 
 ## 실제 repo 연결 전 주의사항 (#85)
 
-- **AppProject 허용 목록은 그때 넓힌다**: `SKYAHO/Autoresearch-airflow` 등
-  실제 repo와 대상 namespace는 해당 Application을 만드는 이슈에서
-  `sourceRepos`/`destinations`에 추가한다. 미리 열어두지 않는다. 이때
-  namespaced 리소스 종류도 `namespaceResourceWhitelist`로 필요한 kind만
-  허용하는 하드닝을 함께 검토한다(미지정 시 모든 namespaced kind 허용).
+- **AppProject 허용 목록**: `SKYAHO/Autoresearch-airflow` repo와 `airflow`
+  namespace는 #124에서 경계에 추가했다(Application은 umbrella chart
+  준비 후 후속 이슈). 그 외 repo/namespace는 해당 Application을 만드는
+  이슈에서 추가하며 미리 열어두지 않는다. Airflow Application 이슈에서는
+  `namespaceResourceWhitelist`로 chart 렌더링 기준 필요한 kind만 허용하는
+  하드닝을 함께 검토한다(미지정 시 모든 namespaced kind 허용).
 - **sync 정책은 manual부터**: auto-sync/prune/self-heal은 GITOPS_STRATEGY의
   단계 기준을 따라 안정화 후 Application별로 켠다. prune은 리소스 삭제를
   유발하므로 특히 신중히 다룬다.

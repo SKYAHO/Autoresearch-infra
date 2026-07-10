@@ -185,3 +185,15 @@
   바뀌는 경우를 대비해 유지한다.
 - 교훈: NetworkPolicy는 선언 검증만으로 부족하며, enforcement 활성화 시
   실제 트래픽 검증(차단·허용 양방향)을 반드시 수행한다.
+
+## 2026-07-10: ArgoCD Airflow 연결 준비 (#124)
+
+- AppProject `autoresearch-dev`의 경계에 `SKYAHO/Autoresearch-airflow`
+  repo와 `airflow` namespace를 추가했다. Application 생성은 Airflow 저장소의
+  umbrella chart(`deploy/airflow/`, Autoresearch-airflow#17 제안) 준비 후
+  후속 이슈에서 진행한다.
+- Airflow 배포의 ArgoCD source는 chart 버전 pin과 values를 한 경로에서
+  관리하는 umbrella chart 방식으로 결정했다(chart는 apache-airflow helm repo
+  dependency로 참조).
+- namespaced kind whitelist 하드닝은 Application 이슈에서 chart 렌더링
+  결과를 기준으로 결정한다.
