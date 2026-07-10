@@ -202,6 +202,34 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
       }
     }
 
+    # #122 service VIP 경유 트래픽. 이 클러스터의 Calico는 egress를 DNAT
+    # 이전(service VIP 기준)에 평가하므로 selector가 VIP에 매칭되지 않는다.
+    # kube-dns(53)와 in-cluster PostgreSQL(5432) VIP를 services CIDR
+    # ipBlock으로 허용한다. 아래 selector 기반 규칙들은 post-DNAT 평가
+    # dataplane으로 바뀌는 경우를 대비해 유지한다.
+    egress {
+      to {
+        ip_block {
+          cidr = var.cluster_services_cidr
+        }
+      }
+
+      ports {
+        protocol = "UDP"
+        port     = "53"
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "53"
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "5432"
+      }
+    }
+
     # DNS (kube-dns)
     egress {
       to {

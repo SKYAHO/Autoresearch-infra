@@ -20,3 +20,6 @@ installer_user_emails = [
 
 # Airflow UI 내부 노출 (#48)
 ui_ingress_source_cidr = "10.10.0.0/20"
+
+# GKE services 2차 대역 (#122). dev root gke_services_cidr와 일치.
+cluster_services_cidr = "172.16.128.0/24"
