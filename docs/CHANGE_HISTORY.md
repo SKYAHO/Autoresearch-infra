@@ -127,3 +127,18 @@
 - 초기 admin 비밀번호는 chart가 생성하는 `argocd-initial-admin-secret`으로
   회수한 뒤 변경하고 secret을 삭제한다. payload는 Git/Terraform state에
   저장하지 않는다.
+
+## 2026-07-10: NetworkPolicy enforcement와 argocd 네트워크 경계
+
+- Issue #116(코드 리뷰 finding 반영)에서 dev GKE에 Calico NetworkPolicy
+  enforcement를 활성화했다. 그 이전에는 enforcement가 꺼져 있어 #32/#48의
+  airflow NetworkPolicy가 선언만 되고 강제되지 않았음을 확인했다.
+- enforcement 활성화로 기존 airflow egress 정책이 실제 동작하게 되므로,
+  same-namespace egress 허용을 추가해 in-cluster PostgreSQL(5432)/redis
+  통신 차단을 방지했다.
+- argocd namespace에 deny-by-default ingress/egress NetworkPolicy를 추가했다.
+  `kubectl port-forward` 트래픽은 노드 IP에서 출발하므로 dev subnet →
+  argocd-server 8080 ingress를 허용해 UI 접근을 유지한다.
+- enforcement 활성화 apply는 노드풀 롤링 재생성을 수반한다(dev 단절 허용).
+  monitoring namespace는 NetworkPolicy가 없어 영향이 없고, 경계 추가는 별도
+  이슈로 검토한다.

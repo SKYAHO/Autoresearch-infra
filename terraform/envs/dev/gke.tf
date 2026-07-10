@@ -73,6 +73,20 @@ resource "google_container_cluster" "dev" {
     services_secondary_range_name = local.gke_services_range_name
   }
 
+  # #116 NetworkPolicy enforcement(Calico). admin root들의 NetworkPolicy가
+  # 실제로 강제되도록 켠다. 활성화 apply 시 노드풀이 롤링 재생성된다.
+  # 보안 경계이므로 변수 토글 없이 상시 활성으로 둔다.
+  network_policy {
+    enabled  = true
+    provider = "CALICO"
+  }
+
+  addons_config {
+    network_policy_config {
+      disabled = false
+    }
+  }
+
   # private nodes. 마스터 접근 기본 경로는 DNS 엔드포인트(#45, IAM 검증)이고,
   # public IP 엔드포인트 + master_authorized_networks는 예비 경로로 병행 유지.
   private_cluster_config {

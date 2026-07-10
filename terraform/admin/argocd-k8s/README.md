@@ -21,9 +21,25 @@ AppProject/Application 리소스는 후속 이슈 #85에서 추가한다.
 | Chart | `argo-cd` `10.1.3` (ArgoCD v3.4.5) | `var.argo_cd_chart_version` |
 | Release | `argo-cd` | `var.argo_cd_release_name` |
 | server Service | `ClusterIP` | 외부 공개 금지. LoadBalancer/Ingress 없음 |
+| NetworkPolicy | deny-by-default ingress/egress (#116) | 아래 네트워크 경계 참조 |
 | dex (SSO) | disabled | SSO 도입 시 별도 이슈에서 활성화 |
 | notifications | disabled | 알림 채널 결정 후 활성화 |
 | applicationSet | disabled | ApplicationSet CR 사용 시 활성화 |
+
+## 네트워크 경계 (#116)
+
+`ClusterIP`는 인터넷 노출만 막고 클러스터 내부 접근은 막지 않으므로, 다른
+namespace 워크로드가 ArgoCD 제어면에 접근하지 못하도록 deny-by-default
+NetworkPolicy를 둔다. enforcement는 dev root(`gke.tf`)의 Calico 활성화가 전제다.
+
+| 방향 | 허용 | 이유 |
+|---|---|---|
+| ingress | 같은 namespace | 컴포넌트 간 통신 (server ↔ repo-server ↔ redis ↔ controller) |
+| ingress | kube-system | 시스템 컴포넌트 |
+| ingress | `var.ui_ingress_source_cidr`(dev subnet) → 8080 | `kubectl port-forward` 트래픽은 노드 IP에서 출발하므로 노드 대역 허용이 없으면 UI 접근이 차단된다 |
+| egress | 같은 namespace | redis(6379), repo-server(8081) 등 |
+| egress | kube-system 53 (UDP/TCP) | DNS |
+| egress | 0.0.0.0/0 443 | Git/Helm repository, Kubernetes API. git ssh(22)는 미사용이라 미허용 |
 
 ## 사용 방법
 

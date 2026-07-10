@@ -193,6 +193,15 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
 
     policy_types = ["Egress"]
 
+    # #116 같은 namespace 내 pod 간 통신(webserver/scheduler → in-cluster
+    # PostgreSQL 5432, redis 6379 등). enforcement(Calico) 활성화 시 이 허용이
+    # 없으면 Airflow 내부 통신이 차단된다.
+    egress {
+      to {
+        pod_selector {}
+      }
+    }
+
     # DNS (kube-dns)
     egress {
       to {
