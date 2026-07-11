@@ -21,6 +21,12 @@ db_app_user             = "app"
 sql_deletion_protection = false
 private_services_cidr   = "192.168.0.0/20" # 현재 dev apply 값. dev subnet/GKE 대역과 미중복
 
+# Feast Online Store Redis (#129) — AUTH/TLS는 코드에서 상시 활성
+redis_tier                = "BASIC"
+redis_memory_size_gb      = 1
+redis_version             = "REDIS_7_2"
+redis_deletion_protection = false
+
 # GKE (#5)
 gke_master_ipv4_cidr              = "172.16.0.0/28" # private 컨트롤 플레인. dev subnet/private services와 미중복
 gke_pods_cidr                     = "172.16.64.0/20"

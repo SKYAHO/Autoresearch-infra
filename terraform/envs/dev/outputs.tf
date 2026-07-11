@@ -68,6 +68,26 @@ output "cloud_sql_database_name" {
   value       = google_sql_database.dev.name
 }
 
+output "redis_host" {
+  description = "Feast Online Store Redis private endpoint. AUTH token 없이 사용 불가."
+  value       = google_redis_instance.online_store.host
+}
+
+output "redis_port" {
+  description = "Feast Online Store Redis TLS endpoint port."
+  value       = google_redis_instance.online_store.port
+}
+
+output "redis_auth_secret_id" {
+  description = "Redis AUTH token을 저장한 Secret Manager secret id. Payload는 output하지 않는다."
+  value       = google_secret_manager_secret.redis_auth.secret_id
+}
+
+output "redis_server_ca_secret_id" {
+  description = "Redis TLS server CA bundle을 저장한 Secret Manager secret id. CA 본문은 output하지 않는다."
+  value       = google_secret_manager_secret.redis_server_ca.secret_id
+}
+
 output "gke_cluster_name" {
   description = "dev GKE 클러스터 이름."
   value       = google_container_cluster.dev.name

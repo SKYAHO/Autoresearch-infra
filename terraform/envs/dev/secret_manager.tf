@@ -21,3 +21,43 @@ resource "google_secret_manager_secret_iam_member" "gke_app_db_password" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.gke_app.email}"
 }
+
+# #129 Redis AUTH token과 TLS server CA를 앱에 전달한다. 두 값 모두
+# Terraform state에 저장되므로 backend IAM을 최소화하고 output으로 노출하지 않는다.
+resource "google_secret_manager_secret" "redis_auth" {
+  secret_id = local.redis_auth_secret_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "redis_auth" {
+  secret      = google_secret_manager_secret.redis_auth.id
+  secret_data = google_redis_instance.online_store.auth_string
+}
+
+resource "google_secret_manager_secret_iam_member" "gke_app_redis_auth" {
+  secret_id = google_secret_manager_secret.redis_auth.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
+resource "google_secret_manager_secret" "redis_server_ca" {
+  secret_id = local.redis_server_ca_secret_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "redis_server_ca" {
+  secret      = google_secret_manager_secret.redis_server_ca.id
+  secret_data = join("\n", google_redis_instance.online_store.server_ca_certs[*].cert)
+}
+
+resource "google_secret_manager_secret_iam_member" "gke_app_redis_server_ca" {
+  secret_id = google_secret_manager_secret.redis_server_ca.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.gke_app.email}"
+}

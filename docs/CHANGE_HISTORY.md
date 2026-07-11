@@ -3,6 +3,18 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-11: Feast Online Store Redis 설계 (#129, apply 대기)
+
+- dev Online Store는 Memorystore for Redis Basic 1 GiB, Redis 7.2로 시작한다.
+- 기존 dev VPC와 Private Service Access 연결을 재사용하고 public endpoint를
+  만들지 않는다.
+- Redis AUTH와 TLS를 활성화하고 AUTH token과 server CA bundle은 Secret Manager에
+  저장하며 app GSA에 resource-level accessor만 부여한다.
+- 일반 앱 namespace, Workload Identity KSA와 Redis 포함 최소 egress
+  NetworkPolicy는 `terraform/admin/autoresearch-k8s` 별도 state로 관리한다.
+- 실제 Redis와 Kubernetes 리소스 apply 및 앱 Feast connection string 반영은
+  각각 plan과 별도 승인 후 진행한다.
+
 ## 2026-07-03: dev GKE 클러스터
 
 - Issue #5, PR #14에서 dev GKE Standard zonal 클러스터를 구성했다.

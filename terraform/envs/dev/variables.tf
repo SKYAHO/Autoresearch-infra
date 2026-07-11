@@ -91,7 +91,7 @@ variable "sql_deletion_protection" {
 }
 
 variable "private_services_cidr" {
-  description = "CIDR for Cloud SQL private services access (VPC peering). Must not overlap dev_subnet_cidr."
+  description = "CIDR for Cloud SQL and Redis private services access (VPC peering). Must not overlap dev_subnet_cidr."
   type        = string
   default     = "192.168.0.0/20"
 
@@ -99,6 +99,45 @@ variable "private_services_cidr" {
     condition     = can(cidrhost(var.private_services_cidr, 0))
     error_message = "private_services_cidr must be a valid CIDR in a.b.c.d/n form."
   }
+}
+
+variable "redis_tier" {
+  description = "Memorystore for Redis service tier. dev 최소 비용 기본은 BASIC."
+  type        = string
+  default     = "BASIC"
+
+  validation {
+    condition     = contains(["BASIC", "STANDARD_HA"], var.redis_tier)
+    error_message = "redis_tier must be BASIC or STANDARD_HA."
+  }
+}
+
+variable "redis_memory_size_gb" {
+  description = "Online Store Redis provisioned memory in GiB. dev 최소값은 1 GiB."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.redis_memory_size_gb >= 1 && floor(var.redis_memory_size_gb) == var.redis_memory_size_gb
+    error_message = "redis_memory_size_gb must be an integer greater than or equal to 1."
+  }
+}
+
+variable "redis_version" {
+  description = "Memorystore Redis software version."
+  type        = string
+  default     = "REDIS_7_2"
+
+  validation {
+    condition     = can(regex("^REDIS_[0-9]+(_[0-9]+|_X)$", var.redis_version))
+    error_message = "redis_version must use a Memorystore version value such as REDIS_7_2."
+  }
+}
+
+variable "redis_deletion_protection" {
+  description = "Online Store Redis 삭제 보호. dev는 false이며 삭제 전 plan과 별도 승인이 필요."
+  type        = bool
+  default     = false
 }
 
 variable "gke_master_ipv4_cidr" {

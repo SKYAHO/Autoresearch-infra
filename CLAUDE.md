@@ -47,6 +47,7 @@
   - `nat.tf` — Cloud Router + Cloud NAT
   - `artifact_registry.tf` — Docker 저장소 (`autoresearch-dev-docker`)
   - `cloud_sql.tf` — PostgreSQL 15 dev 인스턴스 (private IP only)
+  - `redis.tf` — Feast Online Store Redis (private Service Access, AUTH/TLS)
   - `gke.tf` — dev GKE 클러스터
   - `storage.tf` / `bigquery.tf` — raw data, Feast, analytics 저장소
   - `cloud_run.tf` — dev proxy Cloud Run

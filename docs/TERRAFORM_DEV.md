@@ -9,6 +9,7 @@
 - Terraform backend: GCS `autoresearch-dev-tfstate`, prefix `dev/`
 - 마지막 실제 apply: 2026-07-08, #46(GKE DNS 엔드포인트)·#50(bastion)·#51(Airflow ILB + private DNS)·#55(OAuth secrets) merge 및 apply 완료
 - 최신 검증: 2026-07-08, 위 apply 이후 `terraform/envs/dev`와 `terraform/admin/airflow-k8s` 모두 최종 plan `No changes`
+- Issue #129 Online Store Redis와 `terraform/admin/autoresearch-k8s`는 코드 검증 단계이며 실제 apply 전이다.
 
 ## 구조
 
@@ -16,6 +17,7 @@
 terraform/
 ├── README.md
 ├── admin/
+│   ├── autoresearch-k8s/ # #129 앱 namespace/KSA/Redis egress NetworkPolicy (separate state)
 │   ├── airflow-k8s/      # #32 Airflow Kubernetes namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/  # #34/#46 팀원 GKE container.viewer + bastion 접속 IAM (separate state)
 │   ├── monitoring-k8s/   # #78 Prometheus/Grafana monitoring namespace + Helm values (separate state)
@@ -35,6 +37,7 @@ terraform/
 │       ├── bastion.tf        # #47 IAP 전용 bastion host
 │       ├── bigquery.tf       # #20 dev analytics/Feast offline dataset
 │       ├── cloud_sql.tf      # #4 dev Cloud SQL (PostgreSQL, private IP)
+│       ├── redis.tf          # #129 Feast Online Store Redis (private PSA, AUTH/TLS)
 │       ├── cloud_build.tf    # #32 Autoresearch-airflow Cloud Build IAM
 │       ├── cloud_run.tf      # #27 Cloud Run proxy state/code 정합성
 │       ├── dns.tf            # #48 Airflow ILB 예약 내부 IP + private DNS zone
@@ -109,6 +112,48 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 **선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com`, `secretmanager.googleapis.com` (수동 활성화 — `google_project_service` 미사용).
 
 접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 `random_password`로 생성되어 SQL user에 주입되며, #5에서 Secret Manager(`output.db_app_password_secret_id`)에도 저장한다.
+
+## Feast Online Store Redis (#129, apply 대기)
+
+Feast의 Online Store는 GCP Memorystore for Redis 단일 인스턴스로 구성한다.
+기존 dev VPC와 Cloud SQL용 Private Service Access 연결을 재사용하며 public
+endpoint를 만들지 않는다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| Instance | `autoresearch-dev-redis` | `${resource_prefix}-redis` |
+| Region / zone | `asia-northeast3` / `asia-northeast3-a` | GKE와 동일 위치 |
+| Tier / memory | `BASIC` / 1 GiB | dev 최소 비용, HA 없음 |
+| Version | Redis 7.2 | `var.redis_version=REDIS_7_2` |
+| Network | 기존 dev VPC, `PRIVATE_SERVICE_ACCESS` | 기존 `private_services_cidr` 공유 |
+| 인증 | Redis AUTH 활성 | AUTH token은 Secret Manager에 저장 |
+| 전송 암호화 | `SERVER_AUTHENTICATION` | TLS server CA bundle도 Secret Manager에 저장 |
+| Outputs | `redis_host`, `redis_port`, AUTH/CA secret ID | token과 CA 본문은 output하지 않음 |
+| deletion protection | `false` | dev 기본, 삭제 전 별도 plan/승인 필요 |
+
+AUTH token은 `autoresearch-dev-redis-auth`, TLS CA bundle은
+`autoresearch-dev-redis-server-ca` secret에 저장한다. app GSA에는 두 secret의
+resource-level `roles/secretmanager.secretAccessor`만 부여한다. secret payload는
+Terraform state에도 저장되므로 GCS backend IAM을 최소화한다.
+
+Kubernetes 측 `autoresearch` namespace, `autoresearch-app` KSA와 egress
+NetworkPolicy는 `terraform/admin/autoresearch-k8s` 별도 state에서 관리한다.
+NetworkPolicy는 private services CIDR의 Cloud SQL 5432와 Redis TLS port, DNS,
+Workload Identity metadata endpoint, HTTPS만 허용한다. 실제 port는 dev root의
+`redis_port` output과 admin root tfvars가 일치해야 한다.
+
+적용 순서는 다음과 같다.
+
+1. `redis.googleapis.com`을 수동 활성화한다.
+2. dev root plan에서 Redis와 Secret/IAM 변경 및 destroy/replace 부재를 확인한다.
+3. 사용자 승인 후 dev root를 apply한다.
+4. live `autoresearch` namespace/KSA가 이미 있으면 admin state로 import한다.
+5. admin root plan에서 NetworkPolicy 영향을 확인하고 별도 승인 후 apply한다.
+6. 앱 저장소에서 AUTH/CA를 주입한 TLS connection string과 smoke test를 구성한다.
+
+롤백은 앱의 Redis 사용을 먼저 중지하고 NetworkPolicy Redis 규칙을 제거한 뒤,
+Redis 삭제 plan을 별도로 검토한다. Basic tier는 HA가 없으므로 maintenance 또는
+instance 장애 중 Online Store가 중단될 수 있다.
 
 ## dev 원본 데이터 GCS (#18)
 
@@ -858,6 +903,7 @@ release 제거(2단계 롤백) 후에만 key를 정리한다.
 | `bigquery.googleapis.com` | dev 분석 dataset |
 | `artifactregistry.googleapis.com` | Docker image repository |
 | `sqladmin.googleapis.com` | Cloud SQL |
+| `redis.googleapis.com` | Feast Online Store Memorystore for Redis (#129) |
 | `container.googleapis.com` | GKE |
 | `cloudkms.googleapis.com` | Vault auto-unseal KMS key (#132) |
 | `dns.googleapis.com` | 내부 private DNS zone (#48) |

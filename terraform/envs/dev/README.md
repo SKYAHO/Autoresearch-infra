@@ -13,6 +13,7 @@
 - dev VPC/subnet, Cloud Router/NAT, IAP SSH firewall
 - Artifact Registry Docker repository
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장
+- Feast Online Store Memorystore for Redis(private IP, AUTH/TLS), AUTH/CA Secret Manager 저장 (#129, apply 대기)
 - dev 원본 데이터 GCS bucket(YouTube/user/action-log/persona raw)
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset
@@ -21,6 +22,7 @@
 - Airflow 전용 GKE node pool(`airflow-dev`)과 batch KSA Workload Identity binding
 - Airflow YouTube/OpenRouter API key용 Secret Manager secret metadata
 - Airflow Kubernetes namespace/RBAC/NetworkPolicy는 `terraform/admin/airflow-k8s`에서 별도 state로 관리
+- 일반 앱 namespace/KSA/NetworkPolicy는 `terraform/admin/autoresearch-k8s`에서 별도 state로 관리 (#129, apply 대기)
 - Autoresearch-airflow Cloud Build image push용 최소 IAM
 - Cloud Run proxy state/code 정합성
 - GKE 컨트롤 플레인 DNS 엔드포인트 — IAM 기반 kubectl 접속 (#45/#46)
@@ -61,6 +63,10 @@ terraform -chdir=terraform/envs/dev apply
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
 | DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
 | IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
+
+Issue #129의 `autoresearch-dev-redis`와 `terraform/admin/autoresearch-k8s`는
+Terraform 정의만 추가된 상태이며, 실제 생성 여부는 merge 후 승인된 plan/apply
+결과를 기준으로 갱신합니다.
 
 ## 기본 리전
 

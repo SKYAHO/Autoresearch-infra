@@ -30,6 +30,7 @@ locals {
     "monitoring.googleapis.com",
     "oslogin.googleapis.com",
     "run.googleapis.com",
+    "redis.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",
     "servicenetworking.googleapis.com",
@@ -40,7 +41,10 @@ locals {
 
   ar_repo_id = "${local.resource_prefix}-docker"
 
-  sql_instance_name = "${local.resource_prefix}-pg"
+  sql_instance_name         = "${local.resource_prefix}-pg"
+  redis_instance_name       = "${local.resource_prefix}-redis"
+  redis_auth_secret_id      = "${local.resource_prefix}-redis-auth"
+  redis_server_ca_secret_id = "${local.resource_prefix}-redis-server-ca"
 
   gke_cluster_name                      = "${local.resource_prefix}-gke"
   gke_node_sa_name                      = "${local.resource_prefix}-gke-nodes"

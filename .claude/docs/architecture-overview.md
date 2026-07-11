@@ -30,6 +30,7 @@ GCP project (dev, asia-northeast3)
 │   ├── 컨트롤 플레인 DNS 엔드포인트 ── IAM 기반 kubectl 접속 (#45)
 │   └── Airflow internal ILB (`airflow_ilb_ip` output) ── VPC 내부 전용 UI (#48)
 ├── Cloud SQL (PostgreSQL 15, private IP only) ◀── GKE에서 접속
+├── Memorystore for Redis (Feast Online Store, private PSA, AUTH/TLS) ◀── GKE에서 접속 (#129, apply 대기)
 ├── Artifact Registry (autoresearch-dev-docker) ◀── 이미지 push/pull
 ├── GCS / BigQuery ── raw data, analytics, Feast offline store
 ├── Cloud Run proxy ── 내부 호출용 인증 gate 후보
@@ -41,6 +42,7 @@ GCP project (dev, asia-northeast3)
 ### 네트워크: private 우선
 - Cloud SQL은 `ipv4_enabled=false`(private IP only)로 두고 service
   networking peering으로 연결합니다.
+- Redis는 같은 Private Service Access 연결을 재사용하고 AUTH/TLS를 켭니다.
 - 외부 egress는 Cloud NAT, 관리용 SSH는 IAP 경유입니다.
 - subnet은 Private Google Access를 켜서 Google API 접근을 내부
   경로로 처리합니다.
@@ -81,6 +83,8 @@ GCP project (dev, asia-northeast3)
   persona raw, Airflow DAG/log, Feast registry/staging bucket.
 - **Cloud SQL (PostgreSQL):** 운영성 데이터(페르소나, 가상 유저 상태)
   저장소. GKE 워크로드가 private IP로 접속.
+- **Redis:** Feast Online Store. GKE 앱 pod가 private TLS endpoint로 접속하며
+  AUTH token과 CA는 Secret Manager에서 가져옵니다(#129, apply 대기).
 - **Artifact Registry:** 앱 컨테이너 이미지 저장.
 - **BigQuery:** `autoresearch_dev_analytics`, `feast_offline_store`.
 - **GKE/Airflow:** Airflow는 `airflow` namespace 경계와 namespace-scoped
