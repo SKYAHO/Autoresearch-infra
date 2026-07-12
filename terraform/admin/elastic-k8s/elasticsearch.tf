@@ -92,10 +92,12 @@ resource "kubernetes_manifest" "elasticsearch" {
     }
   }
 
-  # ECK operator가 CR의 일부 필드(podTemplate metadata 정규화 등)를 자기
-  # field manager로 소유해 SSA 충돌이 발생한다(#98 검증에서 확인). spec은
-  # 이 root가 단일 소유자이므로 강제 적용이 안전하다 — operator는 spec을
-  # 수정하지 않고 status/annotation만 쓴다.
+  # ECK operator는 이 root가 선언하지 않은 spec 필드의 defaulting
+  # (auth/http/tls/monitoring/updateStrategy 등 — managedFields 실측)을 자기
+  # field manager(Update)로 소유한다. Terraform(Apply)과 소유 영역이 겹치는
+  # 정규화 필드에서 SSA 충돌이 발생하므로(#98 검증) 강제 적용한다. 이
+  # root가 선언한 필드(version/nodeSets 내용/volumeClaimDeletePolicy)는
+  # operator가 되돌리지 않으므로 ping-pong drift는 없다(수렴 검증 #98 기록).
   field_manager {
     force_conflicts = true
   }
