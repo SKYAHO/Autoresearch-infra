@@ -299,3 +299,14 @@
 - ECK 기본 TLS/인증을 처음부터 유지한다(Vault와 달리 operator가 인증서를
   자동 관리하므로 비용 없음). ILM 7일, GCS snapshot 일 1회·7일 보관.
 - 후속 이슈(#97~#103) 입력값을 spec에 정리했다.
+
+## 2026-07-13: ECK operator 설치 (#97)
+
+- admin root `elastic-k8s`를 신설해 chart `eck-operator` 3.4.1을 설치했다.
+  `managedNamespaces: [elastic]`으로 operator 감시 범위를 최소화했다.
+- validating webhook은 포트를 10250으로 옮겨 private GKE 기본 master→node
+  방화벽을 재사용했다(monitoring-k8s의 prometheusOperator.internalPort 선례
+  — 별도 firewall 불필요).
+- 이슈 본문의 elastic-system 대신 #96 설계대로 단일 namespace `elastic`을
+  사용한다. CRD는 helm uninstall에도 남는다(삭제 시 CR 연쇄 삭제·데이터
+  유실 — README 롤백 절 참조).

@@ -1,0 +1,17 @@
+project_id       = "your-gcp-project-id"
+region           = "asia-northeast3"
+zone             = "asia-northeast3-a"
+gke_cluster_name = "autoresearch-dev-gke"
+
+elastic_namespace = "elastic"
+eck_release_name  = "eck-operator"
+eck_chart_version = "3.4.1"
+
+# Kibana(5601) ingress 허용 CIDR. port-forward 노드 트래픽용 dev subnet.
+kibana_ingress_source_cidr = "10.10.0.0/20"
+
+# GKE services 2차 대역 (#122). dev root gke_services_cidr와 일치.
+cluster_services_cidr = "172.16.128.0/24"
+
+# GKE master /28. webhook ingress + post-DNAT 대비. dev root gke_master_ipv4_cidr와 일치.
+cluster_master_cidr = "172.16.0.0/28"
