@@ -73,8 +73,14 @@ kubectl -n argo-rollouts get svc   # 외부 노출 리소스 없어야 함
 
 ## 롤백
 
-- `helm_release.argo_rollouts` 제거 후 apply → controller/CRD 삭제.
-  namespace는 `prevent_destroy`로 남는다. **진행 중인 Rollout이 있으면
-  전환이 중단된 상태로 방치되므로, 제거 전 모든 Rollout을 Healthy 상태로
-  promote하거나 Deployment로 되돌린다.**
+- `helm_release.argo_rollouts` 제거 후 apply → **controller만 삭제된다.**
+  CRD는 chart 기본값(`crds.keep=true`, `helm.sh/resource-policy: keep`)으로
+  클러스터에 남으므로 기존 Rollout CR과 ArgoCD Application은 삭제되지 않고
+  "실행자 없는 선언" 상태(전환 정지, 워크로드 pod는 유지)가 된다.
+  namespace는 `prevent_destroy`로 남는다.
+- **CRD까지 지우면 안 되는 이유**: CRD 삭제는 전 namespace의 Rollout CR을
+  연쇄 삭제하고, Rollout이 소유한 ReplicaSet/pod까지 GC되어 서비스 중단으로
+  이어진다. CRD 정리는 모든 Rollout을 Deployment로 되돌린 뒤에만 수동으로
+  수행한다.
+- 제거 전 진행 중인 Rollout은 모두 promote해 Healthy 상태로 만든다.
 - chart 버전 롤백은 `rollouts_chart_version`을 되돌려 apply.
