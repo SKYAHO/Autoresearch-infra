@@ -12,7 +12,7 @@
 | Rollouts controller Helm release | 예 | chart `argo-rollouts` `2.41.0` pin |
 | NetworkPolicy | 예 | deny-by-default. controller는 DNS/K8s API만 필요 |
 | Rollout/AnalysisTemplate CR | 아니오 | 앱 저장소 manifest → ArgoCD sync (#87 책임 경계) |
-| promote/abort 조작 | 아니오 | 운영자 kubectl plugin (`docs/ROLLOUTS_OPERATIONS_RUNBOOK.md`) |
+| promote/abort 조작 | 아니오 | 운영자 kubectl plugin (`docs/ROLLOUTS_OPERATIONS_RUNBOOK.md`, #90에서 제공) |
 | dashboard | 미설치 | kubectl plugin으로 운영. 필요 시 별도 이슈 |
 
 ## 네트워크 경계
@@ -69,7 +69,26 @@ kubectl -n argo-rollouts get svc   # 외부 노출 리소스 없어야 함
 
 운영 절차(상태 확인, promote/abort/rollback)는
 [docs/ROLLOUTS_OPERATIONS_RUNBOOK.md](../../../docs/ROLLOUTS_OPERATIONS_RUNBOOK.md)
-(#90) 참조.
+참조(#90에서 제공 — 병합 전까지는 #89 이슈 코멘트 참조).
+
+## 실제 앱 적용 전 주의사항 (#89 샘플 검증에서 확인)
+
+샘플 canary(2 replica, `50% → pause → 100%`)로 전 흐름을 실측 검증했다.
+샘플은 검증 후 폐기했고 재현 manifest와 조작 명령은
+`docs/ROLLOUTS_OPERATIONS_RUNBOOK.md`로 제공한다(#90 — 병합 전까지는
+#89 이슈 코멘트의 실측 기록 참조).
+
+- **abort는 rollback이 아니다**: abort는 트래픽만 stable로 되돌리고
+  Rollout은 **Degraded로 남는다**(desired spec에 새 이미지가 남아 있기
+  때문). Healthy 복귀는 spec을 stable revision으로 되돌려야 한다 —
+  CLI `undo`로 검증했지만, **ArgoCD 연결 후에는 Git revert가 원칙**이다.
+  CLI undo는 Git과 어긋나 OutOfSync를 만든다(#87 책임 경계).
+- **pause는 무기한**: promote 전까지 구/신 버전이 혼재 상태로 유지되므로,
+  적용 대상 앱은 N-1 호환(스키마·API)이 전제되어야 한다.
+- **비율은 replica 근사**: 2 replica에서 50%가 최소 단위임을 재확인(#87
+  spec의 stable ≥ 2 replica 전제).
+- 운영 조작은 kubectl plugin이 필요하다:
+  `brew install argoproj/tap/kubectl-argo-rollouts`.
 
 ## 롤백
 

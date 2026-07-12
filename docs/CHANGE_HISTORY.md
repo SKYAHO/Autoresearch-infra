@@ -271,3 +271,12 @@
   사용하고 근거를 root README에 기록했다.
 - #87 spec의 "앱 배포 전 설치 금지" 문구는 기존 이슈 시리즈(#88~#90)와
   충돌해 "설치·샘플 검증 선행, 실 적용은 앱 배포 이슈"로 정정했다.
+
+## 2026-07-13: Argo Rollouts 샘플 검증 (#89)
+
+- 샘플 canary(2 replica, 50% → pause → 100%)로 배포→canary 정지→promote→
+  abort→undo 전 흐름을 실측 검증하고 샘플을 폐기했다.
+- 핵심 교훈: abort는 트래픽만 stable로 되돌리고 Degraded로 남는다 — 복구는
+  spec을 되돌리는 것(ArgoCD 연결 후에는 Git revert가 원칙, CLI undo는
+  OutOfSync 유발). pause 무기한 특성상 적용 앱은 N-1 호환이 전제다.
+- metric 연동은 #87 결정대로 2단계 후속으로 유지한다(1단계 수동 promote).
