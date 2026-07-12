@@ -147,6 +147,23 @@ Prometheus Operator CRD는 chart 제거 시 자동으로 정리되지 않을 수
 | remote write | Prometheus가 수집한 metric을 외부 장기 저장소로 보내는 기능 |
 | Alertmanager | Prometheus alert rule 결과를 묶고 알림 채널로 전송하는 component |
 
+## 로그 플랫폼(ELK) 전략 (#96)
+
+로그 측 상세 설계는
+`superpowers/specs/2026-07-13-elk-architecture-design.md`를 따른다. 요약:
+
+- **ECK operator 확정** — admin root `elastic-k8s`(신설)에서 operator를
+  helm_release로, ES/Kibana는 CR로 관리한다.
+- **Cloud Logging과 병행** — Cloud Logging은 기본 안전망(시스템/audit),
+  ELK는 앱·Airflow 로그 검색/분석. Cloud Monitoring/Prometheus 분리와 동일
+  원칙이며 서로 대체하지 않는다.
+- **수집 범위는 좁게** — 초기 `airflow`·`autoresearch` namespace 컨테이너
+  로그만. 시스템 로그는 제외.
+- **dev 최소 구성** — single-node ES(heap 1G, PVC 30Gi), 신규 node pool
+  없음(실측 여유 기준). Kibana는 ClusterIP + port-forward 전용.
+- **보관/백업** — ILM 7일 삭제(Prometheus retention과 정합), GCS snapshot
+  일 1회·7일 보관.
+
 ## 참고 문서
 
 - [kube-prometheus-stack 공식 chart](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
