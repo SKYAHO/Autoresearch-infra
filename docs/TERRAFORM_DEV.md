@@ -333,6 +333,17 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 | NetworkPolicy | dev subnet(10.10.0.0/20) → 8080 허용 추가 | `terraform/admin/airflow-k8s`, `var.ui_ingress_source_cidr` |
 | 노출 범위 | **VPC 내부 전용** | 인터넷 노출 없음. 접근은 Bastion(#47) 터널 경유 |
 
+### private googleapis DNS zone (#138)
+
+`googleapis.com.` private zone(A `private.googleapis.com` → 199.36.153.8~11,
+CNAME `*.googleapis.com`)이 VPC 전체의 Google API 해석을 고정 VIP로 유도한다.
+이 덕분에 Google API만 필요한 namespace(vault)는 egress 443을
+`199.36.153.8/30`으로 좁힌다. `pkg.dev`(노드 이미지 pull), `run.app`
+(Cloud Run proxy), metadata 경로는 zone 범위 밖이라 영향이 없다.
+argocd(GitHub)·airflow(OpenRouter 등)는 외부 endpoint 의존으로
+`0.0.0.0/0:443`을 유지한다(설계:
+`docs/superpowers/specs/2026-07-13-private-googleapis-egress-design.md`).
+
 ### Airflow Helm values 가이드 (Autoresearch-airflow 저장소에서 설정)
 
 webserver Service를 internal LB로 만들고 Terraform output의 예약 IP를 지정한다.

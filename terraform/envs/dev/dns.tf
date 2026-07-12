@@ -35,3 +35,37 @@ resource "google_dns_record_set" "airflow" {
   ttl          = 300
   rrdatas      = [google_compute_address.airflow_ilb.address]
 }
+
+# #138 Google API 트래픽을 private.googleapis.com 고정 VIP(199.36.153.8/30)로
+# 유도하는 VPC 전용 zone. googleapis.com만 override하므로 pkg.dev(이미지 pull),
+# run.app(Cloud Run), metadata 경로는 영향이 없다. 이 zone 덕분에 Google API만
+# 필요한 namespace(vault 등)는 egress 443을 고정 CIDR로 좁힐 수 있다.
+# 제거 시 TTL(300s) 이내에 공개 IP 해석으로 복귀한다.
+resource "google_dns_managed_zone" "private_googleapis" {
+  name        = "${local.resource_prefix}-private-googleapis"
+  dns_name    = "googleapis.com."
+  description = "Route Google APIs via private.googleapis.com VIPs (#138)"
+  visibility  = "private"
+
+  private_visibility_config {
+    networks {
+      network_url = google_compute_network.dev.id
+    }
+  }
+}
+
+resource "google_dns_record_set" "private_googleapis_a" {
+  managed_zone = google_dns_managed_zone.private_googleapis.name
+  name         = "private.googleapis.com."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = ["199.36.153.8", "199.36.153.9", "199.36.153.10", "199.36.153.11"]
+}
+
+resource "google_dns_record_set" "private_googleapis_cname" {
+  managed_zone = google_dns_managed_zone.private_googleapis.name
+  name         = "*.googleapis.com."
+  type         = "CNAME"
+  ttl          = 300
+  rrdatas      = ["private.googleapis.com."]
+}

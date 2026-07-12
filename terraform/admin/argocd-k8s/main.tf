@@ -143,6 +143,8 @@ resource "kubernetes_network_policy_v1" "argocd_egress" {
 
     # Git/Helm repository와 Kubernetes API server 접근(HTTPS).
     # git ssh(22)는 현재 미사용이라 열지 않는다. 필요 시 별도 변경으로 추가.
+    # #138 검토: GitHub 등 외부 repo IP는 고정 CIDR로 관리할 수 없어
+    # 0.0.0.0/0을 유지한다(vault처럼 private.googleapis VIP로 축소 불가).
     egress {
       to {
         ip_block {

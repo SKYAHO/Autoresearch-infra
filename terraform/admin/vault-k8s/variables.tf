@@ -71,3 +71,14 @@ variable "ui_ingress_source_cidr" {
     error_message = "ui_ingress_source_cidr must be a valid CIDR in a.b.c.d/n form."
   }
 }
+
+variable "cluster_master_cidr" {
+  description = "GKE control plane(master) /28 CIDR (#138). K8s API 443의 post-DNAT 목적지 — dataplane이 post-DNAT 평가로 바뀌는 경우 대비. dev root의 gke_master_ipv4_cidr와 일치해야 한다."
+  type        = string
+  default     = "172.16.0.0/28"
+
+  validation {
+    condition     = can(cidrhost(var.cluster_master_cidr, 0))
+    error_message = "cluster_master_cidr must be a valid CIDR in a.b.c.d/n form."
+  }
+}

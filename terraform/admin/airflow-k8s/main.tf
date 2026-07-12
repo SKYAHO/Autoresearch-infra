@@ -300,6 +300,8 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
     }
 
     # Google APIs and other HTTPS endpoints needed by providers/connectors.
+    # #138 검토: OpenRouter 등 외부 API와 Cloud Run proxy(run.app) 의존으로
+    # 0.0.0.0/0을 유지한다(vault처럼 private.googleapis VIP로 축소 불가).
     egress {
       to {
         ip_block {
