@@ -280,3 +280,9 @@
   spec을 되돌리는 것(ArgoCD 연결 후에는 Git revert가 원칙, CLI undo는
   OutOfSync 유발). pause 무기한 특성상 적용 앱은 N-1 호환이 전제다.
 - metric 연동은 #87 결정대로 2단계 후속으로 유지한다(1단계 수동 promote).
+
+## 2026-07-13: Argo Rollouts 운영 runbook (#90)
+
+- #89 실측 명령 기준으로 `docs/ROLLOUTS_OPERATIONS_RUNBOOK.md`를 작성했다:
+  상태 확인, 수동 promote(1단계 표준 — Grafana 확인 후), abort/rollback
+  구분(Git revert 원칙), 실패 확인 순서, ArgoCD 연계 지점, 재현 manifest.
