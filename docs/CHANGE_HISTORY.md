@@ -286,3 +286,16 @@
 - #89 실측 명령 기준으로 `docs/ROLLOUTS_OPERATIONS_RUNBOOK.md`를 작성했다:
   상태 확인, 수동 promote(1단계 표준 — Grafana 확인 후), abort/rollback
   구분(Git revert 원칙), 실패 확인 순서, ArgoCD 연계 지점, 재현 manifest.
+
+## 2026-07-13: 운영형 ELK 아키텍처 설계 (#96)
+
+- ECK operator 기반으로 확정했다. admin root `elastic-k8s`(신설 예정)에서
+  operator는 helm_release, ES/Kibana는 CR(kubernetes_manifest)로 관리한다.
+- Cloud Logging(기본 안전망)과 ELK(앱·Airflow 로그 검색/분석)를 병행하고
+  서로 대체하지 않는다 — #77 metric 분리와 동일 원칙.
+- dev 최소 구성: single-node ES(heap 1G, PVC 30Gi), Kibana ClusterIP +
+  port-forward. 노드 실측 여유(~8.8GB) 기준으로 신규 node pool 없이
+  수용한다(운영 전환 시 #105에서 재검토). 월 $5 미만.
+- ECK 기본 TLS/인증을 처음부터 유지한다(Vault와 달리 operator가 인증서를
+  자동 관리하므로 비용 없음). ILM 7일, GCS snapshot 일 1회·7일 보관.
+- 후속 이슈(#97~#103) 입력값을 spec에 정리했다.
