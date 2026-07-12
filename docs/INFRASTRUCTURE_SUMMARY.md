@@ -207,7 +207,7 @@ flowchart TB
 | GCS | raw data bucket, Feast registry/staging bucket, Airflow DAG/log bucket | 원본 데이터, feature store 메타데이터, DAG/log 저장 |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` | 분석 데이터셋과 Feast offline store |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA | 워크로드별 최소 권한과 Workload Identity |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121) | 워크로드별 최소 권한과 Workload Identity |
 
 ## 인프라별 상세 구조
 

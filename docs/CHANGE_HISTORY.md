@@ -185,3 +185,22 @@
   바뀌는 경우를 대비해 유지한다.
 - 교훈: NetworkPolicy는 선언 검증만으로 부족하며, enforcement 활성화 시
   실제 트래픽 검증(차단·허용 양방향)을 반드시 수행한다.
+
+## 2026-07-12: GitHub Actions GAR push WIF 확장 (#121)
+
+- Issue #121, PR #128(작성 Noah-JuYong)에서 Autoresearch-airflow 저장소
+  GitHub Actions가 SA key 없이 WIF로 Artifact Registry에 이미지를 push하는
+  경로를 추가했다.
+- bootstrap WIF provider `attribute_condition`을 단일 리포 equality에서
+  허용 목록(`allowed_github_repositories`) 멤버십으로 확장했다. 코드 default는
+  infra 리포만이고, airflow 허용은 bootstrap 로컬 tfvars로 opt-in한다.
+- dev root에 push 전용 SA `autoresearch-dev-gar-pusher`를 추가했다. 가장은
+  Autoresearch-airflow 리포 principalSet만, 권한은 `autoresearch-dev-docker`
+  repository 단위 `roles/artifactregistry.writer`만 부여했다(최소 권한).
+- 토큰 발급(provider 조건)과 SA 가장(SA별 principalSet 바인딩)의 2단 경계로,
+  airflow 리포가 토큰을 받아도 `terraform-ci` SA는 가장할 수 없다.
+- bootstrap을 tfvars 없이 apply하면 airflow 허용이 default로 회귀하는 footgun이
+  있어, 운영 값을 bootstrap 로컬 `terraform.tfvars`(비커밋)에 고정하고
+  `TERRAFORM_BOOTSTRAP.md`에 주의를 명시했다(#130).
+- 기존 Cloud Build push 경로(#32)와 병존한다. GitHub Actions 경로 end-to-end
+  검증 후 정리 여부를 별도 이슈로 결정한다.
