@@ -1,0 +1,76 @@
+# #134 Vault dev values. 설계: docs/superpowers/specs/2026-07-12-vault-dev-design.md
+# - standalone 1 replica + integrated Raft (HA 확장 경로 유지, 비용 최소)
+# - gcpckms auto-unseal: KMS key/GSA는 dev root vault.tf(#132)가 관리
+# - ClusterIP + port-forward 전용. TLS는 1단계 비활성(실 secret 이관 전 활성화 필수)
+# - secret payload는 이 파일/Terraform에 저장하지 않는다
+
+global:
+  # dev 1단계: 클러스터 내부 + port-forward 한정 평문. NetworkPolicy로 격리.
+  tlsDisable: true
+
+# agent injector는 1단계 범위 밖(최소 설치). 필요 시 별도 이슈에서 활성화.
+injector:
+  enabled: false
+
+server:
+  # chart가 KSA를 생성한다. 이름(release name = vault)과 annotation이
+  # dev root WI 바인딩(vault/vault → autoresearch-dev-vault GSA)과 일치해야 한다.
+  serviceAccount:
+    create: true
+    name: vault
+    annotations:
+      iam.gke.io/gcp-service-account: autoresearch-dev-vault@ar-infra-501607.iam.gserviceaccount.com
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  # Raft 데이터. 삭제 시 Vault 데이터 소실(1단계는 학습용 secret만).
+  dataStorage:
+    enabled: true
+    size: 10Gi
+
+  # file audit device용 (활성화 절차는 runbook)
+  auditStorage:
+    enabled: true
+    size: 5Gi
+
+  service:
+    type: ClusterIP
+
+  # single-node integrated Raft + KMS auto-unseal.
+  # replicas를 늘리기 전에 raft join/anti-affinity 구성을 별도 이슈로 설계한다.
+  ha:
+    enabled: true
+    replicas: 1
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+        }
+
+        seal "gcpckms" {
+          project    = "ar-infra-501607"
+          region     = "asia-northeast3"
+          key_ring   = "autoresearch-dev-vault"
+          crypto_key = "vault-unseal"
+        }
+
+        service_registration "kubernetes" {}
+
+ui:
+  enabled: true
+  serviceType: ClusterIP

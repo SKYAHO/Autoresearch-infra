@@ -204,3 +204,21 @@
   `TERRAFORM_BOOTSTRAP.md`에 주의를 명시했다(#130).
 - 기존 Cloud Build push 경로(#32)와 병존한다. GitHub Actions 경로 end-to-end
   검증 후 정리 여부를 별도 이슈로 결정한다.
+
+## 2026-07-12: HashiCorp Vault dev 도입 (1·2단계)
+
+- 실무 학습 목적으로 Vault를 dev GKE에 도입했다. 기존 GCP Secret Manager는
+  대체하지 않고 병존하며, TLS 활성화 전까지 Vault에는 학습·검증용 값만
+  저장한다. 설계: `docs/superpowers/specs/2026-07-12-vault-dev-design.md`.
+- 1단계(#132, dev root `vault.tf`): KMS keyring/key(`vault-unseal`,
+  rotation 90d, prevent_destroy), 전용 GSA, `vault/vault` KSA WI 바인딩.
+  gcpckms seal 요구 권한이 사전 정의 role에 없어(`cloudkms.cryptoKeys.get`
+  누락) custom role을 key 단위로 바인딩했다. `roles/viewer`에 KMS
+  getIamPolicy가 포함됨을 실측 확인해 CI plan refresh 문제가 없음을 검증했다.
+- 2단계(#134, admin root `vault-k8s`): single-node integrated Raft +
+  gcpckms auto-unseal, ClusterIP + port-forward 전용, deny-by-default
+  NetworkPolicy(#116/#122/#126 교훈 반영 — services CIDR DNS VIP, metadata
+  987/988). 운영 절차는 `docs/VAULT_OPERATIONS_RUNBOOK.md`.
+- KMS rotation은 version 추가라 unseal에 무해하지만, 이전 key version
+  disable/destroy는 Raft 데이터 복호화를 영구 불능으로 만든다 — 폐기 순서
+  (release → PVC → key)를 runbook에 명시했다.

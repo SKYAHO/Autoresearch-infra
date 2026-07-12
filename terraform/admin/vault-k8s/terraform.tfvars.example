@@ -1,0 +1,18 @@
+project_id       = "your-gcp-project-id"
+region           = "asia-northeast3"
+zone             = "asia-northeast3-a"
+gke_cluster_name = "autoresearch-dev-gke"
+
+# dev root vault_k8s_namespace/vault_k8s_service_account(WI principal)와
+# 일치해야 한다(#132). release name이 chart KSA 이름을 결정한다.
+vault_namespace    = "vault"
+vault_release_name = "vault"
+
+vault_chart_version    = "0.34.0"
+vault_values_file_path = "helm-values/vault.values.yaml"
+
+# vault server(8200) ingress 허용 CIDR. port-forward 노드 트래픽용 dev subnet.
+ui_ingress_source_cidr = "10.10.0.0/20"
+
+# GKE services 2차 대역 (#122). dev root gke_services_cidr와 일치.
+cluster_services_cidr = "172.16.128.0/24"
