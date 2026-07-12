@@ -109,15 +109,19 @@ External Secrets Operator 도입을 별도 설계로 다룬다.
 
 vault namespace의 KSA JWT로 로그인해 시범 secret을 읽는다.
 
+주소는 반드시 headless service(`vault-internal`, pod IP 직결)를 쓴다.
+service VIP(`vault.vault.svc`)는 vault ns 내부 pod의 egress도 pre-DNAT
+평가(#122)에 걸려 8200이 차단된다(같은 ns pod IP 직결만 허용).
+
 ```bash
 kubectl -n vault run vault-auth-test --rm -i --restart=Never \
   --image=badouralix/curl-jq --overrides='{"spec":{"serviceAccountName":"default"}}' \
   -- sh -c '
 JWT=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-TOKEN=$(curl -s -X POST http://vault.vault.svc:8200/v1/auth/kubernetes/login \
+TOKEN=$(curl -s -X POST http://vault-internal.vault.svc:8200/v1/auth/kubernetes/login \
   -d "{\"role\":\"demo-reader\",\"jwt\":\"$JWT\"}" | jq -r .auth.client_token)
 curl -s -H "X-Vault-Token: $TOKEN" \
-  http://vault.vault.svc:8200/v1/secret/data/demo/sample | jq .data.data'
+  http://vault-internal.vault.svc:8200/v1/secret/data/demo/sample | jq .data.data'
 # 기대 출력: {"message": "hello-vault-dev"}
 ```
 
