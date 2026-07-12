@@ -222,3 +222,16 @@
 - KMS rotation은 version 추가라 unseal에 무해하지만, 이전 key version
   disable/destroy는 Raft 데이터 복호화를 영구 불능으로 만든다 — 폐기 순서
   (release → PVC → key)를 runbook에 명시했다.
+
+## 2026-07-13: Vault 초기 구성 절차 확립 (#136)
+
+- 3단계로 audit device(file), Kubernetes auth method(chart authDelegator
+  기반), KV v2 engine, 최소 권한 policy(demo-read)와 시범 secret 절차를
+  runbook에 확립하고 실행했다. Vault 내부 리소스는 설계 원칙대로 Terraform이
+  아닌 운영자 절차로 관리한다.
+- root token은 초기 구성 완료 후 revoke한다. auth method 구성 전에 revoke하면
+  관리 접근이 recovery key generate-root에만 의존하게 되므로, 2단계 runbook의
+  "init 직후 audit" 문구를 이 순서로 보정했다.
+- Kubernetes auth 검증은 root token 없이 KSA JWT 로그인 → 시범 secret 읽기로
+  수행한다. consumer는 NetworkPolicy상 vault namespace 내부로 한정되며, 타
+  namespace 연동(ingress 허용 또는 ESO)은 별도 설계로 남긴다.
