@@ -89,9 +89,13 @@ kubectl -n vault get ingress
 ## 실 secret 이관 전 필수 조건
 
 - **TLS 활성화** (`global.tlsDisable=false` + 인증서 체계) — 별도 이슈
-- Kubernetes auth method와 최소 권한 policy 구성(3단계)
+- Kubernetes auth method와 최소 권한 policy — #136 초기 구성으로 확립
+  (절차: `docs/VAULT_OPERATIONS_RUNBOOK.md` 초기 구성 섹션)
 - 그 전까지 Vault에는 학습·검증용 더미 값만 저장한다. 실 서비스 secret은
   GCP Secret Manager를 계속 사용한다.
+- 타 namespace 워크로드 연동은 NetworkPolicy ingress 허용 추가 또는
+  External Secrets Operator 도입을 별도 설계로 다룬다(현재 consumer는
+  vault namespace 내부 한정).
 
 ## 롤백
 
