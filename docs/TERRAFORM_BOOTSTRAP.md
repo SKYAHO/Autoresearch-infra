@@ -14,10 +14,26 @@
 
 ```bash
 terraform -chdir=terraform/bootstrap init
-terraform -chdir=terraform/bootstrap apply -var="project_id=ar-infra-501607"
+terraform -chdir=terraform/bootstrap apply
 ```
 
+변수는 `terraform/bootstrap/terraform.tfvars`(비커밋, local 전용)에 기록해 두고 사용한다. 현재 운영 값:
+
+```hcl
+project_id = "ar-infra-501607"
+
+# #121/#128: Autoresearch-airflow GitHub Actions의 WIF 토큰 발급 허용
+allowed_github_repositories = [
+  "SKYAHO/Autoresearch-infra",
+  "SKYAHO/Autoresearch-airflow",
+]
+```
+
+> **주의(회귀 footgun)**: `allowed_github_repositories`의 변수 default는 infra 리포 1개다. tfvars 없이(또는 `-var` 없이) apply하면 WIF provider `attribute_condition`이 default로 되돌아가 Autoresearch-airflow GitHub Actions의 GCP 인증(GAR push)이 조용히 끊긴다. bootstrap apply 전 tfvars에 위 값이 있는지 반드시 확인한다.
+
 생성 대상: GCS 버킷(`autoresearch-dev-tfstate`), WIF 풀/프로바이더, CI SA(`terraform-ci`), IAM.
+
+WIF provider의 `attribute_condition`은 토큰 발급 허용 리포만 결정하고, SA 가장은 SA별 `roles/iam.workloadIdentityUser` principalSet 바인딩이 별도로 필요하다(2단 경계). `terraform-ci` 가장은 infra 리포만 가능하고, Autoresearch-airflow 리포는 dev root의 `gar_pusher` SA(GAR push 전용, `docs/TERRAFORM_DEV.md` 참조)만 가장할 수 있다.
 
 CI SA는 dev root plan을 위해 `roles/viewer`, state bucket `roles/storage.objectAdmin`, custom role `ci_storage_bucket_iam_viewer`를 가진다. custom role은 Cloud Storage bucket IAM member refresh에 필요한 `storage.buckets.getIamPolicy`만 포함한다.
 
