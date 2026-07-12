@@ -169,6 +169,23 @@ resource "kubernetes_network_policy_v1" "vault_egress" {
       }
     }
 
+    # K8s API 443의 post-DNAT 목적지(master private endpoint). 현재 Calico는
+    # pre-DNAT 평가라 위 services CIDR 443이 매칭되지만, post-DNAT 평가
+    # dataplane으로 바뀌는 경우를 대비한다 — DNS의 kube-system selector 규칙과
+    # 같은 취지(리뷰 반영, #138).
+    egress {
+      to {
+        ip_block {
+          cidr = var.cluster_master_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "443"
+      }
+    }
+
     # Cloud KMS 등 Google API. dev root의 private googleapis DNS zone(#138)이
     # *.googleapis.com을 private.googleapis.com 고정 VIP로 유도하므로
     # 0.0.0.0/0 대신 해당 대역만 허용한다(Google 문서화된 고정 대역).

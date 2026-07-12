@@ -42,6 +42,7 @@
 | egress | kube-system 53 | post-DNAT dataplane 대비 유지 |
 | egress | `169.254.169.254/32`:80, `169.254.169.252/32`:987-988 | WI metadata 경로(#126/#127 교훈). auto-unseal이 의존 |
 | egress | services CIDR 443 | kubernetes.default VIP (#138 — service_registration) |
+| egress | master CIDR(`cluster_master_cidr`) 443 | K8s API post-DNAT 목적지 — post-DNAT dataplane 대비(#138) |
 | egress | `199.36.153.8/30`:443 | Google API(Cloud KMS). dev root의 private googleapis DNS zone(#138)이 googleapis.com을 이 고정 VIP로 유도 — `0.0.0.0/0` 불필요 |
 
 ## 사용 방법
