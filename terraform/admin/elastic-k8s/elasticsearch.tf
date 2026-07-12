@@ -78,7 +78,12 @@ resource "kubernetes_manifest" "elasticsearch" {
                     storage = "30Gi"
                   }
                 }
-                storageClassName = "standard-rwo"
+                # standard(pd-standard, HDD): standard-rwo(pd-balanced)는
+                # SSD_TOTAL_GB quota(리전 250GB, 실측 223 사용)를 소비해
+                # provisioning이 실패했다(#98 인시던트). dev 로그 워크로드에는
+                # HDD IOPS로 충분하고 비용도 더 낮다. SSD 전환은 quota 증설과
+                # 함께 별도 검토.
+                storageClassName = "standard"
               }
             },
           ]

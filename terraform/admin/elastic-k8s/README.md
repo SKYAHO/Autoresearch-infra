@@ -34,7 +34,7 @@ state로 관리한다. 아키텍처·정책은 #96 설계
 | nodeSet | `default` 1 node (master+data 겸용) | dev 최소. zonal 클러스터라 multi-zone HA는 범위 밖(이슈 참고 사항) |
 | 리소스 | heap 1G(`ES_JAVA_OPTS`), request 2Gi/500m, limit 3Gi | heap = 컨테이너 메모리의 ~50% 기준 |
 | 배치 | nodeSelector `dev-default` pool 고정 | 실측 여유(~8.8GB)가 있는 노드로 한정 — airflow-dev pool 압박 방지. **전용 node pool 불필요**(#96, headroom 3Gi 미만이 되면 #105에서 재검토) |
-| PVC | `elasticsearch-data` 30Gi `standard-rwo` | 70% 사용 시 증설 검토(#96) |
+| PVC | `elasticsearch-data` 30Gi `standard`(pd-standard, HDD) | 70% 사용 시 증설 검토(#96). SSD quota 초과로 HDD 선택(#98 인시던트) — dev 로그 워크로드에 충분 |
 | mmap | `node.store.allow_mmap: false` | vm.max_map_count sysctl(privileged) 회피 — PSS baseline 유지 |
 | TLS/인증 | ECK 기본(자체 서명 TLS + `elastic` 사용자) | 비밀번호는 `autoresearch-es-elastic-user` Secret에서 회수(#103 runbook). Git/문서 금지 |
 | index replicas | 기본 template은 #101에서 `number_of_replicas: 0` | single-node에서 green 유지를 위한 필수값(#96) |
