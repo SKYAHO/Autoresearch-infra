@@ -45,6 +45,7 @@ terraform/
 │       ├── storage.tf        # #18 dev 원본 데이터/Feast GCS bucket
 │       ├── terraform.tfvars.example
 │       ├── variables.tf
+│       ├── vault.tf          # #132 Vault auto-unseal용 KMS key + GSA/WI
 │       ├── versions.tf
 │       └── vpc.tf          # #2 dev VPC / subnet / 최소 firewall
 └── modules/
@@ -804,6 +805,23 @@ Autoresearch-airflow 저장소 workflow에 필요한 값:
 | `service_account` (secrets `GAR_PUSHER_SA`) | dev output `github_actions_gar_pusher_service_account_email` |
 | workflow `permissions` | `id-token: write` |
 
+## Vault auto-unseal 기반 (#132)
+
+HashiCorp Vault dev 도입 1단계(설계:
+`docs/superpowers/specs/2026-07-12-vault-dev-design.md`). Vault 설치는
+`terraform/admin/vault-k8s`(2단계, 예정)에서 별도 state로 관리하고, dev
+root는 GCP 측 기반(`vault.tf`)만 담당한다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d, key `prevent_destroy`. keyring은 GCP 특성상 삭제 불가 |
+| GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음 |
+| WI 바인딩 | `vault/vault` KSA | namespace/KSA는 vault-k8s root가 생성 |
+| KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족 |
+
+주의: unseal key를 제거하면 Vault Raft 데이터 복호화가 불가능해진다. Vault
+release 제거(2단계 롤백) 후에만 key를 정리한다.
+
 ## 필수 GCP API
 
 아래 API는 현재 dev stack과 CI plan에 필요한 서비스입니다. 이 루트 모듈은 `google_project_service`로 API enable을 관리하지 않으므로, 새 프로젝트에 재구성할 때는 apply 전에 별도로 활성화합니다.
@@ -818,6 +836,7 @@ Autoresearch-airflow 저장소 workflow에 필요한 값:
 | `artifactregistry.googleapis.com` | Docker image repository |
 | `sqladmin.googleapis.com` | Cloud SQL |
 | `container.googleapis.com` | GKE |
+| `cloudkms.googleapis.com` | Vault auto-unseal KMS key (#132) |
 | `dns.googleapis.com` | 내부 private DNS zone (#48) |
 | `iap.googleapis.com` | bastion IAP TCP forwarding (#47) |
 | `oslogin.googleapis.com` | bastion OS Login SSH (#47) — 미활성 시 publickey 거부(#57) |

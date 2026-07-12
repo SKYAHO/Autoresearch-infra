@@ -283,3 +283,18 @@ output "airflow_oauth_client_secret_secret_id" {
   description = "Airflow Google OAuth client secret Secret Manager secret id(#54). Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_oauth_client_secret.secret_id
 }
+
+output "vault_service_account_email" {
+  description = "Vault auto-unseal용 GSA email(#132). vault-k8s root의 KSA annotation 값."
+  value       = google_service_account.vault.email
+}
+
+output "vault_kms_key_ring_name" {
+  description = "Vault unseal KMS keyring 이름(#132). helm values seal gcpckms key_ring 값."
+  value       = google_kms_key_ring.vault.name
+}
+
+output "vault_kms_crypto_key_name" {
+  description = "Vault unseal KMS crypto key 이름(#132). helm values seal gcpckms crypto_key 값."
+  value       = google_kms_crypto_key.vault_unseal.name
+}
