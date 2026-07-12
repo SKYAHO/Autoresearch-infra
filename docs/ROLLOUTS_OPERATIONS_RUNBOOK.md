@@ -92,7 +92,7 @@ metadata:
   name: sample-canary
   namespace: argo-rollouts
 spec:
-  replicas: 2   # 50% step의 전제 (#87 — stable >= 2 replica)
+  replicas: 2   # 50% step의 전제: 총 replica >= 100/weight (#87)
   strategy:
     canary:
       steps:

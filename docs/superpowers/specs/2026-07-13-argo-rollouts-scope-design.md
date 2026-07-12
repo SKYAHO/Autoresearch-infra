@@ -36,11 +36,10 @@ Deployment가 아직 없다(`autoresearch` namespace 비어 있음). 따라서:
   **replica-weight 방식 canary**(trafficRouting 미설정)를 쓴다. 트래픽
   비율은 replica 수로 근사되며 추가 인프라가 필요 없다.
 - **step 비율은 replica 수에 종속된다(리뷰 반영)**: canary는 최소 1 pod로
-  뜨므로 `setWeight` 비율이 유효하려면 stable replica가 `100/weight`벌
-  이상이어야 한다. dev의 낮은 replica 구성에서는 비율을 replica 수에 맞춰
+  뜨므로 `setWeight` 비율이 유효하려면 **총 replica가 `100/weight`벌
+  이상**이어야 한다(전환 중 stable은 그만큼 줄어든다). dev의 낮은 replica 구성에서는 비율을 replica 수에 맞춰
   잡는다 — 예: 2 replica면 `50% → pause → 100%`, 1 replica면 사실상
-  all-or-nothing이라 canary 의미가 없으므로 **적용 전제를 stable ≥ 2
-  replica로 둔다**. 25% 같은 세밀한 step은 replica를 늘릴 수 있는 운영
+  all-or-nothing이라 canary 의미가 없으므로 **적용 전제를 총 replica ≥ 2로 둔다**. 25% 같은 세밀한 step은 replica를 늘릴 수 있는 운영
   전환 후에만 쓴다.
 - 초기 step 예시(dev, 2 replica 전제): `50% → pause(무기한) → 100%` —
   pause 해제(promote)는 운영자가 수행한다.

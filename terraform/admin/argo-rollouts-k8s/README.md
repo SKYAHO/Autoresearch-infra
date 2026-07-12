@@ -86,7 +86,7 @@ kubectl -n argo-rollouts get svc   # 외부 노출 리소스 없어야 함
 - **pause는 무기한**: promote 전까지 구/신 버전이 혼재 상태로 유지되므로,
   적용 대상 앱은 N-1 호환(스키마·API)이 전제되어야 한다.
 - **비율은 replica 근사**: 2 replica에서 50%가 최소 단위임을 재확인(#87
-  spec의 stable ≥ 2 replica 전제).
+  spec의 총 replica ≥ 100/weight 전제).
 - 운영 조작은 kubectl plugin이 필요하다:
   `brew install argoproj/tap/kubectl-argo-rollouts`.
 
