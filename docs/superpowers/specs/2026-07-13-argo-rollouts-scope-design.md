@@ -33,8 +33,15 @@ Deployment가 아직 없다(`autoresearch` namespace 비어 있음). 따라서:
 - 이 클러스터에는 mesh/ingress 기반 트래픽 분할 장치가 없으므로
   **replica-weight 방식 canary**(trafficRouting 미설정)를 쓴다. 트래픽
   비율은 replica 수로 근사되며 추가 인프라가 필요 없다.
-- 초기 step 예시: `25% → pause(무기한) → 100%` — pause 해제(promote)는
-  운영자가 수행한다.
+- **step 비율은 replica 수에 종속된다(리뷰 반영)**: canary는 최소 1 pod로
+  뜨므로 `setWeight` 비율이 유효하려면 stable replica가 `100/weight`벌
+  이상이어야 한다. dev의 낮은 replica 구성에서는 비율을 replica 수에 맞춰
+  잡는다 — 예: 2 replica면 `50% → pause → 100%`, 1 replica면 사실상
+  all-or-nothing이라 canary 의미가 없으므로 **적용 전제를 stable ≥ 2
+  replica로 둔다**. 25% 같은 세밀한 step은 replica를 늘릴 수 있는 운영
+  전환 후에만 쓴다.
+- 초기 step 예시(dev, 2 replica 전제): `50% → pause(무기한) → 100%` —
+  pause 해제(promote)는 운영자가 수행한다.
 
 ## Metric 기반 판단
 
@@ -59,9 +66,11 @@ metric이 Prometheus에 수집되고 있을 것.
 | Rollout health 표시 | ArgoCD (빌트인 health check) | Progressing/Degraded/Healthy가 Application 상태에 반영됨 |
 | controller 설치 | Terraform admin root (신설, 예: `argo-rollouts-k8s`) | argocd-k8s/vault-k8s와 동일 패턴 — namespace, NetworkPolicy, helm_release 버전 pin |
 
-주의: ArgoCD auto-sync + Rollouts를 함께 쓸 때 Git의 이미지 tag 변경이
-sync되면 Rollout이 자동으로 canary를 시작한다. 시작은 자동이어도 완료
-(promote)는 1단계에서 항상 수동이다.
+주의: **auto-sync를 켠 이후에 한해** Git의 이미지 tag 변경이 sync되며
+Rollout이 자동으로 canary를 시작한다. 1단계(GITOPS_STRATEGY 기준 manual
+sync)에서는 sync 자체가 수동이므로 tag만 바꿔서는 아무 전환도 시작되지
+않는다 — 운영자가 sync해야 canary가 시작되고, 완료(promote)도 별도 수동
+조작이다.
 
 앱 저장소 쪽 전환 방식: 기존 Deployment를 삭제하지 않고 Rollout의
 `workloadRef`로 참조하는 방식을 우선 검토한다(manifest 이중화 방지).
