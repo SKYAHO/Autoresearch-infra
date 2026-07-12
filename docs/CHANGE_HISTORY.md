@@ -260,3 +260,14 @@
 - 책임 경계를 확정했다: ArgoCD는 Rollout manifest sync, Rollouts controller는
   전환 실행, promote/abort는 운영자, controller 설치는 Terraform admin root.
 - controller는 앱 첫 배포 이슈와 같은 마일스톤에 설치한다(선제 설치 금지).
+
+## 2026-07-13: Argo Rollouts controller 설치 (#88)
+
+- admin root `argo-rollouts-k8s`를 신설해 chart `argo-rollouts` 2.41.0을
+  설치했다(dashboard 미설치 — kubectl plugin 운영). controller는 GCP API를
+  쓰지 않아 NetworkPolicy egress가 DNS/K8s API로만 열린다(metadata·
+  googleapis 규칙 없음 — vault-k8s보다 좁은 경계).
+- RBAC은 chart upstream 기본 ClusterRole(전환 실행에 필요한 리소스 한정)을
+  사용하고 근거를 root README에 기록했다.
+- #87 spec의 "앱 배포 전 설치 금지" 문구는 기존 이슈 시리즈(#88~#90)와
+  충돌해 "설치·샘플 검증 선행, 실 적용은 앱 배포 이슈"로 정정했다.
