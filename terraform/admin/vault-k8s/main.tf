@@ -88,7 +88,9 @@ resource "kubernetes_network_policy_v1" "vault_egress" {
 
     # #122 service VIP 경유 트래픽. 이 클러스터의 Calico는 egress를 DNAT
     # 이전(service VIP 기준)에 평가하므로 selector가 VIP에 매칭되지 않는다.
-    # kube-dns(53) VIP를 services CIDR ipBlock으로 허용한다.
+    # kube-dns(53)와 kubernetes.default(443, service_registration이 사용)
+    # VIP를 services CIDR ipBlock으로 허용한다(#138에서 443 추가 — 이전에는
+    # 0.0.0.0/0:443이 커버했다).
     egress {
       to {
         ip_block {
@@ -104,6 +106,11 @@ resource "kubernetes_network_policy_v1" "vault_egress" {
       ports {
         protocol = "TCP"
         port     = "53"
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "443"
       }
     }
 
@@ -162,11 +169,14 @@ resource "kubernetes_network_policy_v1" "vault_egress" {
       }
     }
 
-    # Cloud KMS API와 Kubernetes API server(VIP 443 포함).
+    # Cloud KMS 등 Google API. dev root의 private googleapis DNS zone(#138)이
+    # *.googleapis.com을 private.googleapis.com 고정 VIP로 유도하므로
+    # 0.0.0.0/0 대신 해당 대역만 허용한다(Google 문서화된 고정 대역).
+    # Kubernetes API는 위 services CIDR 443 규칙이 커버한다.
     egress {
       to {
         ip_block {
-          cidr = "0.0.0.0/0"
+          cidr = "199.36.153.8/30"
         }
       }
 

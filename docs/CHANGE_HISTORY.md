@@ -235,3 +235,16 @@
 - Kubernetes auth 검증은 root token 없이 KSA JWT 로그인 → 시범 secret 읽기로
   수행한다. consumer는 NetworkPolicy상 vault namespace 내부로 한정되며, 타
   namespace 연동(ingress 허용 또는 ESO)은 별도 설계로 남긴다.
+
+## 2026-07-13: private googleapis DNS zone과 vault egress 443 축소 (#138)
+
+- PR #135 리뷰 제안 후속. VPC private zone `googleapis.com.`으로 Google API
+  해석을 private.googleapis.com 고정 VIP(199.36.153.8/30)로 유도하고, vault
+  namespace의 egress 443을 `0.0.0.0/0`에서 이 대역 + services CIDR
+  (kubernetes.default VIP)로 축소했다.
+- 당초 3개 namespace 일괄 축소를 검토했으나 argocd(GitHub)와
+  airflow(OpenRouter, run.app)는 외부 endpoint 의존이 확인되어 유지하고
+  사유를 코드 주석과 문서에 남겼다.
+- zone은 googleapis.com만 override하므로 pkg.dev(이미지 pull), run.app,
+  metadata 경로는 영향이 없다. 롤백은 두 변경 모두 in-place이며 zone 제거
+  시 TTL 300s 내 공개 IP 해석으로 복귀한다.
