@@ -248,3 +248,15 @@
 - zone은 googleapis.com만 override하므로 pkg.dev(이미지 pull), run.app,
   metadata 경로는 영향이 없다. 롤백은 두 변경 모두 in-place이며 zone 제거
   시 TTL 300s 내 공개 IP 해석으로 복귀한다.
+
+## 2026-07-13: Argo Rollouts 적용 범위 설계 (#87)
+
+- 점진 배포 적용 대상을 Autoresearch 앱 API(stateless Deployment) 하나로
+  한정했다. Airflow(stateful), batch pod(일회성), 플랫폼 컴포넌트, Cloud Run
+  proxy(자체 traffic split)는 제외한다.
+- Blue-Green은 dev 최소 비용 원칙과 충돌해 제외하고, 트래픽 라우터 없는
+  replica-weight canary를 채택했다. 1단계는 수동 promote(Grafana 확인),
+  metric 기반 자동 판단(AnalysisTemplate + Prometheus)은 2단계로 미뤘다.
+- 책임 경계를 확정했다: ArgoCD는 Rollout manifest sync, Rollouts controller는
+  전환 실행, promote/abort는 운영자, controller 설치는 Terraform admin root.
+- controller는 앱 첫 배포 이슈와 같은 마일스톤에 설치한다(선제 설치 금지).
