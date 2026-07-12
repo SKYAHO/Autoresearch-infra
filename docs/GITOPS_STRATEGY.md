@@ -100,8 +100,8 @@ root 또는 별도 platform AppProject에서 관리한다.
 - **책임 경계**: ArgoCD는 Rollout manifest를 sync만 하고, 전환 실행은
   Rollouts controller, promote/abort는 운영자가 담당한다. controller 설치는
   Terraform admin root(신설)가 맡는다.
-- **도입 시점**: 앱이 실제 배포되는 이슈와 같은 마일스톤에 controller를
-  설치한다. 그 전에 미리 설치하지 않는다.
+- **도입 시점**: controller 설치·샘플 검증은 #88~#90에서 선행하고(샘플은
+  검증 후 폐기), 실 서비스 적용은 앱 첫 배포 이슈에서 진행한다.
 
 ## 후속 이슈 입력값
 

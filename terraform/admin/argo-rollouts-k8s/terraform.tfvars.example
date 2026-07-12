@@ -1,0 +1,14 @@
+project_id       = "your-gcp-project-id"
+region           = "asia-northeast3"
+zone             = "asia-northeast3-a"
+gke_cluster_name = "autoresearch-dev-gke"
+
+rollouts_namespace     = "argo-rollouts"
+rollouts_release_name  = "argo-rollouts"
+rollouts_chart_version = "2.41.0"
+
+# GKE services 2차 대역 (#122). dev root gke_services_cidr와 일치.
+cluster_services_cidr = "172.16.128.0/24"
+
+# GKE master /28 (#138). dev root gke_master_ipv4_cidr와 일치.
+cluster_master_cidr = "172.16.0.0/28"
