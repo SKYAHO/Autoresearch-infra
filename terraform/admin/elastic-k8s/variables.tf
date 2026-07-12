@@ -82,3 +82,9 @@ variable "cluster_master_cidr" {
     error_message = "cluster_master_cidr must be a valid CIDR in a.b.c.d/n form."
   }
 }
+
+variable "elasticsearch_version" {
+  description = "Elasticsearch 스택 버전(#98). operator(chart) 버전과 함께 pin하고 upgrade는 operator 먼저(README 버전 고정 기준)."
+  type        = string
+  default     = "9.2.0"
+}

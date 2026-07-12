@@ -310,3 +310,14 @@
 - 이슈 본문의 elastic-system 대신 #96 설계대로 단일 namespace `elastic`을
   사용한다. CRD는 helm uninstall에도 남는다(삭제 시 CR 연쇄 삭제·데이터
   유실 — README 롤백 절 참조).
+
+## 2026-07-13: Elasticsearch 최소 클러스터 (#98)
+
+- elastic-k8s root에 Elasticsearch CR `autoresearch`(9.2.0, single-node,
+  heap 1G, request 2Gi/limit 3Gi, PVC 30Gi standard-rwo)를 추가했다.
+- nodeSelector로 dev-default pool에 고정해 airflow-dev pool 압박을 방지했다.
+  전용 node pool은 불필요로 결론(실측 여유 기준, headroom 3Gi 미만 시
+  #105에서 재검토).
+- `node.store.allow_mmap: false`로 vm.max_map_count sysctl(privileged
+  initContainer) 요구를 회피해 PSS baseline을 유지했다.
+- TLS/인증은 ECK 기본 유지. index 기본 replicas 0 template은 #101에서 적용.
