@@ -86,4 +86,7 @@ locals {
   proxy_image = var.proxy_image != "" ? var.proxy_image : "${var.region}-docker.pkg.dev/${var.project_id}/${local.ar_repo_id}/proxy:dev-20260708-001"
 
   bastion_name = "${local.resource_prefix}-bastion"
+
+  vault_sa_name                     = "${local.resource_prefix}-vault"
+  vault_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.vault_k8s_namespace}/${var.vault_k8s_service_account}]"
 }
