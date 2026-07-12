@@ -1,0 +1,24 @@
+# #97 ECK operator dev values. 설계: #96 spec.
+# - operator만 설치 (ES/Kibana CR은 #98/#99에서 kubernetes_manifest로 추가)
+# - webhook 포트를 10250으로 변경: private GKE의 기본 master→node 방화벽
+#   허용 포트(10250/443)를 재사용해 별도 firewall 없이 admission webhook을
+#   동작시킨다 — monitoring-k8s의 prometheusOperator.internalPort 선례.
+
+# 이 클러스터에서 ELK는 elastic namespace만 쓰므로 operator 감시 범위를
+# 좁힌다(cluster 전역 기본값 대신 최소 권한).
+managedNamespaces:
+  - elastic
+
+webhook:
+  enabled: true
+  port: 10250
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+podMonitor:
+  enabled: false

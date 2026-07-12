@@ -56,7 +56,7 @@
   - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
   `airflow-k8s`(Airflow 경계), `argocd-k8s`(ArgoCD), `monitoring-k8s`(모니터링),
-  `vault-k8s`(#134 Vault), `argo-rollouts-k8s`(#88 Rollouts), 팀원 GKE 접근
+  `vault-k8s`(#134 Vault), `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK), 팀원 GKE 접근
   IAM은 `gke-team-access`.
 - 재사용 module은 `terraform/modules/` (예정)
 - GitHub Actions는 `.github/workflows/`: `lint.yml`(actionlint, required
