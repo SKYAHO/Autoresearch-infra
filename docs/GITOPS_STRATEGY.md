@@ -85,6 +85,24 @@ private repo token이 필요하면 Kubernetes Secret payload로 주입하고 Git
 ArgoCD 자체, CRD, ClusterRole처럼 cluster-wide 권한이 큰 리소스는 플랫폼 admin
 root 또는 별도 platform AppProject에서 관리한다.
 
+## 점진 배포(Argo Rollouts) 경계 (#87)
+
+상세 결정은
+`superpowers/specs/2026-07-13-argo-rollouts-scope-design.md`를 따른다. 요약:
+
+- **적용 대상은 Autoresearch 앱 API(stateless Deployment)뿐**이다. Airflow
+  (stateful/chart 소유 분리), batch pod(일회성), 플랫폼 컴포넌트(ArgoCD·
+  모니터링·Vault), Cloud Run proxy(자체 traffic split)는 제외한다.
+- **Canary만 사용**한다(replica-weight 방식, 트래픽 라우터 없음).
+  Blue-Green은 dev 최소 비용 원칙과 충돌해 제외한다.
+- **1단계는 수동 promote**다. canary pause에서 운영자가 Grafana로 확인 후
+  promote하며, AnalysisTemplate 기반 자동 판단은 안정화 후 2단계로 미룬다.
+- **책임 경계**: ArgoCD는 Rollout manifest를 sync만 하고, 전환 실행은
+  Rollouts controller, promote/abort는 운영자가 담당한다. controller 설치는
+  Terraform admin root(신설)가 맡는다.
+- **도입 시점**: 앱이 실제 배포되는 이슈와 같은 마일스톤에 controller를
+  설치한다. 그 전에 미리 설치하지 않는다.
+
 ## 후속 이슈 입력값
 
 | 이슈 | 입력값 |
