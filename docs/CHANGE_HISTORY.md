@@ -321,3 +321,14 @@
 - `node.store.allow_mmap: false`로 vm.max_map_count sysctl(privileged
   initContainer) 요구를 회피해 PSS baseline을 유지했다.
 - TLS/인증은 ECK 기본 유지. index 기본 replicas 0 template은 #101에서 적용.
+
+## 2026-07-13: ES PVC 스토리지 클래스 정정 — SSD quota 인시던트 (#98)
+
+- 첫 apply에서 PVC provisioning이 `SSD_TOTAL_GB` quota 초과(리전 250GB,
+  실측 223 사용)로 실패했다. `standard-rwo`(pd-balanced)가 SSD quota를
+  소비하며, 노드 부트 디스크와 기존 PVC로 이미 한도 근처였다.
+- ES data PVC를 `standard`(pd-standard, HDD)로 변경했다 — dev 로그
+  워크로드에 IOPS 충분, 비용 절감. WaitForFirstConsumer 덕에 PD 생성 전
+  단계에서 멈춰 부작용 없이 정정했다.
+- 교훈: PVC 추가 시 스토리지 클래스의 quota 종류(SSD vs HDD)와 리전
+  사용량(`gcloud compute regions describe`)을 사전 확인한다.
