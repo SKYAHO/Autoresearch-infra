@@ -54,8 +54,9 @@
   - `secret_manager.tf` — Secret Manager 리소스와 resource-level IAM
   - `bastion.tf` — #47 IAP 전용 bastion host
   - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
-- Kubernetes admin root는 `terraform/admin/airflow-k8s/`, 팀원 GKE 접근 IAM은
-  `terraform/admin/gke-team-access/`에서 별도 state로 관리합니다.
+- Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
+  `airflow-k8s`(Airflow 경계), `argocd-k8s`(ArgoCD), `monitoring-k8s`(모니터링),
+  `vault-k8s`(#134 Vault), 팀원 GKE 접근 IAM은 `gke-team-access`.
 - 재사용 module은 `terraform/modules/` (예정)
 - GitHub Actions는 `.github/workflows/`: `lint.yml`(actionlint, required
   check), `terraform-plan.yml`(OIDC/WIF 기반 PR plan 및 댓글 게시),
