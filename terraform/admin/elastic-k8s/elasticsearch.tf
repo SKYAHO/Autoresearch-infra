@@ -16,6 +16,12 @@ resource "kubernetes_manifest" "elasticsearch" {
     spec = {
       version = var.elasticsearch_version
 
+      # ECK 기본값(DeleteOnScaledownAndClusterDeletion)은 CR 삭제 시 PVC까지
+      # 삭제한다 — standard-rwo(reclaimPolicy Delete)와 결합하면 데이터 영구
+      # 소실(리뷰 반영). CR 제거 시 PVC를 보존하도록 명시하고, 데이터 정리는
+      # README 롤백 절의 수동 단계로만 수행한다.
+      volumeClaimDeletePolicy = "DeleteOnScaledownOnly"
+
       nodeSets = [
         {
           name  = "default"

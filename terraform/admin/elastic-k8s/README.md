@@ -101,6 +101,9 @@ kubectl -n elastic get elasticsearch    # HEALTH green / PHASE Ready (#98)
   유실까지 이어질 수 있다. 정리가 필요하면 CR 제거(#98 롤백) → snapshot
   확인 → CRD 정리 순서를 지킨다.
 - ES CR 제거(`kubernetes_manifest.elasticsearch` 삭제 후 apply)는 pod/서비스를
-  지우지만 PVC는 남는다 — 데이터까지 정리하려면 PVC를 수동 삭제한다.
-  반대로 데이터 보존이 필요하면 제거 전 snapshot(#102)을 확인한다.
+  지우고, **PVC는 `volumeClaimDeletePolicy: DeleteOnScaledownOnly` 설정으로
+  남는다**. 주의: ECK 기본값(DeleteOnScaledownAndClusterDeletion)이었다면
+  CR 삭제가 PVC→PD 삭제(standard-rwo reclaimPolicy Delete)로 이어져 데이터가
+  영구 소실된다 — 이 필드를 제거하지 않는다. 데이터까지 정리하려면 CR 제거
+  후 PVC를 수동 삭제하고, 보존이 필요하면 제거 전 snapshot(#102)을 확인한다.
 - chart 버전 롤백은 `eck_chart_version`을 되돌려 apply.
