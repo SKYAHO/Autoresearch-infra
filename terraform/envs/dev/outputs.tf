@@ -124,6 +124,11 @@ output "cloud_build_compute_service_account_email" {
   value       = local.cloud_build_compute_service_account_email
 }
 
+output "github_actions_gar_pusher_service_account_email" {
+  description = "GitHub Actions (Autoresearch-airflow) WIF가 가장하여 GAR push에 사용하는 SA email. 배포 리포 secrets.GAR_PUSHER_SA 값으로 사용."
+  value       = google_service_account.gar_pusher.email
+}
+
 output "cloud_build_bucket_name" {
   description = "Autoresearch-airflow build가 사용하는 Cloud Build 기본 staging bucket 이름."
   value       = local.cloud_build_bucket_name
