@@ -55,6 +55,11 @@ terraform plan
 terraform apply
 ```
 
+주의: `helm-values/vault.values.yaml`의 GSA annotation과 `seal "gcpckms"`
+project/key 값은 dev root #132 리소스(단일 dev project) 고정 값이다. values는
+`file()`로 정적 로드되므로 `project_id` 변수와 무관하다 — 다른 project로
+재구성할 때는 이 파일을 직접 수정해야 한다.
+
 실행 환경에는 dev GKE API 접근 경로와 namespace/NetworkPolicy/Helm release를
 만들 수 있는 Kubernetes 권한이 필요하다. 일반 PR CI가 아니라 운영자 환경에서만
 plan/apply한다. **선행 조건**: dev root `vault.tf`(#132) apply 완료

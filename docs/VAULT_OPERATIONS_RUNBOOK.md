@@ -34,7 +34,9 @@ kubectl -n vault exec vault-0 -- vault status
 
 ## 최초 init (1회)
 
-auto-unseal 구성이므로 unseal key 대신 **recovery key**가 발급된다.
+최초 apply는 pod가 uninitialized 상태에서도 Ready(health `uninitcode=204`)로
+완료된다. apply가 끝난 뒤 아래 init을 실행한다. auto-unseal 구성이므로
+unseal key 대신 **recovery key**가 발급된다.
 
 ```bash
 kubectl -n vault exec vault-0 -- vault operator init \

@@ -13,6 +13,19 @@ injector:
   enabled: false
 
 server:
+  # 최초 설치 시 vault-0은 operator init 전까지 uninitialized 상태라 기본
+  # readiness(vault status)가 통과하지 않고, helm wait(atomic)가 timeout으로
+  # 실패해 release가 purge된다(리뷰 지적). uninitcode=204만 2xx로 두어
+  # 미초기화 pod를 Ready로 취급하고, sealed(503)는 기본값을 유지해 KMS
+  # unseal 실패는 여전히 NotReady로 드러나게 한다.
+  readinessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true&uninitcode=204"
+
+  # 주의: 아래 GSA annotation과 seal "gcpckms"의 project/key 값은 dev root
+  # #132 리소스에 대한 고정 값이다. values는 file()로 정적 로드되므로
+  # var.project_id와 무관하다 — 다른 project로 재구성 시 이 파일을 직접
+  # 수정해야 한다(README 참조).
   # chart가 KSA를 생성한다. 이름(release name = vault)과 annotation이
   # dev root WI 바인딩(vault/vault → autoresearch-dev-vault GSA)과 일치해야 한다.
   serviceAccount:
