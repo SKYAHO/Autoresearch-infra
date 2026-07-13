@@ -4,6 +4,11 @@
 
 prometheus:
   prometheusSpec:
+    # #170 stateful은 dev-default 고정(#105 원칙) — taint 부재로 작은
+    # airflow 노드에 배치됐던 실측 문제의 해소. RWO PVC는 동일 zone이라
+    # 노드 이동 시 재연결된다.
+    nodeSelector:
+      cloud.google.com/gke-nodepool: dev-default
     retention: 7d
     storageSpec:
       volumeClaimTemplate:
@@ -20,6 +25,9 @@ prometheus:
 
 grafana:
   enabled: true
+  # #170 stateful(PVC 10Gi)은 dev-default 고정(#105 원칙)
+  nodeSelector:
+    cloud.google.com/gke-nodepool: dev-default
   service:
     type: ClusterIP
   persistence:
