@@ -86,10 +86,14 @@ jobs:
               '',
               '</details>',
             ].join('\n');
+            // label 3종으로 좁혀 조회 — open 이슈+PR 100개 초과 시 기존
+            // [DRIFT] 이슈가 첫 페이지에서 밀려 중복 생성되는 것을 방지
+            // (리뷰 반영). labels 필터는 모든 라벨을 가진 이슈만 반환한다.
             const { data: issues } = await github.rest.issues.listForRepo({
               ...context.repo, state: 'open', per_page: 100,
+              labels: 'bug,terraform,gcp',
             });
-            const existing = issues.find(i => i.title.startsWith(marker));
+            const existing = issues.find(i => i.title.startsWith(marker) && !i.pull_request);
             if (existing) {
               await github.rest.issues.createComment({
                 ...context.repo, issue_number: existing.number, body,
