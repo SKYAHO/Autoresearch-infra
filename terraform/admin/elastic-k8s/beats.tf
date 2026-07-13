@@ -92,11 +92,25 @@ resource "kubernetes_manifest" "filebeat" {
                         { equals = { "kubernetes.namespace" = "autoresearch" } },
                       ]
                     }
+                    # Filebeat 9.x는 container/log input이 제거되어
+                    # filestream + container parser를 쓴다(#100 검증에서
+                    # 'Auto discover config check failed'로 실측 확인).
+                    # id는 autodiscover가 만드는 input마다 유일해야 한다.
                     config = [
                       {
-                        type = "container"
+                        type = "filestream"
+                        id   = "container-$${data.kubernetes.container.id}"
+                        prospector = {
+                          scanner = {
+                            # /var/log/containers/*.log는 symlink
+                            symlinks = true
+                          }
+                        }
                         paths = [
                           "/var/log/containers/*$${data.kubernetes.container.id}.log",
+                        ]
+                        parsers = [
+                          { container = {} },
                         ]
                       },
                     ]
