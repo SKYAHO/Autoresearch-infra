@@ -50,5 +50,15 @@ resource "kubernetes_manifest" "kibana" {
     force_conflicts = true
   }
 
+  # 서버가 podTemplate.metadata를 빈 객체로 정규화해 provider 왕복이
+  # 불안정해진다(#99 검증에서 'inconsistent result after apply' 재현).
+  # 해당 경로를 computed로 지정해 diff 대상에서 제외한다. 앞의 두 항목은
+  # provider 기본값 유지분이다.
+  computed_fields = [
+    "metadata.labels",
+    "metadata.annotations",
+    "spec.podTemplate.metadata",
+  ]
+
   depends_on = [helm_release.eck_operator]
 }
