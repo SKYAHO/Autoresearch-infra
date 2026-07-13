@@ -340,3 +340,14 @@
   없음, TLS는 ECK 기본(self-signed).
 - 노드 대역 → 5601 ingress는 #97 NetworkPolicy에 이미 선언되어 있다.
   elastic 사용자 비밀번호는 Secret 회수 절차만 사용(Git/문서 금지).
+
+## 2026-07-13: 모니터링 스택 apply 완결 (#79 reopen)
+
+- Grafana UI 접속 불가 확인 중 monitoring-k8s root가 apply된 적이 없음을
+  발견했다(namespace 부재, state resources 0 — 7/9 시도 흔적만). 코드·
+  runbook은 merge됐지만 스택은 미설치 상태였다.
+- PVC(Prometheus 30Gi, Grafana 10Gi)에 `standard`(pd-standard)를 명시했다
+  — 기본 standard-rwo였다면 SSD quota(#98과 동일)에 막혔을 것을 사전 차단.
+- 교훈: apply·실검증까지가 이슈 완료 기준이라는 원칙을 재확인 — "코드
+  merge = 완료"로 잘못 닫힌 이슈가 없는지 트랙 완료 시점에 state를 함께
+  점검한다.
