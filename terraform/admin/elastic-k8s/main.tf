@@ -100,7 +100,9 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
       }
     }
 
-    # #122 pre-DNAT(VIP) 평가: kube-dns(53), kubernetes.default(443)
+    # #122 pre-DNAT(VIP) 평가: kube-dns(53), kubernetes.default(443),
+    # Filebeat → ES http service VIP(9200, #100 — same-ns 규칙은 VIP에
+    # 매칭되지 않으므로 필수)
     egress {
       to {
         ip_block {
@@ -121,6 +123,11 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
       ports {
         protocol = "TCP"
         port     = "443"
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "9200"
       }
     }
 
