@@ -58,9 +58,16 @@ kubectl -n monitoring create secret generic grafana-google-oauth \
 ### 팀원 계정 사전 생성 (운영자)
 
 admin으로 로그인 → Administration → Users → New user:
-- Email에 팀원 gmail, 권한은 기본 Viewer(대시보드 편집 담당만 Editor)
-- 초기 비밀번호는 임시 값 — 팀원은 이후 Google 버튼으로만 로그인하므로
-  실사용되지 않는다
+- Email에 팀원 gmail을 **Google 계정에 표시되는 문자열 그대로** 입력한다
+  (점/plus 별칭 변형 금지). OAuth 매칭은 이메일 정확 일치 기준이며,
+  불일치 시 Grafana가 신규 가입을 시도하다 allow_sign_up=false에 막혀
+  로그인이 거부된다(안전한 실패).
+- 초기 비밀번호는 **강한 랜덤 값**으로 넣는다(`openssl rand -base64 24`)
+  — 기본 로그인 폼(/login)이 admin 비상용으로 열려 있어, 약한 임시
+  비밀번호는 OAuth allowlist를 우회하는 brute-force 표적이 된다(리뷰
+  반영). 랜덤 값은 기록·공유하지 않는다(해당 계정의 폼 로그인은 사실상
+  봉인되고, 팀원은 Google 버튼만 사용).
+- 권한은 기본 Viewer(대시보드 편집 담당만 Editor).
 - 팀원 목록은 이 문서에 기록하지 않는다(이메일 비노출 원칙)
 
 ## 기본 확인 순서
