@@ -80,7 +80,7 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 ## 보존 정책 — ILM (#101)
 
 ES 내부 리소스(ILM policy)는 Vault 내부 리소스와 같은 원칙으로 Terraform이
-아닌 **운영자 절차**로 관리한다. filebeat data stream이 참조하는 \`filebeat\`
+아닌 **운영자 절차**로 관리한다. filebeat data stream이 참조하는 `filebeat`
 policy를 아래 기준으로 유지한다(기본값은 rollover 30d/50gb + **삭제 없음**
 — 무한 증가):
 
@@ -108,7 +108,7 @@ curl -sk -u "elastic:$PW" https://localhost:19200/_ilm/policy/filebeat
 curl -sk -u "elastic:$PW" "https://localhost:19200/.ds-filebeat-*/_ilm/explain?only_errors=true"
 ```
 
-filebeat 템플릿의 replicas 0은 Beat config(\`setup.template\`)가 관리하지만,
+filebeat 템플릿의 replicas 0은 Beat config(`setup.template`)가 관리하지만,
 **이미 생성된 backing index**에는 소급되지 않으므로 1회 수동 적용한다:
 
 ```bash
