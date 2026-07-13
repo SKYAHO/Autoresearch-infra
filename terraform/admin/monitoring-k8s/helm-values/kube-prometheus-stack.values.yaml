@@ -37,13 +37,21 @@ grafana:
   # #170 stateful(PVC 10Gi)은 dev-default 고정(#105 원칙)
   nodeSelector:
     cloud.google.com/gke-nodepool: dev-default
-  # #106 실측(315Mi) 기반 requests(sidecar 포함 여유)
+  # #106 실측 기반 requests. 315Mi는 pod 전체(top) 측정값이며 이 블록은
+  # grafana 컨테이너에만 적용된다 — sidecar는 아래 별도 블록(리뷰 반영).
   resources:
     requests:
       cpu: 50m
-      memory: 512Mi
+      memory: 384Mi
     limits:
-      memory: 1Gi
+      memory: 768Mi
+  sidecar:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
   service:
     type: ClusterIP
   persistence:
