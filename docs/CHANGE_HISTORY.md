@@ -416,3 +416,14 @@
 - #96 spec의 "bucket lifecycle로 정리" 문구를 정정했다 — ES snapshot은
   증분(세그먼트 공유) 구조라 age 기반 객체 삭제가 최신 snapshot을
   손상시킨다. 정리는 SLM retention만 사용한다.
+
+## 2026-07-13: Kibana/ELK 운영 runbook (#103) — ELK 트랙 완결
+
+- #98~#102 검증에서 실행한 명령 기준으로 KIBANA_OPERATIONS_RUNBOOK을
+  작성했다: 접속/data view, KQL 검색(Airflow 실패·앱 에러), K8s 이벤트는
+  수집 범위 밖(kubectl/Grafana) 명시, 정기 점검(ILM delete phase·SLM
+  last_success·PVC), 장애 1차 표(트랙 인시던트들 반영), 업그레이드 주의
+  (operator 먼저 + kubernetes_manifest 수렴 재확인), 폐기 순서.
+- 팀원용 Kibana 접속 절을 TEAM_OPERATIONS_RUNBOOK에 추가했다(상위 문서
+  동시 점검 원칙).
+- 이로써 ELK 트랙(#96~#103)이 완결됐다.
