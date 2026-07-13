@@ -205,6 +205,20 @@
 - 기존 Cloud Build push 경로(#32)와 병존한다. GitHub Actions 경로 end-to-end
   검증 후 정리 여부를 별도 이슈로 결정한다.
 
+## 2026-07-13: Autoresearch 앱 이미지 GAR 배포 경계 추가 (#157)
+
+- Autoresearch 애플리케이션 이미지 release를 위해 전용 SA
+  `autoresearch-dev-app-pusher`를 추가했다. 기존 Airflow용
+  `autoresearch-dev-gar-pusher`는 변경하지 않는다.
+- 새 SA 가장은 `SKYAHO/Autoresearch` principalSet에만 허용하고,
+  `autoresearch-dev-docker` repository 단위 `roles/artifactregistry.writer`만
+  부여했다. 프로젝트 수준 권한과 service account key는 사용하지 않는다.
+- bootstrap 로컬 tfvars의 WIF 허용 목록에 Autoresearch를 추가한 후 dev root를
+  적용하는 2단 순서와 회귀 방지 절차를 문서화했다.
+- 서비스 계정과 IAM binding은 직접 비용이 없고 새 리전 리소스도 만들지 않는다.
+  롤백은 앱 release 비활성화 → app pusher SA/IAM 제거 → bootstrap 허용 목록 제거
+  순서다.
+
 ## 2026-07-12: HashiCorp Vault dev 도입 (1·2단계)
 
 - 실무 학습 목적으로 Vault를 dev GKE에 도입했다. 기존 GCP Secret Manager는
