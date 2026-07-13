@@ -24,8 +24,51 @@ kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
 http://localhost:3000
 ```
 
-로그인 정보는 `monitoring/grafana-admin-credentials` Secret payload로 관리한다.
-실제 비밀번호를 문서, PR, 채팅, Terraform 변수에 남기지 않는다.
+로그인은 **Google OAuth(팀원 개인 계정)가 기본**이다(#155). admin 계정
+(`monitoring/grafana-admin-credentials` Secret payload)은 비상용으로만
+유지한다. 실제 비밀번호를 문서, PR, 채팅, Terraform 변수에 남기지 않는다.
+
+## Google OAuth 로그인 (#155)
+
+로그인 페이지의 "Sign in with Google"로 팀원 개인 계정 로그인한다.
+`allow_sign_up=false`라 **사전 생성된 계정만** 로그인할 수 있다 —
+gmail은 도메인 제한이 불가능하므로(gmail.com 허용 = 전 세계 허용) 자동
+가입을 막고 계정 매칭으로만 허용하는 구조다. 팀원 이메일 allowlist는
+Git/문서가 아닌 Grafana DB(계정)에만 존재한다.
+
+### 최초 구성 (운영자 1회)
+
+1. **OAuth client 발급** (GCP 콘솔 → APIs & Services → Credentials →
+   Create OAuth client ID):
+   - Application type: Web application
+   - Authorized redirect URI: `http://localhost:3000/login/google`
+   - 기존 OAuth consent screen(Airflow #54와 공용)을 사용한다
+2. **Secret 주입** (client secret은 어디에도 기록하지 않는다):
+
+```bash
+kubectl -n monitoring create secret generic grafana-google-oauth \
+  --from-literal=GF_AUTH_GOOGLE_CLIENT_ID='<client-id>' \
+  --from-literal=GF_AUTH_GOOGLE_CLIENT_SECRET='<client-secret>'
+```
+
+3. monitoring-k8s root apply (values의 `envFromSecret`가 이 Secret을
+   전제로 하므로 **주입 없이는 Grafana pod가 기동하지 못한다** —
+   `grafana-admin-credentials`와 동일 선례)
+
+### 팀원 계정 사전 생성 (운영자)
+
+admin으로 로그인 → Administration → Users → New user:
+- Email에 팀원 gmail을 **Google 계정에 표시되는 문자열 그대로** 입력한다
+  (점/plus 별칭 변형 금지). OAuth 매칭은 이메일 정확 일치 기준이며,
+  불일치 시 Grafana가 신규 가입을 시도하다 allow_sign_up=false에 막혀
+  로그인이 거부된다(안전한 실패).
+- 초기 비밀번호는 **강한 랜덤 값**으로 넣는다(`openssl rand -base64 24`)
+  — 기본 로그인 폼(/login)이 admin 비상용으로 열려 있어, 약한 임시
+  비밀번호는 OAuth allowlist를 우회하는 brute-force 표적이 된다(리뷰
+  반영). 랜덤 값은 기록·공유하지 않는다(해당 계정의 폼 로그인은 사실상
+  봉인되고, 팀원은 Google 버튼만 사용).
+- 권한은 기본 Viewer(대시보드 편집 담당만 Editor).
+- 팀원 목록은 이 문서에 기록하지 않는다(이메일 비노출 원칙)
 
 ## 기본 확인 순서
 
