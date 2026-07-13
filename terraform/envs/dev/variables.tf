@@ -194,9 +194,9 @@ variable "airflow_gke_node_count_min" {
 }
 
 variable "airflow_gke_node_count_max" {
-  description = "Airflow 전용 node pool autoscaling 최대 노드 수."
+  description = "Airflow 전용 node pool autoscaling 최대 노드 수. #106: KPO 배치 피크의 escape valve(평시 1노드, 피크 시에만 확장 — KPO는 일회성이라 scale-down 점착성 없음)."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "airflow_gke_node_disk_size" {
