@@ -5,6 +5,19 @@
 # 주의(부트스트랩 순서): kubernetes_manifest는 plan 시 CRD 스키마를 조회하므로
 # 빈 클러스터에서는 operator를 먼저 targeted apply한다(README 재해 복구 절).
 
+# #102 snapshot용 Workload Identity KSA. dev root의
+# es_workload_identity_principal(elastic/elasticsearch)과 이름이 일치해야
+# 하며, repository-gcs가 ADC(metadata server)로 GSA를 가장한다.
+resource "kubernetes_service_account_v1" "elasticsearch" {
+  metadata {
+    name      = "elasticsearch"
+    namespace = kubernetes_namespace_v1.elastic.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = "autoresearch-dev-es-snapshot@${var.project_id}.iam.gserviceaccount.com"
+    }
+  }
+}
+
 resource "kubernetes_manifest" "elasticsearch" {
   manifest = {
     apiVersion = "elasticsearch.k8s.elastic.co/v1"
@@ -35,6 +48,10 @@ resource "kubernetes_manifest" "elasticsearch" {
 
           podTemplate = {
             spec = {
+              # #102 snapshot WI — 위 KSA로 실행해야 metadata 경유 GSA
+              # 가장이 성립한다.
+              serviceAccountName           = "elasticsearch"
+              automountServiceAccountToken = true
               # 배치 노드 고정: 여유 메모리 실측(#96)이 dev-default 단일 노드
               # 기준이므로 airflow-dev pool(여유 ~2.5GB)로 흘러가 pressure를
               # 만들지 않게 한다. 전용 node pool은 불필요(#96 — 트리거는

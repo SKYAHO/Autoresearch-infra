@@ -303,3 +303,13 @@ output "vault_kms_crypto_key_name" {
   description = "Vault unseal KMS crypto key 이름(#132). helm values seal gcpckms crypto_key 값."
   value       = google_kms_crypto_key.vault_unseal.name
 }
+
+output "es_snapshot_bucket_name" {
+  description = "Elasticsearch snapshot GCS bucket 이름(#102). repository-gcs 등록 시 사용."
+  value       = google_storage_bucket.es_snapshots.name
+}
+
+output "es_snapshot_service_account_email" {
+  description = "ES snapshot GSA email(#102). elastic-k8s root의 KSA annotation 값."
+  value       = google_service_account.es_snapshot.email
+}

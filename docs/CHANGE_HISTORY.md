@@ -406,3 +406,13 @@
   기본값 1이 single-node에서 unassigned replica를 만들어 cluster가
   yellow였던 것을 green으로 복구했다(#96/#98 예고 지점 실측).
 - dev/운영 보관 분리 기준: 운영 전환 시 delete min_age만 상향.
+
+## 2026-07-13: ES GCS snapshot 백업 (#102)
+
+- dev root에 snapshot 전용 bucket(es-snapshots)과 GSA/WI(키 없음)를
+  추가했다. 권한은 bucket 단위 objectAdmin + legacyBucketReader만.
+- ES pod를 전용 KSA(elasticsearch)로 전환하고 metadata egress를 열어
+  repository-gcs가 ADC(WI)로 인증한다. SLM 일 1회(03:30 KST)·expire 7d.
+- #96 spec의 "bucket lifecycle로 정리" 문구를 정정했다 — ES snapshot은
+  증분(세그먼트 공유) 구조라 age 기반 객체 삭제가 최신 snapshot을
+  손상시킨다. 정리는 SLM retention만 사용한다.

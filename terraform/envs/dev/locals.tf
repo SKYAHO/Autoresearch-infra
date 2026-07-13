@@ -89,4 +89,8 @@ locals {
 
   vault_sa_name                     = "${local.resource_prefix}-vault"
   vault_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.vault_k8s_namespace}/${var.vault_k8s_service_account}]"
+
+  es_snapshot_bucket_name        = "${var.project_id}-${local.resource_prefix}-es-snapshots"
+  es_snapshot_sa_name            = "${local.resource_prefix}-es-snapshot"
+  es_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.elastic_k8s_namespace}/${var.es_k8s_service_account}]"
 }
