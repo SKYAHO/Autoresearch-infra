@@ -409,3 +409,15 @@ variable "vault_k8s_service_account" {
   type        = string
   default     = "vault"
 }
+
+variable "elastic_k8s_namespace" {
+  description = "Elasticsearch Workload Identity 매핑용 Kubernetes namespace(#102). 실제 namespace는 terraform/admin/elastic-k8s가 관리."
+  type        = string
+  default     = "elastic"
+}
+
+variable "es_k8s_service_account" {
+  description = "Elasticsearch pod의 Workload Identity 매핑용 Kubernetes service account 이름(#102)."
+  type        = string
+  default     = "elasticsearch"
+}

@@ -166,6 +166,40 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
       }
     }
 
+    # GKE metadata 경로(#102) — repository-gcs의 WI 토큰 교환이 의존.
+    # Dataplane V2용 .254:80과 Calico link-local proxy 987/988 모두 허용
+    # (#126/#127 교훈, vault-k8s와 동일).
+    egress {
+      to {
+        ip_block {
+          cidr = "169.254.169.254/32"
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "80"
+      }
+    }
+
+    egress {
+      to {
+        ip_block {
+          cidr = "169.254.169.252/32"
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "987"
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "988"
+      }
+    }
+
     # Google API — ES snapshot(GCS, #102)용. private googleapis DNS
     # zone(#138)이 googleapis.com을 이 고정 VIP로 유도한다.
     egress {

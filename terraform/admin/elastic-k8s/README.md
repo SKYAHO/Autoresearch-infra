@@ -112,6 +112,57 @@ curl -sk -u "elastic:$PW" -X PUT "https://localhost:19200/.ds-filebeat-*/_settin
   -H 'Content-Type: application/json' -d '{"index.number_of_replicas": 0}'
 ```
 
+## Snapshot 백업 (#102)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| bucket | dev root `es-snapshots` bucket | age lifecycle **없음** — 증분 구조라 나이 기반 객체 삭제는 snapshot 손상. 정리는 SLM retention이 담당 |
+| 인증 | KSA `elasticsearch` → GSA(WI, 키 없음) | repository-gcs가 ADC(metadata)로 가장. bucket 단위 objectAdmin + legacyBucketReader만 |
+| 주기/보관 | SLM 일 1회(18:30 UTC = 03:30 KST), expire 7d (min 3 / max 14) | 복구 창 성격은 #96 — 최근 데이터 복구 전용, 장기 보관 아님 |
+
+repository 등록과 SLM policy는 ES 내부 리소스라 운영자 절차로 관리한다
+(1회 등록, 유실 시 재등록 — 상태 확인은 정기 점검):
+
+```bash
+# 1) repository 등록 + 검증 (verify가 bucket 권한/경로를 end-to-end 확인)
+curl -sk -u "elastic:$PW" -X PUT https://localhost:19200/_snapshot/gcs_snapshots   -H 'Content-Type: application/json' -d '{
+  "type": "gcs",
+  "settings": { "bucket": "ar-infra-501607-autoresearch-dev-es-snapshots" }
+}'
+
+# 2) SLM policy (일 1회 03:30 KST, 7일 보관)
+curl -sk -u "elastic:$PW" -X PUT https://localhost:19200/_slm/policy/daily-snapshots   -H 'Content-Type: application/json' -d '{
+  "schedule": "0 30 18 * * ?",
+  "name": "<daily-snap-{now/d}>",
+  "repository": "gcs_snapshots",
+  "config": { "include_global_state": false },
+  "retention": { "expire_after": "7d", "min_count": 3, "max_count": 14 }
+}'
+
+# 3) 상태 확인 (정기 점검 항목)
+curl -sk -u "elastic:$PW" https://localhost:19200/_slm/policy/daily-snapshots
+curl -sk -u "elastic:$PW" "https://localhost:19200/_snapshot/gcs_snapshots/_all?verbose=false" | head
+```
+
+### 복구 절차 (#102 완료 조건)
+
+```bash
+# 1) snapshot 목록에서 대상 확인
+curl -sk -u "elastic:$PW" "https://localhost:19200/_snapshot/gcs_snapshots/_all?verbose=false"
+
+# 2) 손상된 data stream/index 정리 후 복구 (예: filebeat data stream)
+curl -sk -u "elastic:$PW" -X POST   "https://localhost:19200/_snapshot/gcs_snapshots/<snapshot-name>/_restore"   -H 'Content-Type: application/json' -d '{
+  "indices": ".ds-filebeat-*",
+  "include_global_state": false
+}'
+
+# 3) 복구 후 health green + 문서 수 확인
+```
+
+전체 유실(PVC 소실) 시: ES 재기동(빈 클러스터) → repository 재등록 →
+restore 순서. repository 등록만 하면 기존 bucket의 snapshot을 그대로
+읽을 수 있다.
+
 ## 네트워크 경계
 
 | 방향 | 허용 | 이유 |
@@ -123,6 +174,7 @@ curl -sk -u "elastic:$PW" -X PUT "https://localhost:19200/.ds-filebeat-*/_settin
 | egress | services CIDR 53/443/9200 | kube-dns, kubernetes.default, ES http VIP(Filebeat #100) — pre-DNAT(#122) |
 | egress | kube-system 53 | post-DNAT dataplane 대비 |
 | egress | master CIDR 443 | K8s API post-DNAT 대비(#138 패턴) |
+| egress | `169.254.169.254/32`:80, `169.254.169.252/32`:987-988 | WI metadata 경로(#102 snapshot — vault와 동일 근거 #126/#127) |
 | egress | `199.36.153.8/30`:443 | GCS snapshot(#102) — private googleapis VIP(#138) |
 
 ## 사용 방법
