@@ -439,3 +439,15 @@ variable "batch_spot_gke_node_count_max" {
   type        = number
   default     = 2
 }
+
+variable "airflow_deploy_ref" {
+  description = "Autoresearch-airflow가 GAR push workflow를 실행하는 승인 ref(#175). WIF principalSet을 이 ref로 제한해 임의 브랜치의 SA 가장을 막는다. 앱 저장소 배포 방식 확정 후 조정(예: 태그 릴리스면 refs/tags/*는 GCP principalSet의 정확 일치 특성상 별도 처리 필요)."
+  type        = string
+  default     = "refs/heads/main"
+}
+
+variable "application_deploy_ref" {
+  description = "Autoresearch가 애플리케이션 이미지 GAR push workflow를 실행하는 승인 ref(#175). 위와 동일 목적."
+  type        = string
+  default     = "refs/heads/main"
+}

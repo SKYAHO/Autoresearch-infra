@@ -58,6 +58,12 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
     "attribute.owner"      = "assertion.repository_owner"
+    # #175 repo와 ref를 동시에 강제하는 조합 attribute. pusher SA
+    # (쓰기 권한)의 principalSet을 repository만이 아니라 승인된 ref로
+    # 제한하는 데 사용한다 — repository 단독 principalSet은 임의 브랜치의
+    # workflow까지 SA 가장을 허용해 공급망 위험이 된다(Codex adversarial
+    # review). 값 예: SKYAHO/Autoresearch-airflow@refs/heads/main
+    "attribute.repository_ref" = "assertion.repository + '@' + assertion.ref"
   }
 
   attribute_condition = "attribute.repository in ${jsonencode(var.allowed_github_repositories)}"

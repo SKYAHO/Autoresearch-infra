@@ -479,3 +479,14 @@
   수집 공백을 방지했다(#105에서 명시한 함정).
 - KPO pod의 nodeSelector/toleration 전환은 앱 저장소 소관 — 전환 전까지
   KPO는 기존 airflow pool에서 동작(무해). Spot 중단 내성은 KPO retry 담당.
+
+## 2026-07-14: WIF pusher SA를 승인 ref로 제한 (#175)
+
+- Codex adversarial review high finding. gar_pusher/application_pusher SA의
+  principalSet이 repository만 검사해 임의 브랜치 workflow도 가장 가능했다
+  (공급망 위험 — 악성 브랜치가 dev GAR 이미지 덮어쓰기).
+- bootstrap WIF provider에 `repository_ref`(repo@ref) 조합 attribute를
+  추가하고, 두 pusher principalSet을 승인 ref(기본 refs/heads/main)로
+  좁혔다. terraform-ci(read-only)는 대상 외.
+- 앱 저장소 실제 배포 ref는 협의 필요 — 기본값 main으로 시작, 태그 릴리스
+  등은 확정 후 변수(airflow_deploy_ref/application_deploy_ref)로 조정.
