@@ -1,0 +1,114 @@
+# #153 Terraform drift 감지. merge된 코드와 실제 인프라의 불일치를 매일
+# 확인하고, drift가 있으면 이슈로 알린다(#79 미적용 스택 재발 방지).
+# CI SA의 기존 viewer 권한만 사용한다 — apply 권한 없음(자동 apply 아님).
+# admin root는 GKE master 접근 불가로 대상 외(terraform-plan.yml과 동일 사유).
+
+name: Terraform Drift Detect
+
+on:
+  schedule:
+    - cron: "23 0 * * *" # 매일 09:23 KST
+  workflow_dispatch:
+
+permissions:
+  id-token: write # GCP WIF 인증
+  contents: read
+  issues: write # drift 이슈 생성/코멘트
+
+jobs:
+  drift:
+    # schedule은 fork에서도 정의될 수 있으므로 원본 저장소로 한정
+    if: github.repository == 'SKYAHO/Autoresearch-infra'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.CI_SA_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - run: terraform -chdir=terraform/envs/dev init -reconfigure -no-color
+
+      - name: terraform plan (drift check)
+        id: plan
+        continue-on-error: true
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_dev_subnet_cidr: ${{ vars.DEV_SUBNET_CIDR }}
+          TF_VAR_labels: ${{ vars.TF_LABELS_JSON || '{}' }}
+          TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
+          TF_VAR_gke_master_ipv4_cidr: ${{ vars.GKE_MASTER_IPV4_CIDR }}
+          TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
+          TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
+          TF_VAR_master_authorized_networks: ${{ vars.MASTER_AUTHORIZED_NETWORKS || '[]' }}
+        # -detailed-exitcode: 0=일치, 1=오류, 2=drift.
+        # plan 출력의 user:email PII는 terraform-plan.yml과 동일하게 마스킹.
+        run: |
+          set +e
+          set -o pipefail
+          terraform -chdir=terraform/envs/dev plan -no-color -input=false -detailed-exitcode 2>&1 \
+            | sed -E 's/(user:)[^"[:space:]]+/\1[REDACTED]/g' > /tmp/plan.out
+          code=$?
+          echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
+          # 이 step 자체는 항상 성공 처리하고 판정은 아래 step에서 한다
+          exit 0
+
+      - name: drift/오류 시 이슈 생성 또는 코멘트
+        if: steps.plan.outputs.exitcode != '0'
+        uses: actions/github-script@v7
+        env:
+          PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = '(plan 출력 없음)';
+            try { plan = fs.readFileSync('/tmp/plan.out', 'utf8'); } catch (e) {}
+            const code = process.env.PLAN_EXITCODE;
+            const kind = code === '2' ? 'drift 감지' : 'plan 오류';
+            const marker = '[DRIFT] dev root 코드-인프라 불일치';
+            const body = [
+              `자동 감지(${new Date().toISOString()}): **${kind}** (exit ${code})`,
+              '',
+              'merge된 코드와 실제 인프라가 일치하지 않거나 plan이 실패했습니다.',
+              '원인 확인 후 apply 완결 또는 코드 정정이 필요합니다.',
+              '',
+              '<details><summary>plan 출력 (마스킹됨, 최대 20000자)</summary>',
+              '',
+              '```hcl',
+              plan.slice(0, 20000),
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            // label 3종으로 좁혀 조회 — open 이슈+PR 100개 초과 시 기존
+            // [DRIFT] 이슈가 첫 페이지에서 밀려 중복 생성되는 것을 방지
+            // (리뷰 반영). labels 필터는 모든 라벨을 가진 이슈만 반환한다.
+            const { data: issues } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', per_page: 100,
+              labels: 'bug,terraform,gcp',
+            });
+            const existing = issues.find(i => i.title.startsWith(marker) && !i.pull_request);
+            if (existing) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                ...context.repo,
+                title: marker,
+                body,
+                labels: ['bug', 'terraform', 'gcp'],
+              });
+            }
+
+      - name: 결과 판정
+        if: steps.plan.outputs.exitcode != '0'
+        run: |
+          echo "plan exit=${{ steps.plan.outputs.exitcode }} (2=drift, 1=오류)"
+          exit 1

@@ -351,3 +351,13 @@
 - 교훈: apply·실검증까지가 이슈 완료 기준이라는 원칙을 재확인 — "코드
   merge = 완료"로 잘못 닫힌 이슈가 없는지 트랙 완료 시점에 state를 함께
   점검한다.
+
+## 2026-07-13: Terraform drift 감지 자동화 (#153)
+
+- 매일 1회 dev root plan -detailed-exitcode로 코드-인프라 불일치를 감지해
+  [DRIFT] 이슈를 자동 생성하는 workflow를 추가했다(#79 미적용 스택 재발
+  방지). CI SA의 기존 viewer 권한만 사용 — apply 권한 부여 없음.
+- 자동 apply는 도입하지 않기로 결정했다: 권한 폭발(viewer→editor급),
+  admin root의 구조적 CI 불가(master 접근), apply 시점 사람 검증의 가치
+  (#116/#122/#98 인시던트 실증). 2단계(Environment approval 반자동)는
+  별도 설계 후 검토한다.
