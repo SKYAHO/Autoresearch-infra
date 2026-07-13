@@ -427,3 +427,13 @@
 - 팀원용 Kibana 접속 절을 TEAM_OPERATIONS_RUNBOOK에 추가했다(상위 문서
   동시 점검 원칙).
 - 이로써 ELK 트랙(#96~#103)이 완결됐다.
+
+## 2026-07-13: GKE autoscaling 전략 검토 (#104)
+
+- 실측: dev-default는 CA min1/max2로 이미 활성, airflow-dev는 min=max=1
+  고정(의도), NAP/VPA 비활성.
+- 결론: dev는 현행 유지. NAP 보류(워크로드 프로필 2종 고정 + 비용 예측성),
+  **Karpenter 비권장 확정**(GKE 공식 지원 없음, CA/NAP가 네이티브 대체).
+- 핵심 통찰: PVC(RWO) stateful pod들 때문에 scale-down이 점착적 — 확장은
+  사실상 반영구 증설로 취급. 다음 개선은 autoscaling이 아니라 #105(Spot
+  batch pool, ES 전용 pool 트리거)에 있다.
