@@ -75,7 +75,46 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 | 수집 범위 | **`airflow`·`autoresearch` namespace 컨테이너 로그만** | autodiscover 조건 allowlist. 시스템/플랫폼 로그는 Cloud Logging 담당 — 중복 수집 방지 기준(#96 역할 분리) |
 | RBAC | 전용 SA + 읽기 전용 ClusterRole | pods/namespaces/nodes/replicasets/jobs get·list·watch만 |
 | PSS | hostPath(/var/log) read가 baseline 위반 — **audit/warn만 발생(비강제), 수용** | 로그 수집기의 본질적 요구. enforce 전환 시 Beat 전용 예외 설계 필요 |
-| 인덱스 | data stream `filebeat-<version>` | 보존(ILM 7일)은 #101에서 적용 |
+| 인덱스 | data stream `filebeat-<version>` | 템플릿 replicas 0(#101 — single-node green 전제) |
+
+## 보존 정책 — ILM (#101)
+
+ES 내부 리소스(ILM policy)는 Vault 내부 리소스와 같은 원칙으로 Terraform이
+아닌 **운영자 절차**로 관리한다. filebeat data stream이 참조하는 \`filebeat\`
+policy를 아래 기준으로 유지한다(기본값은 rollover 30d/50gb + **삭제 없음**
+— 무한 증가):
+
+| 항목 | 값 | 근거 |
+|---|---|---|
+| rollover | max_age 1d 또는 primary shard 5gb | #96 — 일 단위 관리 |
+| delete | rollover 후 7일 | Prometheus retention과 정합. **비용 증가 방지의 핵심**(PVC 30Gi 고정에서 무한 보관 차단) |
+| 운영 전환 시 | delete min_age만 상향 | dev/운영 보관 기간 분리 기준(#101 이슈 참고 사항) |
+
+적용/확인(port-forward + elastic 인증 후):
+
+```bash
+curl -sk -u "elastic:$PW" -X PUT https://localhost:19200/_ilm/policy/filebeat \
+  -H 'Content-Type: application/json' -d '{
+  "policy": {
+    "phases": {
+      "hot":    { "actions": { "rollover": { "max_age": "1d", "max_primary_shard_size": "5gb" } } },
+      "delete": { "min_age": "7d", "actions": { "delete": {} } }
+    }
+  }
+}'
+
+# 확인
+curl -sk -u "elastic:$PW" https://localhost:19200/_ilm/policy/filebeat
+curl -sk -u "elastic:$PW" "https://localhost:19200/.ds-filebeat-*/_ilm/explain?only_errors=true"
+```
+
+filebeat 템플릿의 replicas 0은 Beat config(\`setup.template\`)가 관리하지만,
+**이미 생성된 backing index**에는 소급되지 않으므로 1회 수동 적용한다:
+
+```bash
+curl -sk -u "elastic:$PW" -X PUT "https://localhost:19200/.ds-filebeat-*/_settings" \
+  -H 'Content-Type: application/json' -d '{"index.number_of_replicas": 0}'
+```
 
 ## 네트워크 경계
 

@@ -76,6 +76,20 @@ resource "kubernetes_manifest" "filebeat" {
       }
 
       config = {
+        # #101 single-node에서 green 유지: filebeat 기본 템플릿의
+        # replicas 1은 배치 불가(영구 yellow — #96/#98 예고 지점 실측 확인).
+        # overwrite로 기존 템플릿을 replicas 0으로 교체한다. 기존 backing
+        # index의 replicas는 운영자 절차로 0 적용(README ILM 절).
+        setup = {
+          template = {
+            overwrite = true
+            settings = {
+              index = {
+                number_of_replicas = 0
+              }
+            }
+          }
+        }
         filebeat = {
           autodiscover = {
             providers = [

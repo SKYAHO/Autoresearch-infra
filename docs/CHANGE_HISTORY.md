@@ -396,3 +396,13 @@
   services CIDR 9200 egress 추가로 허용(pre-DNAT VIP — #122 교훈).
 - hostPath read의 PSS baseline 위반은 audit/warn(비강제)로 수용하고
   근거를 README에 기록했다(#96에서 확인 예약된 항목의 결론).
+
+## 2026-07-13: ES ILM/retention 정책 (#101)
+
+- filebeat 기본 ILM(rollover 30d/50gb, 삭제 없음)을 hot rollover 1d/5gb +
+  delete 7d로 교체했다(운영자 절차 — ES 내부 리소스는 Terraform 밖 원칙).
+  PVC 30Gi 고정에서 무한 보관을 차단하는 비용 방지 장치다.
+- filebeat 템플릿 replicas를 0으로 교체(Beat config setup.template) —
+  기본값 1이 single-node에서 unassigned replica를 만들어 cluster가
+  yellow였던 것을 green으로 복구했다(#96/#98 예고 지점 실측).
+- dev/운영 보관 분리 기준: 운영 전환 시 delete min_age만 상향.
