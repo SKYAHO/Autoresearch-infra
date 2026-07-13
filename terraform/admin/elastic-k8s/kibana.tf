@@ -20,6 +20,9 @@ resource "kubernetes_manifest" "kibana" {
       }
 
       podTemplate = {
+        # 서버(ECK)가 빈 metadata를 정규화 결과로 유지하므로 동일하게
+        # 선언해 desired와 server 상태를 일치시킨다(왕복 안정화, #99).
+        metadata = {}
         spec = {
           # ES와 같은 이유(#98)로 dev-default pool 고정
           nodeSelector = {
@@ -50,10 +53,10 @@ resource "kubernetes_manifest" "kibana" {
     force_conflicts = true
   }
 
-  # 서버가 podTemplate.metadata를 빈 객체로 정규화해 provider 왕복이
-  # 불안정해진다(#99 검증에서 'inconsistent result after apply' 재현).
-  # 해당 경로를 computed로 지정해 diff 대상에서 제외한다. 앞의 두 항목은
-  # provider 기본값 유지분이다.
+  # 왕복 안정화(#99 실측): 위 podTemplate.metadata = {} 선언과 이
+  # computed_fields의 '조합'에서만 연속 plan이 No changes로 수렴한다.
+  # 각각 단독으로는 정규화 drift 또는 'inconsistent result' 오류가 재발
+  # (실험 기록은 #99 코멘트). 두 블록을 함께 유지할 것.
   computed_fields = [
     "metadata.labels",
     "metadata.annotations",
