@@ -36,6 +36,13 @@ grafana:
   envFromSecret: grafana-google-oauth
 
   grafana.ini:
+    # OAuth 로그인이 '사전 생성 계정'과 이메일로 매칭되게 허용(#155 검증에서
+    # 필수로 확인 — 기본값 false면 수동 생성 계정에 Google auth binding이
+    # 없어 이메일이 같아도 신규 생성을 시도하다 sign-up 차단에 걸린다).
+    # 'insecure'는 다중 IdP·미검증 이메일 환경의 위험을 뜻하며, 이 구성은
+    # 단일 IdP(Google, 이메일 검증됨) + allow_sign_up=false라 수용 가능.
+    auth:
+      oauth_allow_insecure_email_lookup: true
     server:
       # OAuth redirect가 port-forward 접속 주소와 일치해야 한다(내부 전용).
       root_url: http://localhost:3000
