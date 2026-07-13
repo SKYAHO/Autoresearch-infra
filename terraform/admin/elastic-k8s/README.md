@@ -13,7 +13,8 @@ state로 관리한다. 아키텍처·정책은 #96 설계
 | NetworkPolicy | 예 | deny-by-default (아래 표) |
 | Elasticsearch CR `autoresearch` | 예 (#98) | single-node, `kubernetes_manifest` — CRD 부트스트랩 순서 주의 |
 | Kibana CR `autoresearch` | 예 (#99) | 1 replica, ClusterIP + port-forward 전용 |
-| Beat CR | 예 (후속 #100) | `kubernetes_manifest` |
+| Beat CR `autoresearch` (Filebeat) | 예 (#100) | DaemonSet, namespace allowlist 수집 |
+| Filebeat RBAC | 예 (#100) | 전용 SA + 읽기 전용 ClusterRole(autodiscover) |
 | snapshot GCS bucket / GSA | 아니오 | dev root (#102에서 추가) |
 | `elastic` 사용자 비밀번호 | 아니오 | operator 생성 Secret에서 운영자가 회수(#103 runbook). Git/문서 금지 |
 
@@ -66,6 +67,16 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 상세 운영 절차(비밀번호 변경, 검색 기본, 장애 대응)는 #103 runbook에서
 제공한다.
 
+## 로그 수집 (#100)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| 수집기 | Filebeat (ECK `Beat` CR, DaemonSet) | Elastic Agent 대신 단일 용도로 단순화(#96) |
+| 수집 범위 | **`airflow`·`autoresearch` namespace 컨테이너 로그만** | autodiscover 조건 allowlist. 시스템/플랫폼 로그는 Cloud Logging 담당 — 중복 수집 방지 기준(#96 역할 분리) |
+| RBAC | 전용 SA + 읽기 전용 ClusterRole | pods/namespaces/nodes/replicasets/jobs get·list·watch만 |
+| PSS | hostPath(/var/log) read가 baseline 위반 — **audit/warn만 발생(비강제), 수용** | 로그 수집기의 본질적 요구. enforce 전환 시 Beat 전용 예외 설계 필요 |
+| 인덱스 | data stream `filebeat-<version>` | 보존(ILM 7일)은 #101에서 적용 |
+
 ## 네트워크 경계
 
 | 방향 | 허용 | 이유 |
@@ -74,7 +85,7 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 | ingress | master CIDR → 10250 | control plane → validating webhook |
 | ingress | `var.kibana_ingress_source_cidr`(dev subnet) → 5601 | Kibana port-forward(#116 교훈). CR은 #99에서 추가되지만 경계는 선언 |
 | egress | 같은 ns | 내부 통신 |
-| egress | services CIDR 53/443 | kube-dns, kubernetes.default VIP — pre-DNAT(#122) |
+| egress | services CIDR 53/443/9200 | kube-dns, kubernetes.default, ES http VIP(Filebeat #100) — pre-DNAT(#122) |
 | egress | kube-system 53 | post-DNAT dataplane 대비 |
 | egress | master CIDR 443 | K8s API post-DNAT 대비(#138 패턴) |
 | egress | `199.36.153.8/30`:443 | GCS snapshot(#102) — private googleapis VIP(#138) |

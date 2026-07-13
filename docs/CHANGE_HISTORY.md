@@ -386,3 +386,13 @@
   않고 Grafana DB에만 존재한다(이메일 비노출 요구).
 - admin 계정은 비상용으로 유지. redirect URI는 port-forward 주소
   (localhost:3000) — 내부 전용 접근 원칙 유지.
+
+## 2026-07-13: Filebeat 로그 수집 (#100)
+
+- Beat CR(Filebeat DaemonSet)로 airflow·autoresearch namespace 컨테이너
+  로그만 수집한다(autodiscover allowlist). 시스템/플랫폼 로그는 Cloud
+  Logging 담당 — 중복 수집 방지 기준을 문서화했다.
+- 전용 SA + 읽기 전용 ClusterRole(autodiscover 최소 권한), ES 연결은
+  services CIDR 9200 egress 추가로 허용(pre-DNAT VIP — #122 교훈).
+- hostPath read의 PSS baseline 위반은 audit/warn(비강제)로 수용하고
+  근거를 README에 기록했다(#96에서 확인 예약된 항목의 결론).
