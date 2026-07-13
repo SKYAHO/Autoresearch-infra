@@ -490,3 +490,12 @@
   좁혔다. terraform-ci(read-only)는 대상 외.
 - 앱 저장소 실제 배포 ref는 협의 필요 — 기본값 main으로 시작, 태그 릴리스
   등은 확정 후 변수(airflow_deploy_ref/application_deploy_ref)로 조정.
+
+## 2026-07-14: ES snapshot bucket soft delete 추가 (#176)
+
+- Codex adversarial review high finding. snapshot GSA의 objectAdmin(SLM
+  삭제에 필요)과 soft delete 0(복구 불가)이 결합돼, 침해/오작동/잘못된
+  SLM이 객체를 삭제하면 원본과 유일 백업이 동시 소실될 수 있었다.
+- soft delete를 7일(GCS 최소값)로 활성화해 삭제 객체 복구 창을 확보했다.
+  SLM 정상 삭제는 그대로 성공하고 soft-deleted 사본만 뒤에 남으므로 증분
+  구조와 충돌하지 않는다. retention lock은 SLM 정리를 막으므로 미사용.

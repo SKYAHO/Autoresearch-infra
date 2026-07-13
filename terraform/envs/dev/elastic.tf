@@ -15,8 +15,15 @@ resource "google_storage_bucket" "es_snapshots" {
   # 보관 정리는 SLM retention(expire_after 7d)이 ES API로 수행한다
   # (#96 spec의 lifecycle 문구를 이 근거로 정정).
 
+  # #176 soft delete(7d) — snapshot GSA는 objectAdmin(SLM 삭제에 필요)을
+  # 가지므로, 침해/오작동/잘못된 SLM이 객체를 삭제하면 원본(PVC)과 유일
+  # 백업이 동시 소실될 수 있다(Codex adversarial review). soft delete는
+  # 삭제된 객체를 보관 기간 동안 복구 가능하게 유지해 방어층을 제공한다.
+  # SLM의 정상 삭제(오래된 snapshot 정리)는 그대로 성공하고 soft-deleted
+  # 사본만 뒤에 남으므로 증분 구조와 충돌하지 않는다. bucket retention
+  # lock(삭제 자체 차단)은 SLM 정리를 막으므로 쓰지 않는다.
   soft_delete_policy {
-    retention_duration_seconds = 0
+    retention_duration_seconds = 604800 # 7d (GCS 최소값)
   }
 }
 

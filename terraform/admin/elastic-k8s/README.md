@@ -116,7 +116,7 @@ curl -sk -u "elastic:$PW" -X PUT "https://localhost:19200/.ds-filebeat-*/_settin
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| bucket | dev root `es-snapshots` bucket | age lifecycle **없음** — 증분 구조라 나이 기반 객체 삭제는 snapshot 손상. 정리는 SLM retention이 담당 |
+| bucket | dev root `es-snapshots` bucket | age lifecycle **없음**(증분 구조 손상 방지) + **soft delete 7d**(#176 — 삭제 객체 복구 창). 정리는 SLM retention |
 | 인증 | KSA `elasticsearch` → GSA(WI, 키 없음) | repository-gcs가 ADC(metadata)로 가장. bucket 단위 objectAdmin + legacyBucketReader만 |
 | 주기/보관 | SLM 일 1회(18:30 UTC = 03:30 KST), expire 7d (min 3 / max 14) | 복구 창 성격은 #96 — 최근 데이터 복구 전용, 장기 보관 아님 |
 
@@ -158,6 +158,16 @@ curl -sk -u "elastic:$PW" -X POST   "https://localhost:19200/_snapshot/gcs_snaps
 
 # 3) 복구 후 health green + 문서 수 확인
 ```
+
+**객체 삭제 사고 복구(#176 soft delete)**: 실수/오작동으로 snapshot 객체가
+삭제된 경우, GCS soft delete가 7일간 보관한다. objectAdmin 자격으로도
+보관 기간 내 조기 purge가 불가능하다(GCS는 soft-deleted 객체의 강제 삭제
+API를 제공하지 않는다 — 보관 만료 후 자동 삭제만). 복구는 개별 객체가
+아니라 **삭제된 관련 객체 전체를 함께 restore**해야 한다(증분 세그먼트 +
+`index-N` 메타데이터가 일관된 시점으로 돌아가야 repository가 유효). 절차:
+`gcloud storage restore`로 해당 시점 삭제분을 일괄 복구 → ES에서
+`_snapshot/gcs_snapshots/_verify`로 재검증 → snapshot 목록 정합 확인.
+부분 복구는 repository 손상을 남길 수 있으니 피한다.
 
 전체 유실(PVC 소실) 시: ES 재기동(빈 클러스터) → repository 재등록 →
 restore 순서. repository 등록만 하면 기존 bucket의 snapshot을 그대로
