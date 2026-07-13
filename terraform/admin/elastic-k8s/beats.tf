@@ -4,6 +4,39 @@
 # - 시스템/타 namespace 로그는 Cloud Logging이 담당(중복 수집 방지 —
 #   ELK에는 분석 대상 앱 로그만)
 
+# #101 ILM policy를 선언으로 관리한다. filebeat이 기동 시마다
+# setup.ilm.overwrite로 이 policy를 재적용하므로, ES가 재구축되어도
+# 수동 개입 없이 delete 7d가 복원된다(리뷰 반영 — 수동 curl 제거).
+resource "kubernetes_config_map_v1" "filebeat_ilm_policy" {
+  metadata {
+    name      = "filebeat-ilm-policy"
+    namespace = kubernetes_namespace_v1.elastic.metadata[0].name
+  }
+
+  data = {
+    "ilm-policy.json" = jsonencode({
+      policy = {
+        phases = {
+          hot = {
+            actions = {
+              rollover = {
+                max_age                = "1d"
+                max_primary_shard_size = "5gb"
+              }
+            }
+          }
+          delete = {
+            min_age = "7d"
+            actions = {
+              delete = {}
+            }
+          }
+        }
+      }
+    })
+  }
+}
+
 # Filebeat autodiscover가 pod 메타데이터를 조회하기 위한 최소 RBAC.
 # ECK operator는 Beat용 RBAC를 만들어주지 않으므로 직접 관리한다.
 resource "kubernetes_service_account_v1" "filebeat" {
@@ -88,6 +121,14 @@ resource "kubernetes_manifest" "filebeat" {
                 number_of_replicas = 0
               }
             }
+          }
+          # policy는 ConfigMap(선언)에서 로드해 기동 시마다 재적용 — ES
+          # 재구축 시에도 delete 7d 자동 복원(#101)
+          ilm = {
+            enabled     = true
+            overwrite   = true
+            policy_name = "filebeat"
+            policy_file = "/usr/share/filebeat/ilm-policy.json"
           }
         }
         filebeat = {
@@ -176,6 +217,12 @@ resource "kubernetes_manifest" "filebeat" {
                 }
                 volumeMounts = [
                   {
+                    name      = "ilm-policy"
+                    mountPath = "/usr/share/filebeat/ilm-policy.json"
+                    subPath   = "ilm-policy.json"
+                    readOnly  = true
+                  },
+                  {
                     name      = "varlogcontainers"
                     mountPath = "/var/log/containers"
                     readOnly  = true
@@ -189,6 +236,12 @@ resource "kubernetes_manifest" "filebeat" {
               },
             ]
             volumes = [
+              {
+                name = "ilm-policy"
+                configMap = {
+                  name = "filebeat-ilm-policy"
+                }
+              },
               {
                 name = "varlogcontainers"
                 hostPath = {
