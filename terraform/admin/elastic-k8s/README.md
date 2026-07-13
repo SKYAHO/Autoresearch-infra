@@ -64,8 +64,8 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
   -o jsonpath='{.data.elastic}' | base64 -d
 ```
 
-상세 운영 절차(비밀번호 변경, 검색 기본, 장애 대응)는 #103 runbook에서
-제공한다.
+상세 운영 절차(검색, 정기 점검, 장애 대응, 업그레이드 주의)는
+[docs/KIBANA_OPERATIONS_RUNBOOK.md](../../../docs/KIBANA_OPERATIONS_RUNBOOK.md)(#103)를 따른다.
 
 ## 로그 수집 (#100)
 

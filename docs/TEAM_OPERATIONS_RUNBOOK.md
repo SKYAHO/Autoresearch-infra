@@ -197,6 +197,18 @@ Secret payload)은 비상용으로만 쓰고, 실제 비밀번호를 문서, PR,
 로그인 후 어떤 dashboard를 볼지는
 [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md)를 기준으로 한다.
 
+## Kibana (로그 검색) 접속
+
+Kibana도 인터넷에 공개하지 않는다. Airflow/앱 로그 검색이 필요하면:
+
+```bash
+kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
+```
+
+브라우저에서 `https://localhost:5601` (self-signed 경고 허용). 로그인
+계정은 운영자에게 요청한다. 검색 방법과 KQL 예시는
+[`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) 참조.
+
 ## SOCKS 프록시 보조 경로
 
 내부 DNS 이름 자체를 브라우저에서 확인해야 할 때만 SOCKS 프록시를 쓴다.
