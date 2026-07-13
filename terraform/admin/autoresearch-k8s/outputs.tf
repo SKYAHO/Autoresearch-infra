@@ -9,6 +9,6 @@ output "app_service_account" {
 }
 
 output "app_egress_network_policy" {
-  description = "NetworkPolicy that allows minimum application egress including Redis TLS."
+  description = "NetworkPolicy that allows minimum application egress including Redis Cluster PSC topology traffic."
   value       = kubernetes_network_policy_v1.app_egress.metadata[0].name
 }

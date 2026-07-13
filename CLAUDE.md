@@ -1,6 +1,6 @@
 # AI 코딩 에이전트 작업 지침
 
-> Version: 1.1.0 | Last Updated: 2026-07-10
+> Version: 1.1.1 | Last Updated: 2026-07-13
 
 이 문서는 Claude Code 등 AI 코딩 에이전트가 이 저장소에서 작업할 때의 기본
 진입점입니다. 필수 규칙은 짧게 유지하고, 상세 가이드는 `.claude/docs/`를
@@ -47,7 +47,7 @@
   - `nat.tf` — Cloud Router + Cloud NAT
   - `artifact_registry.tf` — Docker 저장소 (`autoresearch-dev-docker`)
   - `cloud_sql.tf` — PostgreSQL 15 dev 인스턴스 (private IP only)
-  - `redis.tf` — Feast Online Store Redis (private Service Access, AUTH/TLS)
+  - `redis.tf` — Feast Online Store 2-shard Redis Cluster (PSC, IAM auth/TLS)
   - `gke.tf` — dev GKE 클러스터
   - `storage.tf` / `bigquery.tf` — raw data, Feast, analytics 저장소
   - `cloud_run.tf` — dev proxy Cloud Run

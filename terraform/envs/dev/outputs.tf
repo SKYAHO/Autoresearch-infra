@@ -68,19 +68,24 @@ output "cloud_sql_database_name" {
   value       = google_sql_database.dev.name
 }
 
-output "redis_host" {
-  description = "Feast Online Store Redis private endpoint. AUTH token 없이 사용 불가."
-  value       = google_redis_instance.online_store.host
+output "redis_cluster_name" {
+  description = "Feast Online Store Memorystore for Redis Cluster resource name."
+  value       = google_redis_cluster.online_store.name
 }
 
-output "redis_port" {
-  description = "Feast Online Store Redis TLS endpoint port."
-  value       = google_redis_instance.online_store.port
+output "redis_discovery_address" {
+  description = "Private PSC discovery endpoint address for cluster-aware Redis clients."
+  value       = one(google_redis_cluster.online_store.discovery_endpoints).address
 }
 
-output "redis_auth_secret_id" {
-  description = "Redis AUTH token을 저장한 Secret Manager secret id. Payload는 output하지 않는다."
-  value       = google_secret_manager_secret.redis_auth.secret_id
+output "redis_discovery_port" {
+  description = "Redis Cluster discovery endpoint port. Data node ports are 11000-13047."
+  value       = one(google_redis_cluster.online_store.discovery_endpoints).port
+}
+
+output "redis_psc_subnet_cidr" {
+  description = "Dedicated PSC subnet CIDR containing Redis Cluster discovery and data node endpoints."
+  value       = google_compute_subnetwork.redis_psc.ip_cidr_range
 }
 
 output "redis_server_ca_secret_id" {

@@ -21,11 +21,12 @@ db_app_user             = "app"
 sql_deletion_protection = false
 private_services_cidr   = "192.168.0.0/20" # 현재 dev apply 값. dev subnet/GKE 대역과 미중복
 
-# Feast Online Store Redis (#129) — AUTH/TLS는 코드에서 상시 활성
-redis_tier                = "BASIC"
-redis_memory_size_gb      = 1
-redis_version             = "REDIS_7_2"
-redis_deletion_protection = false
+# Feast Online Store Redis Cluster (#129) — IAM auth/TLS는 코드에서 상시 활성
+redis_psc_subnet_cidr              = "10.10.16.0/29" # PSC discovery/internal backend 전용, 다른 VPC/GKE 대역과 미중복
+redis_node_type                    = "REDIS_SHARED_CORE_NANO"
+redis_shard_count                  = 2
+redis_replica_count                = 0
+redis_cluster_deletion_protection = false
 
 # GKE (#5)
 gke_master_ipv4_cidr              = "172.16.0.0/28" # private 컨트롤 플레인. dev subnet/private services와 미중복

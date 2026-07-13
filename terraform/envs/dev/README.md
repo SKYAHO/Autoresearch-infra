@@ -13,7 +13,7 @@
 - dev VPC/subnet, Cloud Router/NAT, IAP SSH firewall
 - Artifact Registry Docker repository
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장
-- Feast Online Store Memorystore for Redis(private IP, AUTH/TLS), AUTH/CA Secret Manager 저장 (#129, apply 대기)
+- Feast Online Store 2-shard Memorystore for Redis Cluster(PSC, IAM auth/TLS), CA Secret Manager 저장 (#129, apply 대기)
 - dev 원본 데이터 GCS bucket(YouTube/user/action-log/persona raw)
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset
@@ -64,7 +64,8 @@ terraform -chdir=terraform/envs/dev apply
 | DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
 | IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
 
-Issue #129의 `autoresearch-dev-redis`와 `terraform/admin/autoresearch-k8s`는
+Issue #129의 `autoresearch-dev-redis-cluster`, 전용 PSC subnet/policy와
+`terraform/admin/autoresearch-k8s`는
 Terraform 정의만 추가된 상태이며, 실제 생성 여부는 merge 후 승인된 plan/apply
 결과를 기준으로 갱신합니다.
 

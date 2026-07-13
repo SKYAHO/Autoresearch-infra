@@ -1,6 +1,6 @@
 # 에이전트 프로젝트 참조
 
-> Last Updated: 2026-07-08
+> Last Updated: 2026-07-13
 
 프로젝트 구조, 폴더 책임, 팀 소유권을 빠르게 찾기 위한 문서입니다.
 "X는 어디에 있는가?", "Y는 누가 소유하는가?" 질문에 답합니다.
@@ -30,11 +30,11 @@ terraform/
 │       ├── variables.tf     # 입력 변수
 │       ├── locals.tf        # 공통 locals (이름 prefix, 기본 label)
 │       ├── outputs.tf       # 다른 시스템이 소비하는 출력
-│       ├── vpc.tf           # custom VPC, subnet, firewall, PGA
+│       ├── vpc.tf           # custom VPC, app/Redis PSC subnet, firewall, PGA
 │       ├── nat.tf           # Cloud Router + Cloud NAT
 │       ├── artifact_registry.tf  # Docker 저장소
 │       ├── cloud_sql.tf     # PostgreSQL dev 인스턴스 (private IP)
-│       ├── redis.tf         # Feast Online Store Redis (private IP, AUTH/TLS)
+│       ├── redis.tf         # Feast Online Store 2-shard Redis Cluster (PSC, IAM auth/TLS)
 │       ├── gke.tf           # dev GKE 클러스터
 │       ├── storage.tf       # raw data, Feast, Airflow DAG/log GCS bucket
 │       ├── bigquery.tf      # analytics / Feast offline store dataset

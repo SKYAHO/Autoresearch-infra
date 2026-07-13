@@ -9,7 +9,7 @@
 - Terraform backend: GCS `autoresearch-dev-tfstate`, prefix `dev/`
 - 마지막 실제 apply: 2026-07-08, #46(GKE DNS 엔드포인트)·#50(bastion)·#51(Airflow ILB + private DNS)·#55(OAuth secrets) merge 및 apply 완료
 - 최신 검증: 2026-07-08, 위 apply 이후 `terraform/envs/dev`와 `terraform/admin/airflow-k8s` 모두 최종 plan `No changes`
-- Issue #129 Online Store Redis와 `terraform/admin/autoresearch-k8s`는 코드 검증 단계이며 실제 apply 전이다.
+- Issue #129 Online Store Redis Cluster와 `terraform/admin/autoresearch-k8s`는 코드 검증 단계이며 실제 apply 전이다.
 
 ## 구조
 
@@ -17,7 +17,7 @@
 terraform/
 ├── README.md
 ├── admin/
-│   ├── autoresearch-k8s/ # #129 앱 namespace/KSA/Redis egress NetworkPolicy (separate state)
+│   ├── autoresearch-k8s/ # #129 앱 namespace/KSA/Redis Cluster PSC egress NetworkPolicy (separate state)
 │   ├── airflow-k8s/      # #32 Airflow Kubernetes namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/  # #34/#46 팀원 GKE container.viewer + bastion 접속 IAM (separate state)
 │   ├── monitoring-k8s/   # #78 Prometheus/Grafana monitoring namespace + Helm values (separate state)
@@ -37,7 +37,7 @@ terraform/
 │       ├── bastion.tf        # #47 IAP 전용 bastion host
 │       ├── bigquery.tf       # #20 dev analytics/Feast offline dataset
 │       ├── cloud_sql.tf      # #4 dev Cloud SQL (PostgreSQL, private IP)
-│       ├── redis.tf          # #129 Feast Online Store Redis (private PSA, AUTH/TLS)
+│       ├── redis.tf          # #129 Feast Online Store 2-shard Redis Cluster (PSC, IAM auth/TLS)
 │       ├── cloud_build.tf    # #32 Autoresearch-airflow Cloud Build IAM
 │       ├── cloud_run.tf      # #27 Cloud Run proxy state/code 정합성
 │       ├── dns.tf            # #48 Airflow ILB 예약 내부 IP + private DNS zone
@@ -113,47 +113,97 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 
 접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 `random_password`로 생성되어 SQL user에 주입되며, #5에서 Secret Manager(`output.db_app_password_secret_id`)에도 저장한다.
 
-## Feast Online Store Redis (#129, apply 대기)
+## Feast Online Store Redis Cluster (#129, apply 대기)
 
-Feast의 Online Store는 GCP Memorystore for Redis 단일 인스턴스로 구성한다.
-기존 dev VPC와 Cloud SQL용 Private Service Access 연결을 재사용하며 public
-endpoint를 만들지 않는다.
+Feast Online Store는 GCP Memorystore for Redis Cluster로 구성한다. dev 학습
+환경에서 primary shard 두 개에 keyspace를 분산하여 hash slot, hash tag와
+multi-key command 제약을 실제로 검증한다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| Instance | `autoresearch-dev-redis` | `${resource_prefix}-redis` |
-| Region / zone | `asia-northeast3` / `asia-northeast3-a` | GKE와 동일 위치 |
-| Tier / memory | `BASIC` / 1 GiB | dev 최소 비용, HA 없음 |
-| Version | Redis 7.2 | `var.redis_version=REDIS_7_2` |
-| Network | 기존 dev VPC, `PRIVATE_SERVICE_ACCESS` | 기존 `private_services_cidr` 공유 |
-| 인증 | Redis AUTH 활성 | AUTH token은 Secret Manager에 저장 |
-| 전송 암호화 | `SERVER_AUTHENTICATION` | TLS server CA bundle도 Secret Manager에 저장 |
-| Outputs | `redis_host`, `redis_port`, AUTH/CA secret ID | token과 CA 본문은 output하지 않음 |
+| Cluster | `autoresearch-dev-redis-cluster` | `${resource_prefix}-redis-cluster` |
+| Region | `asia-northeast3` | Redis Cluster 지원 서울 리전 |
+| Node type | `REDIS_SHARED_CORE_NANO` | node당 총 1.4 GB, writable 1.12 GB, SLA 없음 |
+| Shape | primary shard 2 × replica 0 | 총 2 data node, cluster usage unit 2, HA 없음 |
+| Redis version | 서비스 관리 Redis 7.x | provider에서 버전을 고정하지 않음 |
+| Persistence | disabled | 장애/flush 후 Feast 재-materialize 필요 |
+| Network | 기존 dev VPC + 전용 PSC `/29` | `10.10.16.0/29`, public endpoint 없음 |
+| 인증 | IAM auth | app GSA의 단기 access token, 정적 token 저장 안 함 |
+| 전송 암호화 | server authentication TLS | per-instance CA bundle만 Secret Manager 저장 |
 | deletion protection | `false` | dev 기본, 삭제 전 별도 plan/승인 필요 |
 
-AUTH token은 `autoresearch-dev-redis-auth`, TLS CA bundle은
-`autoresearch-dev-redis-server-ca` secret에 저장한다. app GSA에는 두 secret의
-resource-level `roles/secretmanager.secretAccessor`만 부여한다. secret payload는
-Terraform state에도 저장되므로 GCS backend IAM을 최소화한다.
+### PSC와 NetworkPolicy
 
-Kubernetes 측 `autoresearch` namespace, `autoresearch-app` KSA와 egress
-NetworkPolicy는 `terraform/admin/autoresearch-k8s` 별도 state에서 관리한다.
-NetworkPolicy는 private services CIDR의 Cloud SQL 5432와 Redis TLS port, DNS,
-Workload Identity metadata endpoint, HTTPS만 허용한다. 실제 port는 dev root의
-`redis_port` output과 admin root tfvars가 일치해야 한다.
+`autoresearch-dev-redis-psc` subnet과 같은 이름의 Service Connection Policy를
+서울 리전에 만들고 service class `gcp-memorystore-redis`, connection limit 2를
+사용한다. Cloud SQL의 PSA `192.168.0.0/20`과 Redis PSC `10.10.16.0/29`는 목적과
+state address가 다른 별도 네트워크다.
 
-적용 순서는 다음과 같다.
+Redis Cluster client는 discovery endpoint TCP 6379로 topology를 조회한 뒤 PSC
+subnet의 data node TCP 11000-13047로 직접 연결한다. 따라서
+`terraform/admin/autoresearch-k8s` NetworkPolicy는 다음을 별도 egress rule로
+허용한다.
 
-1. `redis.googleapis.com`을 수동 활성화한다.
-2. dev root plan에서 Redis와 Secret/IAM 변경 및 destroy/replace 부재를 확인한다.
-3. 사용자 승인 후 dev root를 apply한다.
-4. live `autoresearch` namespace/KSA가 이미 있으면 admin state로 import한다.
-5. admin root plan에서 NetworkPolicy 영향을 확인하고 별도 승인 후 apply한다.
-6. 앱 저장소에서 AUTH/CA를 주입한 TLS connection string과 smoke test를 구성한다.
+- Cloud SQL PSA CIDR: TCP 5432
+- Redis Cluster PSC CIDR: TCP 6379, TCP 11000-13047
 
-롤백은 앱의 Redis 사용을 먼저 중지하고 NetworkPolicy Redis 규칙을 제거한 뒤,
-Redis 삭제 plan을 별도로 검토한다. Basic tier는 HA가 없으므로 maintenance 또는
-instance 장애 중 Online Store가 중단될 수 있다.
+관련 output은 `redis_cluster_name`, `redis_discovery_address`,
+`redis_discovery_port`, `redis_psc_subnet_cidr`, `redis_server_ca_secret_id`다.
+
+### 인증과 애플리케이션 연계
+
+app GSA에는 `roles/redis.dbConnectionUser`를 부여하되 IAM condition의
+`resource.name`을 dev Redis Cluster full resource name으로 제한한다. pod는
+Workload Identity로 IAM access token을 런타임 발급하고 Redis `AUTH`에 사용한다.
+token은 Terraform state, Secret Manager, output, 로그에 저장하지 않는다.
+
+TLS CA bundle은 `autoresearch-dev-redis-server-ca` Secret Manager secret에
+저장하고 app GSA에 해당 secret의 `roles/secretmanager.secretAccessor`만 부여한다.
+CA payload는 Terraform state에 포함되므로 GCS backend IAM을 최소화한다.
+
+`SKYAHO/Autoresearch` 후속 작업은 다음을 구현해야 한다.
+
+- topology refresh와 `MOVED`를 처리하는 cluster-aware Redis client
+- Workload Identity IAM token 자동 재발급과 새 connection 재인증
+- TLS CA 주입 및 server certificate 검증
+- 함께 `MGET`할 Feature key가 같은 `{entity-id}` hash tag를 공유하는 key schema
+- 모든 key를 하나의 tag로 몰아 shard hot spot을 만들지 않는 분산 검증
+
+### 적용 및 검증 순서
+
+1. `redis.googleapis.com`, `networkconnectivity.googleapis.com`,
+   `serviceconsumermanagement.googleapis.com`을 수동 활성화한다.
+2. Redis Cluster regional usage unit quota가 2 이상인지 확인한다.
+3. dev root plan에서 PSC subnet/policy, Redis Cluster, 조건부 IAM, CA secret의
+   add/change/delete/replace를 확인한다.
+4. 사용자 승인 후 dev root를 apply한다.
+5. live `autoresearch` namespace/KSA가 이미 있으면 admin state로 import한다.
+6. admin root plan에서 Redis PSC 포트와 기존 egress 영향을 확인하고 별도 승인 후
+   apply한다.
+7. GKE 내부 검증 pod에서 IAM token과 CA로 `PING`, `CLUSTER SHARDS`를 확인한다.
+8. 아래 key를 생성해 `CLUSTER KEYSLOT` 결과와 `MGET`을 확인한다.
+
+```text
+feature:{user:100}:age
+feature:{user:100}:watch_time
+feature:{user:200}:age
+```
+
+앞의 두 key는 같은 slot이어야 하고 단일 `MGET`이 성공해야 한다. `{user:100}`과
+`{user:200}`이 실제로 다른 slot이면 둘을 한 `MGET`으로 요청할 때 `CROSSSLOT`이
+발생해야 한다. 상세 명령은 `terraform/admin/autoresearch-k8s/README.md`를 따른다.
+
+### 장애 복구와 롤백
+
+replica 0과 persistence disabled 구성은 node 장애나 전체 flush 후 Online Store
+데이터를 보장하지 않는다. 복구 시 write/read 트래픽을 중지하고 두 primary shard의
+ready 상태를 확인한 뒤 앱 저장소에서 offline store 기준
+`feast materialize <START_TIMESTAMP> <END_TIMESTAMP>`를 실행한다. 대표 entity의
+online feature 조회와 동일 tag `MGET`을 검증한 후 트래픽을 재개한다.
+
+인프라 롤백은 앱의 Redis 사용을 먼저 중지하고 NetworkPolicy 규칙 제거 plan과
+Redis Cluster/PSC 제거 plan을 따로 검토한다. 실제 삭제와 state 조작은 별도 사용자
+승인 후에만 수행한다.
 
 ## dev 원본 데이터 GCS (#18)
 
@@ -903,7 +953,9 @@ release 제거(2단계 롤백) 후에만 key를 정리한다.
 | `bigquery.googleapis.com` | dev 분석 dataset |
 | `artifactregistry.googleapis.com` | Docker image repository |
 | `sqladmin.googleapis.com` | Cloud SQL |
-| `redis.googleapis.com` | Feast Online Store Memorystore for Redis (#129) |
+| `redis.googleapis.com` | Feast Online Store Memorystore for Redis Cluster (#129) |
+| `networkconnectivity.googleapis.com` | Redis Cluster PSC Service Connection Policy (#129) |
+| `serviceconsumermanagement.googleapis.com` | Redis Cluster service connectivity automation (#129) |
 | `container.googleapis.com` | GKE |
 | `cloudkms.googleapis.com` | Vault auto-unseal KMS key (#132) |
 | `dns.googleapis.com` | 내부 private DNS zone (#48) |

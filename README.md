@@ -21,7 +21,7 @@
 - 에이전트용 문서 체계 (CLAUDE.md, AGENTS.md symlink, .claude/docs/)
 - GitHub label 및 Project 초기 운영값 문서
 - GCP/IaC 작업을 고려한 `.gitignore`
-- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, Online Store Redis, GCS, BigQuery, GKE, Cloud Run proxy, bastion, 내부 DNS)
+- Terraform dev 환경 리소스(VPC, Artifact Registry, Cloud SQL, Online Store Redis Cluster, GCS, BigQuery, GKE, Cloud Run proxy, bastion, 내부 DNS)
 - GCS remote backend 및 GitHub Actions Terraform plan(OIDC/WIF)
 - GCP 리소스/API 운영 문서
 

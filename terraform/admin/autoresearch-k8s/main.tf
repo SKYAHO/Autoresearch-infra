@@ -79,7 +79,7 @@ resource "kubernetes_network_policy_v1" "app_egress" {
       }
     }
 
-    # Existing Private Service Access range: Cloud SQL and Online Store Redis.
+    # Existing Private Service Access range: Cloud SQL PostgreSQL only.
     egress {
       to {
         ip_block {
@@ -91,10 +91,25 @@ resource "kubernetes_network_policy_v1" "app_egress" {
         protocol = "TCP"
         port     = "5432"
       }
+    }
+
+    # Redis Cluster PSC discovery endpoint and data node topology ports.
+    egress {
+      to {
+        ip_block {
+          cidr = var.redis_psc_subnet_cidr
+        }
+      }
 
       ports {
         protocol = "TCP"
-        port     = tostring(var.redis_port)
+        port     = tostring(var.redis_discovery_port)
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = tostring(var.redis_node_port_start)
+        end_port = var.redis_node_port_end
       }
     }
 
