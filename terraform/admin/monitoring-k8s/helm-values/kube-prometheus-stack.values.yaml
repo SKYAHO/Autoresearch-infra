@@ -28,6 +28,28 @@ grafana:
     # SSD quota 회피 — Prometheus PVC와 동일 근거 (#79/#98)
     storageClassName: standard
 
+  # #155 Google OAuth client id/secret은 운영자가 사전 주입하는 Secret
+  # (grafana-google-oauth: GF_AUTH_GOOGLE_CLIENT_ID/GF_AUTH_GOOGLE_CLIENT_SECRET)
+  # 에서 env로만 로드한다. 값을 values/Git/state에 저장하지 않는다.
+  # Secret이 없으면 pod가 기동하지 못하므로 apply 전 주입이 전제다
+  # (grafana-admin-credentials와 동일 선례 — README 참조).
+  envFromSecret: grafana-google-oauth
+
+  grafana.ini:
+    server:
+      # OAuth redirect가 port-forward 접속 주소와 일치해야 한다(내부 전용).
+      root_url: http://localhost:3000
+    auth.google:
+      enabled: true
+      # gmail은 도메인 제한이 불가능(allowed_domains=gmail.com은 전 세계
+      # gmail 허용)하므로 자동 가입을 막고, 팀원 계정은 UI에서 사전 생성해
+      # 기존 계정 매칭으로만 로그인 허용한다(#155). 이메일 allowlist를
+      # Git에 두지 않는 것은 팀원 이메일 비노출 요구이기도 하다.
+      allow_sign_up: false
+      scopes: openid email profile
+      auth_url: https://accounts.google.com/o/oauth2/v2/auth
+      token_url: https://oauth2.googleapis.com/token
+
 alertmanager:
   enabled: true
 

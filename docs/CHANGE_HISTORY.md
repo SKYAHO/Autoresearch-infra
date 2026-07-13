@@ -361,3 +361,14 @@
   admin root의 구조적 CI 불가(master 접근), apply 시점 사람 검증의 가치
   (#116/#122/#98 인시던트 실증). 2단계(Environment approval 반자동)는
   별도 설계 후 검토한다.
+
+## 2026-07-13: Grafana Google OAuth 로그인 (#155)
+
+- 로그인을 admin 비밀번호 공유에서 Google OAuth(팀원 개인 계정)로 전환했다.
+  client id/secret은 운영자 주입 Secret(grafana-google-oauth)의 env 참조로만
+  구성 — values/Git/state에 값 없음.
+- gmail은 도메인 제한이 불가능하므로 allow_sign_up=false + 계정 사전 생성
+  방식으로 allowlist를 구현했다. 팀원 이메일은 Git/문서/이슈에 기록하지
+  않고 Grafana DB에만 존재한다(이메일 비노출 요구).
+- admin 계정은 비상용으로 유지. redirect URI는 port-forward 주소
+  (localhost:3000) — 내부 전용 접근 원칙 유지.
