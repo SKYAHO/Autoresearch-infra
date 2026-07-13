@@ -437,3 +437,15 @@
 - 핵심 통찰: PVC(RWO) stateful pod들 때문에 scale-down이 점착적 — 확장은
   사실상 반영구 증설로 취급. 다음 개선은 autoscaling이 아니라 #105(Spot
   batch pool, ES 전용 pool 트리거)에 있다.
+
+## 2026-07-13: 운영 workload node pool 전략 (#105)
+
+- 실측에서 배치 문제를 발견했다: taint 부재로 Prometheus 본체(30Gi PVC)가
+  작은 airflow 노드에 앉아 메모리 압박에 기여 중. 원칙을 "stateful은 명시
+  고정, stateless는 자유"로 정리했다.
+- 전용 pool 결론: monitoring/mlflow/argocd 불필요, ES는 트리거 정의
+  (headroom<3Gi 또는 확장 시), 신규 후보는 batch Spot pool뿐(#104).
+- taint 기준: 2-pool 체제에서는 nodeSelector로 충분, 전용 pool부터 taint
+  필수 + DaemonSet toleration 동반.
+- 후속: Prometheus/Grafana/Vault의 dev-default nodeSelector 적용(소규모),
+  Spot pool 신설, ES 전용 pool(트리거 시).
