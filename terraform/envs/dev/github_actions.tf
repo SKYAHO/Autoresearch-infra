@@ -16,11 +16,13 @@ resource "google_service_account" "gar_pusher" {
   description  = "Impersonated by Autoresearch-airflow GitHub Actions via WIF to push images to GAR."
 }
 
-# Autoresearch-airflow 리포만 이 SA 가장 허용 (principalSet 으로 리포 한정).
+# Autoresearch-airflow 리포 + 승인 ref만 이 SA 가장 허용 (#175).
+# repository 단독이 아니라 repository_ref(repo@ref) 조합으로 제한해
+# 임의 브랜치 workflow의 가장을 차단한다.
 resource "google_service_account_iam_member" "gar_pusher_wi" {
   service_account_id = google_service_account.gar_pusher.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.repository/SKYAHO/Autoresearch-airflow"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.repository_ref/SKYAHO/Autoresearch-airflow@${var.airflow_deploy_ref}"
 }
 
 # GAR repository 쓰기 권한 (batch/airflow 이미지 push).
@@ -38,11 +40,11 @@ resource "google_service_account" "application_pusher" {
   description  = "Impersonated by Autoresearch GitHub Actions via WIF to push application images to GAR."
 }
 
-# Autoresearch 리포만 애플리케이션 이미지 push SA 가장을 허용한다.
+# Autoresearch 리포 + 승인 ref만 애플리케이션 이미지 push SA 가장 허용 (#175).
 resource "google_service_account_iam_member" "application_pusher_wi" {
   service_account_id = google_service_account.application_pusher.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.repository/SKYAHO/Autoresearch"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.repository_ref/SKYAHO/Autoresearch@${var.application_deploy_ref}"
 }
 
 # 기존 dev GAR repository에만 애플리케이션 이미지 쓰기를 허용한다.
