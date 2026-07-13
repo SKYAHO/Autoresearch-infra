@@ -188,9 +188,11 @@ kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
 http://localhost:3000
 ```
 
-Grafana admin 계정과 비밀번호는 `monitoring` namespace의
-`grafana-admin-credentials` Secret payload로 관리한다. 실제 비밀번호를 문서, PR,
-채팅에 남기지 않는다.
+로그인은 **"Sign in with Google" 버튼(팀원 개인 계정)이 기본**이다(#155).
+사전 생성된 계정만 로그인되며(자동 가입 차단), 계정이 없다는 오류가 나면
+운영자에게 계정 생성을 요청한다. admin 계정(`grafana-admin-credentials`
+Secret payload)은 비상용으로만 쓰고, 실제 비밀번호를 문서, PR, 채팅에
+남기지 않는다.
 
 로그인 후 어떤 dashboard를 볼지는
 [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md)를 기준으로 한다.
