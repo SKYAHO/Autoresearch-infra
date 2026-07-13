@@ -116,7 +116,7 @@ curl -sk -u "elastic:$PW" -X PUT "https://localhost:19200/.ds-filebeat-*/_settin
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| bucket | dev root `es-snapshots` bucket | age lifecycle **없음** — 증분 구조라 나이 기반 객체 삭제는 snapshot 손상. 정리는 SLM retention이 담당 |
+| bucket | dev root `es-snapshots` bucket | age lifecycle **없음**(증분 구조 손상 방지) + **soft delete 7d**(#176 — 삭제 객체 복구 창). 정리는 SLM retention |
 | 인증 | KSA `elasticsearch` → GSA(WI, 키 없음) | repository-gcs가 ADC(metadata)로 가장. bucket 단위 objectAdmin + legacyBucketReader만 |
 | 주기/보관 | SLM 일 1회(18:30 UTC = 03:30 KST), expire 7d (min 3 / max 14) | 복구 창 성격은 #96 — 최근 데이터 복구 전용, 장기 보관 아님 |
 
