@@ -125,6 +125,18 @@ resource "kubernetes_manifest" "filebeat" {
             containers = [
               {
                 name = "filebeat"
+                # autodiscover의 ${NODE_NAME} 참조용 — operator가 자동
+                # 주입하지 않으므로 직접 선언(리뷰 반영, ECK 공식 레시피 동일)
+                env = [
+                  {
+                    name = "NODE_NAME"
+                    valueFrom = {
+                      fieldRef = {
+                        fieldPath = "spec.nodeName"
+                      }
+                    }
+                  },
+                ]
                 resources = {
                   requests = {
                     cpu    = "100m"
