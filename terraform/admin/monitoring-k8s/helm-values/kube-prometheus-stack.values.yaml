@@ -96,3 +96,11 @@ prometheusOperator:
   internalPort: 10250
   admissionWebhooks:
     enabled: true
+
+# #173 batch-spot pool taint 허용 — Spot 노드 지표 수집 유지(#105 함정 방지)
+prometheus-node-exporter:
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: batch-spot
+      effect: NoSchedule

@@ -185,6 +185,16 @@ resource "kubernetes_manifest" "filebeat" {
           # 서버 정규화 왕복 안정화 — kibana.tf와 동일 조합(#99 실측)
           metadata = {}
           spec = {
+            # #173 batch-spot pool의 taint 허용 — 없으면 Spot 노드의 KPO
+            # 로그 수집이 조용히 빠진다(#105에서 명시한 함정)
+            tolerations = [
+              {
+                key      = "workload"
+                operator = "Equal"
+                value    = "batch-spot"
+                effect   = "NoSchedule"
+              },
+            ]
             serviceAccountName           = kubernetes_service_account_v1.filebeat.metadata[0].name
             automountServiceAccountToken = true
             dnsPolicy                    = "ClusterFirstWithHostNet"

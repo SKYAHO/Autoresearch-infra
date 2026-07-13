@@ -61,8 +61,7 @@
 
 ## 후속 조치 (별도 이슈)
 
-1. **(권장, 소규모) Prometheus/Grafana/Vault에 dev-default nodeSelector
-   적용** — 발견된 배치 문제 해소. Prometheus는 재기동 1회 동반(RWO PVC는
-   동일 zone이라 재연결 가능). monitoring/vault values 수정.
-2. batch Spot pool 신설 + KPO toleration (Autoresearch-airflow와 협의)
+1. ~~Prometheus/Grafana/Vault dev-default nodeSelector~~ — **완료(#170)**
+2. ~~batch Spot pool 신설~~ — **infra 측 완료(#173)**. KPO
+   toleration/nodeSelector 전환은 Autoresearch-airflow 저장소 이슈로 이관
 3. ES 전용 pool은 트리거 발생 시(§전용 pool 표)

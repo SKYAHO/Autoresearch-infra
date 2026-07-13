@@ -467,3 +467,15 @@
   requests는 in-place 되돌림 가능).
 - 한계 명시: 모니터링이 갓 설치되어 데이터 창이 짧다 — Prometheus 7일
   축적 후(7/21 전후) 피크 데이터로 2차 점검을 조건으로 남김.
+
+## 2026-07-14: KPO batch용 Spot node pool (#173)
+
+- batch-spot pool을 신설했다(#105 후속 ②): spot=true, e2-standard-2,
+  autoscaling min 0/max 2 — 평시 노드 0대(비용 0), toleration 있는 KPO만
+  scale-from-zero로 수용. taint(workload=batch-spot:NoSchedule)로 일반
+  워크로드 유입 차단.
+- 부트 디스크는 pd-standard(#98 SSD quota 교훈). DaemonSet
+  (filebeat/node-exporter)에 toleration을 부여해 Spot 노드의 로그·지표
+  수집 공백을 방지했다(#105에서 명시한 함정).
+- KPO pod의 nodeSelector/toleration 전환은 앱 저장소 소관 — 전환 전까지
+  KPO는 기존 airflow pool에서 동작(무해). Spot 중단 내성은 KPO retry 담당.
