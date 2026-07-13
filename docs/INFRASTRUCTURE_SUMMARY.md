@@ -26,7 +26,7 @@
 flowchart TB
     member["팀원 로컬<br/>kubectl / browser / gcloud"]
     github["GitHub<br/>Autoresearch-infra PR"]
-    apprepo["앱 저장소<br/>Autoresearch / Autoresearch-airflow"]
+    apprepo["이미지 배포 Actions<br/>Autoresearch / Autoresearch-airflow"]
     oauth["Google OAuth<br/>redirect: localhost:8080"]
 
     subgraph gcp["GCP project<br/>ar-infra-501607"]
@@ -54,6 +54,8 @@ flowchart TB
         ar["Artifact Registry"]
         run["Cloud Run proxy<br/>internal + IAM"]
 
+        cisa["GSA<br/>terraform-ci"]
+        pushgsa["GAR push GSA<br/>app / airflow 전용"]
         appgsa["GSA<br/>autoresearch-dev-app"]
         airflowgsa["GSA<br/>autoresearch-dev-airflow"]
         batchgsa["GSA<br/>autoresearch-dev-airflow-batch"]
@@ -62,7 +64,8 @@ flowchart TB
     member -->|"Airflow UI: -L 8080"| iap --> bastion --> dns --> ilb --> airflow
     airflow --> oauth
     member -->|"kubectl: GKE DNS endpoint"| gke
-    github --> wif --> state
+    github --> wif --> cisa --> state
+    apprepo --> wif --> pushgsa --> ar
 
     app --> appgsa
     airflow --> airflowgsa
@@ -77,7 +80,6 @@ flowchart TB
     batchgsa --> bq
     batchgsa -->|"roles/run.invoker<br/>service-level"| run
 
-    apprepo --> ar
     gke --> ar
     gke --> nat
 ```
@@ -89,6 +91,7 @@ flowchart TB
 | Airflow UI | 로컬 `gcloud compute ssh --tunnel-through-iap -L 8080:airflow.dev.autoresearch.internal:8080` → `http://localhost:8080` | IAP, OS Login, Google OAuth |
 | kubectl | `gcloud container clusters get-credentials ... --dns-endpoint` | `roles/container.viewer` + GKE auth plugin |
 | PR plan | GitHub Actions → OIDC/WIF → CI service account → GCS state/dev plan | service account key 없음 |
+| 이미지 push | Autoresearch 또는 Autoresearch-airflow Actions → OIDC/WIF → 저장소별 pusher SA → 기존 GAR | provider 허용 목록 + SA principalSet 2단 경계, repository 단위 writer |
 | Cloud Run proxy | Airflow batch pod → Workload Identity → batch GSA → Cloud Run ID token → proxy | `roles/run.invoker`는 필요조건. ID token, `YOUTUBE_PROXY_URL`, `X-Goog-Api-Key`, VPC 내부 경로가 함께 필요 |
 
 ## 이 문서에서 쓰는 기본 용어

@@ -1,11 +1,12 @@
-# #121 GitHub Actions (Autoresearch-airflow) WIF → GAR push
-# 배포 리포 GitHub Actions가 WIF 경유로 가장할 SA + GAR repository 쓰기 권한.
-# bootstrap WIF provider의 attribute_condition 이 SKYAHO/Autoresearch-airflow 를
-# 허용하도록 확장되어야 한다 (terraform/bootstrap).
+# #121/#157 GitHub Actions WIF → GAR push
+# 배포 리포별 GitHub Actions가 WIF 경유로 가장할 전용 SA와 GAR repository
+# 쓰기 권한. bootstrap WIF provider의 attribute_condition도 각 리포를
+# 허용하도록 확장되어야 한다(terraform/bootstrap).
 
 locals {
-  github_wif_pool_name = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/autoresearch-github"
-  gar_pusher_sa_name   = "${local.resource_prefix}-gar-pusher"
+  github_wif_pool_name       = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/autoresearch-github"
+  gar_pusher_sa_name         = "${local.resource_prefix}-gar-pusher"
+  application_pusher_sa_name = "${local.resource_prefix}-app-pusher"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).
@@ -27,4 +28,26 @@ resource "google_artifact_registry_repository_iam_member" "gar_pusher_ar_writer"
   repository = google_artifact_registry_repository.dev.id
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.gar_pusher.email}"
+}
+
+# Autoresearch 애플리케이션 이미지 push 전용 service account.
+# Airflow 이미지 배포 계정과 분리해 저장소 간 권한 전이를 막는다.
+resource "google_service_account" "application_pusher" {
+  account_id   = local.application_pusher_sa_name
+  display_name = "Autoresearch dev application GAR pusher SA"
+  description  = "Impersonated by Autoresearch GitHub Actions via WIF to push application images to GAR."
+}
+
+# Autoresearch 리포만 애플리케이션 이미지 push SA 가장을 허용한다.
+resource "google_service_account_iam_member" "application_pusher_wi" {
+  service_account_id = google_service_account.application_pusher.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.repository/SKYAHO/Autoresearch"
+}
+
+# 기존 dev GAR repository에만 애플리케이션 이미지 쓰기를 허용한다.
+resource "google_artifact_registry_repository_iam_member" "application_pusher_ar_writer" {
+  repository = google_artifact_registry_repository.dev.id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.application_pusher.email}"
 }
