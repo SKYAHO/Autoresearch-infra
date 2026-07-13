@@ -449,3 +449,10 @@
   필수 + DaemonSet toleration 동반.
 - 후속: Prometheus/Grafana/Vault의 dev-default nodeSelector 적용(소규모),
   Spot pool 신설, ES 전용 pool(트리거 시).
+
+## 2026-07-13: 플랫폼 stateful dev-default 고정 (#170)
+
+- #105 후속 ①. Prometheus/Grafana/Vault에 dev-default nodeSelector를
+  적용해 "stateful 명시 고정" 원칙을 완성했다(ES/Kibana는 기적용).
+- 계기: taint 부재로 Prometheus(30Gi PVC)가 작은 airflow 노드에 배치돼
+  메모리 압박에 기여하던 실측 문제.
