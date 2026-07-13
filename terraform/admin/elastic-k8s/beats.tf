@@ -185,6 +185,16 @@ resource "kubernetes_manifest" "filebeat" {
           # 서버 정규화 왕복 안정화 — kibana.tf와 동일 조합(#99 실측)
           metadata = {}
           spec = {
+            # #173 로그 수집기는 모든 노드에 있어야 한다 — 특정 taint로
+            # 좁히지 않고 NoSchedule 전체를 허용해 batch-spot과 향후 전용
+            # pool까지 자동 커버(node-exporter upstream 기본값과 동일 원칙,
+            # 리뷰 반영).
+            tolerations = [
+              {
+                operator = "Exists"
+                effect   = "NoSchedule"
+              },
+            ]
             serviceAccountName           = kubernetes_service_account_v1.filebeat.metadata[0].name
             automountServiceAccountToken = true
             dnsPolicy                    = "ClusterFirstWithHostNet"

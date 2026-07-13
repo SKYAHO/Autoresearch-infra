@@ -175,3 +175,44 @@ resource "google_container_node_pool" "airflow" {
     ignore_changes = [node_count]
   }
 }
+
+# #173 KPO batch 전용 Spot pool (#105 후속 ②). KPO는 재시도 내성이 있어
+# Spot 중단을 흡수한다(재시도는 앱 저장소 KPO retry 설정 소관).
+# - min 0: 평시 노드 0대(비용 0). toleration+nodeSelector를 가진 KPO pod가
+#   Pending이 되면 CA가 scale-from-zero로 노드를 만든다.
+# - taint: 일반 워크로드가 Spot에 앉는 것을 차단(#105 기준 — 전용 pool은
+#   taint 필수). DaemonSet(filebeat/node-exporter)은 toleration을 부여했다.
+# - 부트 디스크 pd-standard: SSD_TOTAL_GB quota 여유가 없다(#98 교훈).
+resource "google_container_node_pool" "batch_spot" {
+  name       = var.batch_spot_gke_node_pool_name
+  cluster    = google_container_cluster.dev.name
+  location   = var.zone
+  node_count = 0
+
+  autoscaling {
+    min_node_count = 0
+    max_node_count = var.batch_spot_gke_node_count_max
+  }
+
+  node_config {
+    machine_type    = var.batch_spot_gke_machine_type
+    disk_size_gb    = 30
+    disk_type       = "pd-standard"
+    spot            = true
+    service_account = google_service_account.gke_nodes.email
+
+    taint {
+      key    = "workload"
+      value  = "batch-spot"
+      effect = "NO_SCHEDULE"
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [node_count]
+  }
+}

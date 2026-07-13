@@ -96,3 +96,8 @@ prometheusOperator:
   internalPort: 10250
   admissionWebhooks:
     enabled: true
+
+# #173 참고: prometheus-node-exporter 서브차트의 upstream 기본 toleration이
+# {effect: NoSchedule, operator: Exists}로 이미 모든 taint(batch-spot 포함,
+# 향후 전용 pool도)를 허용한다 — 특정 taint로 좁혀 덮어쓰지 말 것(리뷰
+# 반영: 명시 목록은 기본값을 '대체'해 다른 pool 수집이 빠진다).
