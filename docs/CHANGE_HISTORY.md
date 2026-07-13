@@ -456,3 +456,14 @@
   적용해 "stateful 명시 고정" 원칙을 완성했다(ES/Kibana는 기적용).
 - 계기: taint 부재로 Prometheus(30Gi PVC)가 작은 airflow 노드에 배치돼
   메모리 압박에 기여하던 실측 문제.
+
+## 2026-07-14: GKE node pool 운영 최적화 1차 (#106)
+
+- 실측(설치 직후 스냅샷) 기반 1차 조정: ① airflow pool max 1→2 — KPO
+  배치 피크의 escape valve(평시 비용 불변, KPO는 일회성이라 scale-down
+  회수됨) ② Prometheus(실측 508Mi)/Grafana(315Mi)에 requests/limits 부여
+  — 미설정 상태는 스케줄러·CA 판단을 왜곡(#105 배치 문제의 원인 중 하나).
+- machine type은 변경하지 않음(노드 재생성 회피 — rollback 기준: min/max와
+  requests는 in-place 되돌림 가능).
+- 한계 명시: 모니터링이 갓 설치되어 데이터 창이 짧다 — Prometheus 7일
+  축적 후(7/21 전후) 피크 데이터로 2차 점검을 조건으로 남김.

@@ -10,6 +10,15 @@ prometheus:
     nodeSelector:
       cloud.google.com/gke-nodepool: dev-default
     retention: 7d
+    # #106 실측(508Mi) 기반 requests — 미설정이면 스케줄러/CA가 이 pod의
+    # 비용을 0으로 계산해 배치·증설 판단이 왜곡된다. limit은 retention
+    # 축적(7d TSDB) 성장 여유.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -28,6 +37,21 @@ grafana:
   # #170 stateful(PVC 10Gi)은 dev-default 고정(#105 원칙)
   nodeSelector:
     cloud.google.com/gke-nodepool: dev-default
+  # #106 실측 기반 requests. 315Mi는 pod 전체(top) 측정값이며 이 블록은
+  # grafana 컨테이너에만 적용된다 — sidecar는 아래 별도 블록(리뷰 반영).
+  resources:
+    requests:
+      cpu: 50m
+      memory: 384Mi
+    limits:
+      memory: 768Mi
+  sidecar:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
   service:
     type: ClusterIP
   persistence:
