@@ -8,6 +8,10 @@ prometheus:
     storageSpec:
       volumeClaimTemplate:
         spec:
+          # standard(pd-standard, HDD): 기본 standard-rwo(pd-balanced)는
+          # SSD_TOTAL_GB quota(리전 250GB, #98 인시던트와 동일)에 막힌다.
+          # dev 관측 워크로드에는 HDD IOPS로 충분.
+          storageClassName: standard
           accessModes:
             - ReadWriteOnce
           resources:
@@ -21,6 +25,8 @@ grafana:
   persistence:
     enabled: true
     size: 10Gi
+    # SSD quota 회피 — Prometheus PVC와 동일 근거 (#79/#98)
+    storageClassName: standard
 
 alertmanager:
   enabled: true
