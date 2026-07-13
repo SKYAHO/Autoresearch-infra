@@ -332,3 +332,11 @@
   단계에서 멈춰 부작용 없이 정정했다.
 - 교훈: PVC 추가 시 스토리지 클래스의 quota 종류(SSD vs HDD)와 리전
   사용량(`gcloud compute regions describe`)을 사전 확인한다.
+
+## 2026-07-13: Kibana 내부 접근 구성 (#99)
+
+- Kibana CR(1 replica, ES와 동일 스택 버전, elasticsearchRef 연결)을
+  elastic-k8s root에 추가했다. ClusterIP + port-forward 전용, LB/Ingress
+  없음, TLS는 ECK 기본(self-signed).
+- 노드 대역 → 5601 ingress는 #97 NetworkPolicy에 이미 선언되어 있다.
+  elastic 사용자 비밀번호는 Secret 회수 절차만 사용(Git/문서 금지).

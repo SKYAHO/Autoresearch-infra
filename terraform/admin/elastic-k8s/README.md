@@ -12,7 +12,8 @@ state로 관리한다. 아키텍처·정책은 #96 설계
 | ECK operator Helm release | 예 | chart `eck-operator` `3.4.1` pin (#97) |
 | NetworkPolicy | 예 | deny-by-default (아래 표) |
 | Elasticsearch CR `autoresearch` | 예 (#98) | single-node, `kubernetes_manifest` — CRD 부트스트랩 순서 주의 |
-| Kibana/Beat CR | 예 (후속 #99/#100) | `kubernetes_manifest` |
+| Kibana CR `autoresearch` | 예 (#99) | 1 replica, ClusterIP + port-forward 전용 |
+| Beat CR | 예 (후속 #100) | `kubernetes_manifest` |
 | snapshot GCS bucket / GSA | 아니오 | dev root (#102에서 추가) |
 | `elastic` 사용자 비밀번호 | 아니오 | operator 생성 Secret에서 운영자가 회수(#103 runbook). Git/문서 금지 |
 
@@ -38,6 +39,32 @@ state로 관리한다. 아키텍처·정책은 #96 설계
 | mmap | `node.store.allow_mmap: false` | vm.max_map_count sysctl(privileged) 회피 — PSS baseline 유지 |
 | TLS/인증 | ECK 기본(자체 서명 TLS + `elastic` 사용자) | 비밀번호는 `autoresearch-es-elastic-user` Secret에서 회수(#103 runbook). Git/문서 금지 |
 | index replicas | 기본 template은 #101에서 `number_of_replicas: 0` | single-node에서 green 유지를 위한 필수값(#96) |
+
+## Kibana 구성과 접속 (#99)
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| CR / 버전 | `autoresearch` / ES와 동일(`var.elasticsearch_version`) | `elasticsearchRef`로 operator가 ES 연결(계정/CA 자동) |
+| 리소스 | request 1Gi/200m, limit 1Gi | dev-default pool 고정(#98과 동일 이유) |
+| 노출 | ClusterIP + port-forward만 | LB/Ingress 없음. TLS는 ECK 기본(self-signed) |
+
+접속 (내부 전용):
+
+```bash
+kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
+# 브라우저: https://localhost:5601 (self-signed 경고는 dev 내부 경로 특성상 허용)
+```
+
+로그인은 `elastic` 사용자. 비밀번호는 운영자가 Secret에서 회수하고
+채팅/Git/문서에 남기지 않는다:
+
+```bash
+kubectl -n elastic get secret autoresearch-es-elastic-user \
+  -o jsonpath='{.data.elastic}' | base64 -d
+```
+
+상세 운영 절차(비밀번호 변경, 검색 기본, 장애 대응)는 #103 runbook에서
+제공한다.
 
 ## 네트워크 경계
 
