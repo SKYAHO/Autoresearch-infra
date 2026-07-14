@@ -58,6 +58,10 @@ terraform/
 │   └── claude.yml           # Claude Code PR 리뷰
 └── PULL_REQUEST_TEMPLATE.md
 
+deploy/                      # ArgoCD umbrella chart (Terraform helm_release에서 이관)
+├── monitoring/              # kube-prometheus-stack umbrella (Application monitoring, #183)
+└── argo-rollouts/           # argo-rollouts umbrella (Application argo-rollouts, #186)
+
 docs/
 ├── README.md                # 운영 문서 진입점
 ├── TEAM_OPERATIONS_RUNBOOK.md  # 팀원 GKE/Bastion/Airflow UI 접근 절차와 권한 기록
