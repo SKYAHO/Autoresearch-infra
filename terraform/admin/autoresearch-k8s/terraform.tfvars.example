@@ -1,0 +1,22 @@
+project_id       = "your-gcp-project-id"
+region           = "asia-northeast3"
+zone             = "asia-northeast3-a"
+gke_cluster_name = "autoresearch-dev-gke"
+resource_prefix  = "autoresearch-dev"
+
+app_k8s_namespace       = "autoresearch"
+app_k8s_service_account = "autoresearch-app"
+
+# Optional. Empty value derives:
+# autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
+app_gcp_service_account_email = ""
+
+# terraform/envs/dev private_services_cidr, redis_psc_subnet_cidr, gke_services_cidr values.
+private_services_cidr = "192.168.0.0/20"
+redis_psc_subnet_cidr = "10.10.16.0/29"
+cluster_services_cidr = "172.16.128.0/24"
+
+# Memorystore for Redis Cluster fixed discovery/data-node port ranges.
+redis_discovery_port  = 6379
+redis_node_port_start = 11000
+redis_node_port_end   = 13047

@@ -3,6 +3,21 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-13: Feast Online Store Redis Cluster 설계 정정 (#129, apply 대기)
+
+- dev Online Store는 `REDIS_SHARED_CORE_NANO` primary shard 2개, replica 0개의
+  Memorystore for Redis Cluster로 구성한다. zonal GKE와 같은
+  `asia-northeast3-a`의 `SINGLE_ZONE`에 배치하며 nano node에는 SLA가 없다.
+- 기존 dev VPC에 전용 PSC `/29` subnet과 `gcp-memorystore-redis` Service
+  Connection Policy를 만들며 public endpoint를 생성하지 않는다.
+- IAM 인증과 TLS를 활성화한다. app GSA에는 resource name 조건부
+  `roles/redis.dbConnectionUser`를 부여하고, IAM token은 런타임에만 발급한다.
+  TLS CA bundle만 Secret Manager에 저장한다.
+- NetworkPolicy는 PSC discovery 6379와 data node 11000-13047을 허용한다.
+- 동일 hash tag key의 `MGET` 성공과 다른 slot의 `CROSSSLOT`을 GKE 내부에서
+  검증하며 실제 Feature key schema는 앱 저장소 후속 작업으로 분리한다.
+- 2026-07-11의 Basic 단일 Redis 초안은 apply되지 않았고 이 결정으로 대체한다.
+
 ## 2026-07-03: dev GKE 클러스터
 
 - Issue #5, PR #14에서 dev GKE Standard zonal 클러스터를 구성했다.

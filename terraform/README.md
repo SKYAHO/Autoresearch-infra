@@ -6,7 +6,7 @@
 
 ```text
 terraform/
-├── admin/          # 운영자 전용 별도 state root(gke-team-access, airflow-k8s, monitoring-k8s, argocd-k8s)
+├── admin/          # 운영자 전용 별도 state root(IAM 및 Kubernetes 경계)
 ├── bootstrap/      # GCS backend + GitHub WIF/CI SA 1회성 bootstrap
 ├── envs/
 │   └── dev/        # dev 환경 root module(GCS backend)
@@ -19,6 +19,7 @@ terraform/
 |---|---|---|
 | dev | `terraform/envs/dev` | AutoResearch dev 인프라 검증 및 초기 운영 |
 | admin | `terraform/admin/gke-team-access` | 팀원 Google 계정의 GKE `container.viewer` + bastion 접속 IAM |
+| admin | `terraform/admin/autoresearch-k8s` | 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress NetworkPolicy |
 | admin | `terraform/admin/airflow-k8s` | Airflow Kubernetes namespace/RBAC/NetworkPolicy |
 | admin | `terraform/admin/monitoring-k8s` | Prometheus/Grafana monitoring namespace와 Helm values 기반 |
 | admin | `terraform/admin/argocd-k8s` | ArgoCD namespace와 Helm values 설치 기반 |

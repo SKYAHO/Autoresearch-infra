@@ -24,6 +24,15 @@ resource "google_compute_subnetwork" "dev" {
   }
 }
 
+# #129 Redis Cluster service connectivity automation이 discovery endpoint와
+# internal backend 주소를 예약하는 전용 PSC subnet. GKE workload subnet이 아니다.
+resource "google_compute_subnetwork" "redis_psc" {
+  name          = local.redis_psc_subnet_name
+  ip_cidr_range = var.redis_psc_subnet_cidr
+  region        = var.region
+  network       = google_compute_network.dev.id
+}
+
 # ponytail: 최소 ingress — IAP 경유 SSH(22)는 ssh-iap 태그 인스턴스만. 추가 포트는 별도 규칙.
 resource "google_compute_firewall" "allow_ssh_iap" {
   name          = "${local.resource_prefix}-allow-ssh-iap"

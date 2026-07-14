@@ -1,6 +1,6 @@
 # 에이전트 프로젝트 참조
 
-> Last Updated: 2026-07-08
+> Last Updated: 2026-07-13
 
 프로젝트 구조, 폴더 책임, 팀 소유권을 빠르게 찾기 위한 문서입니다.
 "X는 어디에 있는가?", "Y는 누가 소유하는가?" 질문에 답합니다.
@@ -19,6 +19,7 @@
 terraform/
 ├── bootstrap/               # 원격 state bucket, WIF pool/provider, CI SA
 ├── admin/
+│   ├── autoresearch-k8s/     # 앱 namespace/KSA/NetworkPolicy (separate state)
 │   ├── airflow-k8s/          # Airflow namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/      # 팀원 GKE container.viewer IAM (전역 k8s 읽기, secrets 제외 — 의도된 방침) + bastion 접속 IAM (separate state)
 │   ├── monitoring-k8s/       # Prometheus/Grafana monitoring namespace + Helm values (separate state)
@@ -29,10 +30,11 @@ terraform/
 │       ├── variables.tf     # 입력 변수
 │       ├── locals.tf        # 공통 locals (이름 prefix, 기본 label)
 │       ├── outputs.tf       # 다른 시스템이 소비하는 출력
-│       ├── vpc.tf           # custom VPC, subnet, firewall, PGA
+│       ├── vpc.tf           # custom VPC, app/Redis PSC subnet, firewall, PGA
 │       ├── nat.tf           # Cloud Router + Cloud NAT
 │       ├── artifact_registry.tf  # Docker 저장소
 │       ├── cloud_sql.tf     # PostgreSQL dev 인스턴스 (private IP)
+│       ├── redis.tf         # Feast Online Store 2-shard Redis Cluster (PSC, IAM auth/TLS)
 │       ├── gke.tf           # dev GKE 클러스터
 │       ├── storage.tf       # raw data, Feast, Airflow DAG/log GCS bucket
 │       ├── bigquery.tf      # analytics / Feast offline store dataset
@@ -97,6 +99,11 @@ branch_ruleset_main.json     # main branch ruleset 정의
   `locals.tf`, 입력은 `variables.tf`, 외부 소비 값은 `outputs.tf`에
   둡니다. 다른 환경(staging/prod)이 생기면 `envs/` 아래 디렉터리를
   추가하고 공통 부분은 `modules/`로 추출합니다.
+
+### `terraform/admin/autoresearch-k8s/`
+- **책임:** 일반 앱의 Kubernetes namespace, Workload Identity KSA,
+  NetworkPolicy를 별도 state로 관리합니다.
+- **주의:** GKE API 접근이 필요하며 dev root보다 뒤에 plan/apply합니다.
 
 ### `.github/workflows/`
 - **책임:** 검증(lint, Terraform plan)과 리뷰 자동화만 담습니다.

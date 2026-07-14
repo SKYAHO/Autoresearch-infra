@@ -68,6 +68,31 @@ output "cloud_sql_database_name" {
   value       = google_sql_database.dev.name
 }
 
+output "redis_cluster_name" {
+  description = "Feast Online Store Memorystore for Redis Cluster resource name."
+  value       = google_redis_cluster.online_store.name
+}
+
+output "redis_discovery_address" {
+  description = "Private PSC discovery endpoint address for cluster-aware Redis clients."
+  value       = one(google_redis_cluster.online_store.discovery_endpoints).address
+}
+
+output "redis_discovery_port" {
+  description = "Redis Cluster discovery endpoint port. Data node ports are 11000-13047."
+  value       = one(google_redis_cluster.online_store.discovery_endpoints).port
+}
+
+output "redis_psc_subnet_cidr" {
+  description = "Dedicated PSC subnet CIDR containing Redis Cluster discovery and data node endpoints."
+  value       = google_compute_subnetwork.redis_psc.ip_cidr_range
+}
+
+output "redis_server_ca_secret_id" {
+  description = "Redis TLS server CA bundle을 저장한 Secret Manager secret id. CA 본문은 output하지 않는다."
+  value       = google_secret_manager_secret.redis_server_ca.secret_id
+}
+
 output "gke_cluster_name" {
   description = "dev GKE 클러스터 이름."
   value       = google_container_cluster.dev.name

@@ -1,6 +1,7 @@
 # #4 dev Cloud SQL (PostgreSQL, private IP)
 # password: random 생성 → SQL user 주입. Secret Manager 저장은 secret_manager.tf(#5)에 구현.
 # private IP: VPC 전용 대역 할당 후 servicenetworking peering.
+# Redis Cluster(#129)는 별도 PSC subnet을 사용하므로 이 PSA 대역은 Cloud SQL 전용이다.
 
 resource "google_compute_global_address" "private_sql_range" {
   name          = "${local.resource_prefix}-private-sql-range"

@@ -28,9 +28,12 @@ locals {
     "iap.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
+    "networkconnectivity.googleapis.com",
     "oslogin.googleapis.com",
     "run.googleapis.com",
+    "redis.googleapis.com",
     "secretmanager.googleapis.com",
+    "serviceconsumermanagement.googleapis.com",
     "serviceusage.googleapis.com",
     "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
@@ -40,7 +43,11 @@ locals {
 
   ar_repo_id = "${local.resource_prefix}-docker"
 
-  sql_instance_name = "${local.resource_prefix}-pg"
+  sql_instance_name                    = "${local.resource_prefix}-pg"
+  redis_cluster_name                   = "${local.resource_prefix}-redis-cluster"
+  redis_psc_subnet_name                = "${local.resource_prefix}-redis-psc"
+  redis_service_connection_policy_name = "${local.resource_prefix}-redis-psc"
+  redis_server_ca_secret_id            = "${local.resource_prefix}-redis-server-ca"
 
   gke_cluster_name                      = "${local.resource_prefix}-gke"
   gke_node_sa_name                      = "${local.resource_prefix}-gke-nodes"

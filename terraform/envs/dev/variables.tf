@@ -91,7 +91,7 @@ variable "sql_deletion_protection" {
 }
 
 variable "private_services_cidr" {
-  description = "CIDR for Cloud SQL private services access (VPC peering). Must not overlap dev_subnet_cidr."
+  description = "CIDR for Cloud SQL Private Service Access (VPC peering). Must not overlap dev_subnet_cidr."
   type        = string
   default     = "192.168.0.0/20"
 
@@ -99,6 +99,64 @@ variable "private_services_cidr" {
     condition     = can(cidrhost(var.private_services_cidr, 0))
     error_message = "private_services_cidr must be a valid CIDR in a.b.c.d/n form."
   }
+}
+
+variable "redis_psc_subnet_cidr" {
+  description = "Dedicated /29 subnet CIDR for Redis Cluster Private Service Connect endpoints."
+  type        = string
+  default     = "10.10.16.0/29"
+
+  validation {
+    condition     = can(cidrhost(var.redis_psc_subnet_cidr, 0)) && can(regex("/29$", var.redis_psc_subnet_cidr))
+    error_message = "redis_psc_subnet_cidr must be a valid /29 CIDR."
+  }
+}
+
+variable "redis_node_type" {
+  description = "Memorystore for Redis Cluster node type. Shared-core nano is dev/test only and has no SLA."
+  type        = string
+  default     = "REDIS_SHARED_CORE_NANO"
+
+  validation {
+    condition = contains([
+      "REDIS_SHARED_CORE_NANO",
+      "REDIS_STANDARD_SMALL",
+      "REDIS_HIGHMEM_MEDIUM",
+      "REDIS_HIGHCPU_MEDIUM",
+      "REDIS_STANDARD_LARGE",
+      "REDIS_HIGHMEM_XLARGE",
+      "REDIS_HIGHMEM_2XLARGE",
+    ], var.redis_node_type)
+    error_message = "redis_node_type must be a supported Memorystore for Redis Cluster node type."
+  }
+}
+
+variable "redis_shard_count" {
+  description = "Number of primary Redis Cluster shards. Issue #129 dev default is two data nodes."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.redis_shard_count >= 1 && var.redis_shard_count <= 250 && floor(var.redis_shard_count) == var.redis_shard_count
+    error_message = "redis_shard_count must be an integer between 1 and 250."
+  }
+}
+
+variable "redis_replica_count" {
+  description = "Number of replica nodes per Redis Cluster shard. dev uses zero replicas and provides no HA."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.redis_replica_count >= 0 && var.redis_replica_count <= 5 && floor(var.redis_replica_count) == var.redis_replica_count
+    error_message = "redis_replica_count must be an integer between 0 and 5."
+  }
+}
+
+variable "redis_cluster_deletion_protection" {
+  description = "Online Store Redis Cluster 삭제 보호. dev는 false이며 삭제 전 plan과 별도 승인이 필요."
+  type        = bool
+  default     = false
 }
 
 variable "gke_master_ipv4_cidr" {
