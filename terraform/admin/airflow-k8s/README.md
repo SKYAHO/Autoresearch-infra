@@ -34,7 +34,7 @@ terraform apply
 Kubernetes 권한도 필요합니다.
 
 `airflow-deployer-admin`은 dev root가 생성한
-`autoresearch-dev-airflow-deployer` GSA에 `airflow` namespace 범위의 `admin`만
+`autoresearch-dev-airflow-cd` GSA에 `airflow` namespace 범위의 `admin`만
 부여합니다. GitHub Actions는 GKE DNS endpoint로 접속하며 이 RoleBinding 없이는
 Helm 리소스를 변경할 수 없습니다.
 

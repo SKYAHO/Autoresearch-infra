@@ -7,7 +7,7 @@ locals {
   github_wif_pool_name       = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/autoresearch-github"
   gar_pusher_sa_name         = "${local.resource_prefix}-gar-pusher"
   application_pusher_sa_name = "${local.resource_prefix}-app-pusher"
-  airflow_deployer_sa_name   = "${local.resource_prefix}-airflow-deployer"
+  airflow_deployer_sa_name   = "${local.resource_prefix}-airflow-cd"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).

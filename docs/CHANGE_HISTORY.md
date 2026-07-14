@@ -9,7 +9,7 @@
   정확한 `release.yml@refs/heads/main` workflow로 제한했다. release event의 tag
   `ref` 때문에 정상 발행이 거부되던 경계를 바로잡는다.
 - `Autoresearch-airflow@refs/heads/main` 전용
-  `autoresearch-dev-airflow-deployer` GSA를 추가했다.
+  `autoresearch-dev-airflow-cd` GSA를 추가했다.
 - GCP 권한은 `roles/container.clusterViewer`, Kubernetes 권한은 `airflow`
   namespace의 `admin` RoleBinding으로 분리했다. DNS endpoint를 사용하므로 IP
   allowlist는 확장하지 않는다.

@@ -10,7 +10,7 @@ private_services_cidr = "10.20.0.0/20"
 airflow_gcp_service_account_email = ""
 
 # Optional. Empty value derives:
-# autoresearch-dev-airflow-deployer@<project_id>.iam.gserviceaccount.com
+# autoresearch-dev-airflow-cd@<project_id>.iam.gserviceaccount.com
 airflow_deployer_service_account_email = ""
 
 airflow_k8s_namespace       = "airflow"
