@@ -88,7 +88,13 @@ kubectl -n vault get svc
 kubectl -n vault get ingress
 ```
 
-## 실 secret 이관 전 필수 조건
+## 실 secret 이관 전 필수 조건 (하드 게이트 — #177)
+
+**현 상태는 평문(TLS 비활성)이며 학습·검증 전용이다.** 실 서비스 secret은
+아래 게이트를 통과하기 전까지 저장 금지. 위협 모델과 전체 체크리스트는
+[docs/VAULT_OPERATIONS_RUNBOOK.md](../../../docs/VAULT_OPERATIONS_RUNBOOK.md)의
+"하드 게이트" 절 참조. 현재 노출 표면은 NetworkPolicy(#136)로 vault
+namespace 내부에 국한되어 있고 consumer가 없다.
 
 - **TLS 활성화** (`global.tlsDisable=false` + 인증서 체계) — 별도 이슈
 - Kubernetes auth method와 최소 권한 policy — #136 초기 구성으로 확립
