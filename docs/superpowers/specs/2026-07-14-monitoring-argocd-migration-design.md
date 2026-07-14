@@ -101,3 +101,19 @@ adopt가 churn/장애를 유발하면:
    기계적으로 강제(helm provider 유지, required_version 1.7+).
 
 교훈: 실행 중 스택 adopt는 "렌더 리소스 이름이 기존과 byte 단위로 일치"가 무중단의 필수 전제다.
+
+## adopt 실행 중 발견 (2026-07-14)
+
+실제 adopt(merge 후) 시 `argocd app diff` 실측:
+
+- monitoring namespace 리소스 100개 + cluster-scoped는 **tracking-id annotation
+  추가만** 있고 spec 변경/삭제 0건 → 순수 adopt(데이터·PVC 무영향). StatefulSet
+  (prometheus/alertmanager)·Deployment(grafana 등)·DaemonSet은 diff 자체가 없어
+  **sync 시 pod 재시작 없음**을 실측 확인.
+- **블로커**: kube-prometheus-stack이 control-plane exporter Service 5종
+  (coredns/kube-controller-manager/kube-etcd/kube-proxy/kube-scheduler)을
+  `kube-system`에 둔다. AppProject destinations가 monitoring만 허용해 sync 시
+  거부됨. **결정**: destinations에 kube-system 추가(behavior-preserving adopt).
+  권한은 monitoring Application·infra repo source·manual/prune-off로 제한.
+  GKE에서 스크랩 불가한 control-plane exporter(controller-manager/etcd/scheduler/
+  proxy) 비활성화는 별도 튜닝 과제로 남김(현행 유지 = 무중단 우선).

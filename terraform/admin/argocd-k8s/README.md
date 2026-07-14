@@ -11,7 +11,7 @@ AppProject와 샘플 Application을 추가했다.
 | `argocd` namespace | 예 | `prevent_destroy`로 실수 삭제 방지 |
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
-| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). #183: monitoring 전용으로 좁힘(샘플 제거) + cluster-wide 리소스 허용 |
+| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). #183: monitoring 전용으로 좁힘(샘플 제거) + cluster-wide 리소스 허용. destinations=`monitoring`·`kube-system`(control-plane exporter Service) |
 | Application `monitoring` | 예 (#183) | infra repo `deploy/monitoring` umbrella chart, manual sync. helm_release에서 이관 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 
