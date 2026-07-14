@@ -15,12 +15,16 @@ dev GKE의 Vault(`vault` namespace, #132/#134) 운영 절차. 설치 구성은
 허용한다.
 
 **현재 노출 표면(위협 모델)**: consumer가 없다. vault namespace의
-NetworkPolicy가 타 namespace → 8200을 차단하므로(#136 실측), 평문 트래픽은
-vault-0 자신과 운영자 port-forward(그 구간은 kube-apiserver TLS로 암호화)로
-국한된다. 즉 평문의 실제 위험은 "vault pod가 뜬 노드에 침투한 주체의
-로컬 스니핑"이며, 실 secret이 없는 한 탈취할 값도 없다. 위험이 실체화되는
-시점은 **consumer 워크로드가 붙어 평문 secret 트래픽이 네트워크를 가로지를
-때**다 — 그 전에 아래 게이트를 통과해야 한다.
+NetworkPolicy ingress는 (a) 같은 namespace pod (b) 노드 대역 → 8200
+(port-forward)만 허용한다. #177에서 **kube-system 전체 포트 허용 규칙을
+제거**해, 이전에 존재하던 "kube-system의 모든 pod가 8200 평문 접근" 예외를
+닫았다. port-forward 경로의 TLS 구분: 로컬 kubectl → kube-apiserver(TLS) →
+kubelet(apiserver-kubelet TLS) → **kubelet → vault pod:8200(노드 로컬,
+평문)**. 즉 평문 구간은 **kubelet과 vault pod 사이의 노드 내부 홉**뿐이며,
+실제 위험은 "vault pod가 뜬 노드에 침투한 주체의 로컬 스니핑"으로 국한된다.
+실 secret이 없는 한 탈취할 값도 없다. 위험이 실체화되는 시점은 **consumer
+워크로드가 붙어 평문 secret 트래픽이 네트워크를 가로지를 때**이며, 그 전에
+아래 게이트를 통과해야 한다.
 
 **실 secret 이관 체크리스트 (전부 필수)**:
 
