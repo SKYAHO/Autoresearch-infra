@@ -12,7 +12,7 @@
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
-| Kubernetes admin roots | `terraform/admin/gke-team-access`, `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s` |
+| Kubernetes admin roots | `terraform/admin/gke-team-access`, `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/vault-k8s`, `terraform/admin/elastic-k8s` |
 | 일반 애플리케이션 저장소 | `SKYAHO/Autoresearch` |
 | Airflow 저장소 | `SKYAHO/Autoresearch-airflow` |
 
@@ -213,7 +213,7 @@ flowchart TB
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata | 민감값 저장소. payload는 Terraform 밖에서 관리 |
 | IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), Vault SA(#132) | 워크로드별 최소 권한과 Workload Identity |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155) | 운영 관측 dashboard. 접근은 port-forward |
-| GitOps | ArgoCD(#84) + AppProject/샘플(#85), Argo Rollouts controller(#88) | 배포 선언 관리와 점진 배포 실행기. Rollouts 실 적용은 앱 배포 시 |
+| GitOps | ArgoCD(#84) + AppProject(#85). Application: `monitoring`(#183)·`argo-rollouts`(#186) | monitoring/rollouts를 ArgoCD Application으로 관리(manual sync). 검증 샘플은 제거. Rollouts 실 적용은 앱 배포 시 |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99), Filebeat allowlist 수집(#100) — `elastic` ns | airflow/autoresearch 로그 검색·분석. Cloud Logging과 병행 |
 | Secret(학습) | Vault single-node + KMS auto-unseal(#132/#134/#136) — `vault` ns | 학습·검증용. 실 서비스 secret은 Secret Manager 유지 |
 | KMS | `autoresearch-dev-vault`/`vault-unseal` key (#132) | Vault auto-unseal. key 삭제 금지(데이터 복호화 불능) |
@@ -257,8 +257,8 @@ flowchart LR
 | `terraform/admin/gke-team-access` | 별도 state | 팀원 Google 계정 IAM을 관리한다. 사람 이메일이 일반 PR plan에 노출되지 않게 분리했다. |
 | `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress NetworkPolicy를 관리한다(#129, apply 대기). |
 | `terraform/admin/airflow-k8s` | 별도 state | Kubernetes namespace/RBAC/NetworkPolicy를 관리한다. GKE API 접근이 필요해 dev root와 분리했다. |
-| `terraform/admin/monitoring-k8s` | 별도 state | Prometheus/Grafana monitoring namespace, Helm release, port-forward RBAC를 관리한다. |
-| `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace와 argo-cd Helm release를 관리한다. AppProject/Application은 #85에서 추가한다. |
+| `terraform/admin/monitoring-k8s` | 별도 state | monitoring namespace와 port-forward RBAC(플랫폼 경계)를 관리한다. chart는 #183에서 ArgoCD Application `monitoring`으로 이관(helm_release 제거). |
+| `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application(`monitoring` #183, `argo-rollouts` #186)을 관리한다. |
 | `terraform-plan.yml` | GitHub Actions | PR마다 fmt/validate/plan을 실행하고 결과를 댓글/check로 보여준다. |
 | WIF/OIDC | GitHub Actions -> GCP | service account JSON key 없이 CI가 GCP 권한을 얻는다. 키 파일 유출 위험을 줄이기 위한 설정이다. |
 | Apply 수동 운영 | 운영자 로컬 | plan은 자동, apply는 수동이다. 실제 비용/권한/삭제 영향이 있는 변경은 사람이 확인하고 적용한다. |

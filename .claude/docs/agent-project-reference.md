@@ -22,8 +22,11 @@ terraform/
 │   ├── autoresearch-k8s/     # 앱 namespace/KSA/NetworkPolicy (separate state)
 │   ├── airflow-k8s/          # Airflow namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/      # 팀원 GKE container.viewer IAM (전역 k8s 읽기, secrets 제외 — 의도된 방침) + bastion 접속 IAM (separate state)
-│   ├── monitoring-k8s/       # Prometheus/Grafana monitoring namespace + Helm values (separate state)
-│   └── argocd-k8s/           # ArgoCD namespace + Helm values scaffold (separate state)
+│   ├── monitoring-k8s/       # monitoring namespace + port-forward RBAC (chart는 ArgoCD Application, #183) (separate state)
+│   ├── argocd-k8s/           # ArgoCD + AppProject/Application(monitoring·argo-rollouts) (separate state)
+│   ├── argo-rollouts-k8s/    # argo-rollouts namespace/NetworkPolicy (chart는 ArgoCD Application, #186) (separate state)
+│   ├── vault-k8s/            # Vault namespace/NetworkPolicy + Helm release (#134) (separate state)
+│   └── elastic-k8s/          # ECK operator + ES/Kibana/Filebeat CR (#97) (separate state)
 ├── envs/
 │   └── dev/                 # dev 환경 root module
 │       ├── versions.tf      # Terraform/provider 버전, provider 설정
