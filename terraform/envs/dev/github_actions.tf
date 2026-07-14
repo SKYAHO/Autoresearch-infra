@@ -7,6 +7,7 @@ locals {
   github_wif_pool_name       = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/autoresearch-github"
   gar_pusher_sa_name         = "${local.resource_prefix}-gar-pusher"
   application_pusher_sa_name = "${local.resource_prefix}-app-pusher"
+  airflow_deployer_sa_name   = "${local.resource_prefix}-airflow-deployer"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).
@@ -40,11 +41,12 @@ resource "google_service_account" "application_pusher" {
   description  = "Impersonated by Autoresearch GitHub Actions via WIF to push application images to GAR."
 }
 
-# Autoresearch 리포 + 승인 ref만 애플리케이션 이미지 push SA 가장 허용 (#175).
+# 정확한 Autoresearch release workflow만 애플리케이션 이미지 push SA 가장 허용.
+# release event의 ref는 tag이므로 repository_ref 대신 workflow_ref를 사용한다.
 resource "google_service_account_iam_member" "application_pusher_wi" {
   service_account_id = google_service_account.application_pusher.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.repository_ref/SKYAHO/Autoresearch@${var.application_deploy_ref}"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.application_release_workflow_ref}"
 }
 
 # 기존 dev GAR repository에만 애플리케이션 이미지 쓰기를 허용한다.
@@ -52,4 +54,25 @@ resource "google_artifact_registry_repository_iam_member" "application_pusher_ar
   repository = google_artifact_registry_repository.dev.id
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.application_pusher.email}"
+}
+
+# Autoresearch-airflow main의 Helm 배포 전용 service account.
+resource "google_service_account" "airflow_deployer" {
+  account_id   = local.airflow_deployer_sa_name
+  display_name = "Autoresearch dev Airflow GKE deployer SA"
+  description  = "Impersonated by Autoresearch-airflow GitHub Actions to deploy the Airflow Helm release."
+}
+
+resource "google_service_account_iam_member" "airflow_deployer_wi" {
+  service_account_id = google_service_account.airflow_deployer.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.repository_ref/SKYAHO/Autoresearch-airflow@${var.airflow_deploy_ref}"
+}
+
+# GKE DNS endpoint 접속과 cluster metadata 조회만 GCP IAM으로 허용한다.
+# 실제 변경 권한은 airflow namespace의 Kubernetes RoleBinding이 통제한다.
+resource "google_project_iam_member" "airflow_deployer_cluster_viewer" {
+  project = var.project_id
+  role    = "roles/container.clusterViewer"
+  member  = "serviceAccount:${google_service_account.airflow_deployer.email}"
 }

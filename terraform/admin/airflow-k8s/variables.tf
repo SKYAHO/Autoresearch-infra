@@ -45,6 +45,12 @@ variable "airflow_gcp_service_account_email" {
   default     = ""
 }
 
+variable "airflow_deployer_service_account_email" {
+  description = "GitHub Actions Airflow deployer GSA email from terraform/envs/dev output. Empty value derives the dev default name."
+  type        = string
+  default     = ""
+}
+
 variable "private_services_cidr" {
   description = "Private services CIDR that contains the Cloud SQL private IP range."
   type        = string

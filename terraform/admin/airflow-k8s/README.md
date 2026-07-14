@@ -7,6 +7,7 @@ Kubernetes 측 경계를 관리합니다.
 - Workload Identity annotation이 붙은 Airflow Kubernetes service account
 - Airflow 구성요소용 namespace 범위 Role/RoleBinding
 - 선택적인 설치 담당자용 namespace 범위 admin RoleBinding
+- GitHub Actions deployer GSA용 namespace 범위 admin RoleBinding
 - ResourceQuota, LimitRange, NetworkPolicy
 
 이 root는 Kubernetes 리소스를 별도 state와 provider 경계에 두기 위해
@@ -31,6 +32,11 @@ terraform apply
 이 명령은 GKE `master_authorized_networks`에 이미 허용된 운영자 네트워크에서
 실행합니다. 현재 활성 Google 계정에는 namespace 범위 리소스를 만들 수 있는
 Kubernetes 권한도 필요합니다.
+
+`airflow-deployer-admin`은 dev root가 생성한
+`autoresearch-dev-airflow-deployer` GSA에 `airflow` namespace 범위의 `admin`만
+부여합니다. GitHub Actions는 GKE DNS endpoint로 접속하며 이 RoleBinding 없이는
+Helm 리소스를 변경할 수 없습니다.
 
 `installer_user_emails`는 목록에 있는 각 Google 계정에 `airflow` namespace 안에서만
 Kubernetes `admin` ClusterRole을 부여합니다. 이메일을 제거하고 apply하면 해당

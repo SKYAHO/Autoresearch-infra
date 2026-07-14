@@ -92,6 +92,29 @@ resource "kubernetes_role_binding_v1" "installer_admin" {
   depends_on = [kubernetes_namespace_v1.airflow]
 }
 
+# GitHub Actions deployer는 Helm chart가 소유하는 리소스에 대해 airflow
+# namespace 안에서만 admin 권한을 가진다. cluster-wide 권한은 부여하지 않는다.
+resource "kubernetes_role_binding_v1" "airflow_deployer_admin" {
+  metadata {
+    name      = "airflow-deployer-admin"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "admin"
+  }
+
+  subject {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "User"
+    name      = local.airflow_deployer_service_account_email
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+
 resource "kubernetes_resource_quota_v1" "airflow" {
   metadata {
     name      = "airflow-quota"

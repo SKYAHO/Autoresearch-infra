@@ -499,13 +499,13 @@ variable "batch_spot_gke_node_count_max" {
 }
 
 variable "airflow_deploy_ref" {
-  description = "Autoresearch-airflow가 GAR push workflow를 실행하는 승인 ref(#175). WIF principalSet을 이 ref로 제한해 임의 브랜치의 SA 가장을 막는다. 앱 저장소 배포 방식 확정 후 조정(예: 태그 릴리스면 refs/tags/*는 GCP principalSet의 정확 일치 특성상 별도 처리 필요)."
+  description = "Autoresearch-airflow의 GAR push와 GKE deploy workflow에 허용하는 정확한 ref. WIF principalSet을 이 ref로 제한해 임의 브랜치의 SA 가장을 막는다."
   type        = string
   default     = "refs/heads/main"
 }
 
-variable "application_deploy_ref" {
-  description = "Autoresearch가 애플리케이션 이미지 GAR push workflow를 실행하는 승인 ref(#175). 위와 동일 목적."
+variable "application_release_workflow_ref" {
+  description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. release tag ref와 독립적으로 workflow 파일과 source ref를 고정한다."
   type        = string
-  default     = "refs/heads/main"
+  default     = "SKYAHO/Autoresearch/.github/workflows/release.yml@refs/heads/main"
 }
