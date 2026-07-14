@@ -264,6 +264,14 @@ resource "kubernetes_manifest" "application_monitoring" {
         repoURL        = var.infra_repo_url
         path           = "deploy/monitoring"
         targetRevision = var.monitoring_target_revision
+        helm = {
+          # #183 [치명 리스크 수정] release name을 기존 helm_release와 동일하게
+          # 고정한다. 미지정 시 ArgoCD가 Application 이름("monitoring")을 release
+          # name으로 써 subchart 리소스가 monitoring-* 로 개명 → 기존
+          # kube-prometheus-stack-* 를 인수(adopt)하지 못하고 빈 PVC로 새 스택을
+          # 나란히 생성(데이터 손실). 실측으로 이름 일치 확인.
+          releaseName = "kube-prometheus-stack"
+        }
       }
       destination = {
         server    = "https://kubernetes.default.svc"

@@ -85,3 +85,19 @@ adopt가 churn/장애를 유발하면:
 
 - 성공 시 GITOPS_STRATEGY에 이관 로드맵 반영(리마인드 ②), airflow(#17)·vault 순으로 확장 검토.
 - namespaceResourceWhitelist 하드닝, auto-sync 도입 여부.
+
+## 3종 병렬 어드버서리 리뷰 반영 (codex/claude/opencode, 2026-07-14)
+
+3개 모델 병렬 검토에서 claude가 무중단 adopt를 깨뜨리는 리스크 3건을 지적, 전부 실측 확인 후 수정:
+
+1. **[치명] release 이름 불일치 → 데이터 손실** — Application 이름(`monitoring`) 기반 release name이면
+   subchart 리소스가 `monitoring-*`로 개명되어 기존 `kube-prometheus-stack-*`를 인수하지 못하고 빈 PVC로
+   새 스택을 나란히 생성. **수정**: Application source에 `helm.releaseName = "kube-prometheus-stack"`.
+   실측: 렌더 이름이 live와 정확히 일치 확인.
+2. **[높음] Chart.lock 부재 → ArgoCD `helm dependency build` 실패** — build는 lock을 요구. **수정**:
+   Chart.lock을 커밋(gitignore에서 제외), charts/ tgz만 무시.
+3. **[중] helm_release 코드 선삭제 → apply 순서 사고 시 destroy** — **수정**: 수동 state rm 대신
+   Terraform `removed { lifecycle { destroy = false } }` 블록으로 "state에서만 제거, release 유지"를
+   기계적으로 강제(helm provider 유지, required_version 1.7+).
+
+교훈: 실행 중 스택 adopt는 "렌더 리소스 이름이 기존과 byte 단위로 일치"가 무중단의 필수 전제다.

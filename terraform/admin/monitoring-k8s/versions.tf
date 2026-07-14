@@ -1,5 +1,6 @@
 terraform {
-  required_version = ">= 1.6.0"
+  # #183 removed 블록(안전 state 제거) 사용 — Terraform 1.7+ 필요.
+  required_version = ">= 1.7.0"
 
   required_providers {
     google = {
@@ -10,6 +11,13 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = ">= 2.20"
+    }
+
+    # #183 removed 블록이 helm_release 타입을 참조하므로 provider 유지.
+    # 이관 완료(state에서 제거)된 뒤 별도 정리 PR에서 removed 블록과 함께 제거.
+    helm = {
+      source  = "hashicorp/helm"
+      version = ">= 2.13, < 3.0"
     }
   }
 

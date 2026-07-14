@@ -22,9 +22,19 @@ resource "kubernetes_namespace_v1" "monitoring" {
 # (GitOps 파일럿). chart/values는 이제 infra repo `deploy/monitoring/`
 # umbrella chart + argocd-k8s의 Application이 관리한다. 이 root는
 # GITOPS_STRATEGY 책임 분리에 따라 namespace와 port-forward RBAC(플랫폼
-# 경계)만 유지한다. helm-values/, grafana_admin_* 변수, chart 버전 변수는
-# deploy/monitoring로 이전됐다.
-# 이관 절차(state rm → 코드 제거 → Application adopt)는 README/이관 spec 참조.
+# 경계)만 유지한다.
+
+# #183 [리스크 수정] helm_release를 코드에서 그냥 지우면, state에 남은 채
+# apply될 때 Terraform이 release를 destroy(=helm uninstall, 전체 스택+PVC 삭제)
+# 한다. removed 블록 + destroy=false로 "state에서만 제거, 실제 release는 유지"를
+# 강제해 무중단을 보장한다(수동 state rm 순서 의존 제거). 이관이 끝나 state에서
+# 사라지면 이 블록·helm provider는 별도 정리 PR에서 제거한다.
+removed {
+  from = helm_release.kube_prometheus_stack
+  lifecycle {
+    destroy = false
+  }
+}
 
 locals {
   monitoring_port_forward_users = {
