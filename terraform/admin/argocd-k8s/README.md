@@ -11,8 +11,9 @@ AppProject와 샘플 Application을 추가했다.
 | `argocd` namespace | 예 | `prevent_destroy`로 실수 삭제 방지 |
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
-| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85) |
+| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). #183: infra repo·monitoring·cluster-wide 리소스 확장 |
 | 샘플 Application `sample-guestbook` | 예 | manual sync 검증용 (#85). 실제 repo 연결 시 제거 |
+| Application `monitoring` | 예 (#183) | infra repo `deploy/monitoring` umbrella chart, manual sync. helm_release에서 이관 |
 | `argocd-sample` namespace | 예 | 샘플 워크로드 전용, 검증 후 폐기 가능 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 

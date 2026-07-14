@@ -203,12 +203,10 @@ resource "kubernetes_namespace_v1" "argocd_sample" {
 # 로 chart(CRD 포함)를 먼저 설치한 뒤 전체 plan/apply를 실행한다(README 참조).
 
 # AppProject: Application이 접근할 수 있는 repo/destination을 제한하는 경계.
-# - sourceRepos: 공개 샘플 repo만 허용. Airflow 저장소는 실제 Application을
-#   만드는 이슈에서 추가한다(미리 열어두지 않음 — 최소 허용).
-# - destinations: argocd-sample namespace만.
-# - cluster-wide 리소스: AppProject 기본값이 거부(clusterResourceWhitelist
-#   미지정 = 빈 목록)라 별도 필드를 넣지 않는다. 빈 목록을 명시하면
-#   kubernetes_manifest가 서버 정규화와 충돌해 영구 diff가 생길 수 있다.
+# - sourceRepos: 공개 샘플 repo + infra repo(#183 monitoring umbrella chart).
+# - destinations: argocd-sample + monitoring namespace(#183).
+# - clusterResourceWhitelist: kube-prometheus-stack이 CRD/ClusterRole/webhook
+#   같은 cluster-wide 리소스를 설치하므로 필요한 kind만 허용한다(#183, 최소).
 resource "kubernetes_manifest" "appproject_autoresearch_dev" {
   manifest = {
     apiVersion = "argoproj.io/v1alpha1"
@@ -218,16 +216,67 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
       namespace = kubernetes_namespace_v1.argocd.metadata[0].name
     }
     spec = {
-      description = "AutoResearch dev GitOps boundary (#85 sample scope)"
+      description = "AutoResearch dev GitOps boundary (#85 sample, #183 monitoring)"
       sourceRepos = [
         "https://github.com/argoproj/argocd-example-apps.git",
+        var.infra_repo_url,
       ]
       destinations = [
         {
           server    = "https://kubernetes.default.svc"
           namespace = kubernetes_namespace_v1.argocd_sample.metadata[0].name
         },
+        {
+          # #183 monitoring namespace는 terraform/admin/monitoring-k8s가 소유.
+          server    = "https://kubernetes.default.svc"
+          namespace = var.monitoring_namespace
+        },
       ]
+      # #183 kube-prometheus-stack이 요구하는 cluster-wide kind만 허용.
+      clusterResourceWhitelist = [
+        { group = "apiextensions.k8s.io", kind = "CustomResourceDefinition" },
+        { group = "rbac.authorization.k8s.io", kind = "ClusterRole" },
+        { group = "rbac.authorization.k8s.io", kind = "ClusterRoleBinding" },
+        { group = "admissionregistration.k8s.io", kind = "ValidatingWebhookConfiguration" },
+        { group = "admissionregistration.k8s.io", kind = "MutatingWebhookConfiguration" },
+      ]
+    }
+  }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+# #183 monitoring 스택 Application — infra repo의 deploy/monitoring umbrella
+# chart를 배포한다. Terraform helm_release에서 이관(GitOps 파일럿).
+# syncPolicy 미지정 = manual sync(GITOPS_STRATEGY 초기 원칙). 실행 중 스택을
+# 인수(adopt)하므로 최초 sync 전 diff 검토 필수(README 이관 절차).
+resource "kubernetes_manifest" "application_monitoring" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "monitoring"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/monitoring"
+        targetRevision = var.monitoring_target_revision
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.monitoring_namespace
+      }
+      syncPolicy = {
+        # 실행 중 리소스의 helm managed-by 라벨 차이를 흡수 + namespace는
+        # TF 소유라 생성 안 함. auto-sync/prune 없음(수동).
+        syncOptions = [
+          "ServerSideApply=true",
+          "CreateNamespace=false",
+        ]
+      }
     }
   }
 

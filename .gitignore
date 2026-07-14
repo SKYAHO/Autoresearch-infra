@@ -44,3 +44,7 @@ override.tf.json
 # GCP local files
 application_default_credentials.json
 gcloud-config/
+
+# #183 ArgoCD가 helm dependency build로 받으므로 vendor 안 함
+deploy/*/charts/
+deploy/*/Chart.lock

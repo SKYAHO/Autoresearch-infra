@@ -18,39 +18,13 @@ resource "kubernetes_namespace_v1" "monitoring" {
   }
 }
 
-resource "helm_release" "kube_prometheus_stack" {
-  name       = var.kube_prometheus_stack_release_name
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  version    = var.kube_prometheus_stack_chart_version
-  namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
-
-  atomic           = true
-  cleanup_on_fail  = true
-  create_namespace = false
-  timeout          = 600
-
-  values = [
-    file("${path.module}/helm-values/kube-prometheus-stack.values.yaml")
-  ]
-
-  set {
-    name  = "grafana.admin.existingSecret"
-    value = var.grafana_admin_existing_secret_name
-  }
-
-  set {
-    name  = "grafana.admin.userKey"
-    value = var.grafana_admin_user_key
-  }
-
-  set {
-    name  = "grafana.admin.passwordKey"
-    value = var.grafana_admin_password_key
-  }
-
-  depends_on = [kubernetes_namespace_v1.monitoring]
-}
+# #183 kube-prometheus-stack helm_release는 ArgoCD Application으로 이관했다
+# (GitOps 파일럿). chart/values는 이제 infra repo `deploy/monitoring/`
+# umbrella chart + argocd-k8s의 Application이 관리한다. 이 root는
+# GITOPS_STRATEGY 책임 분리에 따라 namespace와 port-forward RBAC(플랫폼
+# 경계)만 유지한다. helm-values/, grafana_admin_* 변수, chart 버전 변수는
+# deploy/monitoring로 이전됐다.
+# 이관 절차(state rm → 코드 제거 → Application adopt)는 README/이관 spec 참조.
 
 locals {
   monitoring_port_forward_users = {
