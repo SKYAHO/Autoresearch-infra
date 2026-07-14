@@ -32,35 +32,10 @@ variable "monitoring_namespace" {
   }
 }
 
-variable "kube_prometheus_stack_release_name" {
-  description = "Helm release name for kube-prometheus-stack."
-  type        = string
-  default     = "kube-prometheus-stack"
-}
 
-variable "kube_prometheus_stack_chart_version" {
-  description = "Pinned kube-prometheus-stack Helm chart version."
-  type        = string
-  default     = "87.12.1"
-}
 
-variable "grafana_admin_existing_secret_name" {
-  description = "Existing Kubernetes Secret name that contains Grafana admin credentials. Secret payload is managed outside Terraform."
-  type        = string
-  default     = "grafana-admin-credentials"
-}
 
-variable "grafana_admin_user_key" {
-  description = "Key in grafana_admin_existing_secret_name that stores the Grafana admin username."
-  type        = string
-  default     = "admin-user"
-}
 
-variable "grafana_admin_password_key" {
-  description = "Key in grafana_admin_existing_secret_name that stores the Grafana admin password."
-  type        = string
-  default     = "admin-password"
-}
 
 variable "monitoring_port_forward_user_emails" {
   description = "Google accounts allowed to port-forward monitoring namespace services and pods. Keep real values in local terraform.tfvars only."

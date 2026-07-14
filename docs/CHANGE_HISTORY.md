@@ -511,3 +511,18 @@
   runbook/README/values에 명시적 게이트로 확립.
 - TLS 활성화(cert-manager/Vault PKI)는 실 secret/ESO 연동의 선행 조건으로
   별도 마일스톤 이슈에 연결.
+
+## 2026-07-14: monitoring 스택 ArgoCD 이관 (#183)
+
+- GitOps 파일럿. kube-prometheus-stack을 Terraform helm_release에서 ArgoCD
+  Application으로 이관했다. chart/values는 infra repo `deploy/monitoring/`
+  umbrella chart(kube-prometheus-stack 87.12.1 dependency)로, 배포는 argocd-k8s의
+  Application(manual sync, ServerSideApply)이 관리한다.
+- monitoring-k8s root는 GITOPS_STRATEGY 책임 분리대로 namespace·port-forward
+  RBAC만 유지(helm_release·helm-values·helm provider·grafana_admin_* 변수 제거).
+- AppProject를 확장했다: infra repo sourceRepo, monitoring destination,
+  clusterResourceWhitelist(CRD/ClusterRole/webhook — kube-prometheus-stack 필요분만).
+- 발견: Grafana admin existingSecret 설정이 values가 아니라 helm_release set
+  블록에 있어, umbrella values로 옮기지 않으면 admin 로그인이 깨질 뻔했다.
+- 무중단 adopt(state rm → 코드 제거 → Application sync)로 실행 중 스택 인수.
+  operator 주입 secret은 chart 밖이라 미관리. 롤백은 helm_release import.

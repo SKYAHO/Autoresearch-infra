@@ -44,3 +44,7 @@ override.tf.json
 # GCP local files
 application_default_credentials.json
 gcloud-config/
+
+# #183 charts/ tgz는 vendor 안 함(ArgoCD가 build). 단 Chart.lock은 커밋한다
+# — ArgoCD의 `helm dependency build`가 lock을 요구하기 때문(없으면 sync 실패).
+deploy/*/charts/

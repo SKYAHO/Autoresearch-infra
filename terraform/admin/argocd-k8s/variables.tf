@@ -71,3 +71,21 @@ variable "argo_cd_chart_version" {
   type        = string
   default     = "10.1.3"
 }
+
+variable "infra_repo_url" {
+  description = "이 저장소(infra) Git URL(#183). ArgoCD가 deploy/ umbrella chart를 읽는 source. public이라 자격증명 불필요."
+  type        = string
+  default     = "https://github.com/SKYAHO/Autoresearch-infra.git"
+}
+
+variable "monitoring_namespace" {
+  description = "monitoring 스택 namespace(#183). monitoring-k8s root가 소유하며 ArgoCD destination으로 허용한다."
+  type        = string
+  default     = "monitoring"
+}
+
+variable "monitoring_target_revision" {
+  description = "monitoring Application이 추적할 infra repo ref(#183). 최초 adopt는 -var로 병합 커밋 SHA를 주입해 렌더가 live와 일치하도록 pin한다(무중단 전제). 기본 main은 파일럿 이후 manual sync 추적용."
+  type        = string
+  default     = "main"
+}
