@@ -18,38 +18,22 @@ resource "kubernetes_namespace_v1" "monitoring" {
   }
 }
 
-resource "helm_release" "kube_prometheus_stack" {
-  name       = var.kube_prometheus_stack_release_name
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  version    = var.kube_prometheus_stack_chart_version
-  namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
+# #183 kube-prometheus-stack helm_release는 ArgoCD Application으로 이관했다
+# (GitOps 파일럿). chart/values는 이제 infra repo `deploy/monitoring/`
+# umbrella chart + argocd-k8s의 Application이 관리한다. 이 root는
+# GITOPS_STRATEGY 책임 분리에 따라 namespace와 port-forward RBAC(플랫폼
+# 경계)만 유지한다.
 
-  atomic           = true
-  cleanup_on_fail  = true
-  create_namespace = false
-  timeout          = 600
-
-  values = [
-    file("${path.module}/helm-values/kube-prometheus-stack.values.yaml")
-  ]
-
-  set {
-    name  = "grafana.admin.existingSecret"
-    value = var.grafana_admin_existing_secret_name
+# #183 [리스크 수정] helm_release를 코드에서 그냥 지우면, state에 남은 채
+# apply될 때 Terraform이 release를 destroy(=helm uninstall, 전체 스택+PVC 삭제)
+# 한다. removed 블록 + destroy=false로 "state에서만 제거, 실제 release는 유지"를
+# 강제해 무중단을 보장한다(수동 state rm 순서 의존 제거). 이관이 끝나 state에서
+# 사라지면 이 블록·helm provider는 별도 정리 PR에서 제거한다.
+removed {
+  from = helm_release.kube_prometheus_stack
+  lifecycle {
+    destroy = false
   }
-
-  set {
-    name  = "grafana.admin.userKey"
-    value = var.grafana_admin_user_key
-  }
-
-  set {
-    name  = "grafana.admin.passwordKey"
-    value = var.grafana_admin_password_key
-  }
-
-  depends_on = [kubernetes_namespace_v1.monitoring]
 }
 
 locals {

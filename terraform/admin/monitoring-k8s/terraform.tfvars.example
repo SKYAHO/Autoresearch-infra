@@ -5,13 +5,8 @@ gke_cluster_name = "autoresearch-dev-gke"
 
 monitoring_namespace = "monitoring"
 
-kube_prometheus_stack_release_name  = "kube-prometheus-stack"
-kube_prometheus_stack_chart_version = "87.12.1"
 
 # Secret payload는 Terraform 밖에서 만들고, 이름과 key만 Terraform에서 참조합니다.
-grafana_admin_existing_secret_name = "grafana-admin-credentials"
-grafana_admin_user_key             = "admin-user"
-grafana_admin_password_key         = "admin-password"
 
 # Keep real Google accounts in local terraform.tfvars only.
 monitoring_port_forward_user_emails = [

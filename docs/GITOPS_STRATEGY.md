@@ -103,6 +103,26 @@ root 또는 별도 platform AppProject에서 관리한다.
 - **도입 시점**: controller 설치·샘플 검증은 #88~#90에서 선행하고(샘플은
   검증 후 폐기), 실 서비스 적용은 앱 첫 배포 이슈에서 진행한다.
 
+## Terraform → ArgoCD 이관 (#183 monitoring 파일럿)
+
+플랫폼 스택(helm_release)을 ArgoCD Application으로 이관해 "Terraform=경로,
+ArgoCD=앱" 책임 분리를 실제로 구현한다. **monitoring을 첫 파일럿**으로 삼는다.
+
+- **source**: infra repo `deploy/<stack>/` umbrella chart(upstream chart를
+  dependency로 감싸 버전 pin + values 관리). infra repo가 public이라 ArgoCD
+  자격증명 불필요.
+- **책임 분리**: namespace·RBAC 등 플랫폼 경계는 Terraform 유지, chart(앱)는
+  ArgoCD Application이 관리. 같은 리소스를 둘이 동시에 관리하지 않는다.
+- **무중단 adopt**: `terraform state rm`(destroy 아님)으로 실행 중 release를
+  TF 관리에서 떼고, ArgoCD가 인수한다. 최초 sync 전 diff 검토 필수(helm
+  managed-by 라벨 차이는 ServerSideApply로 흡수). 롤백은 helm_release import.
+- **operator 주입 secret**(grafana-admin/oauth)은 chart 밖이라 ArgoCD가
+  관리·prune하지 않는다 — values는 이름만 참조.
+- sync는 manual부터(초기 원칙). 파일럿 성공 후 airflow(#17)·vault로 확장 검토.
+  **vault는 stateful secret store라 후순위**(고위험).
+
+설계 상세: `superpowers/specs/2026-07-14-monitoring-argocd-migration-design.md`.
+
 ## 후속 이슈 입력값
 
 | 이슈 | 입력값 |

@@ -3,15 +3,8 @@ output "monitoring_namespace" {
   value       = kubernetes_namespace_v1.monitoring.metadata[0].name
 }
 
-output "kube_prometheus_stack_release_name" {
-  description = "Prometheus/Grafana Helm release name."
-  value       = helm_release.kube_prometheus_stack.name
-}
-
-output "kube_prometheus_stack_chart_version" {
-  description = "Pinned kube-prometheus-stack Helm chart version."
-  value       = helm_release.kube_prometheus_stack.version
-}
+# #183 kube_prometheus_stack_* output은 ArgoCD 이관으로 제거됨
+# (chart/버전은 이제 deploy/monitoring umbrella chart가 관리).
 
 output "monitoring_port_forward_role_binding_names" {
   description = "Monitoring namespace RoleBinding names for allowlisted port-forward users."
