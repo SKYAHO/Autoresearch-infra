@@ -13,7 +13,7 @@
 - dev VPC/subnet, Cloud Router/NAT, IAP SSH firewall
 - Artifact Registry Docker repository
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장
-- Feast Online Store 2-shard Memorystore for Redis Cluster(PSC, IAM auth/TLS), CA Secret Manager 저장 (#129, apply 대기)
+- Feast Online Store single-zone 2-shard Memorystore for Redis Cluster(PSC, IAM auth/TLS), CA Secret Manager 저장 (#129, apply 대기)
 - dev 원본 데이터 GCS bucket(YouTube/user/action-log/persona raw)
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset

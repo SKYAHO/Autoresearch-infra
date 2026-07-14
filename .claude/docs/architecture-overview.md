@@ -31,7 +31,7 @@ GCP project (dev, asia-northeast3)
 │   ├── 컨트롤 플레인 DNS 엔드포인트 ── IAM 기반 kubectl 접속 (#45)
 │   └── Airflow internal ILB (`airflow_ilb_ip` output) ── VPC 내부 전용 UI (#48)
 ├── Cloud SQL (PostgreSQL 15, private IP only) ◀── GKE에서 접속
-├── Memorystore for Redis Cluster (2 shard, PSC, IAM auth/TLS) ◀── GKE에서 접속 (#129, apply 대기)
+├── Memorystore for Redis Cluster (single-zone 2 shard, PSC, IAM auth/TLS) ◀── GKE에서 접속 (#129, apply 대기)
 ├── Artifact Registry (autoresearch-dev-docker) ◀── 이미지 push/pull
 ├── GCS / BigQuery ── raw data, analytics, Feast offline store
 ├── Cloud Run proxy ── 내부 호출용 인증 gate 후보

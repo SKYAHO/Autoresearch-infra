@@ -205,7 +205,7 @@ flowchart TB
 | DNS / ILB | `dev.autoresearch.internal`, `airflow.dev.autoresearch.internal`, Airflow ILB 예약 IP | Airflow UI를 VPC 내부에서만 접근 |
 | Artifact Registry | `autoresearch-dev-docker` | 애플리케이션/Airflow 컨테이너 이미지 저장 |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, DB `airflow` | 앱 DB와 Airflow metadata DB |
-| Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, 2 primary shards, private PSC + IAM auth/TLS (#129, apply 대기) |
+| Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, single-zone primary shard 2개, private PSC + IAM auth/TLS (#129, apply 대기) |
 | GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev` | 앱 워크로드와 Airflow 실행 기반 |
 | Cloud Run | `autoresearch-dev-proxy` | 내부 전용 proxy 서비스, invoker IAM 기반 |
 | GCS | raw data bucket, Feast registry/staging bucket, Airflow DAG/log bucket | 원본 데이터, feature store 메타데이터, DAG/log 저장 |
@@ -409,7 +409,7 @@ flowchart LR
 | BigQuery Feast | `feast_offline_store` | Feast offline feature table 저장소다. |
 | Cloud SQL instance | `autoresearch-dev-pg` | PostgreSQL 15 dev instance다. private IP only로 구성했다. |
 | Cloud SQL DB | `autoresearch`, `airflow` | 앱 운영 DB와 Airflow metadata DB를 같은 instance 안의 별도 database로 둔다. |
-| Redis Cluster | `autoresearch-dev-redis-cluster` | shared-core nano primary shard 2개, replica 0개인 dev Online Store다. |
+| Redis Cluster | `autoresearch-dev-redis-cluster` | `asia-northeast3-a` single-zone의 shared-core nano primary shard 2개, replica 0개인 dev Online Store다. |
 
 ### 5. Airflow 운영 계층
 

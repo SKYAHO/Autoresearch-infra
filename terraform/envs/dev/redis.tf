@@ -32,7 +32,8 @@ resource "google_redis_cluster" "online_store" {
   }
 
   zone_distribution_config {
-    mode = "MULTI_ZONE"
+    mode = "SINGLE_ZONE"
+    zone = var.zone
   }
 
   persistence_config {

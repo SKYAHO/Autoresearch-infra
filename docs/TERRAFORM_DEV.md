@@ -125,6 +125,7 @@ multi-key command 제약을 실제로 검증한다.
 | Region | `asia-northeast3` | Redis Cluster 지원 서울 리전 |
 | Node type | `REDIS_SHARED_CORE_NANO` | node당 총 1.4 GB, writable 1.12 GB, SLA 없음 |
 | Shape | primary shard 2 × replica 0 | 총 2 data node, cluster usage unit 2, HA 없음 |
+| Zone distribution | `SINGLE_ZONE` (`asia-northeast3-a`) | zonal GKE와 같은 zone, zone 장애 시 cluster 전체 영향 |
 | Redis version | 서비스 관리 Redis 7.x | provider에서 버전을 고정하지 않음 |
 | Persistence | disabled | 장애/flush 후 Feast 재-materialize 필요 |
 | Network | 기존 dev VPC + 전용 PSC `/29` | `10.10.16.0/29`, public endpoint 없음 |
@@ -195,9 +196,9 @@ feature:{user:200}:age
 
 ### 장애 복구와 롤백
 
-replica 0과 persistence disabled 구성은 node 장애나 전체 flush 후 Online Store
-데이터를 보장하지 않는다. 복구 시 write/read 트래픽을 중지하고 두 primary shard의
-ready 상태를 확인한 뒤 앱 저장소에서 offline store 기준
+single zone, replica 0, persistence disabled 구성은 선택한 zone이나 node 장애 후
+Online Store 가용성과 데이터를 보장하지 않는다. 복구 시 write/read 트래픽을
+중지하고 두 primary shard의 ready 상태를 확인한 뒤 앱 저장소에서 offline store 기준
 `feast materialize <START_TIMESTAMP> <END_TIMESTAMP>`를 실행한다. 대표 entity의
 online feature 조회와 동일 tag `MGET`을 검증한 후 트래픽을 재개한다.
 

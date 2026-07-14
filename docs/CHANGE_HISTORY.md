@@ -6,7 +6,8 @@
 ## 2026-07-13: Feast Online Store Redis Cluster 설계 정정 (#129, apply 대기)
 
 - dev Online Store는 `REDIS_SHARED_CORE_NANO` primary shard 2개, replica 0개의
-  Memorystore for Redis Cluster로 구성한다. nano node에는 SLA가 없다.
+  Memorystore for Redis Cluster로 구성한다. zonal GKE와 같은
+  `asia-northeast3-a`의 `SINGLE_ZONE`에 배치하며 nano node에는 SLA가 없다.
 - 기존 dev VPC에 전용 PSC `/29` subnet과 `gcp-memorystore-redis` Service
   Connection Policy를 만들며 public endpoint를 생성하지 않는다.
 - IAM 인증과 TLS를 활성화한다. app GSA에는 resource name 조건부

@@ -6,8 +6,8 @@
 
 1. 기존 Basic 단일 Redis 변수·resource·AUTH secret을 제거한다.
 2. dev root에 Redis Cluster 전용 PSC subnet과 Service Connection Policy를 추가한다.
-3. `google_redis_cluster`를 nano primary shard 2개, replica 0개, IAM 인증/TLS로
-   정의한다.
+3. `google_redis_cluster`를 nano primary shard 2개, replica 0개, GKE와 같은
+   single zone, IAM 인증/TLS로 정의한다.
 4. app GSA에 cluster 한정 `roles/redis.dbConnectionUser` 조건부 binding을 추가하고
    managed CA bundle만 Secret Manager에 저장한다.
 5. discovery endpoint/port, PSC CIDR, CA secret ID output과 tfvars example을 갱신한다.
@@ -20,7 +20,8 @@
 ## 검증 체크리스트
 
 - [x] `google_redis_instance`와 static AUTH secret 참조가 제거됨
-- [x] `google_redis_cluster`가 서울 리전 nano primary shard 2개, replica 0개로 정의됨
+- [x] `google_redis_cluster`가 서울 리전 nano primary shard 2개, replica 0개와
+  `SINGLE_ZONE`으로 정의됨
 - [x] 전용 PSC `/29` subnet과 `gcp-memorystore-redis` policy가 정의됨
 - [x] IAM 인증과 TLS가 활성화되고 app GSA 연결 권한이 cluster 하나로 제한됨
 - [x] IAM token은 state/output/Secret Manager에 저장되지 않고 CA bundle만 저장됨
