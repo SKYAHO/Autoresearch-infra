@@ -40,7 +40,9 @@ Issue 자동 close → Project Done
   push·삭제, Project·Ruleset·Secrets 변경, remote URL 변경.
 - 로컬 파일 읽기·수정은 진행해도 됩니다. GitHub에 반영하는 순간에만
   확인받습니다.
-- PR 기본값: Assignee는 `hyeongyu-data`, label은 PR 성격에 맞춰 설정
+- 이슈·PR 기본값: **Assignee는 생성자**(gh 인증 계정)로 지정합니다 —
+  `gh issue create`·`gh pr create`에 항상 `--assignee @me`를 붙입니다
+  (`@me` = 생성자, 현재 계정 `hyeongyu-data`). label은 성격에 맞춰 설정
   (Terraform/IaC: `terraform`+`gcp`, 문서: `documentation`, 자동화:
   `ci-cd`/`chore`, 보안·IAM: `security`/`iam`, 비용 영향: `cost`).
 
@@ -124,6 +126,7 @@ docs: GCP 운영 가이드 갱신
 - [ ] `git diff --check` 통과
 - [ ] state, `.tfvars` 실값, service account key, secret이 포함되지 않았다
 - [ ] 커밋 메시지가 컨벤션을 따른다
+- [ ] Assignee를 생성자로 지정한다 (`gh pr create --assignee @me`)
 
 **PR 본문** (`.github/PULL_REQUEST_TEMPLATE.md` 사용):
 
