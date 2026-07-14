@@ -7,6 +7,37 @@ dev GKE의 Vault(`vault` namespace, #132/#134) 운영 절차. 설치 구성은
 전제: `gcloud` 인증과 dev GKE `kubectl` 컨텍스트(팀 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`).
 
+## ⚠️ 하드 게이트: 실 secret 이관 전 TLS 필수 (#177)
+
+현재 Vault listener는 **평문(TLS 비활성)** 이다. API 토큰과 secret payload가
+클러스터 네트워크를 평문으로 이동한다. 아래를 **모두** 만족하기 전에는
+**실 서비스 secret을 절대 저장하지 않는다** — 지금은 더미 값(hello-vault-dev)만
+허용한다.
+
+**현재 노출 표면(위협 모델)**: consumer가 없다. vault namespace의
+NetworkPolicy ingress는 (a) 같은 namespace pod (b) 노드 대역 → 8200
+(port-forward)만 허용한다. #177에서 **kube-system 전체 포트 허용 규칙을
+제거**해, 이전에 존재하던 "kube-system의 모든 pod가 8200 평문 접근" 예외를
+닫았다. port-forward 경로의 TLS 구분: 로컬 kubectl → kube-apiserver(TLS) →
+kubelet(apiserver-kubelet TLS) → **kubelet → vault pod:8200(노드 로컬,
+평문)**. 즉 평문 구간은 **kubelet과 vault pod 사이의 노드 내부 홉**뿐이며,
+실제 위험은 "vault pod가 뜬 노드에 침투한 주체의 로컬 스니핑"으로 국한된다.
+실 secret이 없는 한 탈취할 값도 없다. 위험이 실체화되는 시점은 **consumer
+워크로드가 붙어 평문 secret 트래픽이 네트워크를 가로지를 때**이며, 그 전에
+아래 게이트를 통과해야 한다.
+
+**실 secret 이관 체크리스트 (전부 필수)**:
+
+- [ ] Vault TLS 활성화 (`global.tlsDisable: false` + 인증서 신뢰·회전 자동화 —
+      cert-manager 또는 Vault PKI, 별도 설계 이슈)
+- [ ] consumer 연동 방식 확정 (직접 연동 시 양쪽 NetworkPolicy, 또는 ESO)
+- [ ] audit device 활성 + 로그 수집 경로 확인
+- [ ] 실 secret과 Secret Manager의 역할 경계 재확인 (무엇을 Vault로, 무엇을
+      Secret Manager에 남길지)
+
+이 게이트를 통과하지 않은 상태의 Vault는 **학습·검증 전용**이다. 실
+서비스 secret은 계속 GCP Secret Manager가 담당한다.
+
 ## 접속 (내부 전용)
 
 Vault UI/API는 인터넷에 공개하지 않는다. 접근은 kubectl port-forward만 사용한다.

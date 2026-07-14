@@ -499,3 +499,15 @@
 - soft delete를 7일(GCS 최소값)로 활성화해 삭제 객체 복구 창을 확보했다.
   SLM 정상 삭제는 그대로 성공하고 soft-deleted 사본만 뒤에 남으므로 증분
   구조와 충돌하지 않는다. retention lock은 SLM 정리를 막으므로 미사용.
+
+## 2026-07-14: Vault 평문 위협 게이트 강화 (#177)
+
+- Codex adversarial review medium finding. Vault가 평문(tlsDisable)이라
+  문서로만 실 secret을 금지하고 기술적 강제가 없었다.
+- 판단: 회전 자동화 없는 self-signed TLS를 지금 켜는 것은 새 부채라 과잉.
+  대신 (a) 위협 모델을 명확화(consumer 부재 + NetworkPolicy로 노출 표면이
+  vault ns 내부 국한 — #136), (b) 실 secret 이관 전 하드 게이트 체크리스트
+  (TLS+cert 회전, consumer 연동, audit, Secret Manager 역할 경계)를
+  runbook/README/values에 명시적 게이트로 확립.
+- TLS 활성화(cert-manager/Vault PKI)는 실 secret/ESO 연동의 선행 조건으로
+  별도 마일스톤 이슈에 연결.

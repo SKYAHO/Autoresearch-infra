@@ -40,15 +40,13 @@ resource "kubernetes_network_policy_v1" "vault_ingress" {
       }
     }
 
-    ingress {
-      from {
-        namespace_selector {
-          match_labels = {
-            "kubernetes.io/metadata.name" = "kube-system"
-          }
-        }
-      }
-    }
+    # #177: kube-system 전체 포트 허용 규칙을 제거했다. Vault는 secret
+    # 제어면이라 다른 root(argocd 등)의 관습적 kube-system ingress를
+    # 그대로 두면 kube-system의 모든 pod가 8200 평문 접근 가능해진다
+    # (Codex/claude-review 지적). Vault는 kube-system으로부터 받을
+    # 트래픽이 없다 — liveness/readiness probe는 kubelet host-local이라
+    # NetworkPolicy 평가와 무관하게 허용되고, DNS는 egress다. 따라서
+    # 이 규칙 제거로 노출 표면이 실제로 좁아진다.
 
     # kubectl port-forward 경로: 트래픽이 노드(dev subnet IP)에서 출발하므로
     # 노드 대역에서 vault server 컨테이너 포트(8200)로의 ingress를 허용한다.

@@ -6,6 +6,10 @@
 
 global:
   # dev 1단계: 클러스터 내부 + port-forward 한정 평문. NetworkPolicy로 격리.
+  # #177 하드 게이트: consumer가 없어 현재 노출 표면은 vault ns 내부 국한.
+  # 실 secret 이관 전 tlsDisable=false + cert 회전 자동화가 필수(runbook
+  # "하드 게이트" 절). 이 값을 false로만 바꾸면 cert 없이 기동 실패하므로
+  # TLS 활성화는 인증서 체계 설계(별도 이슈)와 함께 진행한다.
   tlsDisable: true
 
 # agent injector는 1단계 범위 밖(최소 설치). 필요 시 별도 이슈에서 활성화.
