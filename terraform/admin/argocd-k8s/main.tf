@@ -220,6 +220,16 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
           server    = "https://kubernetes.default.svc"
           namespace = var.monitoring_namespace
         },
+        {
+          # #183 kube-prometheus-stack은 control-plane exporter Service
+          # (coredns/kube-controller-manager/kube-etcd/kube-proxy/kube-scheduler)를
+          # kube-system에 둔다. 실행 중 스택을 그대로 adopt하려면 이 destination이
+          # 필요하다. 이 프로젝트에는 monitoring Application만 있고 source는 infra
+          # repo로 고정, manual sync·prune off라 권한 범위는 제한적이다.
+          # (GKE에서 스크랩 불가한 control-plane exporter 비활성화는 별도 튜닝 과제)
+          server    = "https://kubernetes.default.svc"
+          namespace = "kube-system"
+        },
       ]
       # #183 kube-prometheus-stack이 요구하는 cluster-wide kind만 허용.
       clusterResourceWhitelist = [
