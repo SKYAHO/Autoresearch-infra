@@ -9,7 +9,7 @@
 | 항목 | 이 root에서 관리 | 비고 |
 |---|---|---|
 | `argo-rollouts` namespace | 예 | `prevent_destroy` |
-| Rollouts controller Helm release | 예 | chart `argo-rollouts` `2.41.0` pin |
+| Rollouts controller (chart) | 아니오 (#186) | **ArgoCD Application이 관리** — infra repo `deploy/argo-rollouts/` umbrella chart(argo-rollouts 2.41.0). helm_release에서 이관. 이 root는 `removed { destroy=false }`로 state에서만 제거 |
 | NetworkPolicy | 예 | deny-by-default. controller는 DNS/K8s API만 필요 |
 | Rollout/AnalysisTemplate CR | 아니오 | 앱 저장소 manifest → ArgoCD sync (#87 책임 경계) |
 | promote/abort 조작 | 아니오 | 운영자 kubectl plugin (`docs/ROLLOUTS_OPERATIONS_RUNBOOK.md`, #90에서 제공) |
@@ -92,14 +92,14 @@ kubectl -n argo-rollouts get svc   # 외부 노출 리소스 없어야 함
 
 ## 롤백
 
-- `helm_release.argo_rollouts` 제거 후 apply → **controller만 삭제된다.**
-  CRD는 chart 기본값(`crds.keep=true`, `helm.sh/resource-policy: keep`)으로
-  클러스터에 남으므로 기존 Rollout CR과 ArgoCD Application은 삭제되지 않고
-  "실행자 없는 선언" 상태(전환 정지, 워크로드 pod는 유지)가 된다.
-  namespace는 `prevent_destroy`로 남는다.
+- **#186 이후 controller chart는 ArgoCD Application `argo-rollouts`가 관리한다.**
+  chart 버전 롤백은 infra repo `deploy/argo-rollouts/Chart.yaml`의 dependency
+  버전을 되돌리고 Application을 재 sync한다(이 root의 변수 아님).
+- 이관(adopt) 롤백: ArgoCD Application 제거(argocd-k8s에서 리소스 삭제 apply) —
+  sync policy가 prune off라 실행 중 controller/CRD는 유지된다. 이후 이 root에
+  `helm_release.argo_rollouts`를 복원하고 `terraform import`로 재인수하면 TF 관리로
+  되돌아간다(`removed`는 삭제가 아니므로 무중단).
 - **CRD까지 지우면 안 되는 이유**: CRD 삭제는 전 namespace의 Rollout CR을
   연쇄 삭제하고, Rollout이 소유한 ReplicaSet/pod까지 GC되어 서비스 중단으로
   이어진다. CRD 정리는 모든 Rollout을 Deployment로 되돌린 뒤에만 수동으로
-  수행한다.
-- 제거 전 진행 중인 Rollout은 모두 promote해 Healthy 상태로 만든다.
-- chart 버전 롤백은 `rollouts_chart_version`을 되돌려 apply.
+  수행한다. namespace는 `prevent_destroy`로 남는다.

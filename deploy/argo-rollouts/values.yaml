@@ -1,0 +1,16 @@
+# ArgoCD가 이 values로 argo-rollouts subchart를 배포한다.
+# 원본: terraform/admin/argo-rollouts-k8s/helm-values/argo-rollouts.values.yaml
+# subchart이므로 모든 값은 argo-rollouts: 아래로 중첩된다.
+argo-rollouts:
+  dashboard:
+    enabled: false
+
+  controller:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 256Mi

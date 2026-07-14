@@ -3,6 +3,20 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-14: argo-rollouts ArgoCD 이관 (#186, GitOps 파일럿 확장)
+
+- monitoring(#183) 파일럿에 이어 `helm_release.argo_rollouts`를 ArgoCD Application
+  `argo-rollouts`로 무중단 이관했다. source는 infra repo `deploy/argo-rollouts/`
+  umbrella chart(argo-rollouts 2.41.0 dependency + Chart.lock).
+- releaseName을 기존 release와 동일한 `argo-rollouts`로 고정해 CRD/ClusterRole/
+  ClusterRoleBinding을 재생성 없이 adopt. `removed { destroy=false }`로 helm_release를
+  state에서만 제거(namespace·NetworkPolicy 경계는 Terraform 유지).
+- AppProject는 destinations에 `argo-rollouts`만 추가하고 clusterResourceWhitelist는
+  무변경(monitoring이 이미 CRD/ClusterRole/ClusterRoleBinding 허용, argo-rollouts는
+  webhook 없음). 실행 중 Rollout CR 0개라 컨트롤러 adopt 영향 없음.
+- 구현은 orca 병렬 fan-out(3개 codex 에이전트, disjoint 영역)으로 분담 후 통합.
+- 설계: `superpowers/specs/2026-07-14-argo-rollouts-argocd-migration-design.md`.
+
 ## 2026-07-13: Feast Online Store Redis Cluster 설계 정정 (#129, apply 대기)
 
 - dev Online Store는 `REDIS_SHARED_CORE_NANO` primary shard 2개, replica 0개의

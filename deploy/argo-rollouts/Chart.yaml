@@ -1,0 +1,14 @@
+# ArgoCD가 이 경로를 source로 배포하는 Argo Rollouts umbrella chart.
+# argo-rollouts를 dependency로 감싸 버전 pin과 values를 한곳에서 관리한다.
+# ArgoCD가 sync 시 `helm dependency build`를 자동 수행하므로 charts/를 vendor하지 않는다.
+apiVersion: v2
+name: autoresearch-argo-rollouts
+description: AutoResearch dev Argo Rollouts umbrella chart
+type: application
+version: 0.1.0
+appVersion: "2.41.0"
+
+dependencies:
+  - name: argo-rollouts
+    version: 2.41.0
+    repository: https://argoproj.github.io/argo-helm

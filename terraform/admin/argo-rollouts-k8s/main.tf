@@ -130,22 +130,12 @@ resource "kubernetes_network_policy_v1" "rollouts_egress" {
   }
 }
 
-# #88 Argo Rollouts 최소 설치. dashboard는 설치하지 않고 kubectl plugin으로
-# 운영한다(#90 runbook). chart가 만드는 ClusterRole은 Rollout/ReplicaSet 등
-# 전환 실행에 필요한 리소스 범위로 한정된 upstream 기본값을 사용한다.
-resource "helm_release" "argo_rollouts" {
-  name       = var.rollouts_release_name
-  repository = "https://argoproj.github.io/argo-helm"
-  chart      = "argo-rollouts"
-  version    = var.rollouts_chart_version
-  namespace  = kubernetes_namespace_v1.argo_rollouts.metadata[0].name
-
-  atomic           = true
-  cleanup_on_fail  = true
-  create_namespace = false
-  timeout          = 600
-
-  values = [
-    file("${path.module}/${var.rollouts_values_file_path}")
-  ]
+# helm_release를 코드에서 그냥 지우면 apply 시 Terraform이 helm uninstall을
+# 실행해 Argo Rollouts 컨트롤러와 CRD를 삭제한다. destroy=false로 실제 release는
+# 유지하고 Terraform state에서만 안전하게 제거한다.
+removed {
+  from = helm_release.argo_rollouts
+  lifecycle {
+    destroy = false
+  }
 }

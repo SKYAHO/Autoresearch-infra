@@ -89,3 +89,15 @@ variable "monitoring_target_revision" {
   type        = string
   default     = "main"
 }
+
+variable "rollouts_namespace" {
+  description = "argo-rollouts 스택 namespace. ArgoCD destination으로 허용한다."
+  type        = string
+  default     = "argo-rollouts"
+}
+
+variable "rollouts_target_revision" {
+  description = "argo-rollouts Application이 추적할 infra repo ref. 최초 adopt는 -var로 병합 커밋 SHA를 주입해 pin한다."
+  type        = string
+  default     = "main"
+}
