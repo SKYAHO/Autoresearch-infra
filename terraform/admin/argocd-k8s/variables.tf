@@ -85,7 +85,7 @@ variable "monitoring_namespace" {
 }
 
 variable "monitoring_target_revision" {
-  description = "monitoring Application이 추적할 infra repo ref(#183). manual sync라 main 추적 무방. 재현성 필요 시 커밋 SHA로 pin."
+  description = "monitoring Application이 추적할 infra repo ref(#183). 최초 adopt는 -var로 병합 커밋 SHA를 주입해 렌더가 live와 일치하도록 pin한다(무중단 전제). 기본 main은 파일럿 이후 manual sync 추적용."
   type        = string
   default     = "main"
 }

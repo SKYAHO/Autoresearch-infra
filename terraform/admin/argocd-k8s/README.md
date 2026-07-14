@@ -11,10 +11,8 @@ AppProject와 샘플 Application을 추가했다.
 | `argocd` namespace | 예 | `prevent_destroy`로 실수 삭제 방지 |
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
-| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). #183: infra repo·monitoring·cluster-wide 리소스 확장 |
-| 샘플 Application `sample-guestbook` | 예 | manual sync 검증용 (#85). 실제 repo 연결 시 제거 |
+| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). #183: monitoring 전용으로 좁힘(샘플 제거) + cluster-wide 리소스 허용 |
 | Application `monitoring` | 예 (#183) | infra repo `deploy/monitoring` umbrella chart, manual sync. helm_release에서 이관 |
-| `argocd-sample` namespace | 예 | 샘플 워크로드 전용, 검증 후 폐기 가능 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 
 ## 설치 구성 (#84)
@@ -117,30 +115,21 @@ kubectl -n argocd delete secret argocd-initial-admin-secret
 변경한 admin 비밀번호는 팀 비밀번호 관리 경로로만 공유한다. Git, PR,
 Terraform state, values 파일에 저장하지 않는다.
 
-## 샘플 sync/diff/rollback 검증 (#85)
+## 샘플 sync/diff/rollback 검증 (#85, 완료 후 제거)
 
-`sample-guestbook` Application은 공개 샘플 repo
-(`argoproj/argocd-example-apps`의 `guestbook`)를 `argocd-sample` namespace에
-manual sync로 연결한다. auto-sync/prune/self-heal은 켜지 않는다.
+초기 검증에는 공개 샘플 repo(`argoproj/argocd-example-apps`의 `guestbook`)를
+`argocd-sample` namespace에 manual sync로 연결한 `sample-guestbook`
+Application을 사용했다. sync/diff/rollback 흐름 검증을 마치고, 실제 repo
+(monitoring umbrella chart)를 연결하는 #183에서 샘플 리소스(Application +
+`argocd-sample` namespace)를 제거했다.
 
-UI 기준 절차 (port-forward 후 `https://localhost:8443`):
+제거 이유(코드 리뷰 반영): AppProject `clusterResourceWhitelist`는 프로젝트
+단위 정책이라 같은 프로젝트의 모든 Application에 적용된다. 샘플을 남겨두면
+CRD/ClusterRole/**ClusterRoleBinding**/webhook 등 cluster-wide 권한이
+monitoring 외 Application까지 확대되므로, 최소 권한 원칙에 따라 프로젝트를
+monitoring 전용으로 좁혔다.
 
-1. **diff**: Applications → sample-guestbook → 최초 상태가 `OutOfSync`인지
-   확인하고 `APP DIFF`로 미적용 manifest를 확인한다.
-2. **sync**: `SYNC` 버튼으로 수동 sync → `Synced`/`Healthy` 전환과
-   `argocd-sample` namespace의 guestbook Deployment/Service 생성을 확인한다.
-3. **rollback**: `HISTORY AND ROLLBACK`에서 이전 revision으로 rollback을
-   실행해 이전 상태로 되돌아가는지 확인한다.
-
-kubectl로 상태만 볼 때:
-
-```bash
-kubectl -n argocd get application sample-guestbook \
-  -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}'
-kubectl -n argocd-sample get all
-```
-
-## 실제 repo 연결 전 주의사항 (#85)
+## 실제 repo 연결 시 주의사항 (#85, #183 적용)
 
 - **AppProject 허용 목록은 그때 넓힌다**: `SKYAHO/Autoresearch-airflow` 등
   실제 repo와 대상 namespace는 해당 Application을 만드는 이슈에서

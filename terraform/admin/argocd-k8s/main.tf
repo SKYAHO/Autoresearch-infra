@@ -180,21 +180,13 @@ resource "helm_release" "argo_cd" {
   ]
 }
 
-# #85 AppProject/Application 샘플. 실제 Airflow/앱 연결 전에 ArgoCD의
-# sync/diff/rollback 흐름을 무해한 공개 샘플(guestbook)로 검증한다.
-# 검증이 끝나고 실제 repo를 연결하는 이슈에서 샘플 리소스는 제거한다.
-
-# 샘플 워크로드 전용 namespace. 검증용이라 prevent_destroy를 두지 않는다.
-resource "kubernetes_namespace_v1" "argocd_sample" {
-  metadata {
-    name = "argocd-sample"
-
-    labels = {
-      "app.kubernetes.io/name"    = "argocd-sample"
-      "app.kubernetes.io/part-of" = "gitops"
-    }
-  }
-}
+# #183 #85 샘플(sample-guestbook/argocd-sample)은 sync/diff/rollback 흐름
+# 검증을 마쳤고, 실제 repo(monitoring umbrella chart) 연결 시점에 제거했다.
+# 이유: AppProject clusterResourceWhitelist(CRD/ClusterRole/ClusterRoleBinding/
+# webhook)는 프로젝트 단위 정책이라 같은 프로젝트의 모든 Application에 적용된다.
+# 샘플을 남겨두면 cluster-wide 권한(특히 ClusterRoleBinding 권한 상승 표면)이
+# monitoring 외 Application까지 확대되므로, 최소 권한 원칙에 따라 프로젝트를
+# monitoring 전용으로 좁힌다(코드 리뷰 반영).
 
 # 주의(부트스트랩 순서): kubernetes_manifest는 plan 단계에서 대상 CRD의
 # 스키마를 클러스터에서 조회하므로, ArgoCD CRD가 없는 빈 클러스터에서는
@@ -203,10 +195,12 @@ resource "kubernetes_namespace_v1" "argocd_sample" {
 # 로 chart(CRD 포함)를 먼저 설치한 뒤 전체 plan/apply를 실행한다(README 참조).
 
 # AppProject: Application이 접근할 수 있는 repo/destination을 제한하는 경계.
-# - sourceRepos: 공개 샘플 repo + infra repo(#183 monitoring umbrella chart).
-# - destinations: argocd-sample + monitoring namespace(#183).
+# monitoring 전용으로 좁힌다(샘플 제거, 코드 리뷰 반영).
+# - sourceRepos: infra repo(#183 monitoring umbrella chart)만.
+# - destinations: monitoring namespace(#183)만.
 # - clusterResourceWhitelist: kube-prometheus-stack이 CRD/ClusterRole/webhook
 #   같은 cluster-wide 리소스를 설치하므로 필요한 kind만 허용한다(#183, 최소).
+#   프로젝트에 monitoring Application만 있으므로 이 권한은 monitoring에 국한된다.
 resource "kubernetes_manifest" "appproject_autoresearch_dev" {
   manifest = {
     apiVersion = "argoproj.io/v1alpha1"
@@ -216,16 +210,11 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
       namespace = kubernetes_namespace_v1.argocd.metadata[0].name
     }
     spec = {
-      description = "AutoResearch dev GitOps boundary (#85 sample, #183 monitoring)"
+      description = "AutoResearch dev GitOps boundary (#183 monitoring). 샘플(#85)은 검증 후 제거."
       sourceRepos = [
-        "https://github.com/argoproj/argocd-example-apps.git",
         var.infra_repo_url,
       ]
       destinations = [
-        {
-          server    = "https://kubernetes.default.svc"
-          namespace = kubernetes_namespace_v1.argocd_sample.metadata[0].name
-        },
         {
           # #183 monitoring namespace는 terraform/admin/monitoring-k8s가 소유.
           server    = "https://kubernetes.default.svc"
@@ -261,8 +250,11 @@ resource "kubernetes_manifest" "application_monitoring" {
     spec = {
       project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
       source = {
-        repoURL        = var.infra_repo_url
-        path           = "deploy/monitoring"
+        repoURL = var.infra_repo_url
+        path    = "deploy/monitoring"
+        # 최초 adopt는 병합 커밋 SHA로 pin해 렌더가 live와 일치하도록 한다
+        # (var를 apply 시 -var로 주입; 코드 리뷰 반영). 기본 main은 파일럿
+        # 이후 manual sync 추적용.
         targetRevision = var.monitoring_target_revision
         helm = {
           # #183 [치명 리스크 수정] release name을 기존 helm_release와 동일하게
@@ -289,30 +281,4 @@ resource "kubernetes_manifest" "application_monitoring" {
   }
 
   depends_on = [helm_release.argo_cd]
-}
-
-# 샘플 Application. syncPolicy를 지정하지 않아 manual sync로만 동작한다
-# (auto-sync/prune/self-heal 없음 — GITOPS_STRATEGY 초기 원칙).
-resource "kubernetes_manifest" "application_sample_guestbook" {
-  manifest = {
-    apiVersion = "argoproj.io/v1alpha1"
-    kind       = "Application"
-    metadata = {
-      name      = "sample-guestbook"
-      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
-    }
-    spec = {
-      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
-      source = {
-        repoURL = "https://github.com/argoproj/argocd-example-apps.git"
-        path    = "guestbook"
-        # 외부 repo HEAD 추적 대신 커밋 SHA pin — 검증 재현성 확보 (리뷰 반영).
-        targetRevision = "8088f4c0d970abb09e250248cc97e35623447cb5"
-      }
-      destination = {
-        server    = "https://kubernetes.default.svc"
-        namespace = kubernetes_namespace_v1.argocd_sample.metadata[0].name
-      }
-    }
-  }
 }
