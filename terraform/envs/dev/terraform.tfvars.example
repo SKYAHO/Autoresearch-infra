@@ -26,7 +26,7 @@ redis_psc_subnet_cidr              = "10.10.16.0/29" # PSC discovery/internal ba
 redis_node_type                    = "REDIS_SHARED_CORE_NANO"
 redis_shard_count                  = 2
 redis_replica_count                = 0
-redis_cluster_deletion_protection = false
+redis_cluster_deletion_protection  = false
 
 # GKE (#5)
 gke_master_ipv4_cidr              = "172.16.0.0/28" # private 컨트롤 플레인. dev subnet/private services와 미중복
