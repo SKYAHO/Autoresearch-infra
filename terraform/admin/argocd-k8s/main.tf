@@ -221,6 +221,10 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
           namespace = var.monitoring_namespace
         },
         {
+          server    = "https://kubernetes.default.svc"
+          namespace = var.rollouts_namespace
+        },
+        {
           # #183 kube-prometheus-stack은 control-plane exporter Service
           # (coredns/kube-controller-manager/kube-etcd/kube-proxy/kube-scheduler)를
           # kube-system에 둔다. 실행 중 스택을 그대로 adopt하려면 이 destination이
@@ -282,6 +286,42 @@ resource "kubernetes_manifest" "application_monitoring" {
       syncPolicy = {
         # 실행 중 리소스의 helm managed-by 라벨 차이를 흡수 + namespace는
         # TF 소유라 생성 안 함. auto-sync/prune 없음(수동).
+        syncOptions = [
+          "ServerSideApply=true",
+          "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+resource "kubernetes_manifest" "application_argo_rollouts" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "argo-rollouts"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/argo-rollouts"
+        targetRevision = var.rollouts_target_revision
+        helm = {
+          # 기존 helm_release의 CRD/ClusterRole/ClusterRoleBinding을 adopt하려면
+          # release name이 기존 release와 정확히 일치해야 한다.
+          releaseName = "argo-rollouts"
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.rollouts_namespace
+      }
+      syncPolicy = {
         syncOptions = [
           "ServerSideApply=true",
           "CreateNamespace=false",

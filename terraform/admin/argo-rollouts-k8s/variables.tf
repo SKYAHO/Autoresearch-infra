@@ -32,24 +32,6 @@ variable "rollouts_namespace" {
   }
 }
 
-variable "rollouts_release_name" {
-  description = "Helm release name for Argo Rollouts."
-  type        = string
-  default     = "argo-rollouts"
-}
-
-variable "rollouts_chart_version" {
-  description = "Pinned argo-rollouts Helm chart version."
-  type        = string
-  default     = "2.41.0"
-}
-
-variable "rollouts_values_file_path" {
-  description = "Module-relative path for the Argo Rollouts Helm values file."
-  type        = string
-  default     = "helm-values/argo-rollouts.values.yaml"
-}
-
 variable "cluster_services_cidr" {
   description = "GKE services 2차 대역 (#122). kube-dns/kubernetes.default VIP egress를 ipBlock으로 허용. dev root의 gke_services_cidr와 일치해야 한다."
   type        = string
