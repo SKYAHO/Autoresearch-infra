@@ -3,6 +3,18 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-14: application digest 승격과 Airflow GKE 자동 배포 기반 (#187)
+
+- WIF provider에 `workflow_ref` mapping을 추가하고 application GAR pusher를
+  정확한 `release.yml@refs/heads/main` workflow로 제한했다. release event의 tag
+  `ref` 때문에 정상 발행이 거부되던 경계를 바로잡는다.
+- `Autoresearch-airflow@refs/heads/main` 전용
+  `autoresearch-dev-airflow-cd` GSA를 추가했다.
+- GCP 권한은 `roles/container.clusterViewer`, Kubernetes 권한은 `airflow`
+  namespace의 `admin` RoleBinding으로 분리했다. DNS endpoint를 사용하므로 IP
+  allowlist는 확장하지 않는다.
+- 적용 순서는 bootstrap → dev → admin root이며, 이 변경 자체는 apply하지 않는다.
+
 ## 2026-07-14: argo-rollouts ArgoCD 이관 (#186, GitOps 파일럿 확장)
 
 - monitoring(#183) 파일럿에 이어 `helm_release.argo_rollouts`를 ArgoCD Application
@@ -518,7 +530,8 @@
   추가하고, 두 pusher principalSet을 승인 ref(기본 refs/heads/main)로
   좁혔다. terraform-ci(read-only)는 대상 외.
 - 앱 저장소 실제 배포 ref는 협의 필요 — 기본값 main으로 시작, 태그 릴리스
-  등은 확정 후 변수(airflow_deploy_ref/application_deploy_ref)로 조정.
+  등은 당시 변수로 조정하도록 남겼다. 이후 #187에서 application 권한은
+  `application_release_workflow_ref`로 확정했다.
 
 ## 2026-07-14: ES snapshot bucket soft delete 추가 (#176)
 

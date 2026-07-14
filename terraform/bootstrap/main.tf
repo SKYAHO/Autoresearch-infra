@@ -64,6 +64,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     # workflow까지 SA 가장을 허용해 공급망 위험이 된다(Codex adversarial
     # review). 값 예: SKYAHO/Autoresearch-airflow@refs/heads/main
     "attribute.repository_ref" = "assertion.repository + '@' + assertion.ref"
+    # release event의 assertion.ref는 tag가 될 수 있다. write 권한 workflow를
+    # 파일 경로 + workflow source ref로 고정할 때 사용한다.
+    "attribute.workflow_ref" = "assertion.workflow_ref"
   }
 
   attribute_condition = "attribute.repository in ${jsonencode(var.allowed_github_repositories)}"

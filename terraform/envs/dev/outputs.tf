@@ -159,6 +159,11 @@ output "github_actions_app_pusher_service_account_email" {
   value       = google_service_account.application_pusher.email
 }
 
+output "github_actions_airflow_deployer_service_account_email" {
+  description = "GitHub Actions (Autoresearch-airflow) WIF가 가장하여 dev GKE의 Airflow Helm release를 배포하는 SA email. repository variable GKE_DEPLOYER_SA 값으로 사용."
+  value       = google_service_account.airflow_deployer.email
+}
+
 output "cloud_build_bucket_name" {
   description = "Autoresearch-airflow build가 사용하는 Cloud Build 기본 staging bucket 이름."
   value       = local.cloud_build_bucket_name

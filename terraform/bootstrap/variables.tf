@@ -12,7 +12,11 @@ variable "github_repository" {
 variable "allowed_github_repositories" {
   description = "GitHub repositories allowed to obtain an OIDC token from this WIF provider (owner/name list). The CI SA impersonation is still restricted to var.github_repository by a separate IAM binding."
   type        = list(string)
-  default     = ["SKYAHO/Autoresearch-infra"]
+  default = [
+    "SKYAHO/Autoresearch-infra",
+    "SKYAHO/Autoresearch-airflow",
+    "SKYAHO/Autoresearch",
+  ]
 }
 
 variable "region" {

@@ -30,11 +30,13 @@ allowed_github_repositories = [
 ]
 ```
 
-> **주의(회귀 footgun)**: `allowed_github_repositories`의 변수 default는 infra 리포 1개다. tfvars 없이(또는 `-var` 없이) apply하면 WIF provider `attribute_condition`이 default로 되돌아가 Autoresearch와 Autoresearch-airflow GitHub Actions의 GCP 인증(GAR push)이 조용히 끊긴다. bootstrap apply 전 tfvars에 위 세 값이 있는지 반드시 확인한다.
+`allowed_github_repositories`의 변수 default도 위 세 저장소와 일치한다. 운영
+tfvars에는 같은 목록을 명시해 의도를 남기며, 새 저장소를 추가할 때는 provider
+허용 목록과 해당 SA의 별도 가장 바인딩을 함께 검토한다.
 
 생성 대상: GCS 버킷(`autoresearch-dev-tfstate`), WIF 풀/프로바이더, CI SA(`terraform-ci`), IAM.
 
-WIF provider의 `attribute_condition`은 토큰 발급 허용 리포만 결정하고, SA 가장은 SA별 `roles/iam.workloadIdentityUser` principalSet 바인딩이 별도로 필요하다(2단 경계). `terraform-ci` 가장은 infra 리포만 가능하다. Autoresearch-airflow는 dev root의 `gar_pusher`, Autoresearch는 `application_pusher`만 가장할 수 있으며 두 SA 모두 GAR push 전용이다(`docs/TERRAFORM_DEV.md` 참조).
+WIF provider의 `attribute_condition`은 토큰 발급 허용 리포만 결정하고, SA 가장은 SA별 `roles/iam.workloadIdentityUser` principalSet 바인딩이 별도로 필요하다(2단 경계). `terraform-ci` 가장은 infra 리포만 가능하다. Autoresearch-airflow는 dev root의 `gar_pusher` 또는 `airflow_deployer`, Autoresearch는 정확한 release `workflow_ref`에서만 `application_pusher`를 가장할 수 있다(`docs/TERRAFORM_DEV.md` 참조).
 
 앱 이미지 배포 권한을 활성화할 때는 먼저 위 로컬 tfvars를 포함한 bootstrap
 plan/apply로 provider 허용 목록을 갱신하고, 그 다음 dev root plan/apply로
@@ -79,4 +81,7 @@ terraform -chdir=terraform/envs/dev init -migrate-state
 - backend 되돌리기: `terraform/envs/dev/versions.tf` 에서 backend 블록 제거 → `terraform -chdir=terraform/envs/dev init -migrate-state`
 - bootstrap 제거: state 버킷은 `prevent_destroy=true`로 보호되므로 일반 `terraform destroy`로 삭제되지 않는다. 삭제가 필요하면 state 백업 후 lifecycle을 명시적으로 해제한다.
 - 앱 이미지 배포 허용 철회: Autoresearch release workflow를 먼저 비활성화하고 dev root에서 `application_pusher` 리소스를 제거한 뒤, bootstrap 로컬 tfvars의 `SKYAHO/Autoresearch` 항목을 제거한다.
+- Airflow GKE 자동 배포 허용 철회: Airflow 배포 workflow를 먼저 비활성화하고
+  admin root의 `airflow-deployer-admin` RoleBinding과 dev root의
+  `airflow_deployer` 리소스를 제거한다.
 - GitHub variables 는 Settings 에서 수동 삭제
