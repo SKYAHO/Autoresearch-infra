@@ -12,12 +12,15 @@
 | 팀원에게 GKE, Bastion, Airflow/Grafana UI 접속 방법을 안내 | [`TEAM_OPERATIONS_RUNBOOK.md`](TEAM_OPERATIONS_RUNBOOK.md) |
 | Grafana에서 GKE/Airflow/앱 상태를 점검하는 방법 확인 | [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md) |
 | ArgoCD 접속, sync/diff/rollback, 장애 대응 절차 확인 | [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md) |
+| Argo Rollouts promote/abort/rollback 등 점진 배포 운영 | [`ROLLOUTS_OPERATIONS_RUNBOOK.md`](ROLLOUTS_OPERATIONS_RUNBOOK.md) |
+| Kibana/ELK 로그 검색·운영 절차 확인 | [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) |
+| Vault 접속·시크릿 운영 절차 확인 | [`VAULT_OPERATIONS_RUNBOOK.md`](VAULT_OPERATIONS_RUNBOOK.md) |
 | dev Terraform 리소스, 변수, output, apply 절차 확인 | [`TERRAFORM_DEV.md`](TERRAFORM_DEV.md) |
 | Prometheus/Grafana 운영 모니터링 설계 확인 | [`OBSERVABILITY_STRATEGY.md`](OBSERVABILITY_STRATEGY.md) |
 | bootstrap state bucket, WIF, CI service account 확인 | [`TERRAFORM_BOOTSTRAP.md`](TERRAFORM_BOOTSTRAP.md) |
 | GitHub label, Project 운영 기준 확인 | [`GITHUB_LABELS_AND_PROJECT.md`](GITHUB_LABELS_AND_PROJECT.md) |
 | main branch ruleset 확인 | [`BRANCH_RULESET_MAIN.md`](BRANCH_RULESET_MAIN.md) |
-| ArgoCD GitOps 도입 전 운영 경계 확인 | [`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md) |
+| ArgoCD GitOps 책임 경계와 Terraform→ArgoCD 이관 전략 확인 | [`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md) |
 | 완료된 인프라 변경의 결정 이력 확인 | [`CHANGE_HISTORY.md`](CHANGE_HISTORY.md) |
 
 ## 문서 작성 기준
