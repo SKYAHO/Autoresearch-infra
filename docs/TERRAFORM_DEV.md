@@ -324,11 +324,23 @@ Prometheus/Grafana는 dev GCP root가 아니라 `terraform/admin/monitoring-k8s`
 
 Grafana admin Secret은 apply 전에 운영자가 `monitoring` namespace에 직접 만든다.
 
+비밀번호를 명령행 인수(셸 히스토리·프로세스 목록에 노출)에 두지 않도록,
+`read -s`로 입력받아 권한 제한 임시 파일(`--from-env-file`)로 주입한다.
+
 ```bash
+umask 077                                   # 이후 생성 파일은 0600
+env_file="$(mktemp)"
+trap 'rm -f "$env_file"' EXIT               # 오류 포함 종료 시 폐기
+
+read -rs -p 'admin-password: ' APW; echo    # 화면·히스토리에 남지 않음
+printf 'admin-user=admin\nadmin-password=%s\n' "$APW" > "$env_file"
+unset APW
+
 kubectl create secret generic grafana-admin-credentials \
   -n monitoring \
-  --from-literal=admin-user=admin \
-  --from-literal=admin-password='<강한 임시 비밀번호>'
+  --from-env-file="$env_file"
+
+rm -f "$env_file"; trap - EXIT              # 즉시 삭제
 ```
 
 secret payload는 Git, PR, Terraform state에 남기지 않는다. Helm release는 Secret
@@ -692,6 +704,9 @@ Airflow DAG은 KPO pod에 Kubernetes Secret
 `autoresearch-airflow-env`를 env var로 주입한다. Secret Manager version을
 추가/교체한 뒤 아래처럼 K8s Secret을 materialize한다. 값은 출력하지 않는다.
 
+값을 명령행 인수(프로세스 목록에 노출)에 두지 않도록, ACL 제한 임시 파일에
+써서 `--from-env-file`로 주입하고 `finally`에서 폐기한다.
+
 ```powershell
 $YouTubeApiKey = gcloud secrets versions access latest `
   --secret autoresearch-dev-youtube-api-key `
@@ -700,11 +715,24 @@ $OpenRouterApiKey = gcloud secrets versions access latest `
   --secret autoresearch-dev-openrouter-api-key `
   --project ar-infra-501607
 
-kubectl create secret generic autoresearch-airflow-env -n airflow `
-  --from-literal=YOUTUBE_API_KEYS="$YouTubeApiKey" `
-  --from-literal=YOUTUBE_API_KEY="$YouTubeApiKey" `
-  --from-literal=OPENROUTER_API_KEY="$OpenRouterApiKey" `
-  --dry-run=client -o yaml | kubectl apply -f -
+$envFile = New-TemporaryFile
+try {
+  # 현재 사용자만 접근하도록 상속 제거 + 본인 권한만 부여
+  icacls $envFile.FullName /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
+  @(
+    "YOUTUBE_API_KEYS=$YouTubeApiKey",
+    "YOUTUBE_API_KEY=$YouTubeApiKey",
+    "OPENROUTER_API_KEY=$OpenRouterApiKey"
+  ) | Set-Content -Path $envFile.FullName -Encoding ascii
+
+  kubectl create secret generic autoresearch-airflow-env -n airflow `
+    --from-env-file=$envFile.FullName `
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+finally {
+  Remove-Item $envFile.FullName -Force -ErrorAction SilentlyContinue
+  Remove-Variable YouTubeApiKey, OpenRouterApiKey -ErrorAction SilentlyContinue
+}
 ```
 
 Helm 배포/재현:

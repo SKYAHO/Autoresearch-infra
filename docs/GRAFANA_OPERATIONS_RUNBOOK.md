@@ -45,10 +45,25 @@ Git/문서가 아닌 Grafana DB(계정)에만 존재한다.
    - 기존 OAuth consent screen(Airflow #54와 공용)을 사용한다
 2. **Secret 주입** (client secret은 어디에도 기록하지 않는다):
 
+시크릿을 명령행 인수(셸 히스토리·프로세스 목록에 노출)에 두지 않도록,
+`read -s`로 입력받아 권한 제한 임시 파일(`--from-env-file`)로 주입한다.
+
 ```bash
+umask 077                                   # 이후 생성 파일은 0600
+env_file="$(mktemp)"
+trap 'rm -f "$env_file"' EXIT               # 오류 포함 종료 시 폐기
+
+# read -s: 화면·셸 히스토리에 값이 남지 않는다. 값은 변수로만 다룬다.
+read -rs -p 'GOOGLE_CLIENT_ID: '     GCID;  echo
+read -rs -p 'GOOGLE_CLIENT_SECRET: ' GCSEC; echo
+printf 'GF_AUTH_GOOGLE_CLIENT_ID=%s\nGF_AUTH_GOOGLE_CLIENT_SECRET=%s\n' \
+  "$GCID" "$GCSEC" > "$env_file"
+unset GCID GCSEC
+
 kubectl -n monitoring create secret generic grafana-google-oauth \
-  --from-literal=GF_AUTH_GOOGLE_CLIENT_ID='<client-id>' \
-  --from-literal=GF_AUTH_GOOGLE_CLIENT_SECRET='<client-secret>'
+  --from-env-file="$env_file"
+
+rm -f "$env_file"; trap - EXIT              # 즉시 삭제
 ```
 
 3. monitoring-k8s root apply (values의 `envFromSecret`가 이 Secret을

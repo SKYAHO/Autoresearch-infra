@@ -3,6 +3,20 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-16: 시크릿 주입 런북을 --from-env-file로 전환 (보안 P1, #213)
+
+- 운영 문서의 `kubectl create secret --from-literal=<값>` 예시가 실제 시크릿을
+  명령행 인수에 넣어 셸 히스토리·프로세스 목록에 노출될 수 있던 것을,
+  권한 제한 임시 env 파일 + `--from-env-file` + 정리 패턴으로 교체한다.
+  - bash(타이핑 값: Grafana OAuth secret, grafana admin-password): `read -s`로
+    입력받아 화면·히스토리에 남기지 않고, `umask 077` 임시파일(0600)에 써서
+    `--from-env-file`로 주입, `trap ... EXIT`로 폐기.
+  - PowerShell(gcloud→변수: airflow env): ACL 제한 임시파일 + `--from-env-file`,
+    `finally`에서 파일·변수 폐기.
+- 대상: `docs/GRAFANA_OPERATIONS_RUNBOOK.md`, `docs/TERRAFORM_DEV.md`(2곳).
+- 검증: `kubectl --from-env-file --dry-run=client`로 동등 Secret 생성 확인,
+  임시파일 권한 0600 확인.
+
 ## 2026-07-16: Terraform plan 원문 공개 게시 최소화 (보안 P2, #211)
 
 - 공개 저장소에서 `terraform-plan.yml`(PR 코멘트, 최대 60k)과
