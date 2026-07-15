@@ -270,13 +270,27 @@ IAM 조건은 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 
 
 | 데이터 | 원본 보관 | 분석/조회 |
 |---|---|---|
-| YouTube KR trending 원본 | GCS `data_lake/youtube_trending_kr/` | BigQuery table로 정제 적재 |
+| YouTube KR trending 원본 | GCS `data_lake/youtube_trending_kr/` | BigQuery `dt` 일 단위 partitioned table로 정제 적재 (#199) |
 | 가상 유저 | GCS `asset/virtual_user/` | feature/user dimension 후보 |
-| 액션 로그 원본 | GCS `data_lake/action_log/` | BigQuery partitioned table 후보 |
+| 액션 로그 원본 | GCS `data_lake/action_log/` | BigQuery `dt` 일 단위 partitioned table (#199) |
 | 액션 로그 격리 | GCS `data_lake/action_log_quarantine/` | 품질 점검·재처리 후보 |
 | 페르소나 원본 스냅샷 | GCS `data/raw/personas/` | BigQuery dimension/reference table 후보 |
 
 GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성을 담당한다.
+
+### data lake 테이블 dt 파티션 (#199)
+
+`feast_offline_store` dataset의 `data_lake_action_log`,
+`data_lake_youtube_trending_kr`는 Terraform이 존재와 `dt` 일 단위 파티셔닝을
+보장한다 (`google_bigquery_table`, `deletion_protection = true`).
+
+| 소유권 | 주체 | 내용 |
+| --- | --- | --- |
+| 구조 | 이 저장소 (Terraform) | 테이블 존재, `time_partitioning(DAY, dt)`, labels |
+| 스키마/데이터 | `SKYAHO/Autoresearch` | `scripts/load_raw_to_bigquery.py`가 autodetect + WRITE_TRUNCATE로 관리, Terraform은 `ignore_changes = [schema]` |
+
+파티셔닝 변경은 테이블 교체를 유발하므로 `deletion_protection` 해제와 재적재
+계획 없이는 수행하지 않는다.
 
 ### Feast 저장소
 

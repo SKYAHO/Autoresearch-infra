@@ -3,6 +3,23 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-15: data lake 테이블 dt 파티션 IaC 소유권 경계 (#199)
+
+- `feast_offline_store` dataset의 `data_lake_action_log`,
+  `data_lake_youtube_trending_kr`를 `google_bigquery_table`로 코드화해 테이블
+  재생성 시에도 `dt` 일 단위 파티셔닝을 보장한다. 구조(존재·파티셔닝·labels)는
+  이 저장소(Terraform)가, 스키마/데이터는 앱 저장소
+  `SKYAHO/Autoresearch`의 `scripts/load_raw_to_bigquery.py`(autodetect +
+  WRITE_TRUNCATE, 멱등)가 소유하며 Terraform은 `ignore_changes = [schema]`로
+  경계를 분리한다.
+- 실제 GCP에는 두 테이블이 이미 DAY/dt 파티션으로 존재하므로 merge 후
+  `terraform import`로 state에 편입한다. `deletion_protection = true`로 파티셔닝
+  변경에 따른 테이블 교체를 차단한다.
+- 비용 영향 없음: 테이블 리소스 자체는 무과금이고 파티셔닝은 쿼리 스캔 비용을
+  절감하는 방향이다. 리전 변화 없음(`asia-northeast3`).
+- 롤백: `terraform state rm`으로 state에서만 제거한 뒤 코드를 revert한다. 실제
+  테이블과 데이터는 유지된다.
+
 ## 2026-07-14: application digest 승격과 Airflow GKE 자동 배포 기반 (#187)
 
 - WIF provider에 `workflow_ref` mapping을 추가하고 application GAR pusher를
