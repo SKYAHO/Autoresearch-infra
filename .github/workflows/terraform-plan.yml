@@ -54,11 +54,16 @@ jobs:
           TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
           TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
           TF_VAR_master_authorized_networks: ${{ vars.MASTER_AUTHORIZED_NETWORKS || '[]' }}
-        # plan 출력의 user:email PII를 PR 코멘트 노출 전에 마스킹.
+        # plan 원문은 runner 임시파일에만 둔다(공개 PR 코멘트에 게시 금지).
+        # 공개 코멘트에는 리소스 주소 헤더 + 요약만 게시하므로, 여기서 안전한
+        # 요약(속성 diff 라인 제외 = 값 노출 없음)을 추출해 둔다.
         run: |
           set -o pipefail
-          terraform -chdir=terraform/envs/dev plan -no-color -input=false 2>&1 \
-            | sed -E 's/(user:)[^"[:space:]]+/\1[REDACTED]/g' > /tmp/plan.out
+          terraform -chdir=terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
+          # allowlist: '# <addr> will be/must be ...' 리소스 주소 헤더와
+          # 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는 포함하지 않는다.
+          grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' \
+            /tmp/plan.out > /tmp/plan.summary || true
 
       - name: PR 댓글 게시
         if: always() && github.event_name == 'pull_request'
@@ -68,25 +73,35 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            let plan = '';
-            try {
-              plan = fs.readFileSync('/tmp/plan.out', 'utf8');
-            } catch (e) {
-              plan = '(plan 출력 없음)';
-            }
             const outcome = process.env.PLAN_OUTCOME;
-            const status = outcome === 'success' ? '✅ plan success' : `⚠️ plan ${outcome}`;
-            const body = [
-              `### Terraform Plan — ${status}`,
-              '',
-              '<details><summary>plan 출력 (최대 60000자)</summary>',
-              '',
-              '```hcl',
-              plan.slice(0, 60000),
-              '```',
-              '',
-              '</details>',
-            ].join('\n');
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let body;
+            if (outcome === 'success') {
+              let summary = '';
+              try { summary = fs.readFileSync('/tmp/plan.summary', 'utf8').trim(); } catch (e) {}
+              if (!summary) summary = '(변경 요약 없음 — No changes 이거나 요약 추출 실패)';
+              // 방어적 상한. 요약 라인은 리소스 주소뿐이라 값 노출은 없다.
+              body = [
+                '### Terraform Plan — ✅ plan success',
+                '',
+                '변경 요약(리소스 주소·action). 상세 diff는 Actions 로그 참조 — 원문 plan은 공개하지 않습니다.',
+                '',
+                '```text',
+                summary.slice(0, 20000),
+                '```',
+                '',
+                `전체 로그: ${runUrl}`,
+              ].join('\n');
+            } else {
+              // plan 실패: 오류 텍스트에 민감정보가 섞일 수 있어 게시하지 않는다.
+              body = [
+                `### Terraform Plan — ⚠️ plan ${outcome}`,
+                '',
+                `plan이 실패했습니다. 오류 원문은 공개하지 않으며 Actions 로그에서 확인하세요.`,
+                '',
+                `전체 로그: ${runUrl}`,
+              ].join('\n');
+            }
             await github.rest.issues.createComment({
               ...context.repo,
               issue_number: context.issue.number,

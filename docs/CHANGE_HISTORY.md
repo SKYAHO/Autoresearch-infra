@@ -3,6 +3,23 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-16: Terraform plan 원문 공개 게시 최소화 (보안 P2, #211)
+
+- 공개 저장소에서 `terraform-plan.yml`(PR 코멘트, 최대 60k)과
+  `terraform-drift.yml`(이슈, 최대 20k)이 plan 원문을 게시하고 마스킹은
+  `user:` PII만(denylist) 대상이던 것을, **allowlist로 전환**한다.
+- 공개 게시물에는 `# <addr> will be/must be ...` 리소스 주소 헤더와
+  `Plan:`/`No changes` 요약 라인만 올린다(`grep`로 추출, 속성 diff 라인 제외 =
+  값 노출 없음). plan 원문은 runner 임시파일에만 두고 job 종료 시 폐기한다.
+- plan 오류 시에는 오류 원문 대신 **Actions 실행 링크 + exit code만** 게시한다
+  (오류 텍스트에 섞일 수 있는 민감정보 차단).
+- 근거: 저장소가 public이고 dev root가 실제 비밀 자재(`db_app_password`
+  random_password→secret_version, redis CA)를 다룬다. Terraform이
+  `(sensitive value)`로 redact하지만, 공개·영구 게시에서 denylist 갭 하나가 곧
+  유출+로테이션으로 이어지므로 게시 표면 자체를 줄인다.
+- 합성 plan으로 allowlist 검증: 실제 값(이메일·비밀번호·sensitive)과 속성
+  diff 라인이 요약에 포함되지 않음을 확인.
+
 ## 2026-07-15: ArgoCD 임의 워크로드 실배포 경로 검증 (#208)
 
 - ArgoCD가 plain 매니페스트(Deployment/Service)를 git에서 sync 배포하는 경로를
