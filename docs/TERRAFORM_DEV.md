@@ -1046,13 +1046,13 @@ git diff --check
 
 ## CI 자동 검증 (#6)
 
-PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자동으로 `terraform fmt/validate/plan` 을 실행하고 결과를 PR 댓글로 게시한다.
+PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자동으로 `terraform fmt/validate/plan` 을 실행하고 결과를 PR 댓글로 게시한다. 저장소가 공개라 **댓글에는 변경 리소스 주소와 create/update/delete 요약만** 올리고, plan 원문(속성 diff)은 게시하지 않는다(#211). 상세는 Actions 실행 로그에서 확인한다. plan 오류 시에는 오류 원문 대신 Actions 링크와 exit code만 남긴다.
 
 - **인증**: SA key 없이 GitHub OIDC + Workload Identity Federation(WIF). CI SA(`terraform-ci`)는 현재 dev plan에 필요한 `roles/viewer`와 state bucket 접근 권한만 가진다. Secret payload를 읽는 data source는 사용하지 않는다.
 - **state**: GCS 원격 backend(`autoresearch-dev-tfstate`). 부트스트랩 절차는 [docs/TERRAFORM_BOOTSTRAP.md](TERRAFORM_BOOTSTRAP.md) 참조.
 - **제한**: WIF `attribute_condition` 은 허용 리포 목록(`allowed_github_repositories` — 현재 infra + Autoresearch-airflow + Autoresearch, #121/#157) 기반이지만, CI SA(`terraform-ci`) 가장 바인딩은 infra 저장소만 허용한다. workflow job guard로 fork PR이 아닌 내부 브랜치 PR에서만 plan을 실행한다.
 - **apply 자동화는 범위 밖**(별도 이슈). 본 워크플로는 plan 만 게시한다.
-- **drift 감지(#153)**: `.github/workflows/terraform-drift.yml`이 매일 09:23 KST에 dev root `plan -detailed-exitcode`를 실행하고, drift/오류 시 `[DRIFT]` 이슈를 생성(중복 시 코멘트)한다. CI SA viewer 권한만 사용 — apply 권한 없음. admin root는 master 접근 불가로 대상 외이며 운영자 로컬 plan으로 확인한다.
+- **drift 감지(#153)**: `.github/workflows/terraform-drift.yml`이 매일 09:23 KST에 dev root `plan -detailed-exitcode`를 실행하고, drift/오류 시 `[DRIFT]` 이슈를 생성(중복 시 코멘트)한다. 공개 이슈에는 리소스 주소·요약만 올리고 plan 원문은 게시하지 않는다(#211). CI SA viewer 권한만 사용 — apply 권한 없음. admin root는 master 접근 불가로 대상 외이며 운영자 로컬 plan으로 확인한다.
 
 필요 GitHub variables(4개, secret 아님): `GCP_PROJECT_ID`, `WIF_POOL_ID`, `WIF_PROVIDER_ID`, `CI_SA_EMAIL`.
 
