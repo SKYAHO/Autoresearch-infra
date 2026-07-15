@@ -3,6 +3,22 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-15: ArgoCD 임의 워크로드 실배포 경로 검증 (#208)
+
+- ArgoCD가 plain 매니페스트(Deployment/Service)를 git에서 sync 배포하는 경로를
+  임시 샘플(`deploy/sample-app`, nginx)로 실증했다. 기존 monitoring·argo-rollouts는
+  helm_release adopt 사례라 신규 앱 배포 경로는 이 검증으로 처음 확인했다.
+- 결과: Application `sample-app` Synced/Healthy, pod Running, Service HTTP 200,
+  ArgoCD automated sync가 배포(수동 kubectl apply 아님).
+- 핵심 함정: `CreateNamespace=true`는 cluster-scoped Namespace 생성이라 최소권한
+  AppProject(`clusterResourceWhitelist`에 Namespace 없음)에서 sync 실패
+  ("synchronization tasks are not valid"). **destination namespace 선생성으로 우회**
+  — clusterResourceWhitelist를 넓히지 않는다. 실제 앱은 namespace를 Terraform이
+  소유(`CreateNamespace=false`).
+- **임시 검증**으로 수행 후 Application·AppProject destination·매니페스트를 제거하고
+  namespace를 삭제했다. 절차·결과는 [`ARGOCD_APP_DEPLOY_VALIDATION.md`]에 기록.
+  영구 샘플은 유지하지 않는다(최소권한, sample-guestbook 제거 취지 일관).
+
 ## 2026-07-15: monitoring 스택 앱 메트릭 e2e 검증 재실증·runbook 기록 (#206)
 
 - monitoring 스택(kube-prometheus-stack, ArgoCD 관리)의 관측 파이프라인을
