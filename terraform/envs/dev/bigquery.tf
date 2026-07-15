@@ -51,3 +51,67 @@ resource "google_project_iam_member" "gke_app_bigquery_job_user" {
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.gke_app.email}"
 }
+
+# #199 data lake 테이블 dt 파티션 고정
+# 스키마/데이터는 SKYAHO/Autoresearch scripts/load_raw_to_bigquery.py가 소유하고
+# (autodetect + WRITE_TRUNCATE), Terraform은 존재와 dt 일 단위 파티셔닝만 보장한다.
+resource "google_bigquery_table" "data_lake_action_log" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "data_lake_action_log"
+  description         = "GCS data_lake/action_log raw parquet 적재 테이블. dt 일 단위 파티션."
+  deletion_protection = true
+
+  time_partitioning {
+    type  = "DAY"
+    field = "dt"
+  }
+
+  # 파티션 필드는 생성 시점 스키마에 존재해야 한다. 이후 스키마는 적재 job이 관리한다.
+  schema = jsonencode([
+    {
+      name        = "dt"
+      type        = "DATE"
+      mode        = "NULLABLE"
+      description = "파티션 날짜 (GCS hive partition dt=* 복원 컬럼)"
+    }
+  ])
+
+  labels = {
+    data_class = "raw"
+    purpose    = "data-lake-raw"
+  }
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
+}
+
+resource "google_bigquery_table" "data_lake_youtube_trending_kr" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "data_lake_youtube_trending_kr"
+  description         = "GCS data_lake/youtube_trending_kr raw parquet 적재 테이블. dt 일 단위 파티션."
+  deletion_protection = true
+
+  time_partitioning {
+    type  = "DAY"
+    field = "dt"
+  }
+
+  schema = jsonencode([
+    {
+      name        = "dt"
+      type        = "DATE"
+      mode        = "NULLABLE"
+      description = "파티션 날짜 (GCS hive partition dt=* 복원 컬럼)"
+    }
+  ])
+
+  labels = {
+    data_class = "raw"
+    purpose    = "data-lake-raw"
+  }
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
+}
