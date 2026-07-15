@@ -234,6 +234,11 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
           server    = "https://kubernetes.default.svc"
           namespace = "kube-system"
         },
+        {
+          # #208 임의 워크로드 실배포 검증용 임시 destination. 검증 후 제거한다.
+          server    = "https://kubernetes.default.svc"
+          namespace = "sample-app"
+        },
       ]
       # #183 kube-prometheus-stack이 요구하는 cluster-wide kind만 허용.
       clusterResourceWhitelist = [
@@ -325,6 +330,44 @@ resource "kubernetes_manifest" "application_argo_rollouts" {
         syncOptions = [
           "ServerSideApply=true",
           "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+# #208 ArgoCD 임의 워크로드 실배포 검증용 임시 Application. 검증 후 제거한다.
+# 기존 monitoring/argo-rollouts와 달리 helm adopt가 아니라 plain 매니페스트
+# (deploy/sample-app)를 git에서 sync 배포하는 경로를 실증한다.
+# adopt 대상이 없는 신규 배포라 automated sync(prune on)로 자동 배포한다.
+resource "kubernetes_manifest" "application_sample_app" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "sample-app"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/sample-app"
+        targetRevision = "HEAD"
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = "sample-app"
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = false
+        }
+        syncOptions = [
+          "CreateNamespace=true",
         ]
       }
     }
