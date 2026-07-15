@@ -52,6 +52,15 @@ resource "google_project_iam_member" "gke_app_bigquery_job_user" {
   member  = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
+# feast는 offline store(BigQuery) 결과를 BigQuery Storage Read API로 읽는다.
+# jobUser/dataEditor에는 bigquery.readsessions.create가 없어 readSessionUser로 보강한다.
+# (#204: #203 검증에서 materialize 시 readsessions.create 403으로 발견)
+resource "google_project_iam_member" "gke_app_bigquery_read_session" {
+  project = var.project_id
+  role    = "roles/bigquery.readSessionUser"
+  member  = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
 # #199 data lake 테이블 dt 파티션 고정
 # 스키마/데이터는 SKYAHO/Autoresearch scripts/load_raw_to_bigquery.py가 소유하고
 # (autodetect + WRITE_TRUNCATE), Terraform은 존재와 dt 일 단위 파티셔닝만 보장한다.

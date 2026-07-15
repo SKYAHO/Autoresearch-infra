@@ -94,6 +94,15 @@ resource "google_storage_bucket_iam_member" "feast_registry_gke_app_object_user"
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
+# Feast GCS registry는 read/write 시 bucket.reload()로 bucket 메타데이터를 조회한다.
+# objectAdmin에는 storage.buckets.get이 없어 legacyBucketReader로 딱 그 권한만 보강한다.
+# (#204: #203 검증에서 feast registry 접근 403으로 발견)
+resource "google_storage_bucket_iam_member" "feast_registry_gke_app_bucket_reader" {
+  bucket = google_storage_bucket.feast_registry.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
 # Feast materialization/load job의 임시 staging 파일을 저장한다.
 resource "google_storage_bucket" "feast_staging" {
   name                        = local.feast_staging_bucket
@@ -126,5 +135,12 @@ resource "google_storage_bucket" "feast_staging" {
 resource "google_storage_bucket_iam_member" "feast_staging_gke_app_object_user" {
   bucket = google_storage_bucket.feast_staging.name
   role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
+# feast_registry와 동일 이유(bucket.reload → storage.buckets.get). (#204)
+resource "google_storage_bucket_iam_member" "feast_staging_gke_app_bucket_reader" {
+  bucket = google_storage_bucket.feast_staging.name
+  role   = "roles/storage.legacyBucketReader"
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }

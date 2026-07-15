@@ -3,6 +3,26 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-15: feast materialize IAM 누락 보강 — storage.buckets.get·bigquery.readsessions (#204)
+
+- #203 Feast ↔ Redis Cluster GKE 실연결 검증에서, feast materialize가 실제로
+  요구하지만 IaC에 누락된 IAM 2종을 발견해 보강한다. 둘 다 `objectAdmin`·
+  `jobUser`에 포함되지 않으며 feast 소비자 SA 3종(`gke_app`·`airflow`·
+  `airflow_batch`)에 공통 잠복했다.
+  - `storage.buckets.get`: feast GCS registry가 `bucket.reload()`로 bucket
+    메타데이터를 조회한다. feast registry·staging bucket에
+    `roles/storage.legacyBucketReader`를 추가해 딱 이 권한만 보강한다.
+  - `bigquery.readsessions.create`: feast가 offline store(BigQuery)를 BigQuery
+    Storage Read API로 읽는다. project-level `roles/bigquery.readSessionUser`를
+    추가한다.
+- 최소권한 원칙: 넓은 `storage.admin`/`bigquery.admin` 대신 필요한 권한만 담은
+  predefined role을 additive(`_iam_member`)로 추가한다. 기존 바인딩은 불변.
+- 비용 영향 없음(IAM 바인딩 추가만). 리전 변화 없음.
+- 검증: 임시 부여 상태에서 #203 전 판정(dry-run `redis_ping`·shard 2·materialize
+  `succeeded`·`get_online_features` 실값) 통과 확인 후 코드화. merge 후 apply가
+  임시 부여를 정식 관리로 재조정한다.
+- 롤백: 추가한 `_iam_member` 리소스를 revert 후 apply하면 바인딩만 제거된다.
+
 ## 2026-07-15: data lake 테이블 dt 파티션 IaC 소유권 경계 (#199)
 
 - `feast_offline_store` dataset의 `data_lake_action_log`,
