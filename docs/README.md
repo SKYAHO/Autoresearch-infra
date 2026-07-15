@@ -17,6 +17,7 @@
 | Vault 접속·시크릿 운영 절차 확인 | [`VAULT_OPERATIONS_RUNBOOK.md`](VAULT_OPERATIONS_RUNBOOK.md) |
 | dev Terraform 리소스, 변수, output, apply 절차 확인 | [`TERRAFORM_DEV.md`](TERRAFORM_DEV.md) |
 | Prometheus/Grafana 운영 모니터링 설계 확인 | [`OBSERVABILITY_STRATEGY.md`](OBSERVABILITY_STRATEGY.md) |
+| 앱 메트릭 e2e(스크랩→Grafana 조회) 검증 절차·결과 확인 | [`MONITORING_APP_METRICS_VALIDATION.md`](MONITORING_APP_METRICS_VALIDATION.md) |
 | bootstrap state bucket, WIF, CI service account 확인 | [`TERRAFORM_BOOTSTRAP.md`](TERRAFORM_BOOTSTRAP.md) |
 | GitHub label, Project 운영 기준 확인 | [`GITHUB_LABELS_AND_PROJECT.md`](GITHUB_LABELS_AND_PROJECT.md) |
 | main branch ruleset 확인 | [`BRANCH_RULESET_MAIN.md`](BRANCH_RULESET_MAIN.md) |

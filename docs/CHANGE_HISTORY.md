@@ -3,6 +3,21 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-15: monitoring 스택 앱 메트릭 e2e 검증 재실증·runbook 기록 (#206)
+
+- monitoring 스택(kube-prometheus-stack, ArgoCD 관리)의 관측 파이프라인을
+  테스트 워크로드로 재실증했다: 앱 `/metrics`(Prometheus 형식) → ServiceMonitor →
+  Prometheus scrape(`up=1`) → 저장 → Grafana datasource proxy 조회
+  (`status: success`, `count=8`). 전 경로 동작 확인.
+- 절차·매니페스트·실측 결과를 [`MONITORING_APP_METRICS_VALIDATION.md`]로 저장소에
+  기록해 GitHub에 영속화했다(그간 검증 결과가 로컬 문서에만 있었음).
+- 핵심 재현 조건: ServiceMonitor 라벨 `release: kube-prometheus-stack` 필수,
+  `serviceMonitorNamespaceSelector={}`라 전용 검증 namespace 사용 가능. Grafana
+  admin 자격은 operator 주입 시크릿 `grafana-admin-credentials`.
+- GCP/Terraform 리소스 변경 없음(임시 K8s 워크로드만, 검증 후 namespace 삭제).
+- 범위 밖(후속): ArgoCD를 통한 임의 워크로드 실배포(git manifest + AppProject
+  destination 필요), Vault 시크릿 주입은 진행하지 않음(Vault 드랍 결정).
+
 ## 2026-07-15: feast materialize IAM 누락 보강 — storage.buckets.get·bigquery.readsessions (#204)
 
 - #203 Feast ↔ Redis Cluster GKE 실연결 검증에서, feast materialize가 실제로
