@@ -12,6 +12,7 @@
 | 팀원에게 GKE, Bastion, Airflow/Grafana UI 접속 방법을 안내 | [`TEAM_OPERATIONS_RUNBOOK.md`](TEAM_OPERATIONS_RUNBOOK.md) |
 | Grafana에서 GKE/Airflow/앱 상태를 점검하는 방법 확인 | [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md) |
 | ArgoCD 접속, sync/diff/rollback, 장애 대응 절차 확인 | [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md) |
+| ArgoCD 임의 워크로드 실배포 경로 검증 절차·결과 확인 | [`ARGOCD_APP_DEPLOY_VALIDATION.md`](ARGOCD_APP_DEPLOY_VALIDATION.md) |
 | Argo Rollouts promote/abort/rollback 등 점진 배포 운영 | [`ROLLOUTS_OPERATIONS_RUNBOOK.md`](ROLLOUTS_OPERATIONS_RUNBOOK.md) |
 | Kibana/ELK 로그 검색·운영 절차 확인 | [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) |
 | Vault 접속·시크릿 운영 절차 확인 | [`VAULT_OPERATIONS_RUNBOOK.md`](VAULT_OPERATIONS_RUNBOOK.md) |
