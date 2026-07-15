@@ -9,7 +9,8 @@
 - Terraform backend: GCS `autoresearch-dev-tfstate`, prefix `dev/`
 - 마지막 실제 apply: 2026-07-08, #46(GKE DNS 엔드포인트)·#50(bastion)·#51(Airflow ILB + private DNS)·#55(OAuth secrets) merge 및 apply 완료
 - 최신 검증: 2026-07-08, 위 apply 이후 `terraform/envs/dev`와 `terraform/admin/airflow-k8s` 모두 최종 plan `No changes`
-- Issue #129 Online Store Redis Cluster와 `terraform/admin/autoresearch-k8s`는 코드 검증 단계이며 실제 apply 전이다.
+- 2026-07-15: `terraform/admin/autoresearch-k8s`(app namespace/KSA/NetworkPolicy) apply 완료. #203 Feast ↔ Redis Cluster GKE 실연결 검증(dry-run·CLUSTER SHARDS·materialize·온라인 조회) 전 판정 통과.
+- 검증에서 발견한 feast SA IAM 누락(`storage.buckets.get`·`bigquery.readsessions.create`) 보강은 #204로 진행 중이며 apply 대기다.
 
 ## 구조
 
@@ -113,7 +114,7 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 
 접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 `random_password`로 생성되어 SQL user에 주입되며, #5에서 Secret Manager(`output.db_app_password_secret_id`)에도 저장한다.
 
-## Feast Online Store Redis Cluster (#129, apply 대기)
+## Feast Online Store Redis Cluster (#129, apply·GKE 검증 완료)
 
 Feast Online Store는 GCP Memorystore for Redis Cluster로 구성한다. dev 학습
 환경에서 primary shard 두 개에 keyspace를 분산하여 hash slot, hash tag와
