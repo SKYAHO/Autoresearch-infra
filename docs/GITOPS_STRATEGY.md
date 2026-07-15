@@ -1,7 +1,9 @@
 # ArgoCD GitOps 운영 전략
 
-이 문서는 Issue #82 기준 ArgoCD 도입 전 운영 설계를 정리한다. 실제 ArgoCD 설치와
-Application 생성은 후속 이슈에서 진행한다.
+이 문서는 Issue #82에서 시작한 ArgoCD 운영 설계·책임 경계를 정리한다. ArgoCD는
+이미 설치(#84)됐고 monitoring(#183)·argo-rollouts(#186)를 ArgoCD Application으로
+이관해 운영 중이다. 이 문서는 그 책임 경계("Terraform=플랫폼 경계, ArgoCD=앱")와
+Terraform→ArgoCD 이관 전략의 단일 기준이다.
 
 ## 목적
 
