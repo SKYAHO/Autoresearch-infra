@@ -1,7 +1,7 @@
-# GKE 팀 접근 권한
+# 팀원 GKE·Bastion·BigQuery 접근 권한
 
-이 admin Terraform root는 dev GKE 클러스터에 `kubectl`로 초기 접근해야 하는
-사람 Google 계정을 관리합니다.
+이 admin Terraform root는 dev GKE 클러스터, Bastion, BigQuery 분석 작업에 접근해야
+하는 사람 Google 계정을 관리합니다.
 
 개인 이메일 주소가 PR plan 댓글에 노출되거나, CI가 로컬 tfvars 없이 실행될 때
 사람 계정을 제거하려 시도하지 않도록 `terraform/envs/dev`와 분리되어 있습니다.
@@ -24,7 +24,25 @@ terraform apply
 추가되면 IAM condition으로 binding 범위를 좁히거나 클러스터 접근을 전용
 프로젝트로 분리합니다.
 
-`team_member_emails`에서 이메일을 제거하고 apply하면 해당 IAM member만 제거됩니다.
+## BigQuery 분석 권한 (#215)
+
+`team_member_emails`의 각 계정에는 다음 권한을 additive IAM member로 부여합니다.
+실제 이메일은 이 root의 로컬 `terraform.tfvars`에만 두며, 코드·문서·PR plan에
+넣지 않습니다.
+
+| 범위 | 역할 | 용도 |
+| --- | --- | --- |
+| 프로젝트 | `roles/bigquery.jobUser` | query/load/export BigQuery job 실행 |
+| `autoresearch_dev_analytics` dataset | `roles/bigquery.dataEditor` | 분석 테이블 생성·갱신·삭제 |
+| `feast_offline_store` dataset | `roles/bigquery.dataEditor` | Feast/data lake 테이블 생성·갱신·삭제 |
+
+`dataEditor`는 두 dataset에만 부여합니다. 프로젝트 수준
+`roles/bigquery.dataEditor`, `roles/editor`, `roles/owner`는 부여하지 않습니다.
+`jobUser`는 프로젝트 범위의 job 생성 권한이므로, 팀원이 실행하는 query/load job은
+`maximum_bytes_billed` 등 job 수준 비용 제한을 함께 사용해야 합니다.
+
+`team_member_emails`에서 이메일을 제거하고 apply하면 해당 계정의 GKE, Bastion,
+BigQuery IAM member가 함께 제거됩니다.
 이미 발급된 access token은 만료될 때까지, 보통 최대 약 1시간 동안 유효할 수
 있습니다.
 
