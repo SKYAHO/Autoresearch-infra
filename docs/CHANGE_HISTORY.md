@@ -32,6 +32,23 @@
 - targeted plan: 8 add(#92 GSA 포함) / 0 change / 0 destroy. 기존 SQL 인스턴스 무변경.
   #92와 함께 apply 예정. 배포는 #94.
 
+## 2026-07-17: MLflow tracking server 배포 구성 (#94)
+
+- #91 설계에 따라 MLflow tracking server를 ArgoCD로 배포하는 구성을 추가한다(코드).
+  실제 배포 apply는 단계별 승인 후.
+- **이미지**: 앱 저장소 `deploy/mlflow/Dockerfile`(v2.22.1 + psycopg2 +
+  google-cloud-storage)을 **인프라 Cloud Build로 GAR에 빌드**(#203 방식) —
+  `autoresearch-mlflow@sha256:21f1bde1…`. 앱팀이 파이프라인에 얹으면 image re-point.
+- **`terraform/admin/mlflow-k8s`**(신규 root): namespace `mlflow` + KSA `mlflow`(WI) +
+  deny-by-default egress NetworkPolicy(Cloud SQL PSA 5432, GCS/API 443, DNS, WI metadata).
+- **`deploy/mlflow`**(plain 매니페스트): Deployment(`--serve-artifacts`, GCS proxy) +
+  Service(ClusterIP, 내부 전용). backend는 Cloud SQL private IP.
+- **`argocd-k8s`**: AppProject destination `mlflow` + Application `mlflow`(manual sync,
+  CreateNamespace=false).
+- **보안**: UI 외부 노출 0(ClusterIP), GCS는 WI 인증(키 없음), **DB host(private IP)·비번은
+  공개 저장소에 넣지 않고 operator 주입 K8s Secret `mlflow-db`**(#213 --from-env-file 패턴,
+  mlflow-k8s README)에서만 주입.
+
 ## 2026-07-17: MLflow artifact 버킷 중복 해소 — 기존 수동 버킷 adopt (#226)
 
 - #92 apply 후, 앱팀이 **수동 생성한 기존 MLflow 버킷**

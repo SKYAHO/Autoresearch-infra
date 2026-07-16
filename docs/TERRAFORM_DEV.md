@@ -23,6 +23,7 @@ terraform/
 │   ├── gke-team-access/  # #34/#46 팀원 GKE container.viewer + bastion 접속 IAM (separate state)
 │   ├── monitoring-k8s/   # #78 Prometheus/Grafana monitoring namespace + Helm values (separate state)
 │   ├── argocd-k8s/       # #83/#84 ArgoCD namespace + Helm release (separate state)
+│   ├── mlflow-k8s/       # #94 MLflow namespace/KSA(WI)/NetworkPolicy (separate state)
 │   ├── argo-rollouts-k8s/ # #88 Argo Rollouts controller (separate state)
 │   ├── elastic-k8s/      # #97 ECK operator + (후속) ES/Kibana (separate state)
 │   └── vault-k8s/        # #134 Vault namespace + Helm release + KMS auto-unseal (separate state)

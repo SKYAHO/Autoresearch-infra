@@ -101,3 +101,15 @@ variable "rollouts_target_revision" {
   type        = string
   default     = "main"
 }
+
+variable "mlflow_namespace" {
+  description = "#94 MLflow tracking server namespace(mlflow-k8s 소유). ArgoCD destination으로 허용한다."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_target_revision" {
+  description = "MLflow Application이 추적할 infra repo ref. 최초 sync는 -var로 병합 커밋 SHA를 pin한다."
+  type        = string
+  default     = "main"
+}

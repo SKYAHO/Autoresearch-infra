@@ -12,7 +12,7 @@
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
-| Kubernetes admin roots | `terraform/admin/gke-team-access`, `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/vault-k8s`, `terraform/admin/elastic-k8s` |
+| Kubernetes admin roots | `terraform/admin/gke-team-access`, `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/vault-k8s`, `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` |
 | 일반 애플리케이션 저장소 | `SKYAHO/Autoresearch` |
 | Airflow 저장소 | `SKYAHO/Autoresearch-airflow` |
 
