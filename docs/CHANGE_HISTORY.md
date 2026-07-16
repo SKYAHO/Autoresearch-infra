@@ -18,6 +18,20 @@
   계정을 제거한 뒤 apply하여 해당 계정의 GKE·Bastion·BigQuery IAM member만
   제거한다.
 
+## 2026-07-17: MLflow artifact GCS bucket + 전용 GSA (#92)
+
+- #91 설계에 따라 MLflow의 artifact 저장소와 전용 인증 주체를 `mlflow.tf`(feature
+  파일, redis.tf/airflow.tf 패턴)로 신설한다.
+- `autoresearch-dev-mlflow-artifacts` GCS 버킷: uniform access, public access 차단,
+  `prevent_destroy`, **7일 soft delete 복구층**(#179 교훈). versioning/lifecycle
+  삭제 없음(모델 artifact는 영속).
+- MLflow **전용 GSA `autoresearch-dev-mlflow`**(app GSA와 분리 — GCS 자격을 MLflow에만)
+  + WI 바인딩(`svc.id.goog[mlflow/mlflow]`, KSA는 #94에서 생성).
+- 버킷 IAM(resource-level): `storage.objectAdmin` **+ `storage.legacyBucketReader`**
+  (#204 교훈: objectAdmin엔 `storage.buckets.get` 없어 GCS 클라이언트 403 방지).
+- targeted plan: 5 add / 0 change / 0 destroy. 실제 apply는 별도 승인 후.
+- backend(Cloud SQL DB/user)는 #93, 배포는 #94.
+
 ## 2026-07-17: MLflow 운영 구조 설계 (#91)
 
 - MLflow Tracking + Model Registry의 운영 구조를 확정하고 후속 구현(#92~#95) 범위를
