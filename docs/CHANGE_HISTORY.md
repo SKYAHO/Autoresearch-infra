@@ -32,6 +32,20 @@
 - targeted plan: 8 add(#92 GSA 포함) / 0 change / 0 destroy. 기존 SQL 인스턴스 무변경.
   #92와 함께 apply 예정. 배포는 #94.
 
+## 2026-07-17: MLflow UI OAuth2-proxy 인증 (#232)
+
+- MLflow UI 앞단에 OAuth2-proxy를 두어 **Google 로그인 + 명시적 허용 이메일 목록**으로
+  접근을 제한한다("정해진 계정만"). 기존 네트워크 격리(ClusterIP/port-forward)에
+  개인 인증 계층 추가.
+- `deploy/mlflow/oauth2-proxy.yaml`: oauth2-proxy Deployment + Service(4180).
+  upstream=`mlflow.mlflow:5000`, sign-in 페이지 유지(에어플로우식). 사용자는
+  `mlflow-oauth-proxy`로 port-forward.
+- **보안**: client-id/secret·cookie-secret·허용 이메일 목록은 공개 저장소에 두지 않고
+  operator 주입 Secret `mlflow-oauth`(`--from-file`, read -s로 값 미노출).
+  직접 mlflow Service는 내부 전용 유지.
+- 선행(사람): GCP 콘솔 OAuth client 생성(redirect `http://localhost:4180/oauth2/callback`).
+  NetworkPolicy는 기존 443 egress로 커버(변경 없음).
+
 ## 2026-07-17: MLflow 운영 runbook (#95)
 
 - 배포·검증 완료된 MLflow 스택 기준으로 운영 runbook을 작성한다

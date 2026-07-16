@@ -1,0 +1,109 @@
+# #232 MLflow UI 앞단 인증 게이트(OAuth2-proxy). Google 로그인 + 허용 이메일
+# 목록으로 접근 제한("정해진 계정만"). 사용자는 mlflow가 아니라 이 proxy(4180)로
+# port-forward 한다. proxy가 인증 후 mlflow(5000)로 프록시한다.
+# client-id/secret·cookie-secret·허용 이메일 목록은 공개 저장소에 두지 않고
+# operator 주입 Secret `mlflow-oauth`에서 받는다(mlflow-k8s README 참조).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-oauth-proxy
+  namespace: mlflow
+  labels:
+    app.kubernetes.io/name: mlflow-oauth-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mlflow-oauth-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mlflow-oauth-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+          args:
+            - --provider=google
+            - --http-address=0.0.0.0:4180
+            # 인증 후 프록시 대상 = 내부 MLflow Service(내부 전용 유지).
+            - --upstream=http://mlflow.mlflow:5000
+            # port-forward(localhost:4180) 접속 모델. Google OAuth callback.
+            - --redirect-url=http://localhost:4180/oauth2/callback
+            # 실제 제한은 authenticated-emails-file(허용 목록)로 한다.
+            - --email-domain=*
+            - --authenticated-emails-file=/etc/oauth2-proxy/authenticated-emails
+            # Airflow식 sign-in 페이지를 유지(바로 리다이렉트 안 함).
+            - --skip-provider-button=false
+            # port-forward는 http localhost라 secure 쿠키 불가.
+            - --cookie-secure=false
+          env:
+            # client-id는 공개값이지만 secret/emails와 함께 관리해 매니페스트를
+            # 환경 비종속으로 유지한다. 값은 operator 주입 Secret에서만.
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-oauth
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-oauth
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-oauth
+                  key: cookie-secret
+          ports:
+            - name: http
+              containerPort: 4180
+          volumeMounts:
+            - name: emails
+              mountPath: /etc/oauth2-proxy
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: emails
+          secret:
+            secretName: mlflow-oauth
+            items:
+              - key: authenticated-emails
+                path: authenticated-emails
+---
+# 사용자가 port-forward 하는 대상. ClusterIP = 내부 전용(외부 노출 없음).
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-oauth-proxy
+  namespace: mlflow
+  labels:
+    app.kubernetes.io/name: mlflow-oauth-proxy
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mlflow-oauth-proxy
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
