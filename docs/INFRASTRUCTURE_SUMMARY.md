@@ -205,7 +205,7 @@ flowchart TB
 | DNS / ILB | `dev.autoresearch.internal`, `airflow.dev.autoresearch.internal`, Airflow ILB 예약 IP | Airflow UI를 VPC 내부에서만 접근 |
 | Artifact Registry | `autoresearch-dev-docker` | 애플리케이션/Airflow 컨테이너 이미지 저장 |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, DB `airflow` | 앱 DB와 Airflow metadata DB |
-| Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, single-zone primary shard 2개, private PSC + IAM auth/TLS (#129, apply 대기) |
+| Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, single-zone primary shard 2개, private PSC + IAM auth/TLS (#129, apply·검증 완료) |
 | GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev` | 앱 워크로드와 Airflow 실행 기반 |
 | Cloud Run | `autoresearch-dev-proxy` | 내부 전용 proxy 서비스, invoker IAM 기반 |
 | GCS | raw data bucket, Feast registry/staging bucket, Airflow DAG/log bucket | 원본 데이터, feature store 메타데이터, DAG/log 저장 |
@@ -255,7 +255,7 @@ flowchart LR
 | `terraform/bootstrap` | 별도 root | state bucket, WIF, CI SA처럼 dev root를 실행하기 전에 필요한 기반을 만든다. |
 | `terraform/envs/dev` | dev root | 실제 dev GCP 리소스 대부분을 관리한다. |
 | `terraform/admin/gke-team-access` | 별도 state | 팀원 Google 계정 IAM을 관리한다. 사람 이메일이 일반 PR plan에 노출되지 않게 분리했다. |
-| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress NetworkPolicy를 관리한다(#129, apply 대기). |
+| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress NetworkPolicy를 관리한다(#129, apply·검증 완료). |
 | `terraform/admin/airflow-k8s` | 별도 state | Kubernetes namespace/RBAC/NetworkPolicy를 관리한다. GKE API 접근이 필요해 dev root와 분리했다. |
 | `terraform/admin/monitoring-k8s` | 별도 state | monitoring namespace와 port-forward RBAC(플랫폼 경계)를 관리한다. chart는 #183에서 ArgoCD Application `monitoring`으로 이관(helm_release 제거). |
 | `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application(`monitoring` #183, `argo-rollouts` #186)을 관리한다. |
@@ -355,7 +355,7 @@ flowchart TB
 | Node privacy | private nodes | worker node에 외부 IP를 붙이지 않는다. |
 | `dev-default` node pool | `e2-standard-4` | 일반 앱 워크로드와 기본 system pod 여유를 고려한 node pool이다. |
 | `airflow-dev` node pool | `e2-standard-2` | Airflow component를 일반 앱과 분리해 배치하기 위한 node pool이다. |
-| App KSA/GSA | `autoresearch-app` -> `autoresearch-dev-app` | 일반 앱 pod가 DB password, Redis CA, cluster 한정 IAM 연결 token, Cloud SQL, GCS/BigQuery 권한을 얻는 경로다(#129, apply 대기). |
+| App KSA/GSA | `autoresearch-app` -> `autoresearch-dev-app` | 일반 앱 pod가 DB password, Redis CA, cluster 한정 IAM 연결 token, Cloud SQL, GCS/BigQuery 권한을 얻는 경로다(#129, apply·검증 완료). |
 | Airflow KSA/GSA | `airflow` -> `autoresearch-dev-airflow` | webserver/scheduler 등 Airflow component의 GCP 접근 경로다. |
 | Batch KSA/GSA | `autoresearch-batch` -> `autoresearch-dev-airflow-batch` | KPO batch pod 전용 권한이다. Airflow component 권한과 분리했다. |
 

@@ -1,9 +1,11 @@
 # 운영 모니터링 전략
 
 이 문서는 Issue #77 기준 Prometheus + Grafana 운영 모니터링 설계를 정리한다.
-현재 dev 인프라에는 아직 Prometheus/Grafana가 설치되어 있지 않다. Issue #78에서
-`monitoring` namespace와 Helm values 기준을 준비하고, 실제 chart 설치와 운영 구성은
-#79~#81에서 진행한다.
+설계 이후 스택은 실제로 설치·운영 중이다: `monitoring` namespace(#78) 위에
+`kube-prometheus-stack`을 설치(#79~#81)했고, #183으로 chart 관리를 ArgoCD
+Application(`deploy/monitoring`)으로 이관했다(manual sync). 현재 운영 절차는
+[`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md), 관리 경계는
+[`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md)를 따른다. 이 문서는 설계 배경으로 남긴다.
 
 ## 목적
 
@@ -17,11 +19,11 @@ Cloud Monitoring은 GCP managed resource의 기본 관측 수단으로 유지한
 | 영역 | 현재 구성 |
 |---|---|
 | GKE 기본 관측 | GKE cluster의 Cloud Operations logging/monitoring 기본 연동 |
-| Monitoring 설치 기반 | `monitoring` namespace와 `kube-prometheus-stack` values 준비 |
-| Kubernetes 지표 전용 스택 | 미설치 |
-| Grafana UI | 미설치 |
-| Alerting | 미구성 |
-| 외부 공개 endpoint | 없음 |
+| Monitoring 설치 기반 | `monitoring` namespace(#78), chart는 ArgoCD Application `deploy/monitoring`이 관리(#183) |
+| Kubernetes 지표 전용 스택 | `kube-prometheus-stack` 설치·운영 중(#79~#81) |
+| Grafana UI | 설치·운영 중(Google OAuth 로그인 #155, port-forward 접속) |
+| Alerting | 기본 rule 설치, 별도 알림 채널 연동은 후속 |
+| 외부 공개 endpoint | 없음(port-forward 전용) |
 
 현재 Cloud Logging/Monitoring은 GKE와 GCP 리소스의 기본 로그/지표를 제공한다.
 Prometheus/Grafana는 이를 대체하지 않고, Kubernetes application metric과 운영

@@ -1,6 +1,6 @@
 # 아키텍처 개요
 
-> Last Updated: 2026-07-13
+> Last Updated: 2026-07-16
 
 dev 환경 인프라의 전체 그림과 설계 결정을 담은 문서입니다. 상세 구성은
 `docs/TERRAFORM_DEV.md`, 파일별 책임은 `agent-project-reference.md`를
@@ -27,11 +27,17 @@ GCP project (dev, asia-northeast3)
 │   ├── Cloud DNS private zone dev.autoresearch.internal (#48)
 │   ├── Cloud SQL PSA range 192.168.0.0/20 (service networking peering)
 │   └── Redis Cluster PSC subnet 10.10.16.0/29
-├── GKE dev cluster ── 앱 워크로드 실행
+├── GKE dev cluster ── 앱 워크로드 + 플랫폼 스택 실행
 │   ├── 컨트롤 플레인 DNS 엔드포인트 ── IAM 기반 kubectl 접속 (#45)
-│   └── Airflow internal ILB (`airflow_ilb_ip` output) ── VPC 내부 전용 UI (#48)
+│   ├── Airflow internal ILB (`airflow_ilb_ip` output) ── VPC 내부 전용 UI (#48)
+│   └── 플랫폼 스택(admin root + ArgoCD GitOps):
+│       ├── ArgoCD ── Terraform 설치, AppProject/Application 관리 (#83)
+│       ├── monitoring (kube-prometheus-stack) ── ArgoCD Application deploy/monitoring (#183)
+│       ├── argo-rollouts ── ArgoCD Application deploy/argo-rollouts (#186)
+│       ├── ELK/ECK ── elastic-k8s, GCS snapshot (#97/#102)
+│       └── Vault ── vault-k8s, KMS auto-unseal (#134, 샌드박스)
 ├── Cloud SQL (PostgreSQL 15, private IP only) ◀── GKE에서 접속
-├── Memorystore for Redis Cluster (single-zone 2 shard, PSC, IAM auth/TLS) ◀── GKE에서 접속 (#129, apply 대기)
+├── Memorystore for Redis Cluster (single-zone 2 shard, PSC, IAM auth/TLS) ◀── GKE에서 접속 (#129, apply·검증 완료)
 ├── Artifact Registry (autoresearch-dev-docker) ◀── 이미지 push/pull
 ├── GCS / BigQuery ── raw data, analytics, Feast offline store
 ├── Cloud Run proxy ── 내부 호출용 인증 gate 후보
@@ -87,7 +93,7 @@ GCP project (dev, asia-northeast3)
   저장소. GKE 워크로드가 private IP로 접속.
 - **Redis:** Feast Online Store. GKE 앱 pod가 private PSC discovery endpoint로
   접속하며 Workload Identity로 IAM token을 발급하고 CA만 Secret Manager에서
-  가져옵니다. Primary shard 2개에 hash slot을 분산합니다(#129, apply 대기).
+  가져옵니다. Primary shard 2개에 hash slot을 분산합니다(#129, apply·검증 완료).
 - **Artifact Registry:** 앱 컨테이너 이미지 저장.
 - **BigQuery:** `autoresearch_dev_analytics`, `feast_offline_store`.
 - **GKE/Airflow:** Airflow는 `airflow` namespace 경계와 namespace-scoped

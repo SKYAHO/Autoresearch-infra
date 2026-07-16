@@ -55,14 +55,18 @@
   - `secret_manager.tf` — Secret Manager 리소스와 resource-level IAM
   - `bastion.tf` — #47 IAP 전용 bastion host
   - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
+  - `vault.tf` — #132 Vault auto-unseal용 KMS key/GSA/WI
+  - `elastic.tf` — #102 Elasticsearch GCS snapshot bucket/GSA
+  - `github_actions.tf` — WIF pusher SA 3종(각각 최소권한·repo@ref 제한): GAR
+    pusher, app image pusher, Airflow deployer(container.clusterViewer)
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
   `airflow-k8s`(Airflow 경계), `argocd-k8s`(ArgoCD), `monitoring-k8s`(모니터링),
-  `vault-k8s`(#134 Vault), `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK), 팀원 GKE 접근
-  IAM은 `gke-team-access`.
-- 재사용 module은 `terraform/modules/` (예정)
+  `vault-k8s`(#134 Vault), `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK),
+  `autoresearch-k8s`(앱 namespace/KSA 경계), 팀원 GKE 접근 IAM은 `gke-team-access`.
+- 재사용 module은 `terraform/modules/` (현재 미사용, staging/prod 분리 시 추출)
 - GitHub Actions는 `.github/workflows/`: `lint.yml`(actionlint, required
   check), `terraform-plan.yml`(OIDC/WIF 기반 PR plan 및 댓글 게시),
-  `claude.yml`(Claude PR 리뷰).
+  `claude.yml`(Claude PR 리뷰), `terraform-drift.yml`(dev root state drift 주기 감지).
 - 작업 중 스펙·플랜 문서는 `docs/superpowers/` 기준을 따르고, 완료된 핵심
   결정은 `docs/CHANGE_HISTORY.md`에 요약합니다.
 - 팀원 로컬 GKE/Bastion/Airflow UI 접근 절차는

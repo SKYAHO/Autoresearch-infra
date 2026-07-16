@@ -167,5 +167,8 @@ repo Application 전용으로 좁혔다(현재 `monitoring`·`argo-rollouts`).
 - `helm_release.argo_cd` 리소스를 제거하고 apply하면 release가 삭제된다.
   namespace는 `prevent_destroy`로 남는다.
 - chart 버전 롤백은 `argo_cd_chart_version`을 이전 버전으로 되돌려 apply한다.
-- ArgoCD는 이 시점(#84)에는 Application을 관리하지 않으므로 release 삭제가
-  다른 워크로드에 영향을 주지 않는다.
+- **주의**: 이 root는 이제 `application_monitoring`(#183)·`application_argo_rollouts`
+  (#186) 두 Application을 관리한다. ArgoCD를 삭제하면 이 Application들이 관리하는
+  monitoring·argo-rollouts 스택이 sync/self-heal 없이 남으므로, release 삭제 전
+  두 스택의 adopt 상태와 영향 범위를 먼저 확인한다(워크로드 pod 자체는 prune off라
+  즉시 삭제되지 않지만 GitOps 관리가 끊긴다).

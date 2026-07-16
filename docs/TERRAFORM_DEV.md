@@ -305,24 +305,24 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
 | 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, Feast GCS bucket `storage.objectAdmin` |
 
-## Monitoring Kubernetes root (#78/#79)
+## Monitoring Kubernetes root (#78/#79, #183 ArgoCD 이관)
 
 Prometheus/Grafana는 dev GCP root가 아니라 `terraform/admin/monitoring-k8s`에서
-별도 state로 관리한다. 이 root는 GKE API server와 Helm chart lifecycle을 직접
-다루므로 운영자가 의도적으로 실행한다.
+별도 state로 관리한다. **#183 이후 `kube-prometheus-stack` chart는 ArgoCD
+Application `deploy/monitoring`이 관리**하고, 이 root는 `monitoring` namespace와
+port-forward RBAC 경계만 남긴다(chart/version/retention/PVC 값은 ArgoCD source의
+umbrella chart values에서 관리). chart 버전·관측 파이프라인 운영은
+[`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md)와
+[`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md)를 따른다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| Namespace | `monitoring` | `kubernetes_namespace_v1.monitoring` |
-| Helm chart | `kube-prometheus-stack` | prometheus-community chart |
-| Chart version | `87.12.1` | `var.kube_prometheus_stack_chart_version` |
-| Release name | `kube-prometheus-stack` | `var.kube_prometheus_stack_release_name` |
-| Prometheus retention | 7일 | values 파일 기준 |
-| Prometheus PVC | 30Gi | dev 최소 운영 기준 |
-| Grafana service | `ClusterIP` | 외부 공개 금지. 접근 경로는 #80/#81에서 정리 |
+| Namespace | `monitoring` | `kubernetes_namespace_v1.monitoring`(이 root 관리) |
+| port-forward RBAC | `monitoring_port_forward_user_emails` | 팀원 Grafana 접근 경계(이 root 관리) |
+| Helm chart | `kube-prometheus-stack` | **ArgoCD Application `deploy/monitoring`이 관리(#183)** |
 | Grafana admin credential | 기존 Kubernetes Secret 참조 | payload는 Terraform state에 저장하지 않음 |
 
-Grafana admin Secret은 apply 전에 운영자가 `monitoring` namespace에 직접 만든다.
+Grafana admin Secret은 운영자가 `monitoring` namespace에 직접 만든다(operator 주입).
 
 비밀번호를 명령행 인수(셸 히스토리·프로세스 목록에 노출)에 두지 않도록,
 `read -s`로 입력받아 권한 제한 임시 파일(`--from-env-file`)로 주입한다.
@@ -1006,8 +1006,9 @@ repository IAM을 제거하고 마지막으로 bootstrap 허용 목록에서 저
 
 HashiCorp Vault dev 도입 1단계(설계:
 `docs/superpowers/specs/2026-07-12-vault-dev-design.md`). Vault 설치는
-`terraform/admin/vault-k8s`(2단계, 예정)에서 별도 state로 관리하고, dev
-root는 GCP 측 기반(`vault.tf`)만 담당한다.
+`terraform/admin/vault-k8s`(2단계 #134, 완료)에서 별도 state로 관리하고, dev
+root는 GCP 측 기반(`vault.tf`)만 담당한다. 다만 실 secret 이관은 하지 않기로
+결정했고(Secret Manager로 충분), vault-k8s는 샌드박스로 남긴다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
