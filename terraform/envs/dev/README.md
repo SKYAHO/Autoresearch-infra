@@ -13,7 +13,7 @@
 - dev VPC/subnet, Cloud Router/NAT, IAP SSH firewall
 - Artifact Registry Docker repository
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장
-- Feast Online Store single-zone 2-shard Memorystore for Redis Cluster(PSC, IAM auth/TLS), CA Secret Manager 저장 (#129, apply 대기)
+- Feast Online Store single-zone 2-shard Memorystore for Redis Cluster(PSC, IAM auth/TLS), CA Secret Manager 저장 (#129, apply·검증 완료)
 - dev 원본 데이터 GCS bucket(YouTube/user/action-log/persona raw)
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset
@@ -22,13 +22,16 @@
 - Airflow 전용 GKE node pool(`airflow-dev`)과 batch KSA Workload Identity binding
 - Airflow YouTube/OpenRouter API key용 Secret Manager secret metadata
 - Airflow Kubernetes namespace/RBAC/NetworkPolicy는 `terraform/admin/airflow-k8s`에서 별도 state로 관리
-- 일반 앱 namespace/KSA/NetworkPolicy는 `terraform/admin/autoresearch-k8s`에서 별도 state로 관리 (#129, apply 대기)
+- 일반 앱 namespace/KSA/NetworkPolicy는 `terraform/admin/autoresearch-k8s`에서 별도 state로 관리 (#129, apply·검증 완료)
 - Autoresearch-airflow Cloud Build image push용 최소 IAM
 - Cloud Run proxy state/code 정합성
 - GKE 컨트롤 플레인 DNS 엔드포인트 — IAM 기반 kubectl 접속 (#45/#46)
 - IAP 전용 bastion host(`bastion.tf`, 외부 IP 없음) (#47/#50)
 - Airflow internal ILB 예약 내부 IP(`terraform output airflow_ilb_ip`)와 private DNS zone `dev.autoresearch.internal`(`dns.tf`) (#48/#51)
 - Airflow Google OAuth client 자격증명용 Secret Manager secret metadata (#54/#55)
+- Vault dev auto-unseal 1단계 GCP 기반(`vault.tf`): Cloud KMS unseal key ring/key, Vault GSA + Workload Identity, unseal 전용 custom role (#132)
+- Elasticsearch GCS snapshot 기반(`elastic.tf`): snapshot bucket, snapshot GSA + Workload Identity, bucket IAM (#102)
+- GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer (#121/#157/#187)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
 ## 로컬 실행
@@ -63,11 +66,13 @@ terraform -chdir=terraform/envs/dev apply
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
 | DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
 | IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
+| KMS/Vault | key ring `vault`, crypto key `vault_unseal`, Vault GSA + unseal custom role (#132) |
+| Elastic snapshot | ES snapshot GCS bucket, snapshot GSA + Workload Identity (#102) |
+| CI pusher | GAR pusher SA, app image pusher SA, Airflow deployer SA (WIF, #121/#157/#187) |
 
 Issue #129의 `autoresearch-dev-redis-cluster`, 전용 PSC subnet/policy와
-`terraform/admin/autoresearch-k8s`는
-Terraform 정의만 추가된 상태이며, 실제 생성 여부는 merge 후 승인된 plan/apply
-결과를 기준으로 갱신합니다.
+`terraform/admin/autoresearch-k8s`는 apply 완료됐고, #203/#204에서 Feast ↔ Redis
+Cluster GKE 실연결·materialize까지 검증됐습니다.
 
 ## 기본 리전
 
