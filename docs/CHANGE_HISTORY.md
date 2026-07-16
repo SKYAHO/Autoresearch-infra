@@ -32,6 +32,20 @@
 - targeted plan: 8 add(#92 GSA 포함) / 0 change / 0 destroy. 기존 SQL 인스턴스 무변경.
   #92와 함께 apply 예정. 배포는 #94.
 
+## 2026-07-17: MLflow artifact 버킷 중복 해소 — 기존 수동 버킷 adopt (#226)
+
+- #92 apply 후, 앱팀이 **수동 생성한 기존 MLflow 버킷**
+  `ar-infra-501607-autoresearch-mlflow-artifacts`(2026-07-14, `mlflow-artifacts/`
+  데이터 보유, 어떤 IaC도 관리 안 함)를 발견. #92가 만든 빈 중복 버킷
+  `autoresearch-dev-mlflow-artifacts`을 제거하고 **기존 버킷을 adopt**했다.
+- 절차: 중복 버킷 `state rm` + 삭제(빈 상태) → `mlflow.tf` 버킷명을
+  `${project_id}-${name_prefix}-mlflow-artifacts`로 변경 → `terraform import` →
+  apply. **데이터 유지, destroy 0**(2 add / 1 change / 0 destroy).
+- 부수 보안 강화: adopt 시 `public_access_prevention` **inherited → enforced**,
+  라벨 부착, MLflow GSA에 objectAdmin+legacyBucketReader 부착.
+- 교훈: 설계(#91) 시 라이브 GCS 버킷을 열거하지 않아 중복이 발생. 향후 신규
+  저장소 설계는 **기존 리소스 실사 포함**.
+
 ## 2026-07-17: MLflow artifact GCS bucket + 전용 GSA (#92)
 
 - #91 설계에 따라 MLflow의 artifact 저장소와 전용 인증 주체를 `mlflow.tf`(feature
