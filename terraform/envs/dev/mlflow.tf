@@ -63,3 +63,15 @@ resource "google_project_iam_member" "mlflow_cloudsql" {
   role    = "roles/cloudsql.client"
   member  = "serviceAccount:${google_service_account.mlflow.email}"
 }
+
+# #232 MLflow UI OAuth2-proxy용 Google OAuth client secret 컨테이너.
+# 값(version)은 콘솔에서 발급한 client secret으로 operator가 추가한다(airflow #54 선례).
+# oauth2-proxy pod는 operator 주입 K8s Secret `mlflow-oauth`에서 값을 받으므로
+# GSA에 이 secret 접근권을 주지 않는다(주입은 운영자 자격으로 SM에서 읽음).
+resource "google_secret_manager_secret" "mlflow_oauth_client_secret" {
+  secret_id = local.mlflow_oauth_client_secret_secret_id
+
+  replication {
+    auto {}
+  }
+}
