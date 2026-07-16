@@ -32,6 +32,17 @@
 - targeted plan: 8 add(#92 GSA 포함) / 0 change / 0 destroy. 기존 SQL 인스턴스 무변경.
   #92와 함께 apply 예정. 배포는 #94.
 
+## 2026-07-17: MLflow 운영 runbook (#95)
+
+- 배포·검증 완료된 MLflow 스택 기준으로 운영 runbook을 작성한다
+  (`docs/MLFLOW_OPERATIONS_RUNBOOK.md`, README 인덱스 등록).
+- 포함: 접속(port-forward), 클라이언트 실험/모델 등록(proxy 모드라 GCS 자격 불필요),
+  시크릿 주입·DB 비번 로테이션(#213 `--from-env-file`), backend/artifact 백업·복구
+  (Cloud SQL PITR, GCS soft delete), GitOps 배포·업데이트, 장애 대응(OOM #229·
+  probe·backend·artifact 403 등)·진단 명령.
+- 이로써 MLflow 에픽(#91 설계 → #92 GCS → #93 Cloud SQL → #94 배포 → #95 runbook)
+  전체 완료. UI 인증(OAuth2-proxy)·내부 ILB는 후속 과제.
+
 ## 2026-07-17: MLflow tracking server 배포 구성 (#94)
 
 - #91 설계에 따라 MLflow tracking server를 ArgoCD로 배포하는 구성을 추가한다(코드).
