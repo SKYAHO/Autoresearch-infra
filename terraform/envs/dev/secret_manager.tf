@@ -46,3 +46,25 @@ resource "google_secret_manager_secret_iam_member" "gke_app_redis_server_ca" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.gke_app.email}"
 }
+
+# #93 MLflow DB 비밀번호를 Secret Manager에 저장. random_password는 cloud_sql.tf.
+# state 평문 저장 한계는 db_app_password와 동일(GCS backend 접근제어로 완화, dev accept).
+resource "google_secret_manager_secret" "mlflow_db_password" {
+  secret_id = local.mlflow_db_password_secret_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "mlflow_db_password" {
+  secret      = google_secret_manager_secret.mlflow_db_password.id
+  secret_data = random_password.mlflow_db_password.result
+}
+
+# 최소 권한: MLflow GSA에 이 secret에만 접근 부여(프로젝트 전체 아님).
+resource "google_secret_manager_secret_iam_member" "mlflow_db_password" {
+  secret_id = google_secret_manager_secret.mlflow_db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mlflow.email}"
+}

@@ -56,3 +56,10 @@ resource "google_storage_bucket_iam_member" "mlflow_artifacts_bucket_reader" {
   role   = "roles/storage.legacyBucketReader"
   member = "serviceAccount:${google_service_account.mlflow.email}"
 }
+
+# Cloud SQL 접근(private IP). MLflow 서버 pod만(WI). 노드 SA에 주지 않음. #93.
+resource "google_project_iam_member" "mlflow_cloudsql" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.mlflow.email}"
+}

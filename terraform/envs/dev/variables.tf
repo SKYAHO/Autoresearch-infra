@@ -287,6 +287,18 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "mlflow_db_name" {
+  description = "기존 Cloud SQL 인스턴스 내 MLflow 전용 database 이름(Airflow/앱과 분리)."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_db_user" {
+  description = "MLflow 전용 Cloud SQL user 이름."
+  type        = string
+  default     = "mlflow"
+}
+
 variable "mlflow_k8s_namespace" {
   description = "MLflow tracking server KSA가 배치될 Kubernetes namespace(#94 mlflow-k8s에서 생성)."
   type        = string
