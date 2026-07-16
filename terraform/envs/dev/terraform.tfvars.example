@@ -49,9 +49,11 @@ airflow_gke_node_disk_type        = "pd-standard"
 gke_app_k8s_namespace             = "autoresearch"
 gke_app_k8s_service_account       = "autoresearch-app"
 
-# MLflow (#91 설계, #92 bucket/GSA). K8s namespace/SA는 #94 mlflow-k8s에서 생성.
+# MLflow (#91 설계, #92 bucket/GSA, #93 Cloud SQL DB/user). K8s namespace/SA는 #94에서 생성.
 mlflow_k8s_namespace              = "mlflow"
 mlflow_k8s_service_account        = "mlflow"
+mlflow_db_name                    = "mlflow"
+mlflow_db_user                    = "mlflow"
 airflow_k8s_namespace             = "airflow"
 airflow_k8s_service_account       = "airflow"
 airflow_batch_k8s_service_account = "autoresearch-batch"

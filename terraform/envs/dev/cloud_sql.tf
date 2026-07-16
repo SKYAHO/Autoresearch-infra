@@ -70,3 +70,21 @@ resource "google_sql_user" "app" {
   instance = google_sql_database_instance.dev.name
   password = random_password.db_app_password.result
 }
+
+# --- #93 MLflow backend: 기존 인스턴스에 전용 DB/user (Airflow/앱과 논리 분리) ---
+# 8회차 "DB 외부화" 결정 반영. 신규 인스턴스 없이 schema/DB 분리로 비용 회피.
+resource "random_password" "mlflow_db_password" {
+  length  = 24
+  special = true
+}
+
+resource "google_sql_database" "mlflow" {
+  name     = var.mlflow_db_name
+  instance = google_sql_database_instance.dev.name
+}
+
+resource "google_sql_user" "mlflow" {
+  name     = var.mlflow_db_user
+  instance = google_sql_database_instance.dev.name
+  password = random_password.mlflow_db_password.result
+}

@@ -18,6 +18,20 @@
   계정을 제거한 뒤 apply하여 해당 계정의 GKE·Bastion·BigQuery IAM member만
   제거한다.
 
+## 2026-07-17: MLflow Cloud SQL 전용 DB/user + Secret Manager (#93)
+
+- #91 설계에 따라 MLflow backend를 **기존 Cloud SQL `autoresearch-dev-pg` 재사용**으로
+  구성한다. 신규 인스턴스 없이 전용 `google_sql_database`(`mlflow`) +
+  `google_sql_user`(`mlflow`)로 Airflow/앱과 **논리 분리**(8회차 "DB 외부화").
+- 비밀번호는 전용 `random_password.mlflow_db_password`(24자) → Secret Manager
+  `autoresearch-dev-mlflow-db-password`. state 평문 저장 한계는 기존 `db_app_password`와
+  동일(GCS backend 접근제어로 완화, dev accept).
+- 최소권한: MLflow GSA에 **secret resource-level `secretAccessor`** + project
+  `roles/cloudsql.client`. private IP 접속(NetworkPolicy는 #94 mlflow-k8s).
+- 배치: DB/user=cloud_sql.tf, secret=secret_manager.tf, GSA IAM=mlflow.tf(리포 kind 패턴).
+- targeted plan: 8 add(#92 GSA 포함) / 0 change / 0 destroy. 기존 SQL 인스턴스 무변경.
+  #92와 함께 apply 예정. 배포는 #94.
+
 ## 2026-07-17: MLflow artifact GCS bucket + 전용 GSA (#92)
 
 - #91 설계에 따라 MLflow의 artifact 저장소와 전용 인증 주체를 `mlflow.tf`(feature
