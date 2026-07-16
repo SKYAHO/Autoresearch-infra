@@ -1,6 +1,10 @@
 project_id = "your-gcp-project-id"
 region     = "asia-northeast3"
 
+# Default dev datasets. Keep team_member_emails values in local terraform.tfvars only.
+bigquery_analytics_dataset_id           = "autoresearch_dev_analytics"
+bigquery_feast_offline_store_dataset_id = "feast_offline_store"
+
 team_member_emails = [
   "teammate-1@example.com",
   "teammate-2@example.com",

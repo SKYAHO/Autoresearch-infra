@@ -15,6 +15,35 @@ resource "google_project_iam_member" "gke_kubectl_users" {
   member  = "user:${each.value}"
 }
 
+# #215 팀원의 BigQuery 작업 실행 권한과 dataset별 데이터 편집 권한.
+# jobUser는 BigQuery job을 프로젝트에 생성하는 데 필요하고, dataEditor는 아래 두
+# dataset으로만 제한한다. 프로젝트 수준 Data Editor/Editor/Owner는 부여하지 않는다.
+resource "google_project_iam_member" "team_bigquery_job_users" {
+  for_each = var.team_member_emails
+
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "user:${each.value}"
+}
+
+resource "google_bigquery_dataset_iam_member" "team_bigquery_analytics_data_editors" {
+  for_each = var.team_member_emails
+
+  project    = var.project_id
+  dataset_id = var.bigquery_analytics_dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "user:${each.value}"
+}
+
+resource "google_bigquery_dataset_iam_member" "team_bigquery_feast_data_editors" {
+  for_each = var.team_member_emails
+
+  project    = var.project_id
+  dataset_id = var.bigquery_feast_offline_store_dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "user:${each.value}"
+}
+
 # #47 Bastion IAP 터널 접속 3종. 모두 읽기/접속용이며 리소스 변경 권한 없음.
 # - iap.tunnelResourceAccessor: IAP TCP forwarding 통과
 # - compute.osLogin: SSH 키 배포 없이 IAM 기반 SSH 로그인

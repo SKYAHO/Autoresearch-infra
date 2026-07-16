@@ -3,6 +3,21 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-16: 팀원 BigQuery 분석 권한을 별도 admin state로 관리 (#215)
+
+- 팀원 Google 계정에 프로젝트 수준 `roles/bigquery.jobUser`와
+  `autoresearch_dev_analytics`·`feast_offline_store` dataset별
+  `roles/bigquery.dataEditor`를 추가한다. 사람 IAM은 기존처럼
+  `terraform/admin/gke-team-access`의 로컬 `terraform.tfvars`와 별도 state로만
+  관리해 이메일과 off-boarding churn이 일반 dev PR plan에 노출되지 않게 한다.
+- 최소권한 경계: jobUser는 BigQuery job 생성에만, dataEditor는 두 dataset에만
+  부여한다. 프로젝트 수준 `roles/bigquery.dataEditor`, `roles/editor`,
+  `roles/owner`는 부여하지 않는다. jobUser의 쿼리 비용은 실행 시
+  `maximum_bytes_billed` 등 job 수준 제한으로 제어한다.
+- 비용·리전 영향 없음(IAM binding만 추가). 롤백/퇴사는 로컬 tfvars에서 해당
+  계정을 제거한 뒤 apply하여 해당 계정의 GKE·Bastion·BigQuery IAM member만
+  제거한다.
+
 ## 2026-07-16: 시크릿 주입 런북을 --from-env-file로 전환 (보안 P1, #213)
 
 - 운영 문서의 `kubectl create secret --from-literal=<값>` 예시가 실제 시크릿을

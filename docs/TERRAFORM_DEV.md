@@ -581,6 +581,13 @@ clusterViewer→viewer로 확대) `gcloud container clusters get-credentials`를
 관리한다. 실제 이메일은 해당 경로의 로컬 `terraform.tfvars`에만 기입하며(repo 노출 방지),
 일반 PR Terraform plan에는 팀원 이메일과 사람 IAM 변경이 나오지 않게 분리한다.
 
+#215부터 같은 admin root가 팀원에게 프로젝트 수준 `roles/bigquery.jobUser`와
+`autoresearch_dev_analytics`·`feast_offline_store` 두 dataset의
+`roles/bigquery.dataEditor`를 함께 관리한다. `dataEditor`는 dataset 단위로만
+부여하며 프로젝트 수준 Data Editor/Editor/Owner를 부여하지 않는다. `jobUser`는
+프로젝트 범위의 job 생성 권한이므로 query/load job은 `maximum_bytes_billed` 같은
+job 수준 비용 제한을 사용한다.
+
 관리자 적용 절차:
 
 ```bash
@@ -619,10 +626,11 @@ kubectl get ns
   `gke_ar-infra-501607_asia-northeast3-a_autoresearch-dev-gke` 계열인지 확인한다.
 
 **Off-boarding**: `terraform/admin/gke-team-access/terraform.tfvars`의
-`team_member_emails`에서 이메일을 제거하고 apply하면 `google_project_iam_member`가 해당
-member만 제거된다(non-authoritative). 단, 이미 발급받은 access token은 만료(최대 ~1시간)까지
-유효하므로 **즉시 차단이 아니다**. 긴급 차단이 필요하면 해당 Google 계정의 GCP 세션을 별도로
-종료해야 한다. kubeconfig 자체는 로컬에 남지만 다음 인증 시 403.
+`team_member_emails`에서 이메일을 제거하고 apply하면 GKE·Bastion의 project IAM과
+BigQuery의 project/dataset IAM member가 해당 계정에 대해서만 제거된다
+(non-authoritative). 단, 이미 발급받은 access token은 만료(최대 ~1시간)까지 유효하므로
+**즉시 차단이 아니다**. 긴급 차단이 필요하면 해당 Google 계정의 GCP 세션을 별도로 종료해야
+한다. kubeconfig 자체는 로컬에 남지만 다음 인증 시 403.
 
 기존 dev state에 `google_project_iam_member.gke_kubectl_users[...]`가 남아 있으면
 실제 IAM을 destroy하지 않는다. 이 리소스는 `terraform/admin/gke-team-access`가
