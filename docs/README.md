@@ -13,6 +13,7 @@
 | Grafana에서 GKE/Airflow/앱 상태 점검, 앱 메트릭 e2e 검증 확인 | [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md) |
 | ArgoCD 접속, sync/diff/rollback, 장애 대응, 임의 워크로드 실배포 검증 확인 | [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md) |
 | Argo Rollouts promote/abort/rollback 등 점진 배포 운영 | [`ROLLOUTS_OPERATIONS_RUNBOOK.md`](ROLLOUTS_OPERATIONS_RUNBOOK.md) |
+| MLflow 접속·실험/모델 등록·시크릿 로테이션·백업·장애 대응 | [`MLFLOW_OPERATIONS_RUNBOOK.md`](MLFLOW_OPERATIONS_RUNBOOK.md) |
 | Kibana/ELK 로그 검색·운영 절차 확인 | [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) |
 | Vault 접속·시크릿 운영 절차 확인 | [`VAULT_OPERATIONS_RUNBOOK.md`](VAULT_OPERATIONS_RUNBOOK.md) |
 | dev Terraform 리소스, 변수, output, apply 절차 확인 | [`TERRAFORM_DEV.md`](TERRAFORM_DEV.md) |
