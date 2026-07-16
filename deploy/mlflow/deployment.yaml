@@ -56,26 +56,37 @@ spec:
               exec mlflow server \
                 --host 0.0.0.0 \
                 --port 5000 \
+                --workers 2 \
                 --backend-store-uri \
                 "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}" \
                 --serve-artifacts \
                 --artifacts-destination "${MLFLOW_ARTIFACT_DESTINATION}"
+          # startupProbe로 느린 최초 기동(DB 마이그레이션 등)을 허용하고, 그 뒤에만
+          # liveness/readiness가 동작한다. timeout은 1s→5s로 완화(#229 OOM 조사 반영).
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 30
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 1Gi
