@@ -10,15 +10,13 @@
 |---|---|
 | 지금까지 만든 dev 인프라 전체 구성을 빠르게 파악 | [`INFRASTRUCTURE_SUMMARY.md`](INFRASTRUCTURE_SUMMARY.md) |
 | 팀원에게 GKE, Bastion, Airflow/Grafana UI 접속 방법을 안내 | [`TEAM_OPERATIONS_RUNBOOK.md`](TEAM_OPERATIONS_RUNBOOK.md) |
-| Grafana에서 GKE/Airflow/앱 상태를 점검하는 방법 확인 | [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md) |
-| ArgoCD 접속, sync/diff/rollback, 장애 대응 절차 확인 | [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md) |
-| ArgoCD 임의 워크로드 실배포 경로 검증 절차·결과 확인 | [`ARGOCD_APP_DEPLOY_VALIDATION.md`](ARGOCD_APP_DEPLOY_VALIDATION.md) |
+| Grafana에서 GKE/Airflow/앱 상태 점검, 앱 메트릭 e2e 검증 확인 | [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md) |
+| ArgoCD 접속, sync/diff/rollback, 장애 대응, 임의 워크로드 실배포 검증 확인 | [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md) |
 | Argo Rollouts promote/abort/rollback 등 점진 배포 운영 | [`ROLLOUTS_OPERATIONS_RUNBOOK.md`](ROLLOUTS_OPERATIONS_RUNBOOK.md) |
 | Kibana/ELK 로그 검색·운영 절차 확인 | [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) |
 | Vault 접속·시크릿 운영 절차 확인 | [`VAULT_OPERATIONS_RUNBOOK.md`](VAULT_OPERATIONS_RUNBOOK.md) |
 | dev Terraform 리소스, 변수, output, apply 절차 확인 | [`TERRAFORM_DEV.md`](TERRAFORM_DEV.md) |
 | Prometheus/Grafana 운영 모니터링 설계 확인 | [`OBSERVABILITY_STRATEGY.md`](OBSERVABILITY_STRATEGY.md) |
-| 앱 메트릭 e2e(스크랩→Grafana 조회) 검증 절차·결과 확인 | [`MONITORING_APP_METRICS_VALIDATION.md`](MONITORING_APP_METRICS_VALIDATION.md) |
 | bootstrap state bucket, WIF, CI service account 확인 | [`TERRAFORM_BOOTSTRAP.md`](TERRAFORM_BOOTSTRAP.md) |
 | GitHub label, Project 운영 기준 확인 | [`GITHUB_LABELS_AND_PROJECT.md`](GITHUB_LABELS_AND_PROJECT.md) |
 | main branch ruleset 확인 | [`BRANCH_RULESET_MAIN.md`](BRANCH_RULESET_MAIN.md) |
