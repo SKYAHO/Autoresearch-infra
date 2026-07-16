@@ -42,11 +42,13 @@ resource "google_service_account" "application_pusher" {
 }
 
 # 정확한 Autoresearch release workflow만 애플리케이션 이미지 push SA 가장 허용.
-# release event의 ref는 tag이므로 repository_ref 대신 workflow_ref를 사용한다.
+# #221 release event의 ref는 tag가 되므로, workflow_ref(branch/tag별로 값이
+# 달라짐) 대신 workflow_path(ref를 제거한 경로)를 사용한다. release.yml
+# 워크플로우만 허용하되 main/tag 실행을 모두 커버한다.
 resource "google_service_account_iam_member" "application_pusher_wi" {
   service_account_id = google_service_account.application_pusher.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.application_release_workflow_ref}"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_path/${var.application_release_workflow_path}"
 }
 
 # 기존 dev GAR repository에만 애플리케이션 이미지 쓰기를 허용한다.
