@@ -234,6 +234,12 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
           server    = "https://kubernetes.default.svc"
           namespace = "kube-system"
         },
+        {
+          # #94 MLflow namespace는 terraform/admin/mlflow-k8s가 소유(ns/KSA/NP).
+          # ArgoCD는 deploy/mlflow(Deployment/Service)만 이 namespace에 배포한다.
+          server    = "https://kubernetes.default.svc"
+          namespace = var.mlflow_namespace
+        },
       ]
       # #183 kube-prometheus-stack이 요구하는 cluster-wide kind만 허용.
       clusterResourceWhitelist = [
@@ -324,6 +330,39 @@ resource "kubernetes_manifest" "application_argo_rollouts" {
       syncPolicy = {
         syncOptions = [
           "ServerSideApply=true",
+          "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+# #94 MLflow tracking server Application — infra repo의 deploy/mlflow(plain
+# 매니페스트: Deployment/Service)를 배포한다. helm adopt가 아니라 신규 배포이며
+# namespace는 mlflow-k8s가 소유하므로 CreateNamespace=false. manual sync(초기 원칙).
+resource "kubernetes_manifest" "application_mlflow" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "mlflow"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/mlflow"
+        targetRevision = var.mlflow_target_revision
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.mlflow_namespace
+      }
+      syncPolicy = {
+        syncOptions = [
           "CreateNamespace=false",
         ]
       }
