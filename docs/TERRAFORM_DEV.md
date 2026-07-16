@@ -46,6 +46,7 @@ terraform/
 │       ├── github_actions.tf # #121/#157 배포 리포 GitHub Actions WIF → GAR push SA/IAM
 │       ├── airflow.tf        # #32 Airflow GCP SA/WI + DB/GCS/IAM
 │       ├── locals.tf
+│       ├── mlflow.tf         # #91/#92 MLflow artifact GCS bucket + 전용 GSA/WI/IAM
 │       ├── nat.tf            # #5 Cloud Router + Cloud NAT (private 노드 egress)
 │       ├── outputs.tf
 │       ├── secret_manager.tf # #5 DB 비밀번호 Secret Manager 저장

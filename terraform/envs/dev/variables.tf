@@ -287,6 +287,36 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "mlflow_k8s_namespace" {
+  description = "MLflow tracking server KSA가 배치될 Kubernetes namespace(#94 mlflow-k8s에서 생성)."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_k8s_service_account" {
+  description = "MLflow GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_bucket_location" {
+  description = "MLflow artifact GCS bucket location."
+  type        = string
+  default     = "asia-northeast3"
+}
+
+variable "mlflow_bucket_storage_class" {
+  description = "MLflow artifact GCS bucket storage class."
+  type        = string
+  default     = "STANDARD"
+}
+
+variable "mlflow_artifacts_soft_delete_seconds" {
+  description = "MLflow artifact bucket soft delete 보존(초). 기본 7일 복구층(#179 교훈)."
+  type        = number
+  default     = 604800
+}
+
 variable "airflow_k8s_namespace" {
   description = "Airflow Helm release, Airflow KSA, batch KSA가 배치될 Kubernetes namespace."
   type        = string

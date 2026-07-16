@@ -52,6 +52,8 @@ locals {
   gke_cluster_name                      = "${local.resource_prefix}-gke"
   gke_node_sa_name                      = "${local.resource_prefix}-gke-nodes"
   gke_app_sa_name                       = "${local.resource_prefix}-app"
+  mlflow_sa_name                        = "${local.resource_prefix}-mlflow"
+  mlflow_artifacts_bucket               = "${local.resource_prefix}-mlflow-artifacts"
   gke_node_pool_name                    = "dev-default"
   airflow_batch_sa_name                 = "${local.resource_prefix}-airflow-batch"
   airflow_youtube_api_key_secret_id     = "${local.resource_prefix}-youtube-api-key"
@@ -78,6 +80,8 @@ locals {
     personas_raw_snapshots = "data/raw/personas/"
   }
   gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
+
+  mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
 
   airflow_sa_name                           = "${local.resource_prefix}-airflow"
   airflow_workload_identity_principal       = "${var.project_id}.svc.id.goog[${var.airflow_k8s_namespace}/${var.airflow_k8s_service_account}]"
