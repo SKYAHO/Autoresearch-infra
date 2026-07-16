@@ -18,6 +18,20 @@
   계정을 제거한 뒤 apply하여 해당 계정의 GKE·Bastion·BigQuery IAM member만
   제거한다.
 
+## 2026-07-17: MLflow 운영 구조 설계 (#91)
+
+- MLflow Tracking + Model Registry의 운영 구조를 확정하고 후속 구현(#92~#95) 범위를
+  분리했다. 설계 `superpowers/specs/2026-07-17-mlflow-operating-design.md`, 순서
+  `superpowers/plans/2026-07-17-mlflow-rollout.md`.
+- 핵심 결정: 배포=**ArgoCD Application**(`deploy/mlflow`, monitoring/argo-rollouts와
+  일관), namespace=신규 admin root **`mlflow-k8s`**, backend=**기존 Cloud SQL 재사용 +
+  전용 DB/user 분리**, artifact=**신규 GCS 버킷 + proxy 모드**(GCS 자격은 서버에만),
+  이미지=**앱 저장소 커스텀 이미지 참조**(경계 분리), UI=**내부 전용·외부 노출 금지**,
+  인증=**전용 GSA + WI + 최소 IAM**(SA key 없음).
+- 보안: 외부 노출 0, resource-level IAM, Secret Manager, feast IAM 교훈(`storage.buckets.get`
+  → legacyBucketReader) 선반영.
+- 리소스 변경 없음(설계 문서만). 실제 리소스는 #92~#95에서 사용자 승인 후.
+
 ## 2026-07-16: 시크릿 주입 런북을 --from-env-file로 전환 (보안 P1, #213)
 
 - 운영 문서의 `kubectl create secret --from-literal=<값>` 예시가 실제 시크릿을
