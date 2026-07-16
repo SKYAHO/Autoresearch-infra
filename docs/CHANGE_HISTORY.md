@@ -62,7 +62,8 @@
   — clusterResourceWhitelist를 넓히지 않는다. 실제 앱은 namespace를 Terraform이
   소유(`CreateNamespace=false`).
 - **임시 검증**으로 수행 후 Application·AppProject destination·매니페스트를 제거하고
-  namespace를 삭제했다. 절차·결과는 [`ARGOCD_APP_DEPLOY_VALIDATION.md`]에 기록.
+  namespace를 삭제했다. 절차·결과는 [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md)의
+  "임의 워크로드 실배포 검증" 절에 기록.
   영구 샘플은 유지하지 않는다(최소권한, sample-guestbook 제거 취지 일관).
 
 ## 2026-07-15: monitoring 스택 앱 메트릭 e2e 검증 재실증·runbook 기록 (#206)
@@ -71,8 +72,8 @@
   테스트 워크로드로 재실증했다: 앱 `/metrics`(Prometheus 형식) → ServiceMonitor →
   Prometheus scrape(`up=1`) → 저장 → Grafana datasource proxy 조회
   (`status: success`, `count=8`). 전 경로 동작 확인.
-- 절차·매니페스트·실측 결과를 [`MONITORING_APP_METRICS_VALIDATION.md`]로 저장소에
-  기록해 GitHub에 영속화했다(그간 검증 결과가 로컬 문서에만 있었음).
+- 절차·매니페스트·실측 결과를 [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md)의
+  "앱 메트릭 e2e 검증" 절에 기록해 GitHub에 영속화했다(그간 검증 결과가 로컬 문서에만 있었음).
 - 핵심 재현 조건: ServiceMonitor 라벨 `release: kube-prometheus-stack` 필수,
   `serviceMonitorNamespaceSelector={}`라 전용 검증 namespace 사용 가능. Grafana
   admin 자격은 operator 주입 시크릿 `grafana-admin-credentials`.
