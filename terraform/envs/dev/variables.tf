@@ -505,7 +505,13 @@ variable "airflow_deploy_ref" {
 }
 
 variable "application_release_workflow_ref" {
-  description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. release tag ref와 독립적으로 workflow 파일과 source ref를 고정한다."
+  description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. workflow_dispatch는 main source ref로 제한한다."
   type        = string
   default     = "SKYAHO/Autoresearch/.github/workflows/release.yml@refs/heads/main"
+}
+
+variable "application_release_workflow_event_path" {
+  description = "애플리케이션 GAR push SA를 가장할 수 있는 tag 기반 release 이벤트의 정확한 Autoresearch release 워크플로우 경로. event_name과 workflow path를 함께 검증한다."
+  type        = string
+  default     = "release:SKYAHO/Autoresearch/.github/workflows/release.yml"
 }

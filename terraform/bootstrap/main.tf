@@ -13,13 +13,6 @@ locals {
   }
 }
 
-# The Google provider normalizes imported project identifiers to the numeric
-# project number. Keep the WIF resources on that canonical form so importing
-# the existing bootstrap resources does not force a destructive replacement.
-data "google_project" "current" {
-  project_id = var.project_id
-}
-
 # 원격 state 저장 버킷 (dev 루트가 backend 로 사용)
 resource "google_storage_bucket" "tfstate" {
   name                        = local.state_bucket_name
@@ -50,16 +43,18 @@ resource "google_storage_bucket_iam_member" "ci_state" {
 # Workload Identity Federation 풀
 resource "google_iam_workload_identity_pool" "github" {
   workload_identity_pool_id = local.wif_pool_id
-  project                   = data.google_project.current.number
-  display_name              = "GitHub Actions"
-  description               = "WIF pool for GitHub Actions OIDC (autoresearch-infra)."
+  # 기존 local state가 project ID 문자열을 사용한다. 이 값은 immutable이므로
+  # 현재 state 표현을 유지해 WIF pool 교체를 유발하지 않는다.
+  project      = var.project_id
+  display_name = "GitHub Actions"
+  description  = "WIF pool for GitHub Actions OIDC (autoresearch-infra)."
 }
 
 # GitHub OIDC provider (attribute_condition 으로 repo 제한)
 resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = local.wif_provider_id
-  project                            = data.google_project.current.number
+  project                            = var.project_id
 
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
@@ -74,6 +69,10 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     # release event의 assertion.ref는 tag가 될 수 있다. write 권한 workflow를
     # 파일 경로 + workflow source ref로 고정할 때 사용한다.
     "attribute.workflow_ref" = "assertion.workflow_ref"
+    # #221 release 이벤트 전용 워크플로우 경계. workflow_dispatch는 기존의
+    # workflow_ref(main) 바인딩으로 계속 제한하고, tag 기반 release에만 이
+    # attribute를 사용한다. 값 예: release:SKYAHO/Autoresearch/.github/workflows/release.yml
+    "attribute.workflow_event_path" = "assertion.event_name + ':' + assertion.workflow_ref.split('@')[0]"
   }
 
   attribute_condition = "attribute.repository in ${jsonencode(var.allowed_github_repositories)}"
