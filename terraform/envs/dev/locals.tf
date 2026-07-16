@@ -49,11 +49,13 @@ locals {
   redis_service_connection_policy_name = "${local.resource_prefix}-redis-psc"
   redis_server_ca_secret_id            = "${local.resource_prefix}-redis-server-ca"
 
-  gke_cluster_name                      = "${local.resource_prefix}-gke"
-  gke_node_sa_name                      = "${local.resource_prefix}-gke-nodes"
-  gke_app_sa_name                       = "${local.resource_prefix}-app"
-  mlflow_sa_name                        = "${local.resource_prefix}-mlflow"
-  mlflow_artifacts_bucket               = "${local.resource_prefix}-mlflow-artifacts"
+  gke_cluster_name = "${local.resource_prefix}-gke"
+  gke_node_sa_name = "${local.resource_prefix}-gke-nodes"
+  gke_app_sa_name  = "${local.resource_prefix}-app"
+  mlflow_sa_name   = "${local.resource_prefix}-mlflow"
+  # #226: 앱팀이 수동 생성한 기존 버킷명(${project_id}-${name_prefix}-mlflow-artifacts)을
+  # 그대로 adopt한다. feast 버킷과 동일하게 project_id를 포함해 전역 유일성 확보.
+  mlflow_artifacts_bucket               = "${var.project_id}-${var.name_prefix}-mlflow-artifacts"
   gke_node_pool_name                    = "dev-default"
   airflow_batch_sa_name                 = "${local.resource_prefix}-airflow-batch"
   airflow_youtube_api_key_secret_id     = "${local.resource_prefix}-youtube-api-key"
