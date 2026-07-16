@@ -41,14 +41,22 @@ resource "google_service_account" "application_pusher" {
   description  = "Impersonated by Autoresearch GitHub Actions via WIF to push application images to GAR."
 }
 
-# 정확한 Autoresearch release workflow만 애플리케이션 이미지 push SA 가장 허용.
-# #221 release event의 ref는 tag가 되므로, workflow_ref(branch/tag별로 값이
-# 달라짐) 대신 workflow_path(ref를 제거한 경로)를 사용한다. release.yml
-# 워크플로우만 허용하되 main/tag 실행을 모두 커버한다.
+# 정확한 Autoresearch release workflow의 workflow_dispatch(main)만
+# 애플리케이션 이미지 push SA 가장 허용. #221의 release:published(tag)는 별도
+# event + workflow path 바인딩으로 추가해, 임의 ref workflow_dispatch를 막는다.
 resource "google_service_account_iam_member" "application_pusher_wi" {
   service_account_id = google_service_account.application_pusher.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_path/${var.application_release_workflow_path}"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.application_release_workflow_ref}"
+}
+
+# release:published(tag)에서만 같은 release.yml의 SA 가장 허용. GitHub release
+# 이벤트는 default branch의 workflow 파일만 실행하므로, tag ref를 열어두지 않고
+# event_name과 workflow 경로를 함께 검증한다.
+resource "google_service_account_iam_member" "application_pusher_release_wi" {
+  service_account_id = google_service_account.application_pusher.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_event_path/${var.application_release_workflow_event_path}"
 }
 
 # 기존 dev GAR repository에만 애플리케이션 이미지 쓰기를 허용한다.

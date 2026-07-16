@@ -74,12 +74,10 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     # release event의 assertion.ref는 tag가 될 수 있다. write 권한 workflow를
     # 파일 경로 + workflow source ref로 고정할 때 사용한다.
     "attribute.workflow_ref" = "assertion.workflow_ref"
-    # #221 workflow_ref에서 ref(branch/tag)를 제거한 워크플로우 경로.
-    # release:published(tag)와 workflow_dispatch(main) 모두 허용해야 하는
-    # write 권한 SA 바인딩에 사용한다. ref가 매번 달라지는 tag 기반 실행을
-    # exact-match principalSet로 제어할 수 없기 때문이다.
-    # 값 예: SKYAHO/Autoresearch/.github/workflows/release.yml
-    "attribute.workflow_path" = "assertion.repository + '/' + assertion.workflow_ref.split('@')[0]"
+    # #221 release 이벤트 전용 워크플로우 경계. workflow_dispatch는 기존의
+    # workflow_ref(main) 바인딩으로 계속 제한하고, tag 기반 release에만 이
+    # attribute를 사용한다. 값 예: release:SKYAHO/Autoresearch/.github/workflows/release.yml
+    "attribute.workflow_event_path" = "assertion.event_name + ':' + assertion.workflow_ref.split('@')[0]"
   }
 
   attribute_condition = "attribute.repository in ${jsonencode(var.allowed_github_repositories)}"
