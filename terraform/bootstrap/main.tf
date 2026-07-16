@@ -13,13 +13,6 @@ locals {
   }
 }
 
-# The Google provider normalizes imported project identifiers to the numeric
-# project number. Keep the WIF resources on that canonical form so importing
-# the existing bootstrap resources does not force a destructive replacement.
-data "google_project" "current" {
-  project_id = var.project_id
-}
-
 # 원격 state 저장 버킷 (dev 루트가 backend 로 사용)
 resource "google_storage_bucket" "tfstate" {
   name                        = local.state_bucket_name
@@ -50,16 +43,18 @@ resource "google_storage_bucket_iam_member" "ci_state" {
 # Workload Identity Federation 풀
 resource "google_iam_workload_identity_pool" "github" {
   workload_identity_pool_id = local.wif_pool_id
-  project                   = data.google_project.current.number
-  display_name              = "GitHub Actions"
-  description               = "WIF pool for GitHub Actions OIDC (autoresearch-infra)."
+  # 기존 local state가 project ID 문자열을 사용한다. 이 값은 immutable이므로
+  # 현재 state 표현을 유지해 WIF pool 교체를 유발하지 않는다.
+  project      = var.project_id
+  display_name = "GitHub Actions"
+  description  = "WIF pool for GitHub Actions OIDC (autoresearch-infra)."
 }
 
 # GitHub OIDC provider (attribute_condition 으로 repo 제한)
 resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = local.wif_provider_id
-  project                            = data.google_project.current.number
+  project                            = var.project_id
 
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
