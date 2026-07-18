@@ -264,6 +264,11 @@ output "airflow_workload_identity_principal" {
   value       = local.airflow_workload_identity_principal
 }
 
+output "airflow_scheduler_workload_identity_principal" {
+  description = "Airflow 스케줄러 KSA가 airflow GSA를 가장할 Workload Identity principal (#240)."
+  value       = local.airflow_scheduler_workload_identity_principal
+}
+
 output "airflow_metadata_database_name" {
   description = "Airflow metadata DB(Cloud SQL 내 database 이름)."
   value       = google_sql_database.airflow.name

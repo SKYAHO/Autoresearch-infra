@@ -87,11 +87,12 @@ locals {
 
   mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
 
-  airflow_sa_name                           = "${local.resource_prefix}-airflow"
-  airflow_workload_identity_principal       = "${var.project_id}.svc.id.goog[${var.airflow_k8s_namespace}/${var.airflow_k8s_service_account}]"
-  airflow_batch_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.airflow_k8s_namespace}/${var.airflow_batch_k8s_service_account}]"
-  airflow_dags_bucket_name                  = "${var.project_id}-${local.resource_prefix}-airflow-dags"
-  airflow_logs_bucket_name                  = "${var.project_id}-${local.resource_prefix}-airflow-logs"
+  airflow_sa_name                               = "${local.resource_prefix}-airflow"
+  airflow_workload_identity_principal           = "${var.project_id}.svc.id.goog[${var.airflow_k8s_namespace}/${var.airflow_k8s_service_account}]"
+  airflow_scheduler_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.airflow_k8s_namespace}/${var.airflow_scheduler_k8s_service_account}]"
+  airflow_batch_workload_identity_principal     = "${var.project_id}.svc.id.goog[${var.airflow_k8s_namespace}/${var.airflow_batch_k8s_service_account}]"
+  airflow_dags_bucket_name                      = "${var.project_id}-${local.resource_prefix}-airflow-dags"
+  airflow_logs_bucket_name                      = "${var.project_id}-${local.resource_prefix}-airflow-logs"
 
   cloud_build_bucket_name                   = "${var.project_id}_cloudbuild"
   cloud_build_compute_service_account_email = "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
