@@ -3,6 +3,25 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-18: MLflow UI 내부 ILB 노출 (#244)
+
+- MLflow UI를 Airflow(#48)와 동일 패턴으로 **VPC 내부 전용 ILB + private DNS**로
+  노출한다. 인증(oauth2-proxy)은 앞단에서 계속 강제하고 `mlflow`(5000)은 ClusterIP
+  내부 전용을 유지한다(미인증 우회 차단).
+- 1단계(PR #245): `dns.tf`에 예약 내부 IP `autoresearch-dev-mlflow-ilb`
+  (`SHARED_LOADBALANCER_VIP`, dev subnet → **10.10.0.22**) + A레코드
+  `mlflow.dev.autoresearch.internal`(기존 `internal` zone 재사용) + output. dev root
+  apply 시 #243 airflow scheduler WI 바인딩이 함께 대기 중이라 전체 3 add로 reconcile.
+- 2단계(PR #246): `deploy/mlflow/oauth2-proxy.yaml`의 Service를 internal
+  LoadBalancer로 flip(`networking.gke.io/load-balancer-type: Internal`,
+  `loadBalancerIP: 10.10.0.22`). ArgoCD sync로 배포.
+- **접근**: Bastion(#47) 터널 `-L 4180:mlflow.dev.autoresearch.internal:4180` →
+  브라우저 `localhost:4180`. 터널이 DNS를 목적지로 쓰고 Host는 localhost라 OAuth
+  redirect URI(`localhost:4180`)가 불변 → **콘솔 재등록 불필요**. port-forward(#236)도 유지.
+- 검증: ArgoCD Synced/Healthy, Service EXTERNAL-IP=10.10.0.22, in-cluster probe
+  `/ping`→200·`/`(미인증)→403(인증 강제), `mlflow:5000` ClusterIP 유지(미노출).
+- 롤백: Service를 ClusterIP로 되돌리면 ILB 제거. 예약 IP/DNS는 dev root에서 제거·apply.
+
 ## 2026-07-18: MLflow 팀원 port-forward RBAC (#236)
 
 - `mlflow` 네임스페이스에 RBAC가 전혀 없어 Model Training 담당자가 실배포된
@@ -26,6 +45,18 @@
   기존 kube-dns 패턴과 동일).
 - NetworkPolicy 1개 in-place 변경만, 다른 egress 규칙 영향 없음. apply 후 live
   검증 — airflow Pod → `http://mlflow.mlflow:5000/health` HTTP 200.
+
+## 2026-07-18: MLflow 설계 문서 as-built 정정 (#197)
+
+- MLflow 운영 구조 설계 spec(#91)을 실제 구현과 대조해 정정한다(문서만, 동작 무변경).
+  리뷰에서 문서↔구현 불일치가 확인됐다: backend URI를 완성 단일 key/`$(VAR)`에서
+  실제 `POSTGRES_*` 분해 Secret + `sh -c` 조립으로, GSA IAM을 실제 부여값으로,
+  namespace(`autoresearch`→전용 `mlflow`)·신규 admin root `mlflow-k8s`·deploy 위치·
+  OAuth2-proxy를 as-built로 반영(15절 신설). 확정 as-built는 runbook 기준.
+- **보안 발견(후속 검토)**: MLflow GSA에 project-level `roles/cloudsql.client`와 DB
+  password secret resource-level `roles/secretmanager.secretAccessor`가 부여돼 있으나,
+  현재 런타임 경로(private IP 직접 연결 + operator 주입 K8s Secret `mlflow-db` 읽기)엔
+  둘 다 불필요하다 → 최소권한 축소 후보.
 
 ## 2026-07-16: 팀원 BigQuery 분석 권한을 별도 admin state로 관리 (#215)
 
