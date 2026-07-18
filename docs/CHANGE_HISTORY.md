@@ -3,6 +3,22 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-18: 코드 아카이브 배포용 GCS 버킷·업로더 SA·WIF (#238)
+
+- 앱 코드 배포 파이프라인(main 머지 시 코드 tar.gz를 GCS 업로드, GKE
+  `autoresearch-app` 파드가 시작 시 다운로드) 인프라를 `code_artifacts.tf`로 추가한다.
+  앱 구현은 `SKYAHO/Autoresearch#180`·`#182`, 워크플로우 `code-archive.yml`.
+- 리소스: 코드 아카이브 전용 버킷 `<project_id>-code-artifacts`(서울, UBLA, public
+  차단, versioning 없음) + 업로더 SA `autoresearch-dev-code-uploader` + WIF 바인딩
+  + 버킷 IAM 2종.
+- 최소권한 경계: 업로더 SA는 **정확한 `code-archive.yml@refs/heads/main`
+  `workflow_ref`만** 가장 허용(#175/#221 관례, 임의 브랜치·워크플로우 차단). 권한은
+  **버킷 한정** `roles/storage.objectAdmin`(latest.txt 덮어쓰기, 프로젝트 수준 아님).
+  파드 GSA(`gke_app`)는 같은 버킷 `roles/storage.objectViewer`(read only).
+- `SKYAHO/Autoresearch`는 이미 WIF 허용 목록이라 bootstrap 변경 불필요. 비용 영향
+  미미. output `code_artifacts_bucket_name`·`code_uploader_service_account_email`를
+  앱 리포 secret(`CODE_ARTIFACTS_BUCKET`·`GCS_CODE_UPLOADER_SA`)에 등록(앱팀).
+
 ## 2026-07-18: MLflow UI 내부 ILB 노출 (#244)
 
 - MLflow UI를 Airflow(#48)와 동일 패턴으로 **VPC 내부 전용 ILB + private DNS**로

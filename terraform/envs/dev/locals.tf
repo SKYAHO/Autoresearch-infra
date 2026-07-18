@@ -72,6 +72,9 @@ locals {
   feast_dataset_id                      = "feast_offline_store"
   feast_registry_bucket                 = "${var.project_id}-feast-registry"
   feast_staging_bucket                  = "${var.project_id}-feast-staging"
+  # #238 코드 아카이브 배포 버킷·업로더 SA. 버킷명은 이슈 예시(project_id 포함, 전역 유일).
+  code_artifacts_bucket = "${var.project_id}-code-artifacts"
+  code_uploader_sa_name = "${local.resource_prefix}-code-uploader"
   raw_data_prefixes = {
     youtube_raw            = "data_lake/youtube_trending_kr/"
     users_raw              = "asset/virtual_user/"

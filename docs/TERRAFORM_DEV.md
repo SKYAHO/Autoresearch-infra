@@ -41,6 +41,7 @@ terraform/
 │       ├── cloud_sql.tf      # #4 dev Cloud SQL (PostgreSQL, private IP)
 │       ├── redis.tf          # #129 Feast Online Store 2-shard Redis Cluster (PSC, IAM auth/TLS)
 │       ├── cloud_build.tf    # #32 Autoresearch-airflow Cloud Build IAM
+│       ├── code_artifacts.tf # #238 코드 아카이브 GCS 버킷 + 업로더 SA/WIF + 파드 read IAM
 │       ├── cloud_run.tf      # #27 Cloud Run proxy state/code 정합성
 │       ├── dns.tf            # #48 Airflow·#244 MLflow ILB 예약 내부 IP + private DNS zone
 │       ├── gke.tf            # #5 dev GKE cluster + 노드풀 + SA/WI
@@ -1038,6 +1039,26 @@ SA를 가장할 수 없으며, `release:published`에서만 tag ref를 허용한
 직접 비용이나 새 리전 리소스는 없고, 기존 서울 리전 GAR를 그대로 사용한다.
 롤백할 때는 대상 release workflow를 비활성화한 뒤 해당 저장소의 pusher SA와
 repository IAM을 제거하고 마지막으로 bootstrap 허용 목록에서 저장소를 뺀다.
+
+## 코드 아카이브 배포 (#238)
+
+Autoresearch가 main 머지/`workflow_dispatch` 시 코드 tar.gz를 GCS에 올리고
+(`code/<sha>.tar.gz`, `code/latest.txt` 갱신), GKE `autoresearch-app` 파드가 시작
+시 아카이브를 내려받아 실행하는 경로다(`code_artifacts.tf`). 앱 구현은
+`SKYAHO/Autoresearch#180`·`#182`, 워크플로우는 `code-archive.yml`.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| 버킷 | `ar-infra-501607-code-artifacts`(서울) | UBLA + public access 차단, versioning 없음. output `code_artifacts_bucket_name` |
+| 업로더 SA | `autoresearch-dev-code-uploader` | GitHub Actions가 WIF로 가장. output `code_uploader_service_account_email` |
+| WI 가장 허용 | `workflow_ref` = `…/code-archive.yml@refs/heads/main`만 | push(main)·dispatch(main) 모두 이 ref. 임의 브랜치·워크플로우 차단(#175/#221 관례) |
+| 업로더 권한 | 버킷 한정 `roles/storage.objectAdmin` | `latest.txt` 덮어쓰기 필요. 프로젝트 수준 아님 |
+| 파드 read | `gke_app` GSA에 버킷 한정 `roles/storage.objectViewer` | 아카이브 다운로드 |
+
+앱 리포 GitHub secret 등록(앱팀 수행): `CODE_ARTIFACTS_BUCKET` = 버킷명,
+`GCS_CODE_UPLOADER_SA` = 업로더 SA email(위 두 output). `SKYAHO/Autoresearch`는
+이미 WIF 허용 목록에 있어 bootstrap 변경은 불필요하다. 비용 영향 미미(수 MB
+아카이브, 머지마다 1객체). 롤백은 `code_artifacts.tf` 리소스 제거 후 apply.
 
 ## Vault auto-unseal 기반 (#132)
 
