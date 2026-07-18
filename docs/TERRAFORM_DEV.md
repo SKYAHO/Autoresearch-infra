@@ -533,6 +533,19 @@ webserver:
     externalTrafficPolicy: Local
 ```
 
+스케줄러 파드 안에서 Google provider 오퍼레이터를 직접 실행하는 DAG
+(`lake_to_bigquery_incremental`)를 위해, Helm chart가 생성하는 스케줄러
+KSA(`airflow/airflow-scheduler`)에 GSA annotation을 values로 주입한다(#240).
+GSA 측 `roles/iam.workloadIdentityUser` 바인딩은 이 저장소 Terraform
+(`airflow.tf`의 `airflow_scheduler_wi`)이 관리한다.
+
+```yaml
+scheduler:
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: autoresearch-dev-airflow@ar-infra-501607.iam.gserviceaccount.com
+```
+
 > `externalTrafficPolicy: Local`에서는 webserver pod가 있는 노드만 LB 헬스체크를
 > 통과한다. 위처럼 **replica 2 + PDB**를 두면 pod 재시작(가장 흔한 단절 원인)
 > 중에도 다른 replica가 트래픽을 받아 단절이 없다. 단 현재 airflow 노드풀이
@@ -585,6 +598,7 @@ localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내
 | app WI principal | `ar-infra-501607.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
 | Airflow batch SA(WI) | `autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com` | batch KSA 전용. API key secrets, raw_data, Feast 권한 |
 | Airflow batch WI principal | `ar-infra-501607.svc.id.goog[airflow/autoresearch-batch]` | Airflow batch KSA가 batch GSA를 가장 |
+| Airflow scheduler WI principal | `ar-infra-501607.svc.id.goog[airflow/airflow-scheduler]` | #240 스케줄러 파드 내 직접 실행 오퍼레이터용. airflow GSA를 가장. KSA annotation은 Airflow 저장소 Helm values에서 관리 |
 | Egress | Cloud NAT(`autoresearch-dev-nat`) | private 노드 AR(`*.pkg.dev`) pull |
 | NetworkPolicy enforcement | Calico enabled (#116) | admin root들의 NetworkPolicy 강제. 활성화 apply 시 노드풀 롤링 재생성 |
 | deletion_protection | false (dev) | 운영 전환 시 true |

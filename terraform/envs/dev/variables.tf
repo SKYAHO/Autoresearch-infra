@@ -341,6 +341,12 @@ variable "airflow_k8s_service_account" {
   default     = "airflow"
 }
 
+variable "airflow_scheduler_k8s_service_account" {
+  description = "Airflow Helm chart가 생성하는 스케줄러 KSA 이름. 스케줄러 파드에서 직접 실행되는 Google provider 오퍼레이터의 Workload Identity 매핑용."
+  type        = string
+  default     = "airflow-scheduler"
+}
+
 variable "airflow_batch_k8s_service_account" {
   description = "Airflow KubernetesPodOperator batch pod가 사용할 Kubernetes service account."
   type        = string

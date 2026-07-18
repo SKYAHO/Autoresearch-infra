@@ -22,6 +22,19 @@ resource "google_service_account_iam_member" "airflow_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
+# #240 lake_to_bigquery_incremental DAG는 KubernetesPodOperator가 아니라
+# 스케줄러 파드 안에서 Google provider 오퍼레이터(GCS 센서, BigQuery job)를
+# 직접 실행하므로, Helm chart가 생성하는 스케줄러 KSA(airflow-scheduler)도
+# airflow GSA를 가장할 수 있어야 한다. KSA annotation은 Autoresearch-airflow
+# 저장소의 Helm values(scheduler.serviceAccount.annotations)에서 관리한다.
+resource "google_service_account_iam_member" "airflow_scheduler_wi" {
+  service_account_id = google_service_account.airflow.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.airflow_scheduler_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
 resource "google_service_account_iam_member" "airflow_batch_wi" {
   service_account_id = google_service_account.airflow_batch.name
   role               = "roles/iam.workloadIdentityUser"
