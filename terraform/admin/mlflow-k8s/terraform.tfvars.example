@@ -13,3 +13,9 @@ mlflow_gcp_service_account_email = ""
 # terraform/envs/dev private_services_cidr, gke_services_cidr 값.
 private_services_cidr = "192.168.0.0/20"
 cluster_services_cidr = "172.16.128.0/24"
+
+# #236 mlflow 네임스페이스 view + pods/portforward 부여 대상.
+# 실제 Google 계정은 로컬 terraform.tfvars에만 둔다(예시는 placeholder).
+mlflow_viewer_user_emails = [
+  "model-training-owner@example.com",
+]
