@@ -54,7 +54,15 @@ Airflow GCP service account와 Workload Identity IAM binding을 포함한 대응
 
 현재 dev 클러스터는 GKE Standard + Calico를 사용합니다. 엄격한 egress
 NetworkPolicy에서 Workload Identity Federation이 동작하려면 GKE metadata
-server의 `169.254.169.252/32` TCP 987/988을 허용해야 합니다. Dataplane V2
+server의 `169.254.169.252/32` TCP 987/988을 허용해야 합니다.
+
+> ⚠️ `private_services_cidr`는 **Cloud SQL private IP가 속한 PSA 대역**
+> (`autoresearch-dev-private-sql-range`, 현재 `192.168.0.0/20`)과 반드시
+> 일치해야 합니다. dev root·`mlflow-k8s`와 같은 값입니다. 불일치 시 egress
+> NetworkPolicy가 5432를 차단해 Airflow webserver/scheduler가 metadata DB에
+> 접속하지 못하고 crash-loop에 빠집니다(#253). 확인:
+> `gcloud compute addresses list --global --filter=purpose=VPC_PEERING`.
+ Dataplane V2
 metadata endpoint인 `169.254.169.254/32` TCP 80 경로도 유지합니다. 두 경로 모두
 link-local `/32`와 필요한 TCP 포트만 허용하며 IAM 권한 자체를 변경하지 않습니다.
 
