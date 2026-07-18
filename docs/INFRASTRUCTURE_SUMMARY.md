@@ -211,7 +211,7 @@ flowchart TB
 | GCS | raw data bucket, Feast registry/staging bucket, Airflow DAG/log bucket | 원본 데이터, feature store 메타데이터, DAG/log 저장 |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` | 분석 데이터셋과 Feast offline store |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), Vault SA(#132) | 워크로드별 최소 권한과 Workload Identity |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), Vault SA(#132) | 워크로드별 최소 권한과 Workload Identity |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155) | 운영 관측 dashboard. 접근은 port-forward |
 | GitOps | ArgoCD(#84) + AppProject(#85). Application: `monitoring`(#183)·`argo-rollouts`(#186) | monitoring/rollouts를 ArgoCD Application으로 관리(manual sync). 검증 샘플은 제거. Rollouts 실 적용은 앱 배포 시 |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99), Filebeat allowlist 수집(#100) — `elastic` ns | airflow/autoresearch 로그 검색·분석. Cloud Logging과 병행 |

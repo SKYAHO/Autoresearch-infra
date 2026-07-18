@@ -32,6 +32,7 @@
 - Vault dev auto-unseal 1단계 GCP 기반(`vault.tf`): Cloud KMS unseal key ring/key, Vault GSA + Workload Identity, unseal 전용 custom role (#132)
 - Elasticsearch GCS snapshot 기반(`elastic.tf`): snapshot bucket, snapshot GSA + Workload Identity, bucket IAM (#102)
 - GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer (#121/#157/#187)
+- 코드 아카이브 배포 기반(`code_artifacts.tf`): 코드 아카이브 GCS bucket, 업로더 SA + WIF(code-archive workflow_ref 제한), 버킷 objectAdmin/파드 objectViewer IAM (#238)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
 ## 로컬 실행
@@ -69,6 +70,7 @@ terraform -chdir=terraform/envs/dev apply
 | KMS/Vault | key ring `vault`, crypto key `vault_unseal`, Vault GSA + unseal custom role (#132) |
 | Elastic snapshot | ES snapshot GCS bucket, snapshot GSA + Workload Identity (#102) |
 | CI pusher | GAR pusher SA, app image pusher SA, Airflow deployer SA (WIF, #121/#157/#187) |
+| 코드 아카이브 | 코드 아카이브 GCS bucket, 업로더 SA(WIF), 버킷 objectAdmin/파드 objectViewer (#238) |
 
 Issue #129의 `autoresearch-dev-redis-cluster`, 전용 PSC subnet/policy와
 `terraform/admin/autoresearch-k8s`는 apply 완료됐고, #203/#204에서 Feast ↔ Redis
