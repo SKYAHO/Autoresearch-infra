@@ -50,6 +50,7 @@ terraform/
 │       ├── vault.tf         # Vault auto-unseal KMS key/GSA/WI (#132)
 │       ├── elastic.tf       # Elasticsearch GCS snapshot bucket/GSA (#102)
 │       ├── github_actions.tf     # WIF pusher SA (GAR/app image/Airflow deployer)
+│       ├── code_artifacts.tf     # 코드 아카이브 GCS bucket + 업로더 SA/WIF + 파드 read IAM (#238)
 │       ├── README.md        # dev root 안내
 │       └── terraform.tfvars.example  # 변수 예시 (실값 커밋 금지)
 └── modules/                 # 재사용 module (현재 미사용, staging/prod 분리 시 추출)
