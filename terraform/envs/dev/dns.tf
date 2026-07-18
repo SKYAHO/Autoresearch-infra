@@ -36,6 +36,26 @@ resource "google_dns_record_set" "airflow" {
   rrdatas      = [google_compute_address.airflow_ilb.address]
 }
 
+# #244 MLflow UI 내부 노출 — Airflow(#48)와 동일 패턴. 내부 LoadBalancer는
+# oauth2-proxy(4180) 앞단에만 붙이고(인증 유지), mlflow:5000은 ClusterIP 내부
+# 전용을 유지한다. 이 VIP는 deploy/mlflow oauth2-proxy Service의 loadBalancerIP가
+# 참조한다. 인터넷 노출 없음, 접근은 Bastion(#47) 터널 경유.
+resource "google_compute_address" "mlflow_ilb" {
+  name         = "${local.resource_prefix}-mlflow-ilb"
+  region       = var.region
+  address_type = "INTERNAL"
+  subnetwork   = google_compute_subnetwork.dev.self_link
+  purpose      = "SHARED_LOADBALANCER_VIP"
+}
+
+resource "google_dns_record_set" "mlflow" {
+  managed_zone = google_dns_managed_zone.internal.name
+  name         = "mlflow.${var.internal_dns_domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_address.mlflow_ilb.address]
+}
+
 # #138 Google API 트래픽을 private.googleapis.com 고정 VIP(199.36.153.8/30)로
 # 유도하는 VPC 전용 zone. googleapis.com만 override하므로 pkg.dev(이미지 pull),
 # run.app(Cloud Run), metadata 경로는 영향이 없다. 이 zone 덕분에 Google API만
