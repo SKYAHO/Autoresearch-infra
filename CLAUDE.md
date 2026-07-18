@@ -59,6 +59,8 @@
   - `elastic.tf` — #102 Elasticsearch GCS snapshot bucket/GSA
   - `github_actions.tf` — WIF pusher SA 3종(각각 최소권한·repo@ref 제한): GAR
     pusher, app image pusher, Airflow deployer(container.clusterViewer)
+  - `code_artifacts.tf` — #238 코드 아카이브 배포 GCS 버킷 + 업로더 SA(WIF,
+    `code-archive.yml@main` workflow_ref 제한, 버킷 objectAdmin) + 파드 read IAM
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
   `airflow-k8s`(Airflow 경계), `argocd-k8s`(ArgoCD), `monitoring-k8s`(모니터링),
   `vault-k8s`(#134 Vault), `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK),
