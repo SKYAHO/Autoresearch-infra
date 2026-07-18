@@ -46,6 +46,17 @@ BigQuery IAM member가 함께 제거됩니다.
 이미 발급된 access token은 만료될 때까지, 보통 최대 약 1시간 동안 유효할 수
 있습니다.
 
+## 임시 학습 이미지 AR writer (#185/#256)
+
+학습 이미지(`autoresearch-training`)를 GAR에 첫 **수동 push**로 언블록하기 위해,
+`training_image_ar_writer_emails`의 각 계정에 **`autoresearch-dev-docker` 저장소
+범위** `roles/artifactregistry.writer`만 부여합니다(프로젝트 수준 아님,
+`team_member_emails`와 분리). 실제 이메일은 로컬 `terraform.tfvars`에만 둡니다.
+
+**임시 조치입니다.** 첫 push/E2E 검증이 끝나면 `training_image_ar_writer_emails`를
+빈 목록으로 두고 apply해 **회수**합니다. 항구적 이미지 push 경로는 개인 계정이
+아니라 앱 CI의 `application_pusher` WIF SA입니다(#185 본작업).
+
 팀원에게는
 [`docs/TEAM_OPERATIONS_RUNBOOK.md`](../../../docs/TEAM_OPERATIONS_RUNBOOK.md)의
 로컬 설정 절차를 공유합니다. 실제 공인 IP, kubeconfig 파일, service account key가

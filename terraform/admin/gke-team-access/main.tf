@@ -71,3 +71,18 @@ resource "google_project_iam_member" "bastion_compute_viewer_users" {
   role    = "roles/compute.viewer"
   member  = "user:${each.value}"
 }
+
+# #185/#256 임시: 학습 이미지(autoresearch-training)를 GAR에 첫 수동 push하도록
+# autoresearch-dev-docker 저장소 범위 writer만 부여한다. 프로젝트 수준이 아니라
+# 저장소 IAM으로 한정하고, 대상은 team_member_emails와 분리한 전용 변수로 둔다.
+# 회수: training_image_ar_writer_emails를 비우고 apply. 항구적 push 경로는 개인
+# 계정이 아니라 application_pusher WIF SA(앱 CI, #185 본작업)이다.
+resource "google_artifact_registry_repository_iam_member" "training_image_temp_writers" {
+  for_each = var.training_image_ar_writer_emails
+
+  project    = var.project_id
+  location   = var.region
+  repository = var.artifact_registry_repository_id
+  role       = "roles/artifactregistry.writer"
+  member     = "user:${each.value}"
+}
