@@ -44,3 +44,23 @@ variable "team_member_emails" {
     error_message = "Each item must be an email without a user: prefix."
   }
 }
+
+variable "artifact_registry_repository_id" {
+  description = "Artifact Registry Docker repository id used for the temporary training-image writer grant (#256)."
+  type        = string
+  default     = "autoresearch-dev-docker"
+}
+
+variable "training_image_ar_writer_emails" {
+  description = "임시(#185/#256): 학습 이미지 첫 수동 push용으로 autoresearch-dev-docker 저장소 범위 roles/artifactregistry.writer를 받는 계정. push/E2E 검증 후 비우고 apply해 회수한다. 항구적 push는 application_pusher WIF SA. Keep real values in local terraform.tfvars only."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for e in var.training_image_ar_writer_emails :
+      can(regex("^[^@]+@[^@]+\\.[^@]+$", e)) && !strcontains(e, ":")
+    ])
+    error_message = "Each item must be an email without a user: prefix."
+  }
+}

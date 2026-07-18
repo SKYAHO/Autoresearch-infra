@@ -3,6 +3,17 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-18: 학습 이미지 첫 push용 임시 repo-scoped AR writer (#256, 앱 #185)
+
+- 앱 `SKYAHO/Autoresearch#185`(학습 이미지 GAR publish) 언블록을 위해
+  `toastome@gmail.com`이 `autoresearch-training` 이미지를 **수동 첫 push**하도록
+  `autoresearch-dev-docker` 저장소 범위 `roles/artifactregistry.writer`를 부여한다.
+- 최소권한 경계: **저장소 범위만**(프로젝트 수준 아님), `team_member_emails`와 분리한
+  전용 변수 `training_image_ar_writer_emails`(로컬 tfvars), 사람 IAM 경계
+  `gke-team-access`에 위치. plan: 1 add(repo IAM member).
+- **⚠️ 임시 — 회수 필요**: 첫 push/E2E 검증 후 변수를 비우고 apply해 제거한다.
+  항구적 push 경로는 개인 계정이 아니라 `application_pusher` WIF SA(앱 CI, #185 본작업).
+
 ## 2026-07-18: autoresearch 네임스페이스 팀원 접근 RBAC (#252)
 
 - `autoresearch`(앱) 네임스페이스에 팀 RBAC가 전혀 없어 팀원 5명 전원이 앱/모델

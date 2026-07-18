@@ -12,3 +12,9 @@ team_member_emails = [
   "teammate-4@example.com",
   "teammate-5@example.com",
 ]
+
+# 임시(#185/#256): 학습 이미지 첫 수동 push용 autoresearch-dev-docker 저장소 범위
+# AR writer. push/E2E 검증 후 빈 목록으로 두고 apply해 회수한다. 평소엔 [] 유지.
+training_image_ar_writer_emails = [
+  # "teammate-x@example.com",
+]
