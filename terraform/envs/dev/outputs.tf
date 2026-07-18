@@ -164,6 +164,16 @@ output "github_actions_airflow_deployer_service_account_email" {
   value       = google_service_account.airflow_deployer.email
 }
 
+output "github_actions_code_uploader_service_account_email" {
+  description = "GitHub Actions (Autoresearch) WIF가 가장하여 코드 아카이브를 GCS에 올리는 SA email(#238). 앱 리포 secrets.GCS_CODE_UPLOADER_SA 값으로 사용."
+  value       = google_service_account.code_uploader.email
+}
+
+output "code_artifacts_bucket_name" {
+  description = "코드 아카이브 배포 버킷 이름(#238). 앱 리포 secrets.CODE_ARTIFACTS_BUCKET 값으로 사용."
+  value       = google_storage_bucket.code_artifacts.name
+}
+
 output "cloud_build_bucket_name" {
   description = "Autoresearch-airflow build가 사용하는 Cloud Build 기본 staging bucket 이름."
   value       = local.cloud_build_bucket_name

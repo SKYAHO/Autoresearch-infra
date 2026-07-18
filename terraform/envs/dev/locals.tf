@@ -72,6 +72,7 @@ locals {
   feast_dataset_id                      = "feast_offline_store"
   feast_registry_bucket                 = "${var.project_id}-feast-registry"
   feast_staging_bucket                  = "${var.project_id}-feast-staging"
+  code_artifacts_bucket_name            = "${var.project_id}-code-artifacts"
   raw_data_prefixes = {
     youtube_raw            = "data_lake/youtube_trending_kr/"
     users_raw              = "asset/virtual_user/"

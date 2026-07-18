@@ -8,6 +8,7 @@ locals {
   gar_pusher_sa_name         = "${local.resource_prefix}-gar-pusher"
   application_pusher_sa_name = "${local.resource_prefix}-app-pusher"
   airflow_deployer_sa_name   = "${local.resource_prefix}-airflow-cd"
+  code_uploader_sa_name      = "${local.resource_prefix}-code-uploader"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).
@@ -85,4 +86,30 @@ resource "google_project_iam_member" "airflow_deployer_cluster_viewer" {
   project = var.project_id
   role    = "roles/container.clusterViewer"
   member  = "serviceAccount:${google_service_account.airflow_deployer.email}"
+}
+
+# #238 코드 아카이브 업로더 SA.
+# Autoresearch code-archive 워크플로우가 WIF로 가장해 코드 아카이브를 GCS에 올린다.
+# 이미지 push 계정과 분리해 저장소 간 권한 전이를 막는다.
+resource "google_service_account" "code_uploader" {
+  account_id   = local.code_uploader_sa_name
+  display_name = "Autoresearch dev code archive uploader SA"
+  description  = "Impersonated by Autoresearch GitHub Actions via WIF to upload code archives to the code-artifacts bucket."
+}
+
+# 정확한 Autoresearch code-archive 워크플로우(main)만 이 SA 가장을 허용한다.
+# application_pusher와 동일하게 repository가 아니라 workflow_ref(파일@ref)로 제한해
+# 같은 저장소의 임의 브랜치·다른 워크플로우가 업로더 권한을 얻지 못하게 한다.
+resource "google_service_account_iam_member" "code_uploader_wi" {
+  service_account_id = google_service_account.code_uploader.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.code_uploader_workflow_ref}"
+}
+
+# code-artifacts 버킷에만 objectAdmin을 부여한다. latest.txt를 덮어써야 하므로
+# objectCreator로는 부족하고, 프로젝트 전역이 아니라 이 버킷 단위로 제한한다.
+resource "google_storage_bucket_iam_member" "code_uploader_object_admin" {
+  bucket = google_storage_bucket.code_artifacts.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.code_uploader.email}"
 }

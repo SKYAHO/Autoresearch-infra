@@ -1039,6 +1039,31 @@ SA를 가장할 수 없으며, `release:published`에서만 tag ref를 허용한
 롤백할 때는 대상 release workflow를 비활성화한 뒤 해당 저장소의 pusher SA와
 repository IAM을 제거하고 마지막으로 bootstrap 허용 목록에서 저장소를 뺀다.
 
+## GitHub Actions 코드 아카이브 업로드 (#238)
+
+`SKYAHO/Autoresearch`의 `code-archive.yml`(push:main + workflow_dispatch)이 WIF로
+전용 업로더 SA를 가장해 코드 아카이브를 GCS에 올리는 경로다(`github_actions.tf`,
+`storage.tf`). main 머지 시 `code/<sha>.tar.gz`와 `code/latest.txt`를 올리고,
+feast 파드가 시작 시 `latest.txt`가 가리키는 아카이브를 내려받아 실행한다.
+앱 레포 구현은 PR `SKYAHO/Autoresearch#180`, `#182`.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| 버킷 | `ar-infra-501607-code-artifacts` | `${project_id}-code-artifacts`, 서울, versioning 없음, `prevent_destroy` |
+| 업로더 SA | `autoresearch-dev-code-uploader` | WI 가장은 `code-archive.yml@refs/heads/main` `workflow_ref`로만 허용(app-pusher와 동일 최소권한). 버킷 단위 `roles/storage.objectAdmin`(latest.txt overwrite 필요) |
+| 파드 읽기 | `gke_app` GSA에 버킷 `roles/storage.objectViewer` | feast 파드가 아카이브 다운로드 |
+
+배포 저장소에 전달할 값(앱 레포 GitHub secret 등록은 앱 레포 담당):
+
+| secret | dev output |
+|---|---|
+| `CODE_ARTIFACTS_BUCKET` | `code_artifacts_bucket_name` |
+| `GCS_CODE_UPLOADER_SA` | `github_actions_code_uploader_service_account_email` |
+
+이미지 push SA와 분리해 저장소 간 권한 전이를 막고, GAR가 아니라 GCS 한 버킷
+objectAdmin으로 권한을 좁힌다. 롤백은 `code_uploader*` 리소스와 버킷을 제거한다
+(버킷은 `prevent_destroy`라 먼저 lifecycle 해제 필요).
+
 ## Vault auto-unseal 기반 (#132)
 
 HashiCorp Vault dev 도입 1단계(설계:

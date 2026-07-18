@@ -144,3 +144,36 @@ resource "google_storage_bucket_iam_member" "feast_staging_gke_app_bucket_reader
   role   = "roles/storage.legacyBucketReader"
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
+
+# #238 코드 아카이브 배포 버킷.
+# main 머지 시 GitHub Actions가 code/<sha>.tar.gz와 code/latest.txt를 올리고,
+# feast 파드가 시작 시 latest.txt가 가리키는 아카이브를 내려받아 실행한다.
+# 코드 아카이브는 git에서 언제든 재생성 가능하므로 versioning은 두지 않는다.
+resource "google_storage_bucket" "code_artifacts" {
+  name                        = local.code_artifacts_bucket_name
+  location                    = var.region
+  storage_class               = "STANDARD"
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  soft_delete_policy {
+    retention_duration_seconds = 0
+  }
+
+  labels = {
+    data_class = "artifacts"
+    purpose    = "code-archives"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# feast 파드(autoresearch-app KSA→gke_app GSA)가 코드 아카이브를 다운로드한다. 읽기 전용.
+resource "google_storage_bucket_iam_member" "code_artifacts_gke_app_object_viewer" {
+  bucket = google_storage_bucket.code_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.gke_app.email}"
+}

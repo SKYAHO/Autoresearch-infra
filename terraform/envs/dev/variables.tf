@@ -563,3 +563,9 @@ variable "application_release_workflow_event_path" {
   type        = string
   default     = "release:SKYAHO/Autoresearch/.github/workflows/release.yml"
 }
+
+variable "code_uploader_workflow_ref" {
+  description = "코드 아카이브 업로더 SA를 가장할 수 있는 정확한 Autoresearch code-archive workflow_ref. push(main)와 workflow_dispatch 모두 main workflow file@ref로 제한해 임의 브랜치·워크플로우의 가장을 막는다."
+  type        = string
+  default     = "SKYAHO/Autoresearch/.github/workflows/code-archive.yml@refs/heads/main"
+}
