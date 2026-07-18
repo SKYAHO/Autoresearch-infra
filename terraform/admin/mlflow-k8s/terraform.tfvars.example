@@ -1,0 +1,15 @@
+project_id       = "your-gcp-project-id"
+region           = "asia-northeast3"
+zone             = "asia-northeast3-a"
+gke_cluster_name = "autoresearch-dev-gke"
+resource_prefix  = "autoresearch-dev"
+
+mlflow_k8s_namespace       = "mlflow"
+mlflow_k8s_service_account = "mlflow"
+
+# Optional. Empty value derives autoresearch-dev-mlflow@<project_id>.iam.gserviceaccount.com
+mlflow_gcp_service_account_email = ""
+
+# terraform/envs/dev private_services_cidr, gke_services_cidr 값.
+private_services_cidr = "192.168.0.0/20"
+cluster_services_cidr = "172.16.128.0/24"

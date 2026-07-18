@@ -48,14 +48,17 @@ jobs:
           TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
           TF_VAR_master_authorized_networks: ${{ vars.MASTER_AUTHORIZED_NETWORKS || '[]' }}
         # -detailed-exitcode: 0=일치, 1=오류, 2=drift.
-        # plan 출력의 user:email PII는 terraform-plan.yml과 동일하게 마스킹.
+        # plan 원문은 runner 임시파일에만 둔다(공개 이슈에 게시 금지). 공개
+        # 이슈에는 리소스 주소·요약만 올리므로 안전한 요약을 추출해 둔다.
         run: |
           set +e
-          set -o pipefail
-          terraform -chdir=terraform/envs/dev plan -no-color -input=false -detailed-exitcode 2>&1 \
-            | sed -E 's/(user:)[^"[:space:]]+/\1[REDACTED]/g' > /tmp/plan.out
+          terraform -chdir=terraform/envs/dev plan -no-color -input=false -detailed-exitcode > /tmp/plan.out 2>&1
           code=$?
           echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
+          # allowlist: '# <addr> will be/must be ...' 리소스 주소 헤더와
+          # 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는 포함 안 함.
+          grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' \
+            /tmp/plan.out > /tmp/plan.summary || true
           # 이 step 자체는 항상 성공 처리하고 판정은 아래 step에서 한다
           exit 0
 
@@ -67,25 +70,30 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            let plan = '(plan 출력 없음)';
-            try { plan = fs.readFileSync('/tmp/plan.out', 'utf8'); } catch (e) {}
             const code = process.env.PLAN_EXITCODE;
             const kind = code === '2' ? 'drift 감지' : 'plan 오류';
             const marker = '[DRIFT] dev root 코드-인프라 불일치';
-            const body = [
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const header = [
               `자동 감지(${new Date().toISOString()}): **${kind}** (exit ${code})`,
               '',
               'merge된 코드와 실제 인프라가 일치하지 않거나 plan이 실패했습니다.',
               '원인 확인 후 apply 완결 또는 코드 정정이 필요합니다.',
               '',
-              '<details><summary>plan 출력 (마스킹됨, 최대 20000자)</summary>',
-              '',
-              '```hcl',
-              plan.slice(0, 20000),
-              '```',
-              '',
-              '</details>',
-            ].join('\n');
+              `전체 로그: ${runUrl}`,
+            ];
+            let detail;
+            if (code === '2') {
+              // drift: 리소스 주소·action 요약만(속성 diff/값 라인 제외). 원문 미게시.
+              let summary = '';
+              try { summary = fs.readFileSync('/tmp/plan.summary', 'utf8').trim(); } catch (e) {}
+              if (!summary) summary = '(변경 요약 추출 실패 — Actions 로그 확인)';
+              detail = ['', '변경 리소스 요약(주소·action):', '', '```text', summary.slice(0, 20000), '```'];
+            } else {
+              // plan 오류(exit 1): 오류 원문에 민감정보가 섞일 수 있어 게시하지 않는다.
+              detail = ['', 'plan 오류 원문은 공개하지 않습니다. Actions 로그에서 확인하세요.'];
+            }
+            const body = [...header, ...detail].join('\n');
             // label 3종으로 좁혀 조회 — open 이슈+PR 100개 초과 시 기존
             // [DRIFT] 이슈가 첫 페이지에서 밀려 중복 생성되는 것을 방지
             // (리뷰 반영). labels 필터는 모든 라벨을 가진 이슈만 반환한다.

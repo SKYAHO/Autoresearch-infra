@@ -1,0 +1,92 @@
+# #94 MLflow tracking server. ArgoCD(deploy/mlflow)가 이 매니페스트를 배포한다.
+# 이미지: 앱 저장소 deploy/mlflow/Dockerfile(v2.22.1 + psycopg2 + google-cloud-storage)을
+# 인프라 Cloud Build로 GAR에 빌드한 것. 앱팀이 자기 파이프라인에 얹으면 image를 re-point.
+# backend host(private IP)·비밀번호는 공개 저장소에 넣지 않고 operator 주입 Secret
+# `mlflow-db`(POSTGRES_HOST/POSTGRES_PASSWORD)에서 받는다(mlflow-k8s README 참조).
+# GCS artifact 인증은 Workload Identity(KSA mlflow)로 처리하며 SA key를 쓰지 않는다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlflow
+  labels:
+    app.kubernetes.io/name: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mlflow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mlflow
+    spec:
+      serviceAccountName: mlflow
+      containers:
+        - name: mlflow
+          image: asia-northeast3-docker.pkg.dev/ar-infra-501607/autoresearch-dev-docker/autoresearch-mlflow@sha256:21f1bde1b0b2a0e0a52646fed836b2471a7bcbced2e1d3b47ff4513e50cc97da
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: GOOGLE_CLOUD_PROJECT
+              value: "ar-infra-501607"
+            - name: MLFLOW_ARTIFACT_DESTINATION
+              value: "gs://ar-infra-501607-autoresearch-mlflow-artifacts"
+            - name: POSTGRES_USER
+              value: "mlflow"
+            - name: POSTGRES_DB
+              value: "mlflow"
+            # host(private IP)·비밀번호는 operator 주입 Secret에서만.
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-db
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlflow-db
+                  key: POSTGRES_PASSWORD
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              exec mlflow server \
+                --host 0.0.0.0 \
+                --port 5000 \
+                --workers 2 \
+                --backend-store-uri \
+                "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}" \
+                --serve-artifacts \
+                --artifacts-destination "${MLFLOW_ARTIFACT_DESTINATION}"
+          # startupProbe로 느린 최초 기동(DB 마이그레이션 등)을 허용하고, 그 뒤에만
+          # liveness/readiness가 동작한다. timeout은 1s→5s로 완화(#229 OOM 조사 반영).
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi

@@ -1,6 +1,6 @@
 # 에이전트 프로젝트 참조
 
-> Last Updated: 2026-07-13
+> Last Updated: 2026-07-16
 
 프로젝트 구조, 폴더 책임, 팀 소유권을 빠르게 찾기 위한 문서입니다.
 "X는 어디에 있는가?", "Y는 누가 소유하는가?" 질문에 답합니다.
@@ -47,27 +47,46 @@ terraform/
 │       ├── secret_manager.tf     # Secret Manager
 │       ├── bastion.tf       # IAP 전용 bastion host (#47)
 │       ├── dns.tf           # Airflow ILB 고정 IP + private DNS zone (#48)
+│       ├── vault.tf         # Vault auto-unseal KMS key/GSA/WI (#132)
+│       ├── elastic.tf       # Elasticsearch GCS snapshot bucket/GSA (#102)
+│       ├── github_actions.tf     # WIF pusher SA (GAR/app image/Airflow deployer)
+│       ├── README.md        # dev root 안내
 │       └── terraform.tfvars.example  # 변수 예시 (실값 커밋 금지)
-└── modules/                 # 재사용 module (예정)
+└── modules/                 # 재사용 module (현재 미사용, staging/prod 분리 시 추출)
 
 .github/
 ├── ISSUE_TEMPLATE/          # Issue Forms (feature/bug/experiment)
 ├── workflows/
 │   ├── lint.yml             # actionlint (required check)
 │   ├── terraform-plan.yml   # PR Terraform plan (OIDC/WIF + PR comment)
+│   ├── terraform-drift.yml  # dev root state drift 주기 감지
 │   └── claude.yml           # Claude Code PR 리뷰
 └── PULL_REQUEST_TEMPLATE.md
 
+deploy/                      # ArgoCD umbrella chart (Terraform helm_release에서 이관)
+├── monitoring/              # kube-prometheus-stack umbrella (Application monitoring, #183)
+└── argo-rollouts/           # argo-rollouts umbrella (Application argo-rollouts, #186)
+
 docs/
 ├── README.md                # 운영 문서 진입점
+├── INFRASTRUCTURE_SUMMARY.md   # dev 인프라 전체 구성 요약
 ├── TEAM_OPERATIONS_RUNBOOK.md  # 팀원 GKE/Bastion/Airflow UI 접근 절차와 권한 기록
 ├── TERRAFORM_DEV.md         # dev 환경 구성과 필요 GCP API
 ├── TERRAFORM_BOOTSTRAP.md   # bootstrap root (state bucket/WIF/CI SA) 절차
+├── GITOPS_STRATEGY.md       # ArgoCD 책임 경계와 Terraform→ArgoCD 이관 전략
+├── OBSERVABILITY_STRATEGY.md   # Prometheus/Grafana 관측 설계 배경
+├── ARGOCD_OPERATIONS_RUNBOOK.md    # ArgoCD 접속/sync/diff/rollback 운영
+├── GRAFANA_OPERATIONS_RUNBOOK.md   # Grafana 점검·앱 메트릭 e2e 검증
+├── ROLLOUTS_OPERATIONS_RUNBOOK.md  # Argo Rollouts promote/abort 운영
+├── KIBANA_OPERATIONS_RUNBOOK.md    # Kibana/ELK 로그 운영
+├── VAULT_OPERATIONS_RUNBOOK.md     # Vault 접속·시크릿 운영
 ├── CHANGE_HISTORY.md        # 완료된 주요 인프라 변경 결정 요약
 ├── BRANCH_RULESET_MAIN.md   # main ruleset 설명
 ├── GITHUB_LABELS_AND_PROJECT.md  # label/Project 운영 기준
 └── superpowers/
-    └── README.md            # 작업 중 spec/plan 사용 기준
+    ├── README.md            # 작업 중 spec/plan 사용 기준
+    ├── specs/               # 설계 spec (YYYY-MM-DD-<slug>-design.md)
+    └── plans/               # 구현 plan (YYYY-MM-DD-<slug>.md)
 
 CONTRIBUTING.md              # 사람용 협업 규칙 (워크플로우 전체)
 branch_ruleset_main.json     # main branch ruleset 정의

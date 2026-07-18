@@ -50,6 +50,20 @@ resource "google_project_iam_member" "airflow_batch_bigquery_job_user" {
   member  = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 
+# feast materialize는 BigQuery offline store를 Storage Read API로 읽는다.
+# airflow/airflow_batch도 feast를 실행하므로 gke_app과 동일하게 readSessionUser 보강. (#204)
+resource "google_project_iam_member" "airflow_bigquery_read_session" {
+  project = var.project_id
+  role    = "roles/bigquery.readSessionUser"
+  member  = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_project_iam_member" "airflow_batch_bigquery_read_session" {
+  project = var.project_id
+  role    = "roles/bigquery.readSessionUser"
+  member  = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
 # --- Cloud SQL metadata DB ---
 
 resource "google_sql_database" "airflow" {
@@ -262,6 +276,32 @@ resource "google_storage_bucket_iam_member" "airflow_batch_feast_registry_admin"
 resource "google_storage_bucket_iam_member" "airflow_batch_feast_staging_admin" {
   bucket = google_storage_bucket.feast_staging.name
   role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
+# feast GCS registry의 bucket.reload()에 필요한 storage.buckets.get 보강.
+# objectAdmin에는 없어 legacyBucketReader로 딱 그 권한만 추가한다. (#204)
+resource "google_storage_bucket_iam_member" "airflow_feast_registry_bucket_reader" {
+  bucket = google_storage_bucket.feast_registry.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_storage_bucket_iam_member" "airflow_feast_staging_bucket_reader" {
+  bucket = google_storage_bucket.feast_staging.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_storage_bucket_iam_member" "airflow_batch_feast_registry_bucket_reader" {
+  bucket = google_storage_bucket.feast_registry.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
+resource "google_storage_bucket_iam_member" "airflow_batch_feast_staging_bucket_reader" {
+  bucket = google_storage_bucket.feast_staging.name
+  role   = "roles/storage.legacyBucketReader"
   member = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 

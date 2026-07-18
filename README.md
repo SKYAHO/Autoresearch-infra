@@ -38,7 +38,8 @@
 │   ├── bootstrap/          # 원격 state bucket, WIF, CI SA 부트스트랩
 │   ├── envs/
 │   │   └── dev/            # dev 환경 Terraform root module
-│   └── modules/            # 재사용 module 예정
+│   └── modules/            # 재사용 module(현재 미사용, staging/prod 분리 시 추출)
+├── deploy/                 # ArgoCD가 sync하는 umbrella chart(monitoring, argo-rollouts)
 ├── docs/                   # 인프라/GitHub 운영 문서
 ├── .claude/
 │   └── docs/               # 에이전트 상세 가이드

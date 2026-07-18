@@ -49,9 +49,13 @@ locals {
   redis_service_connection_policy_name = "${local.resource_prefix}-redis-psc"
   redis_server_ca_secret_id            = "${local.resource_prefix}-redis-server-ca"
 
-  gke_cluster_name                      = "${local.resource_prefix}-gke"
-  gke_node_sa_name                      = "${local.resource_prefix}-gke-nodes"
-  gke_app_sa_name                       = "${local.resource_prefix}-app"
+  gke_cluster_name = "${local.resource_prefix}-gke"
+  gke_node_sa_name = "${local.resource_prefix}-gke-nodes"
+  gke_app_sa_name  = "${local.resource_prefix}-app"
+  mlflow_sa_name   = "${local.resource_prefix}-mlflow"
+  # #226: 앱팀이 수동 생성한 기존 버킷명(${project_id}-${name_prefix}-mlflow-artifacts)을
+  # 그대로 adopt한다. feast 버킷과 동일하게 project_id를 포함해 전역 유일성 확보.
+  mlflow_artifacts_bucket               = "${var.project_id}-${var.name_prefix}-mlflow-artifacts"
   gke_node_pool_name                    = "dev-default"
   airflow_batch_sa_name                 = "${local.resource_prefix}-airflow-batch"
   airflow_youtube_api_key_secret_id     = "${local.resource_prefix}-youtube-api-key"
@@ -61,6 +65,8 @@ locals {
   gke_pods_range_name                   = "gke-pods"
   gke_services_range_name               = "gke-services"
   db_password_secret_id                 = "${local.resource_prefix}-db-password"
+  mlflow_db_password_secret_id          = "${local.resource_prefix}-mlflow-db-password"
+  mlflow_oauth_client_secret_secret_id  = "${local.resource_prefix}-mlflow-oauth-client-secret"
   raw_data_bucket_name                  = "${var.project_id}-${local.resource_prefix}-raw-data"
   bigquery_dataset_id                   = replace("${local.resource_prefix}_analytics", "-", "_")
   feast_dataset_id                      = "feast_offline_store"
@@ -78,6 +84,8 @@ locals {
     personas_raw_snapshots = "data/raw/personas/"
   }
   gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
+
+  mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
 
   airflow_sa_name                           = "${local.resource_prefix}-airflow"
   airflow_workload_identity_principal       = "${var.project_id}.svc.id.goog[${var.airflow_k8s_namespace}/${var.airflow_k8s_service_account}]"

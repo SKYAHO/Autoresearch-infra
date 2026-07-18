@@ -287,6 +287,48 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "mlflow_db_name" {
+  description = "기존 Cloud SQL 인스턴스 내 MLflow 전용 database 이름(Airflow/앱과 분리)."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_db_user" {
+  description = "MLflow 전용 Cloud SQL user 이름."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_k8s_namespace" {
+  description = "MLflow tracking server KSA가 배치될 Kubernetes namespace(#94 mlflow-k8s에서 생성)."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_k8s_service_account" {
+  description = "MLflow GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "mlflow"
+}
+
+variable "mlflow_bucket_location" {
+  description = "MLflow artifact GCS bucket location."
+  type        = string
+  default     = "asia-northeast3"
+}
+
+variable "mlflow_bucket_storage_class" {
+  description = "MLflow artifact GCS bucket storage class."
+  type        = string
+  default     = "STANDARD"
+}
+
+variable "mlflow_artifacts_soft_delete_seconds" {
+  description = "MLflow artifact bucket soft delete 보존(초). 기본 7일 복구층(#179 교훈)."
+  type        = number
+  default     = 604800
+}
+
 variable "airflow_k8s_namespace" {
   description = "Airflow Helm release, Airflow KSA, batch KSA가 배치될 Kubernetes namespace."
   type        = string
@@ -505,7 +547,13 @@ variable "airflow_deploy_ref" {
 }
 
 variable "application_release_workflow_ref" {
-  description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. release tag ref와 독립적으로 workflow 파일과 source ref를 고정한다."
+  description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. workflow_dispatch는 main source ref로 제한한다."
   type        = string
   default     = "SKYAHO/Autoresearch/.github/workflows/release.yml@refs/heads/main"
+}
+
+variable "application_release_workflow_event_path" {
+  description = "애플리케이션 GAR push SA를 가장할 수 있는 tag 기반 release 이벤트의 정확한 Autoresearch release 워크플로우 경로. event_name과 workflow path를 함께 검증한다."
+  type        = string
+  default     = "release:SKYAHO/Autoresearch/.github/workflows/release.yml"
 }
