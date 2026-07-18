@@ -42,6 +42,10 @@ kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
 - MLflow 클라이언트(SDK)로 직접 쓸 때는 인증 우회가 필요하므로 GKE 내부 워크로드는
   `http://mlflow.mlflow:5000`(proxy 미경유, 내부 전용)을 tracking URI로 쓴다.
 - port-forward가 timeout이면 실행 IP가 master authorized networks에 없는 것이다.
+- 팀원 접근(#236): `mlflow` 네임스페이스에 팀원 5명 계정별 namespace RBAC(ClusterRole
+  `view` + `pods/portforward` create)를 부여해 cluster-admin 없이 port-forward가
+  가능하다. 대상은 `terraform/admin/mlflow-k8s`의 `mlflow_viewer_user_emails`.
+  `pods/exec`·secret 읽기·write는 부여하지 않는다.
 
 ## 실험/모델 등록 (클라이언트)
 
@@ -131,4 +135,7 @@ kubectl delete pod mlflow-probe -n mlflow
 
 - 설계·경계: `superpowers/specs/2026-07-17-mlflow-operating-design.md`, [`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md)
 - 경계 root README: `terraform/admin/mlflow-k8s/README.md`
-- UI 인증(OAuth2-proxy)·내부 ILB는 후속 과제. 현재는 내부 port-forward 접근만.
+- UI 인증(OAuth2-proxy)은 #232로 완료. 팀원 port-forward RBAC은 #236로 완료.
+  내부 ILB 노출은 #244 진행 중(1단계 예약 IP/DNS 구현, Service flip은 콘솔
+  redirect URI 등록·apply 후 2단계). 현재 접근은 port-forward.
+  설계: `superpowers/specs/2026-07-18-mlflow-internal-ilb-design.md`.

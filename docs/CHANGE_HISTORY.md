@@ -3,6 +3,30 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-18: MLflow 팀원 port-forward RBAC (#236)
+
+- `mlflow` 네임스페이스에 RBAC가 전혀 없어 Model Training 담당자가 실배포된
+  MLflow UI를 `kubectl port-forward`로 검증하지 못했다. `airflow-k8s`의
+  `installer_user_emails` 패턴을 따라 `terraform/admin/mlflow-k8s`에 최소 권한을
+  부여한다: built-in ClusterRole `view`(secret 제외 read) namespace RoleBinding +
+  `pods/portforward` create 전용 Role. 대상은 `mlflow_viewer_user_emails`(로컬
+  tfvars, 팀원 5명).
+- 최소권한 경계: `pods/exec`·write·cluster-admin은 부여하지 않는다. apply 결과
+  live 검증 — `can-i create pods --subresource=portforward` yes, `pods/exec`·
+  `secrets` no, `kubectl port-forward svc/mlflow` 정상.
+- 롤백: 대상 계정을 tfvars에서 제거 후 apply하면 해당 RoleBinding만 삭제된다.
+
+## 2026-07-18: airflow→MLflow tracking egress 허용 (#234, PR #235)
+
+- `airflow` 네임스페이스의 deny-by-default egress NetworkPolicy에 `mlflow.mlflow:5000`
+  규칙이 없어 향후 KubernetesPodOperator CTR 학습 Pod가 tracking server에
+  접속할 수 없었다. `airflow-k8s`의 egress에 두 규칙을 추가한다: `cluster_services_cidr`
+  ipBlock TCP 5000(주 경로 — Calico가 egress를 DNAT 이전 Service VIP 기준으로
+  평가)과 `mlflow` namespace selector TCP 5000(DNAT 이후 dataplane 대비 fallback,
+  기존 kube-dns 패턴과 동일).
+- NetworkPolicy 1개 in-place 변경만, 다른 egress 규칙 영향 없음. apply 후 live
+  검증 — airflow Pod → `http://mlflow.mlflow:5000/health` HTTP 200.
+
 ## 2026-07-16: 팀원 BigQuery 분석 권한을 별도 admin state로 관리 (#215)
 
 - 팀원 Google 계정에 프로젝트 수준 `roles/bigquery.jobUser`와

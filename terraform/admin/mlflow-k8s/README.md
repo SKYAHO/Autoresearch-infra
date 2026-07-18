@@ -106,13 +106,15 @@ apply는 `#234`와 동일하게 GCS state 버킷 쓰기 권한과 `master_author
 `kubernetes_role_v1.mlflow_portforward` 1개 + 계정별 RoleBinding 2개(view,
 portforward)만 add로 보여야 한다.
 
-검증(대상 계정 자격으로):
+검증(대상 계정 자격으로). subresource는 `pods/portforward` 문자열이 아니라
+`--subresource`로 확인한다 — `kubectl auth can-i create pods/portforward`는
+문법상 실제 권한과 무관하게 `no`를 반환하므로 오해하지 말 것.
 
 ```bash
-kubectl auth can-i create pods/portforward -n mlflow   # → yes
-kubectl auth can-i create pods/exec        -n mlflow   # → no (부여 안 함)
-kubectl auth can-i create secrets          -n mlflow   # → no
-kubectl port-forward -n mlflow svc/mlflow 5000:5000    # 접속 성공
+kubectl auth can-i create pods --subresource=portforward -n mlflow  # → yes
+kubectl auth can-i create pods --subresource=exec        -n mlflow  # → no (부여 안 함)
+kubectl auth can-i get    secrets                        -n mlflow  # → no (view는 secret 제외)
+kubectl port-forward -n mlflow svc/mlflow 5000:5000                 # 접속 성공
 ```
 
 롤백: 대상 계정을 `mlflow_viewer_user_emails`에서 제거하고 다시 apply하면 해당

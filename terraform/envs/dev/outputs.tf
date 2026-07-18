@@ -314,6 +314,16 @@ output "airflow_internal_fqdn" {
   value       = trimsuffix(google_dns_record_set.airflow.name, ".")
 }
 
+output "mlflow_ilb_ip" {
+  description = "MLflow oauth2-proxy internal LB 예약 내부 IP(#244). oauth2-proxy Service loadBalancerIP로 사용."
+  value       = google_compute_address.mlflow_ilb.address
+}
+
+output "mlflow_internal_fqdn" {
+  description = "MLflow UI 내부 도메인(#244). Bastion 터널 상태에서 브라우저 접속 주소."
+  value       = trimsuffix(google_dns_record_set.mlflow.name, ".")
+}
+
 output "airflow_oauth_client_id_secret_id" {
   description = "Airflow Google OAuth client ID Secret Manager secret id(#54). Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_oauth_client_id.secret_id
