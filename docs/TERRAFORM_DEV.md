@@ -473,12 +473,13 @@ Airflow(#48)와 동일 패턴. 단 인증 유지를 위해 ILB는 **oauth2-proxy
 | ILB 예약 내부 IP | `autoresearch-dev-mlflow-ilb` | dev subnet 내부 예약, `output.mlflow_ilb_ip` |
 | 레코드 | `mlflow.dev.autoresearch.internal` → ILB IP | A, TTL 300. 기존 `internal` zone 재사용 |
 | LB 대상 | oauth2-proxy Service(4180) | `deploy/mlflow`(ArgoCD). `mlflow:5000`은 미노출 |
-| 인증 | oauth2-proxy(Google + 허용 이메일) 유지 | redirect URI를 `http://mlflow.dev.autoresearch.internal/oauth2/callback`로 변경(콘솔 등록 선행) |
+| 인증 | oauth2-proxy(Google + 허용 이메일) 유지 | redirect URI `localhost:4180` **불변**(터널 접속이라 콘솔 재등록 불필요) |
 | 노출 범위 | **VPC 내부 전용** | 인터넷 노출 없음. 접근은 Bastion(#47) 터널 경유 |
 
-단계: (1) 예약 IP + DNS apply(dev root) → (2) 콘솔 OAuth redirect URI 등록 →
-(3) oauth2-proxy Service를 internal LB로 flip + redirect-url 변경(ArgoCD sync).
-상세는 `docs/superpowers/specs/2026-07-18-mlflow-internal-ilb-design.md`.
+단계: (1) 예약 IP + DNS apply(dev root, IP `10.10.0.22`) → (2) oauth2-proxy
+Service를 internal LB로 flip(ArgoCD sync). Airflow #48과 동일하게 브라우저는
+Bastion 터널로 `localhost:4180`에 접속하므로 redirect URI는 그대로다. 상세는
+`docs/superpowers/specs/2026-07-18-mlflow-internal-ilb-design.md`.
 
 ### private googleapis DNS zone (#138)
 

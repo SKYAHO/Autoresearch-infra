@@ -16,6 +16,7 @@
 | Monitoring namespace | `monitoring` |
 | Bastion | `autoresearch-dev-bastion` |
 | Airflow internal FQDN | `airflow.dev.autoresearch.internal` |
+| MLflow internal FQDN | `mlflow.dev.autoresearch.internal` |
 
 ## 팀원 사전 준비
 
@@ -169,6 +170,37 @@ http://localhost:8080
 
 Google OAuth redirect URI가 `http://localhost:8080/oauth-authorized/google` 기준이라
 로그인은 `localhost:8080` 경로에서만 정상 동작한다.
+
+## MLflow UI 접속
+
+MLflow UI도 인터넷에 공개하지 않는다(#244). 앞단 OAuth2-proxy가 Google 로그인 +
+허용 이메일로 인증한다. 기본 접속 경로는 Bastion 터널이며(Airflow와 동일 패턴),
+`#236` RBAC 보유자는 port-forward도 쓸 수 있다.
+
+```bash
+gcloud compute ssh autoresearch-dev-bastion \
+  --zone asia-northeast3-a \
+  --project ar-infra-501607 \
+  --tunnel-through-iap \
+  -- -N -L 4180:mlflow.dev.autoresearch.internal:4180
+```
+
+터널을 켠 터미널 창은 그대로 두고, 브라우저에서 아래 주소로 접속한다.
+
+```text
+http://localhost:4180
+```
+
+sign-in 페이지에서 Google 로그인하면 허용 이메일 목록에 있는 계정만 통과한다
+(목록 밖 계정은 거부). redirect URI가 `http://localhost:4180/oauth2/callback`
+기준이라 로그인은 `localhost:4180` 경로에서만 정상 동작한다. GKE 내부 워크로드
+(모델 학습 등)는 인증 없이 `http://mlflow.mlflow:5000`을 tracking URI로 쓴다.
+
+port-forward 대안(#236 RBAC 보유자):
+
+```bash
+kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
+```
 
 ## Grafana UI 접속
 
