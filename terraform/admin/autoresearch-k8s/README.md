@@ -117,6 +117,37 @@ MGET feature:{user:100}:age feature:{user:200}:age
 hash tag는 함께 조회·갱신해야 하는 관련 key에만 사용합니다. 모든 key에 동일한
 tag를 넣으면 하나의 shard에 부하가 집중되어 2-shard 구성의 목적을 잃습니다.
 
+## 팀원 접근 (#252)
+
+`autoresearch` 네임스페이스에는 기본 RBAC가 없어 팀원이 앱/모델 파드를
+`kubectl`로 조회하거나 `port-forward`로 검증하지 못했다(`airflow`·`mlflow`·
+`monitoring`에는 팀 접근이 있음). `mlflow-k8s`(#236)와 동일하게 최소 권한을 준다.
+
+- 부여: built-in ClusterRole `view`(secret 제외 read) namespace RoleBinding +
+  `pods/portforward` create 전용 Role `autoresearch-portforward`.
+- 제외: `pods/exec`·write·cluster-admin은 부여하지 않는다.
+- 대상은 `autoresearch_viewer_user_emails`(로컬 tfvars). 저장소엔 placeholder만.
+
+```bash
+# 로컬 terraform.tfvars에 대상 계정 추가 후
+terraform -chdir=terraform/admin/autoresearch-k8s apply
+```
+
+plan은 대상 계정 수에 따라 `kubernetes_role_v1.autoresearch_portforward` 1개 +
+계정별 RoleBinding 2개(view, portforward)만 add로 보여야 한다.
+
+검증(대상 계정 자격으로):
+
+```bash
+kubectl auth can-i get pods                              -n autoresearch --as=<계정>  # → yes
+kubectl auth can-i create pods --subresource=portforward -n autoresearch --as=<계정>  # → yes
+kubectl auth can-i create pods --subresource=exec        -n autoresearch --as=<계정>  # → no
+kubectl auth can-i get secrets                           -n autoresearch --as=<계정>  # → no
+```
+
+롤백: 대상 계정을 `autoresearch_viewer_user_emails`에서 제거하고 다시 apply하면
+해당 RoleBinding이 삭제된다.
+
 ## 장애 복구와 롤백
 
 replica 0과 persistence disabled 구성은 노드 장애 시 Online Store 데이터 복구를

@@ -162,3 +162,71 @@ resource "kubernetes_network_policy_v1" "app_egress" {
 
   depends_on = [kubernetes_namespace_v1.autoresearch]
 }
+
+# #252 팀원용 최소 권한. built-in ClusterRole `view`(secret 제외 read)는
+# pods/portforward를 포함하지 않으므로, port-forward에 필요한 subresource create만
+# 별도 namespace Role로 부여한다. exec/write/cluster-admin은 주지 않는다.
+# (mlflow-k8s #236과 동일 패턴.)
+resource "kubernetes_role_v1" "autoresearch_portforward" {
+  metadata {
+    name      = "autoresearch-portforward"
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["pods/portforward"]
+    verbs      = ["create"]
+  }
+
+  depends_on = [kubernetes_namespace_v1.autoresearch]
+}
+
+# namespace 범위 read(view). ClusterRole `view`는 secret을 제외한 read라
+# 앱/모델 파드 디버깅에 필요한 pods/services/logs 조회를 커버한다.
+resource "kubernetes_role_binding_v1" "autoresearch_viewer" {
+  for_each = var.autoresearch_viewer_user_emails
+
+  metadata {
+    name      = "autoresearch-viewer-${replace(lower(each.value), "/[^a-z0-9-]/", "-")}"
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "view"
+  }
+
+  subject {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "User"
+    name      = each.value
+  }
+
+  depends_on = [kubernetes_namespace_v1.autoresearch]
+}
+
+# port-forward subresource create.
+resource "kubernetes_role_binding_v1" "autoresearch_portforward" {
+  for_each = var.autoresearch_viewer_user_emails
+
+  metadata {
+    name      = "autoresearch-portforward-${replace(lower(each.value), "/[^a-z0-9-]/", "-")}"
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role_v1.autoresearch_portforward.metadata[0].name
+  }
+
+  subject {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "User"
+    name      = each.value
+  }
+
+  depends_on = [kubernetes_namespace_v1.autoresearch]
+}

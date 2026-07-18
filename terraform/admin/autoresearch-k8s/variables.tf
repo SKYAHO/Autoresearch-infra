@@ -119,3 +119,17 @@ variable "redis_node_port_end" {
     error_message = "redis_node_port_end must be an integer between 1 and 65535."
   }
 }
+
+variable "autoresearch_viewer_user_emails" {
+  description = "Google accounts granted namespace-scoped read (view) plus pods/portforward on the autoresearch namespace, for app/model pod debugging. Keep real values in local terraform.tfvars only."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for e in var.autoresearch_viewer_user_emails :
+      can(regex("^[^@]+@[^@]+\\.[^@]+$", e)) && !strcontains(e, ":")
+    ])
+    error_message = "Each item must be an email without a user: prefix."
+  }
+}
