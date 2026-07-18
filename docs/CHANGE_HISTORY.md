@@ -3,6 +3,17 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-18: autoresearch 네임스페이스 팀원 접근 RBAC (#252)
+
+- `autoresearch`(앱) 네임스페이스에 팀 RBAC가 전혀 없어 팀원 5명 전원이 앱/모델
+  파드를 `kubectl` 조회·`port-forward`하지 못했다(`airflow`·`mlflow`·`monitoring`
+  에는 팀 접근이 있는데 정작 앱 파드가 도는 `autoresearch`만 누락). 접근 감사에서 발견.
+- `mlflow-k8s`(#236)와 동일 패턴으로 `terraform/admin/autoresearch-k8s`에 최소 권한
+  부여: built-in ClusterRole `view`(secret 제외 read) namespace RoleBinding +
+  `pods/portforward` create 전용 Role. 대상은 `autoresearch_viewer_user_emails`(로컬 tfvars).
+- 최소권한 경계: `pods/exec`·write·cluster-admin 미부여. plan 검증: 11 add(Role 1 +
+  계정별 RoleBinding 2)/0 change/0 destroy. 롤백은 tfvars에서 계정 제거 후 apply.
+
 ## 2026-07-18: 코드 아카이브 배포용 GCS 버킷·업로더 SA·WIF (#238)
 
 - 앱 코드 배포 파이프라인(main 머지 시 코드 tar.gz를 GCS 업로드, GKE
