@@ -145,3 +145,70 @@ resource "kubernetes_network_policy_v1" "mlflow_egress" {
 
   depends_on = [kubernetes_namespace_v1.mlflow]
 }
+
+# #236 Model Training 담당자용 최소 권한. built-in ClusterRole `view`(secret 제외
+# read)는 pods/portforward를 포함하지 않으므로, port-forward에 필요한 subresource
+# create만 별도 namespace Role로 부여한다. exec/write/cluster-admin은 주지 않는다.
+resource "kubernetes_role_v1" "mlflow_portforward" {
+  metadata {
+    name      = "mlflow-portforward"
+    namespace = kubernetes_namespace_v1.mlflow.metadata[0].name
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["pods/portforward"]
+    verbs      = ["create"]
+  }
+
+  depends_on = [kubernetes_namespace_v1.mlflow]
+}
+
+# namespace 범위 read(view). ClusterRole `view`는 secret을 제외한 read라
+# MLflow UI 검증에 필요한 pods/services 조회를 커버한다.
+resource "kubernetes_role_binding_v1" "mlflow_viewer" {
+  for_each = var.mlflow_viewer_user_emails
+
+  metadata {
+    name      = "mlflow-viewer-${replace(lower(each.value), "/[^a-z0-9-]/", "-")}"
+    namespace = kubernetes_namespace_v1.mlflow.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "view"
+  }
+
+  subject {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "User"
+    name      = each.value
+  }
+
+  depends_on = [kubernetes_namespace_v1.mlflow]
+}
+
+# port-forward subresource create.
+resource "kubernetes_role_binding_v1" "mlflow_portforward" {
+  for_each = var.mlflow_viewer_user_emails
+
+  metadata {
+    name      = "mlflow-portforward-${replace(lower(each.value), "/[^a-z0-9-]/", "-")}"
+    namespace = kubernetes_namespace_v1.mlflow.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role_v1.mlflow_portforward.metadata[0].name
+  }
+
+  subject {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "User"
+    name      = each.value
+  }
+
+  depends_on = [kubernetes_namespace_v1.mlflow]
+}

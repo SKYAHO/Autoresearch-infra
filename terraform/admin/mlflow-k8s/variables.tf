@@ -75,3 +75,17 @@ variable "cluster_services_cidr" {
     error_message = "cluster_services_cidr must be a valid CIDR in a.b.c.d/n form."
   }
 }
+
+variable "mlflow_viewer_user_emails" {
+  description = "Google accounts granted namespace-scoped read (view) plus pods/portforward on the mlflow namespace, for MLflow UI validation. Keep real values in local terraform.tfvars only."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for e in var.mlflow_viewer_user_emails :
+      can(regex("^[^@]+@[^@]+\\.[^@]+$", e)) && !strcontains(e, ":")
+    ])
+    error_message = "Each item must be an email without a user: prefix."
+  }
+}
