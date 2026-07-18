@@ -159,6 +159,16 @@ output "github_actions_app_pusher_service_account_email" {
   value       = google_service_account.application_pusher.email
 }
 
+output "code_artifacts_bucket_name" {
+  description = "코드 아카이브 배포용 GCS 버킷 이름(#238). 앱 리포 secret CODE_ARTIFACTS_BUCKET 값으로 사용."
+  value       = google_storage_bucket.code_artifacts.name
+}
+
+output "code_uploader_service_account_email" {
+  description = "GitHub Actions (Autoresearch) WIF가 가장하여 코드 아카이브를 GCS에 업로드하는 SA email(#238). 앱 리포 secret GCS_CODE_UPLOADER_SA 값으로 사용."
+  value       = google_service_account.code_uploader.email
+}
+
 output "github_actions_airflow_deployer_service_account_email" {
   description = "GitHub Actions (Autoresearch-airflow) WIF가 가장하여 dev GKE의 Airflow Helm release를 배포하는 SA email. repository variable GKE_DEPLOYER_SA 값으로 사용."
   value       = google_service_account.airflow_deployer.email
