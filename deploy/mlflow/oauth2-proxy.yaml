@@ -28,7 +28,9 @@ spec:
             - --http-address=0.0.0.0:4180
             # 인증 후 프록시 대상 = 내부 MLflow Service(내부 전용 유지).
             - --upstream=http://mlflow.mlflow:5000
-            # port-forward(localhost:4180) 접속 모델. Google OAuth callback.
+            # 접속(port-forward 또는 Bastion 터널) 모두 브라우저는 localhost:4180.
+            # 터널은 DNS:4180으로 연결하고 브라우저 Host는 localhost라 redirect 불변
+            # (콘솔 재등록 불필요). Google OAuth callback.
             - --redirect-url=http://localhost:4180/oauth2/callback
             # 실제 제한은 authenticated-emails-file(허용 목록)로 한다.
             - --email-domain=*
@@ -91,7 +93,10 @@ spec:
               - key: authenticated-emails
                 path: authenticated-emails
 ---
-# 사용자가 port-forward 하는 대상. ClusterIP = 내부 전용(외부 노출 없음).
+# 접근: (1) Bastion(#47) 터널 → 내부 LB VIP(10.10.0.22 =
+# mlflow.dev.autoresearch.internal), (2) kubectl port-forward. 둘 다 브라우저는
+# localhost:4180로 접속 → oauth2-proxy 인증. internal LB는 VPC 전용(외부 노출 없음).
+# loadBalancerIP는 terraform output mlflow_ilb_ip(#244). Airflow #48과 동일 패턴.
 apiVersion: v1
 kind: Service
 metadata:
@@ -99,8 +104,11 @@ metadata:
   namespace: mlflow
   labels:
     app.kubernetes.io/name: mlflow-oauth-proxy
+  annotations:
+    networking.gke.io/load-balancer-type: "Internal"
 spec:
-  type: ClusterIP
+  type: LoadBalancer
+  loadBalancerIP: "10.10.0.22"
   selector:
     app.kubernetes.io/name: mlflow-oauth-proxy
   ports:

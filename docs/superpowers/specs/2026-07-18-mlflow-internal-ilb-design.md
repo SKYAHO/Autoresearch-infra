@@ -2,7 +2,8 @@
 
 > 관련 이슈: `SKYAHO/Autoresearch-infra#244`
 > 대상 환경: dev
-> 상태: 설계 + 1단계(예약 IP/DNS) 구현. Service flip은 apply·콘솔 등록 후 2단계.
+> 상태: 1단계(예약 IP/DNS, #245 merged·apply 완료, IP 10.10.0.22) + 2단계
+> (Service internal LB flip) 구현. redirect URI 변경·콘솔 등록은 불필요(4절).
 
 ## 1. 목표
 
@@ -34,43 +35,36 @@ MLflow UI/API 접근을 `kubectl port-forward`(oauth2-proxy 4180) 전용에서 *
 `loadBalancerIP`는 예약 IP 값(apply 전 미지)에, redirect URI 변경은 **콘솔 등록**에
 하드 의존한다. 그래서 Airflow #48처럼 나눈다.
 
-### 1단계 — 예약 IP + DNS (이 PR)
+### 1단계 — 예약 IP + DNS (#245 merged·apply 완료)
 
 - `dns.tf`에 예약 IP + A 레코드, `outputs.tf`에 output 추가.
-- apply(dev root, GCS state 쓰기 권한 운영자): `google_compute_address.mlflow_ilb`
-  와 `google_dns_record_set.mlflow` 2개 add만 보여야 한다.
+- apply(dev root): `google_compute_address.mlflow_ilb`와
+  `google_dns_record_set.mlflow` 2개 add. 예약 IP = **10.10.0.22**.
 
-### 2단계 — Service flip + redirect (후속, 1단계 apply·콘솔 등록 후)
+### 2단계 — Service flip (이 변경, 1단계 apply 후)
 
-선행(사람만 가능): GCP 콘솔 OAuth client에 redirect URI
-`http://mlflow.dev.autoresearch.internal/oauth2/callback` 추가.
+`deploy/mlflow/oauth2-proxy.yaml`의 Service만 internal LoadBalancer로 flip한다.
+`--redirect-url`은 `http://localhost:4180/oauth2/callback` **그대로** 둔다.
 
-`deploy/mlflow/oauth2-proxy.yaml`의 Service를 아래로 변경(예약 IP는
-`terraform -chdir=terraform/envs/dev output -raw mlflow_ilb_ip`로 채운다):
+핵심(Airflow #48 동일): 브라우저 접근은 **Bastion 터널 → localhost:4180**이다.
+터널이 `mlflow.dev.autoresearch.internal:4180`으로 연결하고 브라우저 Host는
+`localhost:4180`이므로 OAuth redirect URI가 바뀌지 않는다 →
+**콘솔 재등록 불필요**. `kubectl port-forward` 접근도 그대로 동작한다(#236).
 
 ```yaml
-apiVersion: v1
-kind: Service
 metadata:
-  name: mlflow-oauth-proxy
-  namespace: mlflow
   annotations:
     networking.gke.io/load-balancer-type: "Internal"
 spec:
   type: LoadBalancer
-  loadBalancerIP: "<terraform output mlflow_ilb_ip 값>"
-  selector:
-    app.kubernetes.io/name: mlflow-oauth-proxy
+  loadBalancerIP: "10.10.0.22"   # = terraform output mlflow_ilb_ip
   ports:
     - name: http
-      port: 80
-      targetPort: http   # 4180
+      port: 4180
+      targetPort: http
 ```
 
-같은 파일 Deployment의 `--redirect-url`을
-`http://mlflow.dev.autoresearch.internal/oauth2/callback`로 변경. ArgoCD sync
-후 반영. redirect URI 미등록 상태로 flip하면 Google 로그인 콜백이 실패하므로
-콘솔 등록을 반드시 선행한다.
+ArgoCD sync 후 반영. `mlflow`(5000)은 ClusterIP 내부 전용 유지.
 
 ## 5. 보안
 
