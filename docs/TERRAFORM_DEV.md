@@ -42,7 +42,7 @@ terraform/
 │       ├── redis.tf          # #129 Feast Online Store 2-shard Redis Cluster (PSC, IAM auth/TLS)
 │       ├── cloud_build.tf    # #32 Autoresearch-airflow Cloud Build IAM
 │       ├── cloud_run.tf      # #27 Cloud Run proxy state/code 정합성
-│       ├── dns.tf            # #48 Airflow ILB 예약 내부 IP + private DNS zone
+│       ├── dns.tf            # #48 Airflow·#244 MLflow ILB 예약 내부 IP + private DNS zone
 │       ├── gke.tf            # #5 dev GKE cluster + 노드풀 + SA/WI
 │       ├── github_actions.tf # #121/#157 배포 리포 GitHub Actions WIF → GAR push SA/IAM
 │       ├── airflow.tf        # #32 Airflow GCP SA/WI + DB/GCS/IAM
@@ -462,6 +462,23 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 | 레코드 | `airflow.dev.autoresearch.internal` → ILB IP | A, TTL 300 |
 | NetworkPolicy | dev subnet(10.10.0.0/20) → 8080 허용 추가 | `terraform/admin/airflow-k8s`, `var.ui_ingress_source_cidr` |
 | 노출 범위 | **VPC 내부 전용** | 인터넷 노출 없음. 접근은 Bastion(#47) 터널 경유 |
+
+## MLflow UI 내부 노출 (#244)
+
+Airflow(#48)와 동일 패턴. 단 인증 유지를 위해 ILB는 **oauth2-proxy(4180)**
+앞단에만 붙이고 `mlflow`(5000)은 ClusterIP 내부 전용을 유지한다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| ILB 예약 내부 IP | `autoresearch-dev-mlflow-ilb` | dev subnet 내부 예약, `output.mlflow_ilb_ip` |
+| 레코드 | `mlflow.dev.autoresearch.internal` → ILB IP | A, TTL 300. 기존 `internal` zone 재사용 |
+| LB 대상 | oauth2-proxy Service(4180) | `deploy/mlflow`(ArgoCD). `mlflow:5000`은 미노출 |
+| 인증 | oauth2-proxy(Google + 허용 이메일) 유지 | redirect URI를 `http://mlflow.dev.autoresearch.internal/oauth2/callback`로 변경(콘솔 등록 선행) |
+| 노출 범위 | **VPC 내부 전용** | 인터넷 노출 없음. 접근은 Bastion(#47) 터널 경유 |
+
+단계: (1) 예약 IP + DNS apply(dev root) → (2) 콘솔 OAuth redirect URI 등록 →
+(3) oauth2-proxy Service를 internal LB로 flip + redirect-url 변경(ArgoCD sync).
+상세는 `docs/superpowers/specs/2026-07-18-mlflow-internal-ilb-design.md`.
 
 ### private googleapis DNS zone (#138)
 

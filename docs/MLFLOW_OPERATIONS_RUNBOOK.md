@@ -136,4 +136,6 @@ kubectl delete pod mlflow-probe -n mlflow
 - 설계·경계: `superpowers/specs/2026-07-17-mlflow-operating-design.md`, [`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md)
 - 경계 root README: `terraform/admin/mlflow-k8s/README.md`
 - UI 인증(OAuth2-proxy)은 #232로 완료. 팀원 port-forward RBAC은 #236로 완료.
-  내부 ILB 노출은 후속 과제(현재는 port-forward 접근).
+  내부 ILB 노출은 #244 진행 중(1단계 예약 IP/DNS 구현, Service flip은 콘솔
+  redirect URI 등록·apply 후 2단계). 현재 접근은 port-forward.
+  설계: `superpowers/specs/2026-07-18-mlflow-internal-ilb-design.md`.
