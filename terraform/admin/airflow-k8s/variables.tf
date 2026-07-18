@@ -52,8 +52,9 @@ variable "airflow_deployer_service_account_email" {
 }
 
 variable "private_services_cidr" {
-  description = "Private services CIDR that contains the Cloud SQL private IP range."
+  description = "Cloud SQL private IP가 속한 PSA 대역(autoresearch-dev-private-sql-range). dev root·mlflow-k8s와 반드시 일치해야 하며, 불일치 시 egress NetworkPolicy가 5432를 차단해 Airflow가 DB에 접속하지 못한다(#253). default는 현재 PSA 대역."
   type        = string
+  default     = "192.168.0.0/20"
 
   validation {
     condition     = can(cidrhost(var.private_services_cidr, 0))

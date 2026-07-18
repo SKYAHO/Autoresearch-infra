@@ -3,11 +3,10 @@ region                = "asia-northeast3"
 zone                  = "asia-northeast3-a"
 gke_cluster_name      = "autoresearch-dev-gke"
 resource_prefix       = "autoresearch-dev"
-# Cloud SQL private IP가 속한 PSA 대역. dev root private_services_cidr와 반드시
-# 일치해야 한다(현재 `autoresearch-dev-private-sql-range` = 192.168.0.0/20).
-# 불일치 시 airflow egress NetworkPolicy가 5432를 차단해 webserver가 DB에
-# 접속하지 못한다(#253).
-private_services_cidr = "192.168.0.0/20"
+# Cloud SQL private IP가 속한 PSA 대역. 변수 default가 현재 값(192.168.0.0/20)이라
+# 보통 지정하지 않는다(#259). PSA 대역이 바뀔 때만 dev root·mlflow-k8s와 동일하게
+# 맞춰 설정한다. 잘못 지정하면 egress가 5432를 차단해 Airflow가 DB에 못 붙는다(#253).
+# private_services_cidr = "192.168.0.0/20"
 
 # Optional. Empty value derives:
 # autoresearch-dev-airflow@<project_id>.iam.gserviceaccount.com
