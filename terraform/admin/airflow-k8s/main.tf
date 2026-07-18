@@ -337,6 +337,40 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
         port     = "443"
       }
     }
+
+    # #234 MLflow tracking server(mlflow 네임스페이스, ClusterIP
+    # mlflow.mlflow:5000). Calico가 egress를 DNAT 이전(service VIP 기준)에
+    # 평가하므로 namespace_selector가 VIP에 매칭되지 않는다 — 위 kube-dns/
+    # PostgreSQL과 같은 이유로 services CIDR ipBlock을 사용한다.
+    egress {
+      to {
+        ip_block {
+          cidr = var.cluster_services_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "5000"
+      }
+    }
+
+    # DNAT 후 평가하는 dataplane용 mlflow namespace selector 규칙(방어적 유지,
+    # 위 kube-dns 패턴과 동일).
+    egress {
+      to {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "mlflow"
+          }
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "5000"
+      }
+    }
   }
 
   depends_on = [kubernetes_namespace_v1.airflow]
