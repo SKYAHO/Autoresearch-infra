@@ -154,6 +154,26 @@ plan은 `kubernetes_network_policy_v1.airflow_egress` 한 개의 in-place 변경
 문제가 생기면 이 변경에서 추가한 Redis egress 블록 하나만 제거하고 다시
 plan/apply합니다.
 
+## Gmail SMTP egress (#277)
+
+`Autoresearch-airflow#87`의 DAG 성공·실패 메일 callback은 scheduler에서 Gmail
+SMTP STARTTLS endpoint(`smtp.gmail.com:587`)에 연결합니다. `airflow-egress`는
+기본 deny 정책이므로 기존 TCP 443 외부 egress만으로는 SMTP 연결이 timeout 됩니다.
+
+표준 Kubernetes NetworkPolicy는 FQDN 목적지를 지원하지 않고 Gmail SMTP IP는
+고정되지 않으므로, 기존 외부 endpoint 규칙의 `0.0.0.0/0` 목적지에 TCP 587만
+추가합니다. IAM과 GCP 리소스는 변경하지 않으며 SMTP 계정, 앱 비밀번호, 수신자는
+`Autoresearch-airflow`가 관리하는 Kubernetes Secret에만 저장합니다.
+
+plan은 `kubernetes_network_policy_v1.airflow_egress` 한 개의 in-place 변경
+(`0 to add, 1 to change, 0 to destroy`)만 보여야 합니다. 적용 후에는 Secret 값을
+출력하지 않는 일회성 Pod에서 DNS와 TCP 587 연결을 확인한 뒤 SMTP 전달 smoke와
+합성 성공·실패 callback smoke를 순서대로 수행합니다.
+
+문제가 생기면 TCP 587 ports 블록만 제거하고 admin root를 다시 plan/apply합니다.
+이 롤백은 NetworkPolicy 한 개의 in-place 갱신이며 Pod, node, IAM, GCP 리소스를
+재생성하지 않습니다.
+
 ## 최초 Apply 기록
 
 2026-07-08 기준 `airflow` namespace는 클러스터에 이미 존재했습니다. 삭제 후
