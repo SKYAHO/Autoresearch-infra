@@ -3,6 +3,20 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-18: Airflow crash-loop 복구 — airflow-k8s private_services_cidr 정정·하드닝 (#253, PR #254/#260)
+
+- 팀원 Airflow UI 접속 불가를 접근 감사에서 진단: webserver/scheduler가 Cloud SQL
+  metadata DB(`192.168.0.3:5432`) 연결 timeout으로 crash-loop(약 45h). 원인은 airflow
+  egress NetworkPolicy의 5432 허용 대역이 `10.20.0.0/20`(stale)이라, 실제 PSA 대역
+  `192.168.0.0/20`(`autoresearch-dev-private-sql-range`, Cloud SQL 192.168.0.3)을 차단한 것.
+  dev root·mlflow-k8s는 이미 `192.168`로 정상이었다(airflow-k8s만 어긋남).
+- 복구(PR #254): `airflow-k8s`의 `private_services_cidr`를 `192.168.0.0/20`으로 정정·apply
+  (NetworkPolicy 5432 대역 in-place). 파드 재시작 후 DB 연결·`/health` 200, webserver 1/1·
+  scheduler 2/2 회복. `tfvars.example`·README도 정정.
+- 재발 방지(PR #260): `airflow-k8s`의 `private_services_cidr`에 default `192.168.0.0/20`
+  (dev root와 동일) 부여 + `tfvars.example` 값 주석 처리. 로컬 tfvars에서 미지정 시 올바른
+  값이 적용된다. 단 로컬 tfvars의 명시값은 default를 덮으므로 운영자는 stale 값 제거 필요.
+
 ## 2026-07-18: 학습 이미지 첫 push용 임시 repo-scoped AR writer (#256, 앱 #185)
 
 - 앱 `SKYAHO/Autoresearch#185`(학습 이미지 GAR publish) 언블록을 위해
