@@ -3,6 +3,21 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-20: Airflow Gmail SMTP TCP 587 egress (#277)
+
+- `Autoresearch-airflow#87`의 DAG 성공·실패 메일 callback이 Gmail SMTP STARTTLS
+  (`smtp.gmail.com:587`)를 사용하지만, `airflow-egress`의 기본 deny 정책에 TCP 587이
+  없어 GKE Pod 연결이 timeout 됐다. DNS와 로컬 SMTP 인증·실제 전달은 정상이었다.
+- 표준 NetworkPolicy는 FQDN을 지원하지 않고 Gmail SMTP IP는 고정되지 않아
+  목적지는 `0.0.0.0/0`을 사용한다. 이 CIDR은 사설·link-local을 포함한 모든
+  IPv4에 일치하므로 별도 `airflow-scheduler-smtp-egress` 정책이
+  `component=scheduler`, `release=airflow` Pod에만 TCP 587을 허용한다.
+- namespace 공통 `airflow-egress`에는 587을 추가하지 않아 webserver와 batch Pod의
+  SMTP egress를 막는다. IAM·GCP 리소스·비용 변화는 없고 NetworkPolicy 한 개만
+  생성된다. SMTP credential과 수신자는 scheduler 전용 Kubernetes Secret에 둔다.
+- 롤백은 scheduler 전용 NetworkPolicy를 제거한 뒤 admin root를 다시 plan/apply하는
+  것이며, Pod·node 재생성은 없다.
+
 ## 2026-07-20: dev Cloud SQL tier 상향 db-f1-micro → db-g1-small (#273, PR #274) — apply 완료
 
 - 여러 애플리케이션(Airflow metadata, MLflow backend)이 같은 dev 인스턴스를 쓰면서

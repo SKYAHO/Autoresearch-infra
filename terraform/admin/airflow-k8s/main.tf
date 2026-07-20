@@ -345,7 +345,7 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
       }
     }
 
-    # Google APIs and other HTTPS endpoints needed by providers/connectors.
+    # Google APIs and provider HTTPS endpoints.
     # #138 검토: OpenRouter 등 외부 API와 Cloud Run proxy(run.app) 의존으로
     # 0.0.0.0/0을 유지한다(vault처럼 private.googleapis VIP로 축소 불가).
     egress {
@@ -392,6 +392,43 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
       ports {
         protocol = "TCP"
         port     = "5000"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+
+# #277 DAG run callback은 scheduler에서만 실행되고 SMTP Secret도 scheduler에만
+# 주입된다. 공통 airflow-egress와 분리해 webserver와 batch Pod에 587 권한을 주지
+# 않는다. Gmail SMTP는 고정 IP/FQDN NetworkPolicy를 사용할 수 없어 목적지는
+# 전체 IPv4로 두되 STARTTLS 포트 하나만 허용한다.
+resource "kubernetes_network_policy_v1" "airflow_scheduler_smtp_egress" {
+  metadata {
+    name      = "airflow-scheduler-smtp-egress"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        component = "scheduler"
+        release   = "airflow"
+      }
+    }
+
+    policy_types = ["Egress"]
+
+    egress {
+      to {
+        ip_block {
+          cidr = "0.0.0.0/0"
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "587"
       }
     }
   }
