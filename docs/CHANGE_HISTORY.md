@@ -3,6 +3,43 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-20: 3개 저장소 교차 팀원 권한 감사 (#265, 부여는 #266)
+
+- `Autoresearch-infra`·`Autoresearch`·`Autoresearch-airflow` 세 저장소가 하나의 작업 흐름이라,
+  각 저장소의 runbook·DAG·workflow가 요구하는 **사람이 직접 하는 작업**을 뽑아 라이브 GCP IAM
+  정책·GKE RoleBinding과 대조했다(문서 주장이 아니라 실제 적용값 기준).
+- 확인: runbook 권한표가 주장하는 팀 권한(GCP IAM 7종, `airflow` admin, `mlflow`·
+  `autoresearch` view+port-forward, `monitoring` port-forward)은 **모두 실제로 적용돼 있다**.
+  문서-실태 불일치 없음.
+- 식별된 부여 갭 5건(실제 부여는 #266):
+  1. `autoresearch` namespace `pods/exec` — 앱 저장소 Feast·Redis GKE 검증 runbook이 exec 기반.
+  2. Artifact Registry `reader` — release 파이프라인의 digest 확인 절차에 필요.
+  3. 학습 이미지 push용 GAR `writer`가 라이브에만 있고 tfvars에 미선언(apply 시 소실될 drift).
+  4. Cloud Build 빌드 실행 — Feast 이미지 빌드 runbook 경로.
+  5. Cloud SQL viewer + DB password secret `secretAccessor` — 현재 owner 1인에 병목.
+- 감사 방법 메모: 저장소 문서만으로는 실제 부여 상태를 알 수 없다(로컬 tfvars는 머신마다 다름).
+  `gcloud projects get-iam-policy`, dataset/저장소/secret IAM, `kubectl get rolebindings`를
+  **라이브로 조회해 대조**하는 절차를 권한 감사의 기준으로 삼는다.
+
+## 2026-07-20: Feast materialize batch IAM 3종 + Redis Cluster egress (#263, PR #264) — apply 완료
+
+- Feast online store materialize DAG(KSA `airflow/autoresearch-batch`, GSA
+  `autoresearch-dev-airflow-batch`)에 부족했던 세 경로를 채웠다: code archive 다운로드,
+  Redis IAM 인증·TLS CA 조회, Redis Cluster PSC 통신.
+- dev root(3 add): code artifacts 버킷 `storage.objectViewer`(버킷 한정),
+  `redis.dbConnectionUser`(cluster 1개로 IAM condition 제한),
+  `autoresearch-dev-redis-server-ca` secret 한 건의 `secretAccessor`.
+  프로젝트 수준 권한은 없고 기존 app GSA 권한은 무변경.
+- `airflow-k8s`(1 change): `airflow-egress`에 Redis PSC subnet(`10.10.16.0/29`)
+  대상 egress 1블록 추가 — TCP 6379(discovery) + 11000-13047(data node).
+  **Cluster 클라이언트는 discovery 후 data node에 직접 연결하므로 6379만 열면 실패**한다.
+- apply 검증(2026-07-20): dev root 3 add 후 재plan `No changes`. airflow-k8s는 plan
+  JSON으로 egress 9→10 규칙, Cloud SQL 5432(`192.168.0.0/20`)·DNS·443 기존 규칙 보존을
+  확인한 뒤 apply. 적용 후 재plan `No changes`, live NetworkPolicy에 6379/11000 반영,
+  scheduler 2/2·webserver 1/1 정상 유지.
+- 롤백: 추가한 IAM member 3개와 egress 블록 1개를 제거하고 각 root를 apply. 재생성·
+  노드 재시작 없음. 비용 영향 없음.
+
 ## 2026-07-18: Airflow crash-loop 복구 — airflow-k8s private_services_cidr 정정·하드닝 (#253, PR #254/#260)
 
 - 팀원 Airflow UI 접속 불가를 접근 감사에서 진단: webserver/scheduler가 Cloud SQL
