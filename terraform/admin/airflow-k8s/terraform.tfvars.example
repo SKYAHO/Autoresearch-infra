@@ -30,3 +30,12 @@ ui_ingress_source_cidr = "10.10.0.0/20"
 
 # GKE services 2차 대역 (#122). dev root gke_services_cidr와 일치.
 cluster_services_cidr = "172.16.128.0/24"
+
+# Feast materialize DAG의 Redis Cluster egress (#263).
+# dev root redis_psc_subnet_cidr output과 일치해야 한다.
+redis_psc_subnet_cidr = "10.10.16.0/29"
+
+# Memorystore for Redis Cluster fixed discovery/data-node port ranges.
+redis_discovery_port  = 6379
+redis_node_port_start = 11000
+redis_node_port_end   = 13047

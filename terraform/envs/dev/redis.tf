@@ -70,3 +70,18 @@ resource "google_project_iam_member" "gke_app_redis_connection" {
     expression  = "resource.name == 'projects/${var.project_id}/locations/${var.region}/clusters/${local.redis_cluster_name}'"
   }
 }
+
+# #263 Feast materialize DAG가 online store에 write하려면 batch GSA도 IAM auth가
+# 필요하다. gke_app과 동일한 condition으로 이 cluster 하나에만 제한하고, 프로젝트
+# 전체 unrestricted 권한은 부여하지 않는다.
+resource "google_project_iam_member" "airflow_batch_redis_connection" {
+  project = var.project_id
+  role    = "roles/redis.dbConnectionUser"
+  member  = "serviceAccount:${google_service_account.airflow_batch.email}"
+
+  condition {
+    title       = "autoresearch-dev-redis-cluster-only"
+    description = "Allow the Airflow batch workload to authenticate only to the dev Online Store cluster."
+    expression  = "resource.name == 'projects/${var.project_id}/locations/${var.region}/clusters/${local.redis_cluster_name}'"
+  }
+}
