@@ -21,3 +21,44 @@ resource "google_project_iam_member" "cloud_build_compute_logging" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${local.cloud_build_compute_service_account_email}"
 }
+
+# #269 Cloud Build 전용 SA. 기본 compute SA는 프로젝트의 모든 build가 공유하는
+# 주체라, 사람에게 cloudbuild.builds.editor를 주면(#266) 기본 SA의 GAR writer를
+# 빌드로 빌려 쓰는 간접 push 경로가 열린다. build를 이 전용 SA로 실행시키면
+# "빌드 제출 권한"과 "push 권한"을 분리할 수 있다.
+resource "google_service_account" "cloud_build_builder" {
+  account_id   = "${var.name_prefix}-cloud-build"
+  display_name = "Cloud Build builder (dev images)"
+  description  = "Dedicated Cloud Build runtime SA (#269). Team members submit builds via serviceAccountUser on this SA instead of the default compute SA."
+}
+
+# 이미지 push 대상은 dev 저장소 하나로 제한한다(프로젝트 수준 아님).
+resource "google_artifact_registry_repository_iam_member" "cloud_build_builder_ar_writer" {
+  repository = google_artifact_registry_repository.dev.id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.cloud_build_builder.email}"
+}
+
+# source 아카이브 read 전용. 빌드 로그는 GCS가 아니라 Cloud Logging으로 보내므로
+# (build config의 options.logging = CLOUD_LOGGING_ONLY) 이 공유 버킷에 대한 쓰기·삭제
+# 권한이 필요 없다. 다른 build의 source·로그를 건드릴 수 없다.
+resource "google_storage_bucket_iam_member" "cloud_build_builder_bucket_object_viewer" {
+  bucket = local.cloud_build_bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.cloud_build_builder.email}"
+}
+
+# objectAdmin에는 storage.buckets.get이 없어(#204 교훈) Cloud Build의 버킷 사용 가능
+# 여부 사전 검사가 "does not have access to the bucket"으로 실패한다. 버킷 메타데이터
+# 읽기를 같은 버킷 범위로만 추가한다.
+resource "google_storage_bucket_iam_member" "cloud_build_builder_bucket_reader" {
+  bucket = local.cloud_build_bucket_name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.cloud_build_builder.email}"
+}
+
+resource "google_project_iam_member" "cloud_build_builder_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cloud_build_builder.email}"
+}

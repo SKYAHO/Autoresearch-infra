@@ -368,3 +368,8 @@ output "es_snapshot_service_account_email" {
   description = "ES snapshot GSA email(#102). elastic-k8s root의 KSA annotation 값."
   value       = google_service_account.es_snapshot.email
 }
+
+output "cloud_build_builder_service_account_email" {
+  description = "Dedicated Cloud Build runtime service account (#269). Use with `gcloud builds submit --service-account`."
+  value       = google_service_account.cloud_build_builder.email
+}

@@ -1,6 +1,12 @@
 locals {
   # 기본값은 Cloud Build가 자동 생성하는 <project_id>_cloudbuild 버킷.
   cloud_build_staging_bucket = coalesce(var.cloud_build_staging_bucket, "${var.project_id}_cloudbuild")
+
+  # dev root(cloud_build.tf)가 만드는 전용 build SA. 빈 값이면 resource_prefix 규칙으로 파생.
+  cloud_build_builder_service_account_email = coalesce(
+    var.cloud_build_builder_service_account_email,
+    "${var.name_prefix}-cloud-build@${var.project_id}.iam.gserviceaccount.com"
+  )
 }
 
 # Team member access is intentionally separated from terraform/envs/dev.
@@ -151,4 +157,16 @@ resource "google_secret_manager_secret_iam_member" "team_db_password_accessors" 
   secret_id = var.db_password_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "user:${each.value}"
+}
+
+# #269 팀원은 Cloud Build 전용 SA(#269)로만 build를 제출한다. serviceAccountUser는
+# "이 SA로 실행"만 허용하며 SA의 키 발급·권한 변경 권한은 아니다. 이렇게 하면
+# #266의 builds.editor가 기본 compute SA를 빌려 쓰는 간접 push 경로 대신, push 대상이
+# dev 저장소 하나로 제한된 전용 SA를 쓰게 된다.
+resource "google_service_account_iam_member" "team_cloud_build_sa_users" {
+  for_each = var.team_member_emails
+
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.cloud_build_builder_service_account_email}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "user:${each.value}"
 }

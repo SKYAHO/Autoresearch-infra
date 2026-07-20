@@ -76,3 +76,15 @@ variable "db_password_secret_id" {
   type        = string
   default     = "autoresearch-dev-db-password"
 }
+
+variable "name_prefix" {
+  description = "Resource name prefix used by terraform/envs/dev (#269). Must match that root's name_prefix so the Cloud Build builder SA email derives correctly."
+  type        = string
+  default     = "autoresearch"
+}
+
+variable "cloud_build_builder_service_account_email" {
+  description = "Dedicated Cloud Build runtime SA that team members may run builds as (#269). Empty value derives <name_prefix>-cloud-build@<project_id>.iam.gserviceaccount.com."
+  type        = string
+  default     = ""
+}
