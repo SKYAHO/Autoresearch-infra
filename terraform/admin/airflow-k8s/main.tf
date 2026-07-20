@@ -288,6 +288,29 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
       }
     }
 
+    # #263 Feast materialize DAG의 Redis Cluster PSC egress. Redis Cluster client는
+    # discovery endpoint(6379)에서 topology를 받은 뒤 data node에 직접 연결하므로
+    # 6379만 열면 실제 read/write가 실패한다. 대상은 PSC subnet CIDR로만 제한한다.
+    # terraform/admin/autoresearch-k8s의 동일 규칙과 같은 구현이다.
+    egress {
+      to {
+        ip_block {
+          cidr = var.redis_psc_subnet_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = tostring(var.redis_discovery_port)
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = tostring(var.redis_node_port_start)
+        end_port = var.redis_node_port_end
+      }
+    }
+
     # Existing GKE metadata endpoint allowance used by Dataplane V2.
     egress {
       to {

@@ -49,3 +49,12 @@ resource "google_storage_bucket_iam_member" "code_artifacts_app_viewer" {
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
+
+# #263 Feast materialize DAG. KubernetesPodOperator가 KSA airflow/autoresearch-batch로
+# 띄우는 Feast 전용 이미지의 entrypoint가 code/latest.txt와 code/<sha>.tar.gz를 읽는다.
+# gke_app과 동일하게 이 버킷 read만 부여하고 write(objectAdmin)는 업로더 SA에만 남긴다.
+resource "google_storage_bucket_iam_member" "code_artifacts_airflow_batch_viewer" {
+  bucket = google_storage_bucket.code_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+}

@@ -75,6 +75,33 @@ Issue #129의 `autoresearch-dev-redis-cluster`, 전용 PSC subnet/policy와
 `terraform/admin/autoresearch-k8s`는 apply 완료됐고, #203/#204에서 Feast ↔ Redis
 Cluster GKE 실연결·materialize까지 검증됐습니다.
 
+## Airflow batch Feast materialize 권한 (#263)
+
+Feast online store materialize DAG는 KubernetesPodOperator가 KSA
+`airflow/autoresearch-batch`(GSA `autoresearch-dev-airflow-batch`)로 실행합니다.
+BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있고, 이
+이슈에서 다음 IAM 3개를 추가했습니다. 모두 프로젝트 전체가 아니라 리소스 단위
+또는 IAM condition으로 제한합니다.
+
+| 대상 | Role | 범위 | 용도 |
+|---|---|---|---|
+| `ar-infra-501607-code-artifacts` bucket | `roles/storage.objectViewer` | 버킷 단위 (`code_artifacts.tf`) | Feast 이미지 entrypoint가 `code/latest.txt`, `code/<sha>.tar.gz` 다운로드 |
+| project (condition 제한) | `roles/redis.dbConnectionUser` | `projects/<project>/locations/asia-northeast3/clusters/autoresearch-dev-redis-cluster` 한정 (`redis.tf`) | Redis Cluster IAM 인증 토큰 발급 |
+| `autoresearch-dev-redis-server-ca` secret | `roles/secretmanager.secretAccessor` | secret 단위 (`secret_manager.tf`) | TLS(`SERVER_AUTHENTICATION`) 검증용 CA 조회 |
+
+기존 app GSA(`gke_app`)의 Redis/CA/코드 아카이브 권한은 변경하지 않았습니다.
+
+Kubernetes 쪽에서는 `terraform/admin/airflow-k8s`의 `airflow-egress`
+NetworkPolicy에 Redis PSC subnet(`10.10.16.0/29`) egress를 추가했습니다. Redis
+Cluster client는 discovery 후 data node에 직접 연결하므로 두 포트 범위가 모두
+필요합니다.
+
+- TCP `6379` — Redis Cluster discovery endpoint
+- TCP `11000-13047` — Redis Cluster data node
+
+롤백은 위 IAM member 3개와 egress 블록 1개만 제거하면 되며, 리소스 재생성이나
+비용 변화는 없습니다.
+
 ## 기본 리전
 
 dev 기본 리전은 `asia-northeast3`로 둡니다. 다른 리전을 사용할 경우 `region`, `zone` 변수를 변경합니다.

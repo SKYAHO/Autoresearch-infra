@@ -47,6 +47,14 @@ resource "google_secret_manager_secret_iam_member" "gke_app_redis_server_ca" {
   member    = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
+# #263 Feast materialize DAG는 TLS(SERVER_AUTHENTICATION) 검증용 CA가 필요하다.
+# 이 secret 하나에만 accessor를 부여하고 프로젝트 수준 Secret Manager 권한은 주지 않는다.
+resource "google_secret_manager_secret_iam_member" "airflow_batch_redis_server_ca" {
+  secret_id = google_secret_manager_secret.redis_server_ca.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.airflow_batch.email}"
+}
+
 # #93 MLflow DB 비밀번호를 Secret Manager에 저장. random_password는 cloud_sql.tf.
 # state 평문 저장 한계는 db_app_password와 동일(GCS backend 접근제어로 완화, dev accept).
 resource "google_secret_manager_secret" "mlflow_db_password" {

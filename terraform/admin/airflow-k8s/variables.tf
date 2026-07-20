@@ -87,6 +87,50 @@ variable "cluster_services_cidr" {
   }
 }
 
+variable "redis_psc_subnet_cidr" {
+  description = "Redis Cluster PSC subnet CIDR from terraform/envs/dev redis_psc_subnet_cidr output."
+  type        = string
+  default     = "10.10.16.0/29"
+
+  validation {
+    condition     = can(cidrhost(var.redis_psc_subnet_cidr, 0)) && can(regex("/29$", var.redis_psc_subnet_cidr))
+    error_message = "redis_psc_subnet_cidr must be a valid /29 CIDR."
+  }
+}
+
+variable "redis_discovery_port" {
+  description = "Memorystore for Redis Cluster discovery endpoint port."
+  type        = number
+  default     = 6379
+
+  validation {
+    condition     = var.redis_discovery_port >= 1 && var.redis_discovery_port <= 65535 && floor(var.redis_discovery_port) == var.redis_discovery_port
+    error_message = "redis_discovery_port must be an integer between 1 and 65535."
+  }
+}
+
+variable "redis_node_port_start" {
+  description = "First Redis Cluster data node port returned by cluster topology."
+  type        = number
+  default     = 11000
+
+  validation {
+    condition     = var.redis_node_port_start >= 1 && var.redis_node_port_start <= 65535 && floor(var.redis_node_port_start) == var.redis_node_port_start
+    error_message = "redis_node_port_start must be an integer between 1 and 65535."
+  }
+}
+
+variable "redis_node_port_end" {
+  description = "Last Redis Cluster data node port returned by cluster topology."
+  type        = number
+  default     = 13047
+
+  validation {
+    condition     = var.redis_node_port_end >= 1 && var.redis_node_port_end <= 65535 && floor(var.redis_node_port_end) == var.redis_node_port_end && var.redis_node_port_end >= var.redis_node_port_start
+    error_message = "redis_node_port_end must be an integer between 1 and 65535 and not lower than redis_node_port_start."
+  }
+}
+
 variable "ui_ingress_source_cidr" {
   description = "Airflow webserver(8080)로 ingress를 허용할 VPC 내부 CIDR (#48). dev subnet 기본."
   type        = string

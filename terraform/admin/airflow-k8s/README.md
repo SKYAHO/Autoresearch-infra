@@ -126,6 +126,34 @@ kubectl delete pod mlflow-egress-probe -n airflow
 plan/apply합니다. 다른 egress 규칙(WI metadata, DNS, PostgreSQL 등)에는 영향이
 없어야 합니다.
 
+## Feast materialize Redis egress (#263)
+
+Feast online store materialize DAG는 KubernetesPodOperator가 KSA
+`airflow/autoresearch-batch`로 실행합니다. 이 Pod가 dev Memorystore for Redis
+Cluster(`autoresearch-dev-redis-cluster`)에 접속하려면 PSC subnet으로의 egress
+허용이 필요합니다. `airflow-egress` NetworkPolicy에 다음 규칙을 추가했습니다.
+
+| 대상 | 프로토콜/포트 | 용도 |
+|---|---|---|
+| `var.redis_psc_subnet_cidr` (dev `10.10.16.0/29`) | TCP `6379` | Redis Cluster discovery endpoint |
+| `var.redis_psc_subnet_cidr` (dev `10.10.16.0/29`) | TCP `11000`-`13047` | Redis Cluster data node |
+
+Redis Cluster client는 discovery endpoint에서 topology를 받은 뒤 각 data node에
+직접 연결하므로 `6379`만 열면 실제 read/write가 실패합니다. 두 포트 범위를 모두
+허용해야 합니다. 구현은 `terraform/admin/autoresearch-k8s`의 동일 규칙(#203/#204)과
+같은 패턴이며, 목적지는 PSC subnet CIDR로만 제한합니다. 기존 metadata, DNS,
+Cloud SQL, HTTPS, MLflow egress 규칙은 변경하지 않았습니다.
+
+대응하는 GCP IAM(코드 아카이브 버킷 read, `roles/redis.dbConnectionUser`,
+Redis CA secret accessor)은 `terraform/envs/dev`에서 관리하며 자세한 표는
+`terraform/envs/dev/README.md`에 있습니다.
+
+plan은 `kubernetes_network_policy_v1.airflow_egress` 한 개의 in-place 변경
+(`0 to add, 1 to change, 0 to destroy`)만 보여야 합니다. 적용 후에는 batch KSA를
+사용하는 Pod에서 Feast materialize smoke test로 online store write를 확인합니다.
+문제가 생기면 이 변경에서 추가한 Redis egress 블록 하나만 제거하고 다시
+plan/apply합니다.
+
 ## 최초 Apply 기록
 
 2026-07-08 기준 `airflow` namespace는 클러스터에 이미 존재했습니다. 삭제 후
