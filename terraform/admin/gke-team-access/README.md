@@ -54,13 +54,16 @@ BigQuery IAM member가 함께 제거됩니다.
 | 범위 | 역할 | 용도 |
 | --- | --- | --- |
 | `autoresearch-dev-docker` 저장소 | `roles/artifactregistry.reader` | 배포된 이미지 목록·digest 확인(release 파이프라인 운영 절차) |
-| 프로젝트 | `roles/cloudbuild.builds.editor` | `gcloud builds submit`으로 Feast 등 이미지 빌드. ⚠️ build는 기본 compute SA로 실행되고 그 SA가 dev GAR writer라, 빌드를 통한 **간접 이미지 push 경로**가 함께 열립니다(`terraform/envs/dev/cloud_build.tf`). 차단하려면 build 전용 SA 분리가 필요합니다 |
+| 프로젝트 | `roles/cloudbuild.builds.editor` | `gcloud builds submit`으로 Feast 등 이미지 빌드 |
+| 전용 build SA(`<name_prefix>-cloud-build`) | `roles/iam.serviceAccountUser` | 그 SA로 build를 실행(#269). push 대상이 dev 저장소 하나로 제한된 전용 SA를 쓰게 해, 기본 compute SA를 빌려 쓰는 간접 push 경로를 대체합니다. SA 키 발급·권한 변경 권한은 아닙니다 |
 | `<project>_cloudbuild` 버킷 | `roles/storage.objectAdmin` | 위 build의 source 업로드(버킷 범위로만) |
 | 프로젝트 | `roles/cloudsql.viewer` | Cloud SQL 인스턴스 상태·private IP 조회. DB 접속 권한 아님 |
 | `autoresearch-dev-db-password` secret | `roles/secretmanager.secretAccessor` | 저장된 DB 비밀번호 **값 읽기**. Airflow runbook의 `kubectl create secret` 절차에 필요합니다. 새 version 추가·rotate는 별도 역할(`secretVersionAdder`/`secretVersionManager`)이 필요하며 이 PR에서는 부여하지 않습니다 |
 
 사람 계정에 **직접** 부여한 Artifact Registry 역할은 `reader`뿐이며, 직접 push(`writer`)는
-WIF SA와 아래 학습 이미지 writer 대상에만 둡니다. 프로젝트 수준 Secret Manager·Cloud SQL
+WIF SA와 아래 학습 이미지 writer 대상에만 둡니다. 빌드 경로는 #269의 전용 build SA를
+사용하며(제출 명령은 `docs/TERRAFORM_DEV.md`), 기본 compute SA의 GAR writer 회수는
+모든 호출부 전환 확인 후 별도로 진행합니다. 프로젝트 수준 Secret Manager·Cloud SQL
 client·Storage admin은 부여하지 않습니다.
 
 ## 학습 이미지 AR writer (#185/#256, 정책 갱신 #266)
