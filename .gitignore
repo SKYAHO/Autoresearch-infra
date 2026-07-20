@@ -10,6 +10,7 @@ __pycache__/
 !.claude/docs/
 agent.local.md
 docs/NOTION_PROGRESS_TIMELINE.md
+docs/TROUBLESHOOTING_2026-07-16-session.md
 
 # Local env / secrets
 keys/
@@ -40,6 +41,9 @@ override.tf.json
 
 # Git worktrees (local)
 .worktrees/
+
+# repo-walk 로컬 캐시
+.repo-walk/
 
 # GCP local files
 application_default_credentials.json
