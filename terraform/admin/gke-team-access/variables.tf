@@ -52,7 +52,7 @@ variable "artifact_registry_repository_id" {
 }
 
 variable "training_image_ar_writer_emails" {
-  description = "임시(#185/#256): 학습 이미지 첫 수동 push용으로 autoresearch-dev-docker 저장소 범위 roles/artifactregistry.writer를 받는 계정. push/E2E 검증 후 비우고 apply해 회수한다. 항구적 push는 application_pusher WIF SA. Keep real values in local terraform.tfvars only."
+  description = "학습 이미지(autoresearch-training) 수동 push용으로 autoresearch-dev-docker 저장소 범위 roles/artifactregistry.writer를 받는 계정(#185/#256). push 자동화 전까지는 담당자를 명시해 유지한다(#266) — 비워두고 apply하면 라이브 권한이 사라져 수동 push가 깨진다. 자동화 후 회수하며, 항구적 push 경로는 application_pusher WIF SA. Keep real values in local terraform.tfvars only."
   type        = set(string)
   default     = []
 
@@ -63,4 +63,16 @@ variable "training_image_ar_writer_emails" {
     ])
     error_message = "Each item must be an email without a user: prefix."
   }
+}
+
+variable "cloud_build_staging_bucket" {
+  description = "Cloud Build source staging bucket granted to team members (#266). Empty value derives the auto-created <project_id>_cloudbuild bucket."
+  type        = string
+  default     = ""
+}
+
+variable "db_password_secret_id" {
+  description = "Secret Manager secret id holding the Airflow metadata DB password (#266). Team members get resource-level secretAccessor on this one secret only."
+  type        = string
+  default     = "autoresearch-dev-db-password"
 }

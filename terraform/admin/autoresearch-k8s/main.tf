@@ -230,3 +230,47 @@ resource "kubernetes_role_binding_v1" "autoresearch_portforward" {
 
   depends_on = [kubernetes_namespace_v1.autoresearch]
 }
+
+# #266 앱 저장소의 Feast·Redis GKE 검증 runbook은 파드 안에서 `feast apply`,
+# materialize, 조회 스크립트를 돌리는 절차라 `kubectl exec`/`cp`가 전제다. view와
+# portforward만으로는 실행할 수 없어 exec subresource만 별도 Role로 부여한다.
+# 주의: exec은 파드 내부 환경변수·마운트를 볼 수 있어 view보다 강한 권한이다.
+# 대상은 앱 namespace 검증 담당(viewer 목록)과 동일하게 두고, write/delete와
+# cluster-admin은 여전히 부여하지 않는다.
+resource "kubernetes_role_v1" "autoresearch_exec" {
+  metadata {
+    name      = "autoresearch-exec"
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["pods/exec"]
+    verbs      = ["create"]
+  }
+
+  depends_on = [kubernetes_namespace_v1.autoresearch]
+}
+
+resource "kubernetes_role_binding_v1" "autoresearch_exec" {
+  for_each = var.autoresearch_viewer_user_emails
+
+  metadata {
+    name      = "autoresearch-exec-${replace(lower(each.value), "/[^a-z0-9-]/", "-")}"
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role_v1.autoresearch_exec.metadata[0].name
+  }
+
+  subject {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "User"
+    name      = each.value
+  }
+
+  depends_on = [kubernetes_namespace_v1.autoresearch]
+}

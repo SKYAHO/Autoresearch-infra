@@ -124,8 +124,13 @@ tag를 넣으면 하나의 shard에 부하가 집중되어 2-shard 구성의 목
 `monitoring`에는 팀 접근이 있음). `mlflow-k8s`(#236)와 동일하게 최소 권한을 준다.
 
 - 부여: built-in ClusterRole `view`(secret 제외 read) namespace RoleBinding +
-  `pods/portforward` create 전용 Role `autoresearch-portforward`.
-- 제외: `pods/exec`·write·cluster-admin은 부여하지 않는다.
+  `pods/portforward` create 전용 Role `autoresearch-portforward` +
+  `pods/exec` create 전용 Role `autoresearch-exec`(#266).
+- 제외: write/delete·cluster-admin은 부여하지 않는다.
+- `pods/exec`(#266)는 앱 저장소의 Feast·Redis GKE 검증 runbook이 파드 안에서
+  `feast apply`·materialize·조회 스크립트를 실행하는 절차라 필요하다. 다만 exec은
+  파드 내부 환경변수·마운트를 볼 수 있어 `view`보다 강한 권한이므로, 대상은 앱
+  namespace 검증 담당(viewer 목록)과 동일하게만 유지한다.
 - 대상은 `autoresearch_viewer_user_emails`(로컬 tfvars). 저장소엔 placeholder만.
 
 ```bash
@@ -133,17 +138,23 @@ tag를 넣으면 하나의 shard에 부하가 집중되어 2-shard 구성의 목
 terraform -chdir=terraform/admin/autoresearch-k8s apply
 ```
 
-plan은 대상 계정 수에 따라 `kubernetes_role_v1.autoresearch_portforward` 1개 +
-계정별 RoleBinding 2개(view, portforward)만 add로 보여야 한다.
+plan은 대상 계정 수에 따라 Role 2개(`autoresearch_portforward`,
+`autoresearch_exec`) + 계정별 RoleBinding 3개(view, portforward, exec)만 add로
+보여야 한다.
 
 검증(대상 계정 자격으로):
 
 ```bash
 kubectl auth can-i get pods                              -n autoresearch --as=<계정>  # → yes
 kubectl auth can-i create pods --subresource=portforward -n autoresearch --as=<계정>  # → yes
-kubectl auth can-i create pods --subresource=exec        -n autoresearch --as=<계정>  # → no
+kubectl auth can-i create pods --subresource=exec        -n autoresearch --as=<계정>  # → yes (#266)
 kubectl auth can-i get secrets                           -n autoresearch --as=<계정>  # → no
 ```
+
+> GKE에서는 Google 계정을 `--as`로 impersonate한 `can-i` 결과가 IAM 경로 때문에
+> 실제 권한과 다르게 `no`로 나올 수 있다(이미 동작 중인 port-forward도 `no`로 보임).
+> 확실한 확인은 `kubectl get rolebindings -n autoresearch`로 대상 계정의 binding과
+> `roleRef`를 직접 대조하거나, 대상 계정 본인이 실행해 보는 것이다.
 
 롤백: 대상 계정을 `autoresearch_viewer_user_emails`에서 제거하고 다시 apply하면
 해당 RoleBinding이 삭제된다.

@@ -21,7 +21,7 @@ redis_discovery_port  = 6379
 redis_node_port_start = 11000
 redis_node_port_end   = 13047
 
-# #252 autoresearch 네임스페이스 view + pods/portforward 부여 대상.
+# #252 view + pods/portforward, #266 pods/exec 부여 대상.
 # 실제 Google 계정은 로컬 terraform.tfvars에만 둔다(예시는 placeholder).
 autoresearch_viewer_user_emails = [
   "teammate-1@example.com",
