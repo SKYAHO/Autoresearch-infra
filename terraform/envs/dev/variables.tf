@@ -67,9 +67,9 @@ variable "db_database_version" {
 }
 
 variable "db_tier" {
-  description = "Cloud SQL machine tier (dev 최소 비용)."
+  description = "Cloud SQL machine tier (dev 동시 연결 수요를 고려한 shared-core 기본값)."
   type        = string
-  default     = "db-f1-micro"
+  default     = "db-g1-small"
 }
 
 variable "db_name" {
