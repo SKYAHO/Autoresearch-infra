@@ -1,3 +1,8 @@
+locals {
+  # 기본값은 Cloud Build가 자동 생성하는 <project_id>_cloudbuild 버킷.
+  cloud_build_staging_bucket = coalesce(var.cloud_build_staging_bucket, "${var.project_id}_cloudbuild")
+}
+
 # Team member access is intentionally separated from terraform/envs/dev.
 # This keeps personal email addresses and off-boarding churn out of PR plan comments.
 #
@@ -103,7 +108,13 @@ resource "google_artifact_registry_repository_iam_member" "team_ar_readers" {
 
 # #266 Feast 이미지를 로컬 Docker 없이 빌드하는 `gcloud builds submit` 경로.
 # builds.editor는 build 생성·조회 권한이며, source 업로드에는 Cloud Build 자동 생성
-# staging bucket(<project>_cloudbuild) 쓰기가 함께 필요하다(버킷 범위로만 부여).
+# staging bucket(<project_id>_cloudbuild) 쓰기가 함께 필요하다(버킷 범위로만 부여).
+#
+# ⚠️ 권한 경계 주의: build는 기본 compute SA로 실행되고, 그 SA에는 dev GAR 저장소
+# writer가 부여돼 있다(terraform/envs/dev/cloud_build.tf). 따라서 builds.editor는
+# "빌드를 통한 간접 이미지 push 경로"를 함께 여는 셈이며, 사람 계정에 직접 부여한
+# artifactregistry는 reader뿐이라는 점과 구분해서 이해해야 한다. 이 경로를 막으려면
+# build 전용 SA를 분리하고 기본 compute SA의 writer를 걷어야 한다(후속 과제).
 resource "google_project_iam_member" "team_cloud_build_editors" {
   for_each = var.team_member_emails
 
@@ -115,7 +126,7 @@ resource "google_project_iam_member" "team_cloud_build_editors" {
 resource "google_storage_bucket_iam_member" "team_cloud_build_staging_writers" {
   for_each = var.team_member_emails
 
-  bucket = var.cloud_build_staging_bucket
+  bucket = local.cloud_build_staging_bucket
   role   = "roles/storage.objectAdmin"
   member = "user:${each.value}"
 }
