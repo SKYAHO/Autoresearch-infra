@@ -102,7 +102,7 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 |---|---|---|
 | Instance | `autoresearch-dev-pg` | `${resource_prefix}-pg` (`local.sql_instance_name`) |
 | Engine | PostgreSQL 15 | `var.db_database_version` |
-| Tier | `db-f1-micro` | `var.db_tier`, shared-core 최소 비용 (~$7/월) |
+| Tier | `db-g1-small` | `var.db_tier`, shared-core 1.7GiB 기본 구성 (인스턴스 비용 월 약 $26, 스토리지·백업·네트워크 별도) |
 | Availability | `ZONAL` | dev 단일 zone, 비용 절감 |
 | 접속 | **private IP only** (`ipv4_enabled=false`) | VPC 내부에서만 접근. `google_service_networking_connection` peering |
 | Private services 대역 | `192.168.0.0/20` | 현재 dev apply 값. VPC subnet(`10.10.0.0/20`)과 미중복 |
@@ -116,6 +116,16 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 **선행 API**: `sqladmin.googleapis.com`, `servicenetworking.googleapis.com`, `secretmanager.googleapis.com` (수동 활성화 — `google_project_service` 미사용).
 
 접속은 같은 VPC의 리소스(GKE 노드, Cloud SQL Auth Proxy)에서 private IP(`output.cloud_sql_private_ip_address`)로. 비밀번호는 `random_password`로 생성되어 SQL user에 주입되며, #5에서 Secret Manager(`output.db_app_password_secret_id`)에도 저장한다.
+
+### Tier 변경 운영 절차 (#273)
+
+`db-g1-small` 적용은 Cloud SQL 인스턴스 재시작을 유발하므로 배치 작업이 없는
+시간에 수행한다. 적용 전 자동 백업과 PITR 상태를 확인하고, 적용 후에는 인스턴스
+상태, 애플리케이션 DB 연결, CPU·메모리 지표, Airflow 수동 DAG run 1회를 확인한다.
+비공개 `terraform.tfvars`에서 `db_tier`를 명시한 환경은 기본값 대신 그 값이
+사용되므로, plan/apply 전에 해당 값을 `db-g1-small`으로 갱신한다. 이 파일은
+커밋하지 않는다. 롤백이 필요하면 `db_tier`를 이전 값으로 되돌려 별도
+`terraform apply`를 수행하며, 이 경우에도 다시 재시작이 발생한다.
 
 **MLflow 전용 DB/user (#93)**: 같은 인스턴스에 MLflow 전용 `google_sql_database`(`mlflow`) + `google_sql_user`(`mlflow`)를 추가해 Airflow/앱과 **논리 분리**한다(8회차 "DB 외부화"). 비밀번호는 전용 `random_password` → Secret Manager `autoresearch-dev-mlflow-db-password`에 저장, MLflow GSA(`autoresearch-dev-mlflow`)에만 resource-level `secretAccessor`. MLflow 서버는 `cloudsql.client`로 private IP 접속(신규 인스턴스 없음).
 
@@ -959,7 +969,7 @@ repository variable이 설정된 뒤에만 Airflow 수동 배포 workflow로 현
 
 - namespace/RBAC/NetworkPolicy 자체는 비용 발생 안 함. GCS 버킷 2개(DAG/log)는 객체 크기에 따라 과금.
 - `prevent_destroy=true`: dev 전체 destroy에서도 버킷 삭제 차단. 삭제 필요 시 lifecycle 해제 후 별도 apply.
-- Cloud SQL database `airflow`는 기존 인스턴스 비용에 포함(db-f1-micro 공유).
+- Cloud SQL database `airflow`는 기존 인스턴스 비용에 포함(db-g1-small 공유).
 - 롤백: `terraform/envs/dev/airflow.tf`의 GCP 리소스와 `terraform/admin/airflow-k8s`의 K8s 리소스를 각각 제거 후 apply. 단 GCS 버킷은 prevent_destroy로 보호됨.
 
 ### Airflow Google OAuth 클라이언트 자격증명 (#54)
