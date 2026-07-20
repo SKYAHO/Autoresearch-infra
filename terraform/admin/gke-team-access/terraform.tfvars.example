@@ -14,7 +14,8 @@ team_member_emails = [
 ]
 
 # 임시(#185/#256): 학습 이미지 첫 수동 push용 autoresearch-dev-docker 저장소 범위
-# AR writer. push/E2E 검증 후 빈 목록으로 두고 apply해 회수한다. 평소엔 [] 유지.
+# AR writer. 학습 이미지 push 자동화 전까지는 담당자를 명시해 둔다(#266) — 값을
+# 비워두면 apply 때 라이브 권한이 사라져 수동 push가 깨진다. 자동화 후 회수한다.
 training_image_ar_writer_emails = [
   # "teammate-x@example.com",
 ]

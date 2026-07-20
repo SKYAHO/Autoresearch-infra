@@ -64,3 +64,15 @@ variable "training_image_ar_writer_emails" {
     error_message = "Each item must be an email without a user: prefix."
   }
 }
+
+variable "cloud_build_staging_bucket" {
+  description = "Cloud Build source staging bucket granted to team members (#266). Defaults to the auto-created <project>_cloudbuild bucket."
+  type        = string
+  default     = "ar-infra-501607_cloudbuild"
+}
+
+variable "db_password_secret_id" {
+  description = "Secret Manager secret id holding the Airflow metadata DB password (#266). Team members get resource-level secretAccessor on this one secret only."
+  type        = string
+  default     = "autoresearch-dev-db-password"
+}

@@ -86,3 +86,58 @@ resource "google_artifact_registry_repository_iam_member" "training_image_temp_w
   role       = "roles/artifactregistry.writer"
   member     = "user:${each.value}"
 }
+
+# #266 배포된 이미지 digest 확인용 read 권한. 앱 저장소 release 파이프라인 문서가
+# `gcloud artifacts docker images list/describe`를 표준 운영 절차로 안내하는데 사람
+# 계정에 read 권한이 없었다. 저장소 범위로만 부여하고 push(writer)는 WIF SA와
+# training_image_ar_writer_emails에만 남긴다.
+resource "google_artifact_registry_repository_iam_member" "team_ar_readers" {
+  for_each = var.team_member_emails
+
+  project    = var.project_id
+  location   = var.region
+  repository = var.artifact_registry_repository_id
+  role       = "roles/artifactregistry.reader"
+  member     = "user:${each.value}"
+}
+
+# #266 Feast 이미지를 로컬 Docker 없이 빌드하는 `gcloud builds submit` 경로.
+# builds.editor는 build 생성·조회 권한이며, source 업로드에는 Cloud Build 자동 생성
+# staging bucket(<project>_cloudbuild) 쓰기가 함께 필요하다(버킷 범위로만 부여).
+resource "google_project_iam_member" "team_cloud_build_editors" {
+  for_each = var.team_member_emails
+
+  project = var.project_id
+  role    = "roles/cloudbuild.builds.editor"
+  member  = "user:${each.value}"
+}
+
+resource "google_storage_bucket_iam_member" "team_cloud_build_staging_writers" {
+  for_each = var.team_member_emails
+
+  bucket = var.cloud_build_staging_bucket
+  role   = "roles/storage.objectAdmin"
+  member = "user:${each.value}"
+}
+
+# #266 Cloud SQL 인스턴스 상태·private IP 조회. 데이터 접근 권한은 아니며
+# (client/admin 아님), 접속은 여전히 GKE 내부 경로와 DB 계정으로만 가능하다.
+resource "google_project_iam_member" "team_cloudsql_viewers" {
+  for_each = var.team_member_emails
+
+  project = var.project_id
+  role    = "roles/cloudsql.viewer"
+  member  = "user:${each.value}"
+}
+
+# #266 Airflow metadata DB 비밀번호 조회. Airflow 저장소 runbook의 Secret 생성·교체
+# 절차가 project owner 계정에만 가능해 병목이었다. secret 하나의 resource-level
+# IAM으로만 부여하고 프로젝트 수준 Secret Manager 역할은 주지 않는다.
+resource "google_secret_manager_secret_iam_member" "team_db_password_accessors" {
+  for_each = var.team_member_emails
+
+  project   = var.project_id
+  secret_id = var.db_password_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "user:${each.value}"
+}

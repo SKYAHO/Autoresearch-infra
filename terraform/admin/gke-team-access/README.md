@@ -46,6 +46,22 @@ BigQuery IAM member가 함께 제거됩니다.
 이미 발급된 access token은 만료될 때까지, 보통 최대 약 1시간 동안 유효할 수
 있습니다.
 
+## 이미지·빌드·DB 운영 권한 (#266)
+
+세 저장소(`Autoresearch-infra`·`Autoresearch`·`Autoresearch-airflow`)의 runbook이
+요구하는데 빠져 있던 권한을 `team_member_emails` 전원에게 추가로 부여합니다.
+
+| 범위 | 역할 | 용도 |
+| --- | --- | --- |
+| `autoresearch-dev-docker` 저장소 | `roles/artifactregistry.reader` | 배포된 이미지 목록·digest 확인(release 파이프라인 운영 절차) |
+| 프로젝트 | `roles/cloudbuild.builds.editor` | `gcloud builds submit`으로 Feast 등 이미지 빌드 |
+| `<project>_cloudbuild` 버킷 | `roles/storage.objectAdmin` | 위 build의 source 업로드(버킷 범위로만) |
+| 프로젝트 | `roles/cloudsql.viewer` | Cloud SQL 인스턴스 상태·private IP 조회. DB 접속 권한 아님 |
+| `autoresearch-dev-db-password` secret | `roles/secretmanager.secretAccessor` | Airflow metadata DB 비밀번호 조회(Secret 생성·교체 절차) |
+
+이미지 push(`writer`)는 계속 WIF SA와 아래 임시 writer 대상에만 둡니다. 프로젝트
+수준 Secret Manager·Cloud SQL client·Storage admin은 부여하지 않습니다.
+
 ## 임시 학습 이미지 AR writer (#185/#256)
 
 학습 이미지(`autoresearch-training`)를 GAR에 첫 **수동 push**로 언블록하기 위해,
