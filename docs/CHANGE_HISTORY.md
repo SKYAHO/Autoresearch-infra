@@ -3,6 +3,22 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-20: dev Cloud SQL tier 상향 db-f1-micro → db-g1-small (#273, PR #274) — apply 완료
+
+- 여러 애플리케이션(Airflow metadata, MLflow backend)이 같은 dev 인스턴스를 쓰면서
+  shared-core `db-f1-micro`의 동시 연결 여유가 부족해 tier를 `db-g1-small`로 올렸다.
+- plan `0 add / 1 change / 0 destroy` — `google_sql_database_instance.dev`의 `tier`만
+  in-place 변경. database·user·private IP·디스크·백업/PITR 구성은 무변경.
+- **인스턴스 재시작이 발생한다**(apply 약 4분 40초 소요). 배치 파드가 없는 시간에 수행했고,
+  재시작 동안 Airflow scheduler가 3회 재시작한 뒤 자동 회복했다.
+- 검증(2026-07-20): 인스턴스 `db-g1-small`·`RUNNABLE`, scheduler 2/2·webserver 1/1,
+  scheduler에서 DB 쿼리 정상, webserver `/health` 200, MLflow 파드는 재시작 없이 유지.
+- **운영자 주의**: 로컬 `terraform.tfvars`에 `db_tier`를 명시한 환경은 값을
+  `db-g1-small`로 갱신해야 한다. 미갱신 상태로 apply하면 tier가 다시 내려간다
+  (변수 default 갱신만으로는 로컬 명시값을 덮지 못함 — #253과 같은 함정).
+- 비용: shared-core 한 단계 상향분만 증가. 롤백: `db_tier`를 되돌려 apply하면 되며
+  같은 재시작이 발생한다.
+
 ## 2026-07-20: 3개 저장소 교차 팀원 권한 감사 (#265, 부여는 #266)
 
 - `Autoresearch-infra`·`Autoresearch`·`Autoresearch-airflow` 세 저장소가 하나의 작업 흐름이라,
