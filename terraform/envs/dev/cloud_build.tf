@@ -39,11 +39,12 @@ resource "google_artifact_registry_repository_iam_member" "cloud_build_builder_a
   member     = "serviceAccount:${google_service_account.cloud_build_builder.email}"
 }
 
-# source 아카이브 read와 build 로그 write. 사용자 지정 SA로 실행하는 build는
-# 로그 대상을 명시해야 하므로 같은 staging 버킷의 logs/ 경로를 쓴다(버킷 범위).
-resource "google_storage_bucket_iam_member" "cloud_build_builder_bucket_object_admin" {
+# source 아카이브 read 전용. 빌드 로그는 GCS가 아니라 Cloud Logging으로 보내므로
+# (build config의 options.logging = CLOUD_LOGGING_ONLY) 이 공유 버킷에 대한 쓰기·삭제
+# 권한이 필요 없다. 다른 build의 source·로그를 건드릴 수 없다.
+resource "google_storage_bucket_iam_member" "cloud_build_builder_bucket_object_viewer" {
   bucket = local.cloud_build_bucket_name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.cloud_build_builder.email}"
 }
 
