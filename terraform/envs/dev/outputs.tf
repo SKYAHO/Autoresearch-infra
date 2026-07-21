@@ -219,6 +219,17 @@ output "feast_offline_store_dataset_id" {
   value       = google_bigquery_dataset.feast_offline_store.dataset_id
 }
 
+# #280 배치 job이 CREATE MODEL ... REMOTE WITH CONNECTION에 넣을 값
+output "vertex_ai_connection_id" {
+  description = "BigQuery ML remote model이 참조하는 Vertex AI connection의 전체 id (project.location.connection_id)."
+  value       = google_bigquery_connection.vertex_ai.id
+}
+
+output "vertex_ai_connection_service_account" {
+  description = "Vertex AI connection이 자동 생성한 service agent. roles/aiplatform.user를 보유한다."
+  value       = google_bigquery_connection.vertex_ai.cloud_resource[0].service_account_id
+}
+
 output "feast_registry_bucket_name" {
   description = "Feast registry GCS bucket 이름."
   value       = google_storage_bucket.feast_registry.name

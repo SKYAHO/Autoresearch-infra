@@ -17,6 +17,8 @@
 - dev 원본 데이터 GCS bucket(YouTube/user/action-log/persona raw)
 - Feast registry/staging GCS bucket
 - dev BigQuery analytics dataset 및 Feast offline store dataset
+- Feast 피처 테이블 4종(스키마를 Terraform이 소유, `deletion_protection`) (#280)
+- BigQuery ↔ Vertex AI `CLOUD_RESOURCE` connection과 `roles/aiplatform.user` IAM (#280)
 - GKE Standard private-node cluster, node pool, node/app service account, Workload Identity binding
 - Airflow GCP 리소스: 전용 GCP SA/WI IAM, batch 전용 GCP SA, metadata DB, DAG/log bucket, BigQuery/GCS IAM
 - Airflow 전용 GKE node pool(`airflow-dev`)과 batch KSA Workload Identity binding
@@ -61,7 +63,8 @@ terraform -chdir=terraform/envs/dev apply
 | Artifact Registry | `autoresearch-dev-docker` |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
 | GCS | `ar-infra-501607-autoresearch-dev-raw-data`, `ar-infra-501607-feast-registry`, `ar-infra-501607-feast-staging`, `ar-infra-501607-autoresearch-dev-airflow-dags`, `ar-infra-501607-autoresearch-dev-airflow-logs`, `ar-infra-501607-code-artifacts` (#238) |
-| BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` |
+| BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` (data lake 2종 + Feast 피처 테이블 4종) |
+| BigQuery connection | `autoresearch-dev-vertex-ai` (`CLOUD_RESOURCE`, `asia-northeast3`, #280) |
 | Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key`, `autoresearch-dev-airflow-oauth-client-id`, `autoresearch-dev-airflow-oauth-client-secret` |
 | GKE | `autoresearch-dev-gke`, node pools `dev-default`, `airflow-dev`, 컨트롤 플레인 DNS 엔드포인트(#45/#46) |
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
