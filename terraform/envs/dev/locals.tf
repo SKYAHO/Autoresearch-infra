@@ -16,8 +16,12 @@ locals {
   )
 
   required_services = toset([
+    # #280 BigQuery ML remote model이 호출하는 Vertex AI
+    "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
     "bigquery.googleapis.com",
+    # #280 BigQuery ↔ Vertex AI CLOUD_RESOURCE connection
+    "bigqueryconnection.googleapis.com",
     "cloudbuild.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "compute.googleapis.com",

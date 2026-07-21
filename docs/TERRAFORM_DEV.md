@@ -57,6 +57,7 @@ terraform/
 │       ├── variables.tf
 │       ├── vault.tf          # #132 Vault auto-unseal용 KMS key + GSA/WI
 │       ├── versions.tf
+│       ├── vertex_ai.tf      # #280 BigQuery ↔ Vertex AI connection + aiplatform IAM
 │       └── vpc.tf          # #2 dev VPC / subnet / 최소 firewall
 └── modules/
     └── README.md
@@ -319,6 +320,76 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | Registry 보호 | versioning enabled, noncurrent 30일 보존 | registry 갱신 이력 보호와 비용 제어 |
 | Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
 | 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, Feast GCS bucket `storage.objectAdmin` |
+
+### Feast 피처 테이블 스키마 소유권 (#280)
+
+`data_lake_*` 테이블과 달리, 아래 4개 Feast 피처 테이블은 **스키마를 Terraform이
+소유**한다. Feast `FeatureView`(`SKYAHO/Autoresearch`
+`feature_repo/feature_definitions.py`)가 컬럼명·타입·mode를 계약으로 선언하고
+있어, 계약 위반을 `terraform plan` 단계에서 잡기 위해서다.
+
+| 테이블 | 파티셔닝 | Feast FeatureView |
+| --- | --- | --- |
+| `user_static_feature` | 없음 | `UserStaticView` |
+| `user_dynamic_feature` | `event_timestamp` DAY | `UserDynamicView` |
+| `video_feature` | `event_timestamp` DAY | `VideoFeatureView` |
+| `user_category_similarity` | 없음 | `UserCategorySimilarityView` |
+
+`user_static_feature`와 `user_category_similarity`는 `event_timestamp`가
+`1970-01-01` 고정값(정적 피처가 모든 action log보다 먼저 유효하다는 규약)이라
+파티셔닝하지 않는다.
+
+| 소유권 | 주체 | 내용 |
+| --- | --- | --- |
+| 구조 + 스키마 | 이 저장소 (Terraform) | 테이블 존재, 컬럼·타입·mode, 파티셔닝, labels |
+| 데이터 | `SKYAHO/Autoresearch` | `autoresearch.jobs.feature_store_build`가 `createDisposition=CREATE_NEVER`로 적재 |
+
+> **주의 — 적재는 `WRITE_TRUNCATE`가 아니라 `TRUNCATE` + `INSERT INTO`를 쓴다.**
+> `WRITE_TRUNCATE`는 대상 테이블의 스키마까지 결과 스키마로 덮어쓴다
+> (`CREATE_NEVER`는 테이블 신규 생성만 막는다). 2026-07-21 실측에서 `REQUIRED`
+> 컬럼이 `NULLABLE`로 파괴되는 것을 확인했다. 그대로 두면 job ↔ Terraform 간 영구
+> drift가 발생한다.
+
+적재 job은 아래 형태로 결과를 저장한다. DML은 대상 테이블 스키마를 변경하지 않아
+Terraform 소유 스키마가 보호되고, `REQUIRED` 컬럼에 NULL이 들어오면 BigQuery가
+거부해 불량 데이터도 차단된다. `TRUNCATE`와 `INSERT` 사이에 Feast가 빈 테이블을
+읽지 않도록 트랜잭션으로 묶는다.
+
+```sql
+BEGIN TRANSACTION;
+TRUNCATE TABLE `<project>.feast_offline_store.<table>`;
+INSERT INTO `<project>.feast_offline_store.<table>`
+<SELECT ...>;
+COMMIT TRANSACTION;
+```
+
+아래 3개는 임베딩 모델·차원 변경 시 스키마가 따라 바뀌고 Feast가 직접 읽지
+않으므로 Terraform 관리에서 제외한다. 배치 job이 `CREATE OR REPLACE`로 관리한다:
+`user_topic_embedding`, `category_embedding`, `training_entity`.
+
+### BigQuery ↔ Vertex AI connection (#280)
+
+한국어 페르소나 키워드와 카테고리 설명문 간 코사인 유사도
+(`user_category_similarity.topic_similarity`) 계산에 다국어 임베딩이 필요하다.
+BigQuery ML `ML.GENERATE_EMBEDDING`이 Vertex AI를 호출하는 경로를 `vertex_ai.tf`가
+관리한다.
+
+| 항목 | 값 | 비고 |
+| --- | --- | --- |
+| Connection | `autoresearch-dev-vertex-ai` | `CLOUD_RESOURCE` 타입 |
+| Location | `asia-northeast3` | `var.bigquery_location`. `feast_offline_store` dataset과 **반드시 동일**해야 remote model이 동작한다 |
+| Connection service agent | 자동 생성 | `roles/aiplatform.user` (project) |
+| Airflow SA / Airflow batch SA | 기존 GSA | `roles/aiplatform.user` 추가 (BigQuery 권한은 `airflow.tf`에 기존 보유) |
+| 필요 API | `aiplatform.googleapis.com`, `bigqueryconnection.googleapis.com` | `local.required_services`에 기록 |
+
+remote model(`CREATE MODEL ... REMOTE WITH CONNECTION`)은 배치 job이 멱등하게
+생성한다. 이 저장소 범위는 connection과 IAM까지다. 배치가 참조할 값은
+`vertex_ai_connection_id` output으로 노출한다.
+
+**사용 모델은 `text-multilingual-embedding-002`다** (#280). connection은 모델명을
+담지 않으므로 모델 교체 시 Terraform 변경은 필요 없고, 배치 job의 `ENDPOINT` 값만
+바꾸면 된다. 신형 `gemini-embedding-001`도 서울 리전에서 동작하지만 요청당 1건만
+허용해(다건 요청 시 429) 순차 약 100건/분에 그치므로 채택하지 않았다.
 
 ## Monitoring Kubernetes root (#78/#79, #183 ArgoCD 이관)
 

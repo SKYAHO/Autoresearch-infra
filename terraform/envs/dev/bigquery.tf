@@ -124,3 +124,133 @@ resource "google_bigquery_table" "data_lake_youtube_trending_kr" {
     ignore_changes = [schema]
   }
 }
+
+# #280 Feast 피처 테이블 4종
+#
+# data_lake_* 테이블과 달리 스키마를 Terraform이 소유한다. Feast FeatureView
+# (SKYAHO/Autoresearch feature_repo/feature_definitions.py)가 컬럼명·타입·mode를
+# 계약으로 선언하고 있어, 계약 위반을 terraform plan 단계에서 잡기 위함이다.
+#
+# 데이터는 SKYAHO/Autoresearch autoresearch.jobs.feature_store_build가 적재하며,
+# createDisposition=CREATE_NEVER로 테이블을 새로 만들지 않는다.
+#
+# ⚠️ 적재는 WRITE_TRUNCATE가 아니라 TRUNCATE + INSERT INTO를 써야 한다.
+# WRITE_TRUNCATE는 대상 테이블 스키마까지 결과 스키마로 교체하며(CREATE_NEVER는
+# 테이블 생성만 막는다), 2026-07-21 실측에서 REQUIRED가 NULLABLE로 파괴되는 것을
+# 확인했다. DML(TRUNCATE + INSERT)은 스키마를 바꾸지 않아 이 정의가 보호되고,
+# REQUIRED 컬럼에 NULL이 들어오면 BigQuery가 거부한다. 상세는 #280 참조.
+
+resource "google_bigquery_table" "user_static_feature" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "user_static_feature"
+  description         = "페르소나 기반 유저 정적 피처. Feast UserStaticView 소스."
+  deletion_protection = true
+
+  # event_timestamp가 1970-01-01 고정값(정적 피처가 모든 action log보다 먼저
+  # 유효하다는 규약)이라 파티셔닝이 무의미하다.
+
+  schema = jsonencode([
+    { name = "user_id", type = "STRING", mode = "REQUIRED" },
+    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "age_group", type = "STRING", mode = "NULLABLE" },
+    { name = "occupation", type = "STRING", mode = "NULLABLE" },
+    { name = "preferred_category", type = "STRING", mode = "REPEATED" },
+    { name = "preferred_topics", type = "STRING", mode = "REPEATED" },
+    { name = "watch_time_band", type = "STRING", mode = "NULLABLE" },
+  ])
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-feature-table"
+  }
+}
+
+resource "google_bigquery_table" "user_dynamic_feature" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "user_dynamic_feature"
+  description         = "action log 기반 유저 동적 피처(일 단위 snapshot). Feast UserDynamicView 소스."
+  deletion_protection = true
+
+  # 일 단위 snapshot이 누적되고 feast materialize가 timestamp 범위로 스캔하므로
+  # DAY 파티션이 스캔 비용에 직접 기여한다.
+  time_partitioning {
+    type  = "DAY"
+    field = "event_timestamp"
+  }
+
+  schema = jsonencode([
+    { name = "user_id", type = "STRING", mode = "REQUIRED" },
+    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "recent_click_count_7d", type = "INTEGER", mode = "NULLABLE" },
+    { name = "recent_view_count_7d", type = "INTEGER", mode = "NULLABLE" },
+    { name = "recent_watch_time_7d", type = "INTEGER", mode = "NULLABLE" },
+    { name = "recent_like_count_7d", type = "INTEGER", mode = "NULLABLE" },
+    { name = "historical_category_affinity", type = "STRING", mode = "NULLABLE" },
+    { name = "total_event_count_7d", type = "INTEGER", mode = "NULLABLE" },
+  ])
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-feature-table"
+  }
+}
+
+resource "google_bigquery_table" "video_feature" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "video_feature"
+  description         = "YouTube 영상·채널 피처. Feast VideoFeatureView 소스."
+  deletion_protection = true
+
+  time_partitioning {
+    type  = "DAY"
+    field = "event_timestamp"
+  }
+
+  schema = jsonencode([
+    { name = "video_id", type = "STRING", mode = "REQUIRED" },
+    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "category_id", type = "STRING", mode = "NULLABLE" },
+    { name = "duration_sec", type = "INTEGER", mode = "NULLABLE" },
+    { name = "view_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "like_ratio", type = "FLOAT", mode = "NULLABLE" },
+    { name = "comment_ratio", type = "FLOAT", mode = "NULLABLE" },
+    { name = "days_since_upload", type = "INTEGER", mode = "NULLABLE" },
+    { name = "channel_subscriber_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "channel_view_count", type = "INTEGER", mode = "NULLABLE" },
+    { name = "channel_video_count", type = "INTEGER", mode = "NULLABLE" },
+  ])
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-feature-table"
+  }
+}
+
+resource "google_bigquery_table" "user_category_similarity" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "user_category_similarity"
+  description         = "유저 관심 키워드 ↔ 카테고리 설명문 임베딩 간 코사인 유사도. Feast UserCategorySimilarityView 소스."
+  deletion_protection = true
+
+  # user_static_feature와 동일하게 event_timestamp가 1970-01-01 고정값이라
+  # 파티셔닝하지 않는다.
+
+  schema = jsonencode([
+    { name = "user_id", type = "STRING", mode = "REQUIRED" },
+    { name = "category_id", type = "STRING", mode = "REQUIRED" },
+    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "topic_similarity", type = "FLOAT", mode = "NULLABLE" },
+    { name = "topic_similarity_top_topic", type = "STRING", mode = "NULLABLE" },
+    { name = "embedding_model", type = "STRING", mode = "NULLABLE" },
+    { name = "embedding_dim", type = "INTEGER", mode = "NULLABLE" },
+    { name = "user_topic_embedding_version", type = "STRING", mode = "NULLABLE" },
+    { name = "category_embedding_version", type = "STRING", mode = "NULLABLE" },
+    { name = "similarity_method", type = "STRING", mode = "NULLABLE" },
+    { name = "similarity_pooling", type = "STRING", mode = "NULLABLE" },
+  ])
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-feature-table"
+  }
+}
