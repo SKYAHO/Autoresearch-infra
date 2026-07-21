@@ -91,6 +91,26 @@ POST https://asia-northeast3-aiplatform.googleapis.com/v1/projects/ar-infra-5016
 `topic_similarity`를 원값 그대로 피처로 쓰면 변별력이 낮다. 카테고리별 정규화
 (z-score)나 순위 기반 변환을 배치 측에서 검토해야 한다. 인프라 범위 밖이다.
 
+### 검토 후 기각한 대안 — `gemini-embedding-001`
+
+더 신형인 `gemini-embedding-001`도 후보로 실측했다. `asia-northeast3`에서
+제공되지만(HTTP 200, 3072차원, `outputDimensionality`로 768 축소 가능) **처리량
+때문에 기각했다.**
+
+| 항목 | `text-multilingual-embedding-002` (채택) | `gemini-embedding-001` (기각) |
+| --- | --- | --- |
+| 한 요청 5건 배치 | 5건 반환 | **HTTP 429** — 요청당 1건만 허용 |
+| 순차 처리량 | — | 약 100건/분 (0.6초/건) |
+| 판별 격차 (최고−차순위) | 0.166~0.169 | 0.072~0.104 |
+| 유사도 바닥값 | 0.47~0.55 | 0.77~0.78 |
+
+`gemini-embedding-001`은 요청당 1건만 받아 `ML.GENERATE_EMBEDDING`이 행마다 개별
+요청을 보내게 되고, 순차 기준 2,000건에 약 20분, 10,000건에 약 100분이 걸린다.
+데이터 규모가 커질수록 배치 실행 시간이 선형으로 늘어 채택하지 않았다.
+
+판별 격차도 `text-multilingual-embedding-002`가 1.6~2.3배 넓었다(`task_type`은
+`SEMANTIC_SIMILARITY` 적용). 다만 문장 5개 표본이라 벤치마크는 아니다.
+
 ## 영향 및 제외 범위
 
 - 기존 4개 테이블의 더미 데이터 300~600행이 소실된다(요청자 승인 완료).
