@@ -63,18 +63,33 @@ replace가 충돌해 결국 수동 개입이 필요하므로 채택하지 않는
 `local.required_services`에 기록한다(이 local은 문서용 output이며 API를 실제로
 활성화하지 않는다).
 
-## 미해결 — 서울 리전 임베딩 모델 제공 여부
+## 서울 리전 임베딩 모델 제공 여부 — 확인 완료 (2026-07-21)
 
-`text-multilingual-embedding-002`가 `asia-northeast3`에서 제공되는지 공개 문서로
-확인되지 않았다. `aiplatform.googleapis.com` 활성화 후 실호출로 판정한다.
+`text-multilingual-embedding-002`는 `asia-northeast3`에서 **제공된다.** 공개
+문서에 리전별 제공 표가 없어 실호출로 판정했다.
 
-미지원으로 판정되면 아래 중 하나로 설계를 변경한다. 두 경우 모두 이번 변경의
-connection·테이블 정의는 그대로 유효하며, 임베딩 산출 경로만 달라진다.
+```
+POST https://asia-northeast3-aiplatform.googleapis.com/v1/projects/ar-infra-501607
+     /locations/asia-northeast3/publishers/google/models/text-multilingual-embedding-002:predict
+→ HTTP 200, 768차원 임베딩 반환
+```
 
-1. 임베딩 전용 데이터셋을 US에 두고, 결과를 서울 `feast_offline_store`로 복사한다.
-   BigQuery는 cross-region 조인을 지원하지 않으므로 복사 단계가 추가된다.
-2. BigQuery ML 대신 Python 배치에서 Vertex AI SDK를 직접 호출한다. 이 경우
-   connection은 불필요해지고 Airflow GSA의 `aiplatform.user`만 남는다.
+한국어 의미 판별도 정상이다. 페르소나 키워드가 올바른 카테고리에서 최고 유사도를
+보였다.
+
+| 키워드 | 음식·맛집 | 게임·e스포츠 | 정치·시사 |
+| --- | --- | --- | --- |
+| 노포 맛집 탐방 | **0.7221** | 0.5413 | 0.5529 |
+| 리그 오브 레전드 | 0.4681 | **0.6417** | 0.4754 |
+
+`feast_offline_store`와 동일 리전이므로 BigQuery ML remote model 경로가 성립한다.
+임베딩 전용 데이터셋 US 분리나 Python 배치 전환 같은 대안 설계는 불필요하다.
+
+### 배치 측 참고 — 코사인 유사도 바닥값이 높다
+
+무관한 카테고리 조합에서도 유사도가 0.47~0.55로 나온다. 이 모델의 특성이며,
+`topic_similarity`를 원값 그대로 피처로 쓰면 변별력이 낮다. 카테고리별 정규화
+(z-score)나 순위 기반 변환을 배치 측에서 검토해야 한다. 인프라 범위 밖이다.
 
 ## 영향 및 제외 범위
 

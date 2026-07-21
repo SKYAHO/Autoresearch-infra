@@ -32,14 +32,14 @@ git diff --check
 `terraform apply`는 프로젝트 owner 계정(`sk.yaho2026@gmail.com`)으로 수행한다.
 팀원 계정은 `roles/viewer` 수준이라 API 활성화와 IAM 부여 권한이 없다.
 
-### 1. API 활성화와 리전 판정
+### 1. API 활성화와 리전 판정 — 완료 (2026-07-21)
 
 ```bash
 gcloud services enable aiplatform.googleapis.com --project=ar-infra-501607
 ```
 
-`asia-northeast3`에서 `text-multilingual-embedding-002` 제공 여부를 실호출로
-판정한다. 미지원이면 설계 문서의 대안 2가지 중 하나를 선택하고 이슈에 기록한다.
+활성화 완료. `asia-northeast3`에서 `text-multilingual-embedding-002` 제공을
+실호출로 확인했다(HTTP 200, 768차원). 설계 변경 불필요. 상세는 설계 문서 참조.
 
 ### 2. 기존 더미 테이블 drop
 
