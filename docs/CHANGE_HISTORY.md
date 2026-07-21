@@ -3,6 +3,56 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-21: Feast 피처 테이블 4종 IaC 편입 + BigQuery↔Vertex AI connection (#280, PR #281) — apply 완료
+
+- CTR 피처 스토어를 더미에서 실데이터로 전환하기 위해 Feast 피처 테이블 4종
+  (`user_static_feature`, `user_dynamic_feature`, `video_feature`,
+  `user_category_similarity`)을 Terraform으로 편입하고, BigQuery ML
+  `ML.GENERATE_EMBEDDING`이 Vertex AI를 호출할 `CLOUD_RESOURCE` connection을 만들었다.
+- **`data_lake_*`와 달리 스키마를 Terraform이 소유한다.** raw 테이블은
+  `ignore_changes = [schema]`로 적재 job에 위임하지만, 피처 테이블은 Feast
+  `FeatureView`가 컬럼명·타입을 계약으로 선언하므로 계약 위반을 `terraform plan`
+  단계에서 잡는다. 두 패턴의 차이는 취향이 아니라 **계약의 유무**다.
+- **적재는 `WRITE_TRUNCATE`가 아니라 `TRUNCATE` + `INSERT INTO`를 써야 한다.**
+  임시 테이블 실측 결과, `WRITE_TRUNCATE` query job은 대상 테이블 스키마까지 결과
+  스키마로 교체해 `REQUIRED`를 `NULLABLE`로 파괴한다(`createDisposition =
+  CREATE_NEVER`는 테이블 신규 생성만 막고 스키마 교체는 막지 못함). 그대로 두면
+  job ↔ Terraform 간 영구 drift가 생겨 "계약을 plan에서 잡는다"는 목적이 무력화된다.
+  DML은 스키마를 바꾸지 않고, `REQUIRED` 컬럼에 NULL이 오면 BigQuery가 거부해
+  불량 데이터 차단이 함께 달성된다. `TRUNCATE`와 `INSERT` 사이의 빈 테이블 구간은
+  `BEGIN TRANSACTION`으로 묶어 없앤다.
+  - query job에는 스키마 필드 자체가 없어(`configuration.load.schema`는 load job
+    전용) "job에 스키마 명시 전달" 방안은 **적용 불가**임을 확인했다.
+- 임베딩 모델은 `text-multilingual-embedding-002`를 채택했다. 서울 리전 제공 여부는
+  공개 문서에 표가 없어 실호출로 판정했다(HTTP 200, 768차원). 신형
+  `gemini-embedding-001`도 서울에서 동작하지만 **요청당 1건만 허용**해(다건 요청 시
+  429) 순차 약 100건/분에 그치고, 데이터 증가에 배치 시간이 선형으로 늘어 기각했다.
+  connection은 모델명을 담지 않으므로 모델 교체 시 Terraform 변경은 불필요하다.
+- 기존 동명 더미 테이블 4개는 전 컬럼 `NULLABLE`·무파티션이라 `NULLABLE → REQUIRED`
+  승격과 파티셔닝 추가가 모두 불가능해 drop 후 재생성했다. `bak280_*` 백업본을 먼저
+  만들었으며, 실데이터 적재 확인 후 수동 삭제가 필요하다.
+- plan `8 add / 0 change / 0 destroy` — connection 1, BigQuery table 4,
+  `roles/aiplatform.user` 3(connection service agent, airflow, airflow_batch).
+  Vertex AI는 dataset 수준 IAM이 없어 project가 최소 단위이며 `admin`이 아닌 `user`로
+  제한했다.
+- 검증(2026-07-21): 테이블 스키마·`REQUIRED`·`REPEATED`·파티션이 정의와 일치,
+  apply 직후 plan `No changes`, remote model 생성 및 `ML.GENERATE_EMBEDDING` 호출
+  성공(768차원, status `OK`). 검증용 임시 모델은 삭제했다.
+- **운영자 주의**: `roles/aiplatform.user` 부여 직후 remote model 생성이
+  `does not have the permission to access or use the endpoint`로 실패한다. IAM 전파
+  지연이며 약 2~3분 뒤 정상화된다. IAM 자체를 의심하기 전에 재시도할 것.
+- **운영자 주의**: 첫 plan에서 `google_sql_database_instance.dev`의 tier가
+  `db-g1-small → db-f1-micro`로 내려가는 변경이 섞여 나왔다. #273/#276에서 이미
+  apply했음에도 로컬 비공개 `terraform.tfvars`가 옛 값을 갖고 있던 탓이다(#276이
+  경고한 함정이 실제로 재발). apply 전 `terraform.tfvars`의 `db_tier` 확인이 필요하다.
+- 비용: connection·IAM은 무료. DAY 파티션(`user_dynamic_feature`, `video_feature`)이
+  Feast materialize 스캔량을 줄인다. 정적 피처 2종은 `event_timestamp`가
+  `1970-01-01` 고정값이라 파티셔닝하지 않았다.
+- 롤백: 테이블은 `deletion_protection = false`로 바꿔 apply 후
+  `terraform destroy -target`. connection·IAM은 정의를 되돌려 apply하며, connection
+  삭제 시 service agent도 함께 사라져 IAM binding 별도 정리는 불필요하다. 배치 측
+  remote model이 남으면 참조가 끊기므로 함께 정리한다.
+
 ## 2026-07-20: Airflow Gmail SMTP TCP 587 egress (#277)
 
 - `Autoresearch-airflow#87`의 DAG 성공·실패 메일 callback이 Gmail SMTP STARTTLS
