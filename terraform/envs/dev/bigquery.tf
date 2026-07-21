@@ -134,11 +134,11 @@ resource "google_bigquery_table" "data_lake_youtube_trending_kr" {
 # 데이터는 SKYAHO/Autoresearch autoresearch.jobs.feature_store_build가 적재하며,
 # createDisposition=CREATE_NEVER로 테이블을 새로 만들지 않는다.
 #
-# ⚠️ 적재 job이 WRITE_TRUNCATE를 쓰면 BigQuery가 대상 테이블 스키마까지 결과
-# 스키마로 교체한다(CREATE_NEVER는 테이블 생성만 막고 스키마 교체는 막지 못한다).
-# 특히 REQUIRED mode는 쿼리 결과에서 NULLABLE로 산출되므로 job ↔ terraform 간
-# 영구 drift가 발생할 수 있다. 배치 측에서 스키마를 명시 전달하거나
-# DELETE + WRITE_APPEND로 전환해야 한다. 상세는 #280 참조.
+# ⚠️ 적재는 WRITE_TRUNCATE가 아니라 TRUNCATE + INSERT INTO를 써야 한다.
+# WRITE_TRUNCATE는 대상 테이블 스키마까지 결과 스키마로 교체하며(CREATE_NEVER는
+# 테이블 생성만 막는다), 2026-07-21 실측에서 REQUIRED가 NULLABLE로 파괴되는 것을
+# 확인했다. DML(TRUNCATE + INSERT)은 스키마를 바꾸지 않아 이 정의가 보호되고,
+# REQUIRED 컬럼에 NULL이 들어오면 BigQuery가 거부한다. 상세는 #280 참조.
 
 resource "google_bigquery_table" "user_static_feature" {
   dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id

@@ -122,24 +122,63 @@ POST https://asia-northeast3-aiplatform.googleapis.com/v1/projects/ar-infra-5016
 - BigQuery ML remote model(`CREATE MODEL ... REMOTE WITH CONNECTION`)도 배치 job이
   멱등하게 생성한다.
 
-## 리스크 — `WRITE_TRUNCATE`가 Terraform 소유 스키마를 덮어쓴다
+## 적재 방식 — `WRITE_TRUNCATE` 금지, `TRUNCATE` + `INSERT INTO` 사용
 
-적재 job이 `WRITE_TRUNCATE`를 쓰면 BigQuery는 대상 테이블의 **스키마까지** 결과
-스키마로 교체한다. `createDisposition = CREATE_NEVER`는 테이블 신규 생성만 막을 뿐
-스키마 교체는 막지 못한다.
+### 검증 결과 (2026-07-21, 임시 테이블 실측)
 
-특히 `REQUIRED` mode는 쿼리 결과에서 일반적으로 `NULLABLE`로 산출되므로, job 실행
-→ Terraform이 `REQUIRED`로 되돌림 → 다음 job이 다시 `NULLABLE`로 만드는 **영구
-drift**가 발생할 가능성이 높다. 이는 "스키마를 Terraform이 소유해 계약 위반을
-plan에서 잡는다"는 이번 작업의 목적 자체를 무력화한다.
+`feast_offline_store`에 `user_id`/`event_timestamp`를 `REQUIRED`로 선언한 임시
+테이블을 만들어 적재 방식별 스키마 영향을 실측했다.
 
-배치 팀(`SKYAHO/Autoresearch`)과 아래 중 하나를 합의해야 한다.
+| 실험 | 방식 | 스키마 결과 |
+| --- | --- | --- |
+| 1 | `WRITE_TRUNCATE` query job | `REQUIRED` → **`NULLABLE` 파괴** |
+| 2 | `BEGIN TRANSACTION` + `TRUNCATE TABLE` + `INSERT INTO` | **보존** |
+| 3 | 위 방식으로 `user_id = NULL` 삽입 시도 | **거부됨** (`Required field user_id cannot be null`) |
+| 4 | 실험 2 재실행 | 전체 교체 정상 동작 |
+| 5 | `WRITE_APPEND` query job | 보존 |
 
-1. job이 대상 테이블 스키마를 명시 전달하고 스키마 갱신 옵션을 쓰지 않는다.
-2. `WRITE_TRUNCATE` 대신 `DELETE` + `WRITE_APPEND`로 전환한다(기존 스키마 보존).
-3. `REQUIRED` 요구를 포기하고 전 컬럼을 `NULLABLE`로 정의한다.
+`WRITE_TRUNCATE`는 BigQuery가 대상 테이블의 **스키마까지** 결과 스키마로 교체한다.
+`createDisposition = CREATE_NEVER`는 테이블 신규 생성만 막을 뿐 스키마 교체는 막지
+못한다. 이대로 두면 job 실행 → Terraform이 `REQUIRED`로 되돌림 → 다음 job이 다시
+`NULLABLE`로 만드는 **영구 drift**가 발생하고, "스키마를 Terraform이 소유해 계약
+위반을 plan에서 잡는다"는 이번 작업의 목적 자체가 무력화된다.
 
-합의 전까지는 첫 apply 이후 `terraform plan`으로 drift 발생 여부를 관찰한다.
+### 배치 팀에 요청할 사항
+
+`SKYAHO/Autoresearch` `autoresearch.jobs.feature_store_build`가 결과를 저장하는
+방식을 job 설정(`write_disposition`)이 아니라 DML로 바꾼다. `SELECT` 부분은 그대로
+둔다.
+
+```sql
+BEGIN TRANSACTION;
+TRUNCATE TABLE `<project>.feast_offline_store.<table>`;
+INSERT INTO `<project>.feast_offline_store.<table>`
+<기존 SELECT 그대로>;
+COMMIT TRANSACTION;
+```
+
+- DML은 대상 테이블 스키마를 변경하지 않으므로 Terraform 소유 스키마가 보호된다.
+- `REQUIRED` 컬럼에 NULL이 들어오면 BigQuery가 거부한다. 불량 데이터 차단이라는
+  본래 목적이 함께 달성된다.
+- `TRUNCATE`와 `INSERT`는 별개 문장이라 그 사이에 Feast가 읽으면 빈 테이블을 보게
+  된다. `BEGIN TRANSACTION`으로 묶어 원자적 교체로 만든다.
+
+`WRITE_APPEND`도 스키마를 보존하지만 전체 교체가 아니므로 별도 `DELETE` 문이
+필요하고, 트랜잭션으로 묶지 않으면 같은 빈틈이 생긴다. `TRUNCATE` + `INSERT`가
+더 낫다.
+
+### 대안으로 검토했다 기각한 방법
+
+- **job에 스키마를 명시 전달**: `configuration.load.schema`는 load job에만 있고
+  query job에는 스키마 필드 자체가 없다. 이 파이프라인은 `data_lake_*`에서 SQL로
+  집계하는 query job이라 적용 불가. 설령 가능해도 스키마 선언이 Feast·Terraform·
+  배치 3곳으로 중복돼 어긋날 지점이 늘어난다.
+- **Python에서 계산 후 parquet를 load job으로 적재**: load job이므로 스키마 명시가
+  가능해지지만, BigQuery 데이터를 워커로 전부 꺼냈다 다시 올리는 왕복이 생기고
+  메모리에 묶인다. `ML.GENERATE_EMBEDDING`은 BigQuery 함수라 밖에서 호출할 수도
+  없다.
+- **`REQUIRED` 포기 후 전 컬럼 `NULLABLE`**: 가장 간단하지만 `user_id`가 빈 불량
+  데이터를 막지 못한다. 위 방법이 실측으로 확인됐으므로 채택하지 않는다.
 
 ## 롤백
 

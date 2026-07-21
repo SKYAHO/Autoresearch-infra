@@ -344,12 +344,24 @@ GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성
 | 구조 + 스키마 | 이 저장소 (Terraform) | 테이블 존재, 컬럼·타입·mode, 파티셔닝, labels |
 | 데이터 | `SKYAHO/Autoresearch` | `autoresearch.jobs.feature_store_build`가 `createDisposition=CREATE_NEVER`로 적재 |
 
-> **주의 — `WRITE_TRUNCATE`는 스키마도 교체한다.** 적재 job이 `WRITE_TRUNCATE`를
-> 쓰면 BigQuery가 대상 테이블 스키마를 결과 스키마로 덮어쓴다. `CREATE_NEVER`는
-> 테이블 신규 생성만 막고 스키마 교체는 막지 못한다. 특히 `REQUIRED` mode는 쿼리
-> 결과에서 `NULLABLE`로 산출되므로 job ↔ Terraform 간 영구 drift가 발생할 수
-> 있다. 배치 측이 스키마를 명시 전달하거나 `DELETE` + `WRITE_APPEND`로 전환해야
-> 한다.
+> **주의 — 적재는 `WRITE_TRUNCATE`가 아니라 `TRUNCATE` + `INSERT INTO`를 쓴다.**
+> `WRITE_TRUNCATE`는 대상 테이블의 스키마까지 결과 스키마로 덮어쓴다
+> (`CREATE_NEVER`는 테이블 신규 생성만 막는다). 2026-07-21 실측에서 `REQUIRED`
+> 컬럼이 `NULLABLE`로 파괴되는 것을 확인했다. 그대로 두면 job ↔ Terraform 간 영구
+> drift가 발생한다.
+
+적재 job은 아래 형태로 결과를 저장한다. DML은 대상 테이블 스키마를 변경하지 않아
+Terraform 소유 스키마가 보호되고, `REQUIRED` 컬럼에 NULL이 들어오면 BigQuery가
+거부해 불량 데이터도 차단된다. `TRUNCATE`와 `INSERT` 사이에 Feast가 빈 테이블을
+읽지 않도록 트랜잭션으로 묶는다.
+
+```sql
+BEGIN TRANSACTION;
+TRUNCATE TABLE `<project>.feast_offline_store.<table>`;
+INSERT INTO `<project>.feast_offline_store.<table>`
+<SELECT ...>;
+COMMIT TRANSACTION;
+```
 
 아래 3개는 임베딩 모델·차원 변경 시 스키마가 따라 바뀌고 Feast가 직접 읽지
 않으므로 Terraform 관리에서 제외한다. 배치 job이 `CREATE OR REPLACE`로 관리한다:
