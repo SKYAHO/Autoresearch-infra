@@ -34,7 +34,8 @@ git diff --check
 1. `plan`에서 `google_container_node_pool.batch_od` 추가만 확인하고, 기존 node
    pool·클러스터 리소스의 변경·교체가 없는지 검토한다.
 2. apply 후 `gcloud container node-pools list`에 `batch-od`가 보이는지 확인한다.
-3. `kubectl get nodes -l workload=batch-od`가 평시 0개(min 0)인지 확인한다.
+3. `kubectl get nodes -l cloud.google.com/gke-nodepool=batch-od`가 평시 0개(min 0)인지
+   확인한다(GKE가 자동 부여하는 nodepool 라벨 사용).
 4. filebeat, node-exporter가 batch-od 노드에 스케줄되는지(노드가 생겼을 때)
    확인한다.
 
