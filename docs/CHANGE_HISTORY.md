@@ -3,6 +3,43 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-22: BigQuery raw/feature layer 분리 — data_lake_raw dataset 신설 (#285) — apply 대기
+
+- `feast_offline_store` 안에 raw 적재 테이블(`data_lake_*`)과 Feast 피처 테이블이
+  섞여 있어 dataset 이름과 내용이 어긋났고, dataset 단위 IAM·비용·수명주기 정책을
+  계층별로 다르게 걸 수 없었다. raw 전용 dataset `data_lake_raw`
+  (`asia-northeast3`, `prevent_destroy = true`)를 신설해 계층을 분리했다.
+  - `data_lake_raw`: `data_lake_action_log`, `data_lake_youtube_trending_kr`
+  - `feast_offline_store`: 피처 테이블 4종만 남긴다
+- **테이블 정의는 dataset_id만 바꾸고 스키마·`time_partitioning(DAY, dt)`·
+  `deletion_protection = true`·labels·`ignore_changes = [schema]`를 그대로 유지**했다.
+  raw 테이블은 여전히 스키마를 적재 job(`SKYAHO/Autoresearch`
+  `scripts/load_raw_to_bigquery.py`)이 소유한다는 #199의 경계를 바꾸지 않는다.
+- **회귀 방지 원칙: 구 dataset이 가진 dataset 레벨 IAM 주체를 새 dataset에 그대로
+  복제한다.** 실 dataset ACL을 조회해 주체를 확인했고(gke_app / airflow /
+  airflow_batch SA + 팀원 5명), dev root에 SA 3건, `terraform/admin/gke-team-access`에
+  팀원 `for_each` 1건을 추가했다. **팀원 권한은 별도 state라 해당 root를 따로
+  apply해야 하며, 빠뜨리면 팀원이 raw 테이블 접근을 잃는다.**
+- **실물이 이미 존재해 apply 전 state 재조정이 필수다.** 운영자가 `bq`로 dataset과
+  두 테이블을 데이터 포함 복사해 둔 상태라 Terraform이 신규 생성하면
+  `Already Exists`로 실패한다. 순서는 **`state rm` 2건 → `import` 3건**이다.
+  구 주소를 먼저 `state rm` 하지 않으면 (1) 같은 리소스 주소가 점유돼 `import`가
+  실패하고 (2) `deletion_protection = true`라 구 테이블 destroy 시도가 오류로
+  중단된다. 명령어는 `TERRAFORM_DEV.md` "raw/feature layer 분리 state 재조정" 참조.
+- 검증 기준은 재조정 후 `terraform plan`이 raw 테이블에 대해 no-op이고, diff가
+  `google_bigquery_dataset_iam_member` 추가분(dev root 3건)에 그치는 것이다.
+- **물리 구 테이블(`feast_offline_store.data_lake_*`) 삭제는 Terraform 범위 밖**이며
+  cutover 검증 후 운영자가 수동 `bq rm`으로 수행한다. 삭제 전까지 원본이 남아 있어
+  `dataset_id`를 되돌리는 롤백이 가능하다. `asset_virtual_user_vu_1000`, `bak280_*`
+  4종은 Terraform 미관리 테이블이라 코드에 편입하지 않고 운영자가 별도 정리한다.
+- **연동 저장소 후속 조치가 함께 필요하다**(이 PR 범위 밖):
+  `Autoresearch-airflow`의 Airflow Variable `LAKE_TO_BQ_DATASET`,
+  `Autoresearch`의 `BQ_DATASET`·`CTR_TRAINING_BQ_DATASET`(raw 참조분)을
+  `data_lake_raw`로 바꿔야 한다. `FEAST_BQ_DATASET`은 피처 테이블만 읽으므로 유지한다.
+- 비용: dataset 신설·IAM은 무료. 데이터 복사분만큼 저장 비용이 일시적으로 중복되며
+  구 테이블 삭제 시 해소된다. 리전은 `asia-northeast3`로 동일해 조인 시 리전 간
+  제약이나 추가 비용이 없다.
+
 ## 2026-07-22: GKE master_authorized_networks drift 해소 — 개인 IP allowlist 제거 (#279) — apply 완료
 
 - dev root drift 자동 감지(#279)가 `google_container_cluster.dev`의 in-place
