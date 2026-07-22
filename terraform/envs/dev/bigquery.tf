@@ -166,6 +166,39 @@ resource "google_bigquery_table" "data_lake_youtube_trending_kr" {
   }
 }
 
+# #300 가상 유저 raw 테이블 (정적 자산, 비 hive-partition)
+# 스키마/데이터는 SKYAHO/Autoresearch scripts/load_raw_to_bigquery.py가 소유하고
+# (parquet autodetect + WRITE_TRUNCATE, hive_partitioned=False), Terraform은 존재와
+# 삭제 보호, 관리 라벨만 보장한다.
+#
+# parquet의 LIST<string> 필드는 BigQuery load 시 flat ARRAY<STRING>이 아니라
+# wrapper record로 적재된다:
+#   <field> RECORD NULLABLE { list: RECORD REPEATED { element: STRING NULLABLE } }
+# feature_materialize.py의 _string_array()가 UNNEST(<col>.list)로 언래핑한다.
+# Terraform은 스키마를 소유하지 않고 ignore_changes = [schema]로 둔다.
+resource "google_bigquery_table" "asset_virtual_user_vu_1000" {
+  dataset_id          = google_bigquery_dataset.data_lake_raw.dataset_id
+  table_id            = "asset_virtual_user_vu_1000"
+  description         = "가상 유저 페르소나 원본 parquet(vu_1000) raw 적재 테이블. 정적 자산이라 파티션 없음. 스키마는 SKYAHO/Autoresearch scripts/load_raw_to_bigquery.py가 소유(WRITE_TRUNCATE)한다."
+  deletion_protection = true
+
+  # 적재 스크립트가 전체 스키마를 소유한다. 존재 보장용 최소 seed 컬럼만 둔다.
+  schema = jsonencode([
+    { name = "user_id", type = "STRING", mode = "NULLABLE" },
+  ])
+
+  labels = {
+    data_class = "raw"
+    purpose    = "data-lake-raw"
+    managed_by = "terraform"
+    owner      = "infra"
+  }
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
+}
+
 # #280 Feast 피처 테이블 4종
 #
 # data_lake_* 테이블과 달리 스키마를 Terraform이 소유한다. Feast FeatureView
