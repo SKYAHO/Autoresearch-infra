@@ -44,7 +44,7 @@ gcloud compute ssh autoresearch-dev-bastion \
 
 ```bash
 export PATH="$PATH:/opt/homebrew/share/google-cloud-sdk/bin"   # gke auth plugin
-gcloud container clusters get-credentials autoresearch-dev-gke --zone asia-northeast3-a
+gcloud container clusters get-credentials autoresearch-dev-gke --zone asia-northeast3-a --project ar-infra-501607 --dns-endpoint
 kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
 # 브라우저: http://localhost:4180 → sign-in 페이지 → Google 로그인
 ```
