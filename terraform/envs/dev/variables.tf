@@ -546,6 +546,24 @@ variable "batch_spot_gke_node_count_max" {
   default     = 2
 }
 
+variable "batch_od_gke_node_pool_name" {
+  description = "재시도 내성이 없는 장시간 KPO용 비-Spot(on-demand) node pool 이름(#297)."
+  type        = string
+  default     = "batch-od"
+}
+
+variable "batch_od_gke_machine_type" {
+  description = "batch on-demand pool 머신 타입(#297). batch-spot과 동일 사양."
+  type        = string
+  default     = "e2-standard-2"
+}
+
+variable "batch_od_gke_node_count_max" {
+  description = "batch on-demand pool autoscaling 최대 노드 수(#297). min은 0 고정(평시 비용 0)."
+  type        = number
+  default     = 2
+}
+
 variable "airflow_deploy_ref" {
   description = "Autoresearch-airflow의 GAR push와 GKE deploy workflow에 허용하는 정확한 ref. WIF principalSet을 이 ref로 제한해 임의 브랜치의 SA 가장을 막는다."
   type        = string

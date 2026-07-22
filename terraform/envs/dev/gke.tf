@@ -216,3 +216,45 @@ resource "google_container_node_pool" "batch_spot" {
     ignore_changes = [node_count]
   }
 }
+
+# #297 재시도 내성이 없는 장시간 KPO(예: Action Log shard)용 비-Spot pool.
+# batch-spot(#173)은 "KPO는 재시도 내성이 있어 Spot 중단을 흡수"라는 전제로
+# 설계됐으나, Action Log shard는 graceful shutdown 미처리로 재시도 내성이 없어
+# Spot 선점 시 장애가 발생했다(#297). 이 pool은 on-demand VM으로 해당 작업을
+# 격리한다. 앱 쪽 toleration 이동은 Autoresearch-airflow 별도 이슈 소관.
+# - min 0: 평시 노드 0대(비용 0). batch-spot과 동일 구조.
+# - taint: workload=batch-od — batch-spot과 분리해 앱이 명시적으로 선택.
+#   DaemonSet(filebeat/node-exporter)은 Exists/NoSchedule toleration으로 자동 커버.
+# - 부트 디스크 pd-standard: batch-spot과 동일(#98 교훈).
+resource "google_container_node_pool" "batch_od" {
+  name       = var.batch_od_gke_node_pool_name
+  cluster    = google_container_cluster.dev.name
+  location   = var.zone
+  node_count = 0
+
+  autoscaling {
+    min_node_count = 0
+    max_node_count = var.batch_od_gke_node_count_max
+  }
+
+  node_config {
+    machine_type    = var.batch_od_gke_machine_type
+    disk_size_gb    = 30
+    disk_type       = "pd-standard"
+    service_account = google_service_account.gke_nodes.email
+
+    taint {
+      key    = "workload"
+      value  = "batch-od"
+      effect = "NO_SCHEDULE"
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [node_count]
+  }
+}

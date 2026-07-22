@@ -206,7 +206,7 @@ flowchart TB
 | Artifact Registry | `autoresearch-dev-docker` | 애플리케이션/Airflow 컨테이너 이미지 저장 |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, DB `airflow` | 앱 DB와 Airflow metadata DB |
 | Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, single-zone primary shard 2개, private PSC + IAM auth/TLS (#129, apply·검증 완료) |
-| GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev` | 앱 워크로드와 Airflow 실행 기반 |
+| GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev`, `batch-spot`(#173), `batch-od`(#297) | 앱 워크로드와 Airflow 실행 기반. batch-spot은 재시도 내성 있는 KPO, batch-od는 재시도 내성 없는 장시간 KPO용 |
 | Cloud Run | `autoresearch-dev-proxy` | 내부 전용 proxy 서비스, invoker IAM 기반 |
 | GCS | raw data bucket, Feast registry/staging bucket, Airflow DAG/log bucket | 원본 데이터, feature store 메타데이터, DAG/log 저장 |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` | 분석 데이터셋과 Feast offline store |
