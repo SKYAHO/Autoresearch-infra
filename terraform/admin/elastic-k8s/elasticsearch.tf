@@ -44,6 +44,15 @@ resource "kubernetes_manifest" "elasticsearch" {
             # mmap 비활성: vm.max_map_count sysctl(privileged initContainer)
             # 요구를 피한다 — PSS baseline 라벨과 충돌하지 않는 dev 최소 구성.
             "node.store.allow_mmap" = false
+
+            # #293 anonymous access — Kibana 앞단 oauth2-proxy(Google 로그인)를
+            # 통과한 요청을 재로그인 없이 익명 사용자로 자동 로그인시키기 위함.
+            # role은 변수(기본 viewer=읽기 전용). authz_exception=true면 익명 역할에
+            # 없는 권한 요청 시 401 대신 403을 반환(정상 인증 흐름 유지).
+            # elastic 슈퍼유저(basic 인증)는 break-glass용으로 계속 동작한다.
+            "xpack.security.authc.anonymous.username"        = "anonymous_kibana"
+            "xpack.security.authc.anonymous.roles"           = var.kibana_anonymous_role
+            "xpack.security.authc.anonymous.authz_exception" = true
           }
 
           podTemplate = {

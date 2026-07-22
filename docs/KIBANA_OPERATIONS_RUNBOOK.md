@@ -8,23 +8,31 @@ dev GKE의 ELK 스택(`elastic` namespace, #96~#102) 운영·검색 절차.
 ## 접속 (내부 전용)
 
 Kibana는 인터넷에 공개하지 않는다. 접근은 kubectl port-forward만 사용한다.
+로그인은 두 가지다(#293).
+
+**(A) Google(Gmail) 로그인 — 기본.** 앞단 oauth2-proxy(4180)로 접속한다. 허용
+이메일만 통과하고, Kibana는 anonymous 인증으로 재로그인 없이 자동 로그인된다.
+익명 역할은 `var.kibana_anonymous_role`(기본 `viewer`=읽기 전용, 전원 공유).
+
+```bash
+kubectl -n elastic port-forward svc/kibana-oauth-proxy 4180:4180
+# 브라우저: http://localhost:4180 → sign-in → Google 로그인
+```
+
+`kibana-oauth` Secret 주입·허용 이메일·redirect URI 절차는
+[terraform/admin/elastic-k8s/README.md](../terraform/admin/elastic-k8s/README.md)를
+단일 원본으로 한다. client secret은 문서/PR/채팅에 남기지 않는다.
+
+**(B) `elastic` 슈퍼유저 — break-glass.** Kibana에 직접 붙어 `/login`에서 basic 인증.
 
 ```bash
 kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
-# 브라우저: https://localhost:5601 (self-signed 경고는 dev 내부 경로 특성상 허용)
-```
-
-로그인은 `elastic` 사용자. 비밀번호는 운영자가 Secret에서 회수하고
-문서/PR/채팅에 남기지 않는다:
-
-```bash
+# 브라우저: https://localhost:5601 → /login (self-signed 경고는 dev 특성상 허용)
 kubectl -n elastic get secret autoresearch-es-elastic-user \
-  -o jsonpath='{.data.elastic}' | base64 -d; echo
+  -o jsonpath='{.data.elastic}' | base64 -d; echo   # 비밀번호 회수(문서/PR/채팅 미기재)
 ```
 
 `elastic` 비밀번호는 ECK operator가 관리하므로 임의 변경하지 않는다.
-팀원 공유가 필요해지면 Kibana UI에서 개별 사용자를 만들어 최소 role만
-부여한다(Grafana OAuth 같은 SSO 전환은 별도 설계).
 
 ## 최초 1회: data view 생성
 

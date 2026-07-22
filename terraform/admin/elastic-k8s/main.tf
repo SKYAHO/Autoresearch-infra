@@ -66,8 +66,8 @@ resource "kubernetes_network_policy_v1" "elastic_ingress" {
       }
     }
 
-    # kubectl port-forward 경로(#116 교훈): 노드 대역 → Kibana 5601.
-    # Kibana CR은 #99에서 추가되지만 경계는 미리 선언해 둔다.
+    # kubectl port-forward 경로(#116 교훈): 노드 대역 → Kibana 5601 및
+    # #293 oauth2-proxy 4180(사용자는 이 proxy로 붙는다).
     ingress {
       from {
         ip_block {
@@ -77,6 +77,11 @@ resource "kubernetes_network_policy_v1" "elastic_ingress" {
 
       ports {
         port     = "5601"
+        protocol = "TCP"
+      }
+
+      ports {
+        port     = "4180"
         protocol = "TCP"
       }
     }
@@ -128,6 +133,14 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
       ports {
         protocol = "TCP"
         port     = "9200"
+      }
+
+      # #293 oauth2-proxy → Kibana Service VIP(5601). #122대로 Calico가 egress를
+      # pre-DNAT(VIP) 평가하므로 same-ns pod_selector로는 안 잡혀 services CIDR
+      # ipBlock으로 열어야 proxy→Kibana upstream이 성립한다.
+      ports {
+        protocol = "TCP"
+        port     = "5601"
       }
     }
 
@@ -206,6 +219,41 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
       to {
         ip_block {
           cidr = "199.36.153.8/30"
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "443"
+      }
+    }
+  }
+}
+
+# #293 oauth2-proxy 전용 egress. Google OAuth(accounts.google.com,
+# *.googleapis.com)는 고정 CIDR로 관리할 수 없어 443을 0.0.0.0/0으로 연다
+# (argocd-egress git 규칙과 동일 판단). elastic-egress(전체 pod)에 넣지 않고
+# proxy pod만 selector로 잡아 ES/Kibana에는 인터넷 egress를 주지 않는다(최소권한).
+# DNS·same-ns 등 나머지 egress는 elastic-egress가 이 pod에도 additive로 적용된다.
+resource "kubernetes_network_policy_v1" "kibana_oauth_proxy_egress" {
+  metadata {
+    name      = "kibana-oauth-proxy-egress"
+    namespace = kubernetes_namespace_v1.elastic.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "kibana-oauth-proxy"
+      }
+    }
+
+    policy_types = ["Egress"]
+
+    egress {
+      to {
+        ip_block {
+          cidr = "0.0.0.0/0"
         }
       }
 
