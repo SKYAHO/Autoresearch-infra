@@ -231,6 +231,45 @@ terraform -chdir=terraform/admin/argocd-k8s apply \
 pin을 풀고 다시 `main` HEAD를 따라가려면 `-var` 없이(또는 `main` 값으로) 다시
 apply한다.
 
+## ⚠️ apply 전 필수 — admin 이메일 변수 (#304)
+
+**`terraform.tfvars` 없이 이 root를 apply하면 ArgoCD 접근이 전원 차단된다.**
+
+`argocd_admin_user_emails`와 `argocd_readonly_user_emails`의 기본값은 `[]`다.
+값을 넘기지 않으면 helm values의 `policy.csv`가 비워지고, `policy.default = ""`
+(기본 거부)와 결합되어 **아무도 UI에 로그인할 수 없게 된다.** OIDC 로그인은
+성공하지만 모든 요청이 권한 거부로 끝난다.
+
+plan에서 이 변경은 `helm_release.argo_cd will be updated in-place`로만 보이고,
+실제 RBAC 삭제는 values diff 안쪽에 묻혀 있어 놓치기 쉽다. apply 전에 반드시
+확인한다:
+
+```bash
+terraform -chdir=terraform/admin/argocd-k8s plan -no-color \
+  | grep -A3 'policy.csv'
+```
+
+`- g, <email>, role:admin` 처럼 **제거되는 줄이 보이면 중단**하고 변수를 채운다.
+
+### tfvars를 분실했을 때 현재 값 복구
+
+라이브 ConfigMap이 현재 적용된 정본이다.
+
+```bash
+kubectl -n argocd get cm argocd-rbac-cm -o jsonpath='{.data.policy\.csv}'
+```
+
+출력의 `g, <email>, role:admin` 줄을 `argocd_admin_user_emails`에,
+`role:readonly` 줄을 `argocd_readonly_user_emails`에 **같은 순서로** 옮긴다.
+순서가 다르면 렌더 결과가 달라져 불필요한 diff가 생긴다.
+
+apply 후에는 보존을 확인한다:
+
+```bash
+kubectl -n argocd get cm argocd-rbac-cm -o jsonpath='{.data.policy\.csv}' \
+  | grep -c 'role:admin'
+```
+
 ## Secret 처리 원칙
 
 - repo credential, admin password, webhook secret, OAuth secret payload를 Git에
