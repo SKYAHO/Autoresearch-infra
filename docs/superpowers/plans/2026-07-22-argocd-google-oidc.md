@@ -30,7 +30,7 @@
 - [ ] `fmt -check` / `init -backend=false` / `validate` 통과
 - [ ] `templatefile` 렌더가 유효한 `policy.csv`(이메일→role) 생성 — 로컬 console로 확인
 - [ ] (apply 후) 허용 이메일 Google 로그인 성공, 목록 밖 계정 거부
-- [ ] (apply 후) admin=sync/rollback, readonly=조회만
+- [ ] (apply 후) admin=내장 role:admin(전체 관리, sync/rollback 포함), readonly=조회만
 - [ ] (apply 후) 로컬 `admin` 로그인·`argocd` CLI 회귀 없음
 - [ ] client id/secret·이메일이 Git/state/values에 없음(`git diff` + `git grep`)
 

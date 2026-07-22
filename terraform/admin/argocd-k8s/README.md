@@ -164,7 +164,9 @@ apply하면 `argocd-rbac-cm`의 `policy.csv`에 `g, <email>, role:admin|readonly
 **4) 로그인 확인**
 
 port-forward 후 `https://localhost:8443`에서 **LOG IN VIA GOOGLE**로 로그인한다.
-admin은 sync/rollback, readonly는 조회만 가능해야 한다. 로컬 `admin` 로그인도 그대로 된다.
+admin(내장 `role:admin`)은 app sync/rollback을 포함해 repo·project·설정·RBAC까지
+전체를 관리하고, readonly는 조회만 가능하다. 로컬 `admin` 로그인도 그대로 된다.
+(admin 티어를 더 좁히려면 sync/rollback만 허용하는 커스텀 role을 별도로 정의한다.)
 
 **로테이션/회수**: client secret은 Secret Manager 새 version → 위 2)로 재주입 →
 `rollout restart`. 팀원 제거는 `terraform.tfvars`에서 이메일을 빼고 apply한다.

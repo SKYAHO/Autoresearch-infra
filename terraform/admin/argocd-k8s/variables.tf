@@ -51,7 +51,7 @@ variable "argocd_admin_user_emails" {
 
   validation {
     condition = alltrue([
-      for e in var.argocd_admin_user_emails : can(regex("^[^@[:space:]]+@[^@[:space:]]+$", e))
+      for e in var.argocd_admin_user_emails : can(regex("^[^@:[:space:]]+@[^@:[:space:]]+$", e))
     ])
     error_message = "Each admin email must be a bare email without a user: prefix."
   }
@@ -64,7 +64,7 @@ variable "argocd_readonly_user_emails" {
 
   validation {
     condition = alltrue([
-      for e in var.argocd_readonly_user_emails : can(regex("^[^@[:space:]]+@[^@[:space:]]+$", e))
+      for e in var.argocd_readonly_user_emails : can(regex("^[^@:[:space:]]+@[^@:[:space:]]+$", e))
     ])
     error_message = "Each readonly email must be a bare email without a user: prefix."
   }

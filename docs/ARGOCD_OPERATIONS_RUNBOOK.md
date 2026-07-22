@@ -32,7 +32,8 @@ dev 내부 경로 특성상 허용한다.
 로그인은 두 가지다(#289):
 
 - **Google(Gmail) 로그인(기본)**: **LOG IN VIA GOOGLE**. 허용 이메일만 접근하며
-  admin은 sync/rollback, readonly는 조회만 가능하다. 목록 밖 계정은 로그인해도
+  admin은 내장 `role:admin`(app sync/rollback 포함 repo·project·설정·RBAC까지 전체
+  관리), readonly는 조회만 가능하다. 목록 밖 계정은 로그인해도
   권한이 없다(`policy.default` 거부).
 - **로컬 `admin`**: CLI·자동화·break-glass용으로 유지한다.
 
