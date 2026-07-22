@@ -225,7 +225,11 @@ python scripts/verify_serving_e2e.py --base-url http://127.0.0.1:8000 \
 ## 후속 분리 항목
 
 - Argo Rollout 적용(canary 수동 promote) — replica 2 이상이 전제
-- 앱 저장소 `release.yml`의 serving 이미지 빌드 추가(동반 이슈)
+- 앱 저장소 `release.yml`의 serving 이미지 빌드 추가 — 동반 이슈
+  [SKYAHO/Autoresearch#266](https://github.com/SKYAHO/Autoresearch/issues/266).
+  WIF 바인딩이 `.github/workflows/release.yml` 경로에 고정돼 있어 같은 파일의 job으로
+  추가하면 이 저장소의 IAM 변경이 필요 없다. 이 이슈가 digest를 내보내기 전에는
+  배포를 시작할 수 없다(선행 의존).
 - digest 갱신 자동화 — 배포 빈도가 올라간 뒤 판단
 - 앱 `/healthcheck` 실시간 의존성 조회 전환 시 probe 재검토
 
