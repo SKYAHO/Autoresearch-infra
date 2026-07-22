@@ -33,9 +33,41 @@ variable "argocd_namespace" {
 }
 
 variable "argocd_values_file_path" {
-  description = "Module-relative path for the ArgoCD Helm values file consumed by helm_release.argo_cd."
+  description = "Module-relative path for the ArgoCD Helm values template consumed by helm_release.argo_cd (templatefile)."
   type        = string
-  default     = "helm-values/argo-cd.values.yaml"
+  default     = "helm-values/argo-cd.values.yaml.tftpl"
+}
+
+variable "argocd_server_url" {
+  description = "#289 ArgoCD가 자기 자신을 인식하는 URL(OIDC redirect 기준). port-forward 접근이라 localhost. Google OAuth client redirect URI(<url>/auth/callback)와 일치해야 한다."
+  type        = string
+  default     = "https://localhost:8443"
+}
+
+variable "argocd_admin_user_emails" {
+  description = "#289 ArgoCD role:admin을 부여할 Google 계정 이메일. 실제 값은 로컬 terraform.tfvars에만 두고 Git에 커밋하지 않는다."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for e in var.argocd_admin_user_emails : can(regex("^[^@[:space:]]+@[^@[:space:]]+$", e))
+    ])
+    error_message = "Each admin email must be a bare email without a user: prefix."
+  }
+}
+
+variable "argocd_readonly_user_emails" {
+  description = "#289 ArgoCD role:readonly를 부여할 Google 계정 이메일. 실제 값은 로컬 terraform.tfvars에만 두고 Git에 커밋하지 않는다."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for e in var.argocd_readonly_user_emails : can(regex("^[^@[:space:]]+@[^@[:space:]]+$", e))
+    ])
+    error_message = "Each readonly email must be a bare email without a user: prefix."
+  }
 }
 
 variable "cluster_services_cidr" {

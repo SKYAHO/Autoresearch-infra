@@ -4,10 +4,19 @@ zone             = "asia-northeast3-a"
 gke_cluster_name = "autoresearch-dev-gke"
 
 argocd_namespace        = "argocd"
-argocd_values_file_path = "helm-values/argo-cd.values.yaml"
+argocd_values_file_path = "helm-values/argo-cd.values.yaml.tftpl"
 
 # argocd-server(8080) ingress 허용 CIDR (#116). port-forward 노드 트래픽용 dev subnet.
 ui_ingress_source_cidr = "10.10.0.0/20"
 
 # GKE services 2차 대역 (#122). dev root gke_services_cidr와 일치.
 cluster_services_cidr = "172.16.128.0/24"
+
+# #289 Google OIDC 로그인. redirect 기준 URL(port-forward라 localhost).
+# Google OAuth client의 redirect URI는 <url>/auth/callback 로 등록한다.
+argocd_server_url = "https://localhost:8443"
+
+# #289 ArgoCD 권한 부여 이메일. 실제 값은 이 로컬 tfvars에만 두고 Git에 커밋 금지.
+# client id/secret은 여기가 아니라 argocd-google-oidc Secret으로 주입(README).
+argocd_admin_user_emails    = ["you@gmail.com"]
+argocd_readonly_user_emails = ["teammate@gmail.com"]

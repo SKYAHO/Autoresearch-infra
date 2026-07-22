@@ -175,8 +175,14 @@ resource "helm_release" "argo_cd" {
   create_namespace = false
   timeout          = 600
 
+  # #289 templatefile로 RBAC policy에 허용 이메일을 주입한다. client id/secret은
+  # 여기 담지 않고 argocd-google-oidc Secret을 oidc.config에서 $ 참조한다(README).
   values = [
-    file("${path.module}/${var.argocd_values_file_path}")
+    templatefile("${path.module}/${var.argocd_values_file_path}", {
+      argocd_server_url = var.argocd_server_url
+      admin_emails      = var.argocd_admin_user_emails
+      readonly_emails   = var.argocd_readonly_user_emails
+    })
   ]
 }
 

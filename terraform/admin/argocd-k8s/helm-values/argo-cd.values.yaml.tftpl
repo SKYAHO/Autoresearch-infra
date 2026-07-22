@@ -1,0 +1,63 @@
+# #84 ArgoCD 최소 설치 values (#289 Google OIDC 적용 후 templatefile로 렌더).
+# helm_release.argo_cd가 이 파일을 templatefile()로 읽어 RBAC policy에 허용
+# 이메일을 주입한다.
+#
+# Keep secret payloads out of this file. Repository credentials, admin password,
+# webhook secrets, and OAuth client id/secret must be injected through Kubernetes
+# Secret payloads managed outside Terraform/Git.
+# - Google OIDC client id/secret은 별도 Secret `argocd-google-oidc`
+#   (label app.kubernetes.io/part-of=argocd)로 주입하고, oidc.config는 값이 아니라
+#   `$argocd-google-oidc:<key>` 참조만 담는다(README 절차).
+
+configs:
+  params:
+    server.insecure: false
+
+  cm:
+    # #289 OIDC redirect가 기준으로 삼는 ArgoCD 자기 URL. port-forward 접근이라
+    # localhost. Google OAuth client의 redirect URI(<url>/auth/callback)와 일치해야 한다.
+    url: ${argocd_server_url}
+
+    # #289 Google 직접 OIDC(Dex 미사용). client id/secret은 Git에 두지 않고
+    # argocd-google-oidc Secret을 $ 참조한다. requestedScopes에 email을 포함해
+    # RBAC subject로 쓴다.
+    oidc.config: |
+      name: Google
+      issuer: https://accounts.google.com
+      clientID: $argocd-google-oidc:clientId
+      clientSecret: $argocd-google-oidc:clientSecret
+      requestedScopes:
+        - openid
+        - email
+        - profile
+
+  rbac:
+    # 기본 거부. 아래 policy.csv에 등록된 이메일만 접근한다.
+    policy.default: ""
+    # OIDC email claim을 policy subject로 사용.
+    scopes: "[email]"
+    policy.csv: |
+%{ for email in admin_emails ~}
+      g, ${email}, role:admin
+%{ endfor ~}
+%{ for email in readonly_emails ~}
+      g, ${email}, role:readonly
+%{ endfor ~}
+
+# UI 외부 공개 금지. 접근은 kubectl port-forward만 사용한다.
+server:
+  service:
+    type: ClusterIP
+
+# 최소 설치: SSO는 #289에서 Dex 없이 직접 OIDC로 구성하므로 Dex는 계속 비활성.
+# 알림(notifications), ApplicationSet controller는 사용 시점(후속 이슈)에 활성화한다.
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
+
+# chart 8.0부터 applicationSet.enabled 키가 제거되어(core 컴포넌트 승격)
+# replicas 0으로 중지한다(#115). ApplicationSet CR 사용 시 1로 되돌린다.
+applicationSet:
+  replicas: 0
