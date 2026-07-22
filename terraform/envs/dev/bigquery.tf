@@ -236,6 +236,59 @@ resource "google_bigquery_table" "user_dynamic_feature" {
   }
 }
 
+# #295 임베딩 중간 산출물 테이블 2종
+#
+# user_category_similarity(Feast feature table)를 만드는 원본이지만 그 자체는
+# Feast FeatureView 소스가 아니라 analytics dataset의 중간 산출물이라, feature
+# 테이블과 달리 feast_offline_store가 아니라 analytics dataset에 둔다.
+#
+# 스키마는 Terraform이 아니라 적재 스크립트(SKYAHO/Autoresearch
+# scripts/build_static_features.py)가 소유한다. 스크립트가 매번 WRITE_TRUNCATE로
+# 테이블 전체를 재생성하므로, Terraform이 schema를 소유하면 매 적재마다 충돌한다.
+# 따라서 feature 테이블의 full-schema 패턴이 아니라 raw 테이블(data_lake_*)의
+# 존재만 관리(ignore_changes = [schema]) 패턴을 따른다. 재생성 가능한 중간
+# 산출물이므로 deletion_protection도 끈다.
+resource "google_bigquery_table" "user_topic_embedding" {
+  dataset_id          = google_bigquery_dataset.analytics.dataset_id
+  table_id            = "user_topic_embedding"
+  description         = "persona 관심 키워드의 Vertex AI 임베딩(행별 topic). Feast feature table이 아니라 analytics dataset의 임베딩 중간 산출물이며, 스키마는 SKYAHO/Autoresearch scripts/build_static_features.py가 소유(WRITE_TRUNCATE)한다."
+  deletion_protection = false
+
+  # 적재 스크립트가 전체 스키마를 소유한다. 존재 보장용 최소 seed 컬럼만 둔다.
+  schema = jsonencode([
+    { name = "user_id", type = "STRING", mode = "REQUIRED" },
+  ])
+
+  labels = {
+    data_class = "analytics"
+    purpose    = "embedding-intermediate"
+  }
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
+}
+
+resource "google_bigquery_table" "category_embedding" {
+  dataset_id          = google_bigquery_dataset.analytics.dataset_id
+  table_id            = "category_embedding"
+  description         = "15개 YouTube 카테고리 설명문의 Vertex AI 임베딩 참조 테이블. Feast feature table이 아니라 analytics dataset의 임베딩 중간 산출물이며, 스키마는 SKYAHO/Autoresearch scripts/build_static_features.py가 소유(WRITE_TRUNCATE)한다."
+  deletion_protection = false
+
+  schema = jsonencode([
+    { name = "category_id", type = "STRING", mode = "REQUIRED" },
+  ])
+
+  labels = {
+    data_class = "analytics"
+    purpose    = "embedding-intermediate"
+  }
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
+}
+
 resource "google_bigquery_table" "video_feature" {
   dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
   table_id            = "video_feature"
