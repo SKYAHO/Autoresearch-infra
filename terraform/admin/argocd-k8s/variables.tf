@@ -145,3 +145,15 @@ variable "mlflow_target_revision" {
   type        = string
   default     = "main"
 }
+
+variable "app_namespace" {
+  description = "#302 Autoresearch 앱 namespace(autoresearch-k8s 소유). ArgoCD destination으로 허용한다."
+  type        = string
+  default     = "autoresearch"
+}
+
+variable "serving_target_revision" {
+  description = "Inference Server Application이 추적할 infra repo ref. 최초 sync는 -var로 병합 커밋 SHA를 pin한다."
+  type        = string
+  default     = "main"
+}
