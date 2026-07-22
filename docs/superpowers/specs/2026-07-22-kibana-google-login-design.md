@@ -46,8 +46,14 @@ ECK 기본 **Basic 라이선스**라 ES/Kibana 네이티브 OIDC/SAML realm(Plat
   접근 로그로 대체.
 - **git-safe**: client id/secret·cookie-secret·허용 이메일은 `kibana-oauth` Secret으로
   file-based 주입(#213 패턴). 매니페스트엔 Secret 참조만.
-- **NetworkPolicy 최소권한**: proxy 전용 egress 정책으로 Google 443(0.0.0.0/0)만
-  개방(ES/Kibana 파드엔 인터넷 egress 안 줌). node→4180 ingress 추가.
+- **우회 차단**: anonymous access가 켜지면 Kibana 5601 직접 접속이 무인증 viewer가
+  되므로, `elastic-ingress`에서 노드→5601 직접 경로를 **제거**하고 사람 접근을
+  proxy(4180)로만 강제한다(proxy→Kibana는 same-ns라 유지). proxy 장애·secret 미주입
+  시 Kibana는 일시 접근 불가이며, operator break-glass는 5601 ingress를 임시 복원한다.
+- **proxy egress는 신규 정책 불필요**: google provider의 서버사이드 호출은 전부
+  `*.googleapis.com`이고 #138 private DNS가 이를 private VIP(199.36.153.8/30)로
+  유도한다. elastic-egress가 이미 이 VIP:443을 전체 pod에 열어두므로(ES snapshot용)
+  proxy도 커버된다. authorize 리다이렉트(accounts.google.com)는 브라우저 client-side.
 
 ## 리스크·영향
 

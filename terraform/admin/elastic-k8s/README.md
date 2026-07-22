@@ -114,7 +114,13 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4180:4180
 
 이메일 목록·client secret 변경 시 위를 다시 실행
 (`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
-`kibana-oauth` Secret 미주입 시 proxy만 실패하고 `elastic` 직접 접속(5601)은 정상.
+
+**우회 차단·break-glass**: anonymous access가 켜지면 Kibana 5601 직접 접속이
+무인증 viewer가 되므로, `elastic-ingress`는 노드→5601 직접 경로를 열지 않고 사람
+접근을 proxy(4180)로만 강제한다(proxy→Kibana는 same-ns라 정상). 따라서 proxy 장애나
+`kibana-oauth` 미주입 시 Kibana는 일시적으로 접근 불가다. operator break-glass는
+`elastic-ingress`에 5601 ingress를 임시로 되살린 뒤(terraform 또는 `kubectl`) `elastic`
+계정으로 직접 접속하고, 복구 후 되돌린다.
 
 ## 로그 수집 (#100)
 

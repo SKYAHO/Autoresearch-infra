@@ -23,9 +23,16 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4180:4180
 [terraform/admin/elastic-k8s/README.md](../terraform/admin/elastic-k8s/README.md)를
 단일 원본으로 한다. client secret은 문서/PR/채팅에 남기지 않는다.
 
-**(B) `elastic` 슈퍼유저 — break-glass.** Kibana에 직접 붙어 `/login`에서 basic 인증.
+**(B) `elastic` 슈퍼유저 — break-glass.** 두 경로가 있다.
+
+- **평상시**: proxy(A)로 Google 로그인 후 Kibana `/login`에서 basic 인증(`elastic`).
+- **proxy 장애 시**: Kibana 5601 직접 경로는 기본 차단돼 있다(#293 — anonymous 우회
+  방지). operator가 `elastic-ingress`에 노드→5601 ingress를 임시로 되살린 뒤
+  (`terraform/admin/elastic-k8s` 규칙 복원 apply 또는 `kubectl` 패치) 직접 접속하고,
+  복구 후 되돌린다.
 
 ```bash
+# 임시 복원 후:
 kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
 # 브라우저: https://localhost:5601 → /login (self-signed 경고는 dev 특성상 허용)
 kubectl -n elastic get secret autoresearch-es-elastic-user \

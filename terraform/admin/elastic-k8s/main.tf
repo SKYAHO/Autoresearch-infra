@@ -66,18 +66,17 @@ resource "kubernetes_network_policy_v1" "elastic_ingress" {
       }
     }
 
-    # kubectl port-forward 경로(#116 교훈): 노드 대역 → Kibana 5601 및
-    # #293 oauth2-proxy 4180(사용자는 이 proxy로 붙는다).
+    # kubectl port-forward 경로(#116 교훈): 노드 대역 → #293 oauth2-proxy 4180만.
+    # Kibana 5601 직접 ingress는 의도적으로 열지 않는다 — anonymous access(#293)가
+    # 켜지면 5601 직접 접속이 무인증 viewer가 되어 Google 로그인 게이트를 우회하게
+    # 되므로, 사람 접근은 인증 proxy(4180)로만 강제한다. proxy→Kibana(5601)는
+    # same-ns pod_selector ingress로 커버되어 영향 없다. operator break-glass로
+    # 5601 직접 접근이 필요하면 이 규칙을 임시로 되살린다(README/runbook).
     ingress {
       from {
         ip_block {
           cidr = var.kibana_ingress_source_cidr
         }
-      }
-
-      ports {
-        port     = "5601"
-        protocol = "TCP"
       }
 
       ports {
@@ -230,40 +229,12 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
   }
 }
 
-# #293 oauth2-proxy 전용 egress. Google OAuth(accounts.google.com,
-# *.googleapis.com)는 고정 CIDR로 관리할 수 없어 443을 0.0.0.0/0으로 연다
-# (argocd-egress git 규칙과 동일 판단). elastic-egress(전체 pod)에 넣지 않고
-# proxy pod만 selector로 잡아 ES/Kibana에는 인터넷 egress를 주지 않는다(최소권한).
-# DNS·same-ns 등 나머지 egress는 elastic-egress가 이 pod에도 additive로 적용된다.
-resource "kubernetes_network_policy_v1" "kibana_oauth_proxy_egress" {
-  metadata {
-    name      = "kibana-oauth-proxy-egress"
-    namespace = kubernetes_namespace_v1.elastic.metadata[0].name
-  }
-
-  spec {
-    pod_selector {
-      match_labels = {
-        "app.kubernetes.io/name" = "kibana-oauth-proxy"
-      }
-    }
-
-    policy_types = ["Egress"]
-
-    egress {
-      to {
-        ip_block {
-          cidr = "0.0.0.0/0"
-        }
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "443"
-      }
-    }
-  }
-}
+# #293 oauth2-proxy(google provider)의 서버사이드 Google 호출(token redeem
+# oauth2.googleapis.com, JWKS/userinfo www.googleapis.com)은 모두 *.googleapis.com
+# 이고, #138 private DNS zone이 이를 private.googleapis.com VIP(199.36.153.8/30)로
+# 유도한다. 이 VIP:443은 elastic-egress가 이미 전체 pod에 열어두므로(ES snapshot용)
+# proxy 전용 egress 정책은 불필요하다. 로그인 authorize 리다이렉트(accounts.google.com)는
+# 사용자 브라우저가 수행하는 client-side라 proxy egress 대상이 아니다.
 
 # #97 ECK operator 최소 설치. CRD는 chart의 crds/ 경로로 설치되며 helm
 # uninstall이 CRD를 삭제하지 않는다(rollouts와 동일 주의 — CRD를 지우면
