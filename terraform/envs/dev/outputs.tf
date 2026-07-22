@@ -219,6 +219,12 @@ output "feast_offline_store_dataset_id" {
   value       = google_bigquery_dataset.feast_offline_store.dataset_id
 }
 
+# #285 raw 적재 job(Airflow lake_to_bigquery, 앱 load_raw_to_bigquery)이 참조할 dataset
+output "data_lake_raw_dataset_id" {
+  description = "GCS 원천 적재(raw) 전용 BigQuery dataset id."
+  value       = google_bigquery_dataset.data_lake_raw.dataset_id
+}
+
 # #280 배치 job이 CREATE MODEL ... REMOTE WITH CONNECTION에 넣을 값
 output "vertex_ai_connection_id" {
   description = "BigQuery ML remote model이 참조하는 Vertex AI connection의 전체 id (project.location.connection_id)."

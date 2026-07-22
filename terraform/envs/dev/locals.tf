@@ -74,8 +74,10 @@ locals {
   raw_data_bucket_name                  = "${var.project_id}-${local.resource_prefix}-raw-data"
   bigquery_dataset_id                   = replace("${local.resource_prefix}_analytics", "-", "_")
   feast_dataset_id                      = "feast_offline_store"
-  feast_registry_bucket                 = "${var.project_id}-feast-registry"
-  feast_staging_bucket                  = "${var.project_id}-feast-staging"
+  # #285 raw layer 전용 dataset. feast_offline_store는 Feast 피처 테이블 전용으로 남긴다.
+  data_lake_raw_dataset_id = "data_lake_raw"
+  feast_registry_bucket    = "${var.project_id}-feast-registry"
+  feast_staging_bucket     = "${var.project_id}-feast-staging"
   # #238 코드 아카이브 배포 버킷·업로더 SA. 버킷명은 이슈 예시(project_id 포함, 전역 유일).
   code_artifacts_bucket = "${var.project_id}-code-artifacts"
   code_uploader_sa_name = "${local.resource_prefix}-code-uploader"

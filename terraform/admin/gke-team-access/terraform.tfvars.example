@@ -4,6 +4,7 @@ region     = "asia-northeast3"
 # Default dev datasets. Keep team_member_emails values in local terraform.tfvars only.
 bigquery_analytics_dataset_id           = "autoresearch_dev_analytics"
 bigquery_feast_offline_store_dataset_id = "feast_offline_store"
+bigquery_data_lake_raw_dataset_id       = "data_lake_raw"
 
 team_member_emails = [
   "teammate-1@example.com",

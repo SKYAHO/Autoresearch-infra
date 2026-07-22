@@ -25,6 +25,17 @@ variable "bigquery_feast_offline_store_dataset_id" {
   }
 }
 
+variable "bigquery_data_lake_raw_dataset_id" {
+  description = "Dev raw data lake BigQuery dataset where team members receive dataset-scoped dataEditor (#285)."
+  type        = string
+  default     = "data_lake_raw"
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]*$", var.bigquery_data_lake_raw_dataset_id)) && length(var.bigquery_data_lake_raw_dataset_id) <= 1024
+    error_message = "BigQuery dataset ID must start with a letter or underscore and contain only letters, digits, and underscores."
+  }
+}
+
 variable "region" {
   description = "Default GCP region for provider operations."
   type        = string
