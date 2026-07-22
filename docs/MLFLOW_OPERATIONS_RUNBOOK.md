@@ -54,7 +54,11 @@ kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
   `mlflow-oauth` Secret 절차. 목록 변경 후 `kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow`.
 - MLflow 클라이언트(SDK)로 직접 쓸 때는 인증 우회가 필요하므로 GKE 내부 워크로드는
   `http://mlflow.mlflow:5000`(proxy 미경유, 내부 전용)을 tracking URI로 쓴다.
-- port-forward가 timeout이면 실행 IP가 master authorized networks에 없는 것이다.
+- port-forward가 timeout이면 kubeconfig가 IP 엔드포인트를 쓰는 것이다. #279로
+  `master_authorized_networks`는 비어 있어 IP 엔드포인트(공인 IP)는 외부에서 차단된다.
+  `gcloud container clusters get-credentials ... --dns-endpoint`로 재발급한다
+  (IAM 검증, IP 등록 불필요 — `TEAM_OPERATIONS_RUNBOOK.md` 기준). IP를 allowlist에
+  추가하는 방식은 동적 IP drift를 유발하므로 쓰지 않는다.
 - 팀원 접근(#236): `mlflow` 네임스페이스에 팀원 5명 계정별 namespace RBAC(ClusterRole
   `view` + `pods/portforward` create)를 부여해 cluster-admin 없이 port-forward가
   가능하다. 대상은 `terraform/admin/mlflow-k8s`의 `mlflow_viewer_user_emails`.

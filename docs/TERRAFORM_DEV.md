@@ -1060,7 +1060,7 @@ Airflow 구성요소가 배포되는 GKE namespace 경계와, 거기에 물릴 G
 Airflow는 두 Terraform root로 나눈다.
 
 - `terraform/envs/dev`: GCP 리소스만 관리한다. GCP SA, Workload Identity IAM member, Cloud SQL database, GCS bucket/IAM, BigQuery IAM이 여기 있다.
-- `terraform/admin/airflow-k8s`: Kubernetes namespace/RBAC/ResourceQuota/LimitRange/NetworkPolicy만 관리한다. GKE API 서버가 `master_authorized_networks`로 제한되어 있어, GitHub Actions PR plan이 이 root를 실행하지 않는다. apply는 허용된 관리자 네트워크에서 수행한다.
+- `terraform/admin/airflow-k8s`: Kubernetes namespace/RBAC/ResourceQuota/LimitRange/NetworkPolicy만 관리한다. GKE API 서버 접근이 필요해 GitHub Actions PR plan이 이 root를 실행하지 않는다. apply는 운영자 로컬에서 DNS 엔드포인트(`--dns-endpoint`, IAM 검증) kubeconfig로 수행한다. #279로 `master_authorized_networks`는 비어 있어 IP 엔드포인트 경로는 쓰지 않는다.
 - `terraform/admin/argocd-k8s`: ArgoCD namespace와 argo-cd Helm release를 관리한다. AppProject/Application 리소스는 #85에서 추가한다.
 
 | 항목 | 값 | 비고 |
