@@ -670,7 +670,8 @@ localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내
 |---|---|---|
 | Cluster | `autoresearch-dev-gke` | Standard, zonal `asia-northeast3-a` |
 | Endpoint | `34.64.97.177` (IP) + **DNS 엔드포인트(#45)** | DNS 경로는 IAM 검증(IP 등록 불필요), IP 경로는 authorized networks 예비 |
-| 모드 | private nodes, public endpoint | 노드 공인 IP 없음. 마스터 접근: DNS(IAM) 기본 + IP allowlist 예비 |
+| `master_authorized_networks` | `[]` (비어 있음) | #279에서 개인 동적 IP 제거. 기본 경로는 DNS(IAM)라 등록 불필요. IP 예비 경로가 필요하면 고정 IP를 등록 |
+| 모드 | private nodes, public endpoint | 노드 공인 IP 없음. 마스터 접근: DNS(IAM) 기본 + IP allowlist 예비(현재 비어 있음) |
 | Master CIDR | `172.16.0.0/28` | 현재 dev apply 값. dev subnet/private services와 미중복 |
 | Pods/Services 대역 | `172.16.64.0/20` / `172.16.128.0/24` | 서브넷 2차 대역, VPC-native(alias IP) |
 | Control plane | GKE 관리형 | CPU/RAM 직접 지정 불가. Google이 control plane을 관리 |

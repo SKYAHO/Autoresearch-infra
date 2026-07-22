@@ -3,6 +3,27 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-22: GKE master_authorized_networks drift 해소 — 개인 IP allowlist 제거 (#279) — apply 완료
+
+- dev root drift 자동 감지(#279)가 `google_container_cluster.dev`의 in-place
+  변경 1건을 보고했다. 원인은 GitHub Actions 변수 `MASTER_AUTHORIZED_NETWORKS`에
+  등록된 개인 가정용 동적 IP `222.108.125.33/32`로, plan(변수 주입)과 라이브
+  클러스터가 어긋난 상태였다.
+- IP allowlist는 마스터 IP 엔드포인트의 **예비 경로**일 뿐이고 기본 kubectl 경로는
+  DNS 엔드포인트(#45, IAM 검증)라 IP 등록이 불필요하다. 동적 가정용 IP는 로테이션
+  시 drift가 반복되므로 등록값을 유지하지 않고 비웠다.
+- 조치: GitHub 변수 `MASTER_AUTHORIZED_NETWORKS`를 `[]`로 되돌리고, 로컬 비공개
+  `terraform.tfvars`의 동일 값(변수 default `[]`를 덮던 override)도 `[]`로 정정한
+  뒤 apply했다. plan `0 add / 1 change / 0 destroy` —
+  `master_authorized_networks_config`에서 `222.108.125.33/32` cidr_block 1개만
+  제거했고, apply 직후 plan `No changes`로 drift 해소를 확인했다.
+- 운영자 주의: 이 override는 #276/#283이 경고한 로컬 `terraform.tfvars` 노후화
+  함정과 동일 계열이다. GitHub 변수만 바꾸면 로컬 apply가 옛 값을 되살리므로
+  변수·tfvars·라이브 세 곳을 함께 맞춰야 한다.
+- 비용·IAM·리전 영향 없음. 롤백은 IP 예비 경로가 다시 필요할 경우
+  `master_authorized_networks`에 고정 egress IP(가정용 동적 IP 아님)를 등록해
+  apply한다.
+
 ## 2026-07-21: Feast 피처 테이블 4종 IaC 편입 + BigQuery↔Vertex AI connection (#280, PR #281) — apply 완료
 
 - CTR 피처 스토어를 더미에서 실데이터로 전환하기 위해 Feast 피처 테이블 4종
@@ -228,21 +249,6 @@
   현재 런타임 경로(private IP 직접 연결 + operator 주입 K8s Secret `mlflow-db` 읽기)엔
   둘 다 불필요하다 → 최소권한 축소 후보.
 
-## 2026-07-16: 팀원 BigQuery 분석 권한을 별도 admin state로 관리 (#215)
-
-- 팀원 Google 계정에 프로젝트 수준 `roles/bigquery.jobUser`와
-  `autoresearch_dev_analytics`·`feast_offline_store` dataset별
-  `roles/bigquery.dataEditor`를 추가한다. 사람 IAM은 기존처럼
-  `terraform/admin/gke-team-access`의 로컬 `terraform.tfvars`와 별도 state로만
-  관리해 이메일과 off-boarding churn이 일반 dev PR plan에 노출되지 않게 한다.
-- 최소권한 경계: jobUser는 BigQuery job 생성에만, dataEditor는 두 dataset에만
-  부여한다. 프로젝트 수준 `roles/bigquery.dataEditor`, `roles/editor`,
-  `roles/owner`는 부여하지 않는다. jobUser의 쿼리 비용은 실행 시
-  `maximum_bytes_billed` 등 job 수준 제한으로 제어한다.
-- 비용·리전 영향 없음(IAM binding만 추가). 롤백/퇴사는 로컬 tfvars에서 해당
-  계정을 제거한 뒤 apply하여 해당 계정의 GKE·Bastion·BigQuery IAM member만
-  제거한다.
-
 ## 2026-07-17: MLflow Cloud SQL 전용 DB/user + Secret Manager (#93)
 
 - #91 설계에 따라 MLflow backend를 **기존 Cloud SQL `autoresearch-dev-pg` 재사용**으로
@@ -340,6 +346,21 @@
 - 보안: 외부 노출 0, resource-level IAM, Secret Manager, feast IAM 교훈(`storage.buckets.get`
   → legacyBucketReader) 선반영.
 - 리소스 변경 없음(설계 문서만). 실제 리소스는 #92~#95에서 사용자 승인 후.
+
+## 2026-07-16: 팀원 BigQuery 분석 권한을 별도 admin state로 관리 (#215)
+
+- 팀원 Google 계정에 프로젝트 수준 `roles/bigquery.jobUser`와
+  `autoresearch_dev_analytics`·`feast_offline_store` dataset별
+  `roles/bigquery.dataEditor`를 추가한다. 사람 IAM은 기존처럼
+  `terraform/admin/gke-team-access`의 로컬 `terraform.tfvars`와 별도 state로만
+  관리해 이메일과 off-boarding churn이 일반 dev PR plan에 노출되지 않게 한다.
+- 최소권한 경계: jobUser는 BigQuery job 생성에만, dataEditor는 두 dataset에만
+  부여한다. 프로젝트 수준 `roles/bigquery.dataEditor`, `roles/editor`,
+  `roles/owner`는 부여하지 않는다. jobUser의 쿼리 비용은 실행 시
+  `maximum_bytes_billed` 등 job 수준 제한으로 제어한다.
+- 비용·리전 영향 없음(IAM binding만 추가). 롤백/퇴사는 로컬 tfvars에서 해당
+  계정을 제거한 뒤 apply하여 해당 계정의 GKE·Bastion·BigQuery IAM member만
+  제거한다.
 
 ## 2026-07-16: 시크릿 주입 런북을 --from-env-file로 전환 (보안 P1, #213)
 
