@@ -15,3 +15,8 @@ cluster_services_cidr = "172.16.128.0/24"
 
 # GKE master /28. webhook ingress + post-DNAT 대비. dev root gke_master_ipv4_cidr와 일치.
 cluster_master_cidr = "172.16.0.0/28"
+
+# #293 Kibana Google 로그인. anonymous 사용자 역할(기본 viewer=읽기 전용).
+# 저장 객체 생성이 필요하면 "editor". client id/secret·이메일은 여기가 아니라
+# kibana-oauth Secret으로 주입(README).
+# kibana_anonymous_role = "viewer"

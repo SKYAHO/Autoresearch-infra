@@ -67,6 +67,61 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 상세 운영 절차(검색, 정기 점검, 장애 대응, 업그레이드 주의)는
 [docs/KIBANA_OPERATIONS_RUNBOOK.md](../../../docs/KIBANA_OPERATIONS_RUNBOOK.md)(#103)를 따른다.
 
+## Kibana Google(Gmail) 로그인 (#293)
+
+팀원이 Gmail로 로그인한다. ECK Basic 라이선스라 네이티브 OIDC(Platinum)를 못 쓰므로
+**oauth2-proxy 앞단 + Kibana anonymous access** 조합을 쓴다(MLflow #232 패턴).
+
+- 사용자는 Kibana(5601)가 아니라 **oauth2-proxy(4180)** 로 port-forward 한다.
+  proxy가 Google 로그인 + 허용 이메일로 인증한 뒤 Kibana로 프록시하고, Kibana는
+  anonymous 인증(`kibana.tf`/`elasticsearch.tf`)으로 재로그인 없이 자동 로그인된다.
+- anonymous 역할은 `var.kibana_anonymous_role`(기본 `viewer`=읽기 전용). 전원이 이
+  역할을 공유한다(Basic 한계 — 개별 Kibana RBAC은 Platinum 필요).
+- `elastic` 슈퍼유저(basic 인증)는 break-glass용으로 계속 동작(`/login`).
+
+**operator secret 주입 — `kibana-oauth`** (값을 명령행·히스토리에 남기지 않도록 file 기반):
+
+선행: GCP 콘솔에서 OAuth client(웹) 생성, redirect URI
+`http://localhost:4180/oauth2/callback` 등록.
+
+```bash
+umask 077
+d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
+read -rs -p 'client-secret: ' CS; echo
+printf '%s' "$CS" > "$d/client-secret"; unset CS
+printf '%s' '<CLIENT_ID>.apps.googleusercontent.com' > "$d/client-id"
+python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+cat > "$d/authenticated-emails" <<'EMAILS'
+someone@gmail.com
+EMAILS
+
+kubectl create secret generic kibana-oauth -n elastic \
+  --from-file=client-id="$d/client-id" \
+  --from-file=client-secret="$d/client-secret" \
+  --from-file=cookie-secret="$d/cookie-secret" \
+  --from-file=authenticated-emails="$d/authenticated-emails"
+rm -rf "$d"; trap - EXIT
+
+kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
+```
+
+접속:
+
+```bash
+kubectl -n elastic port-forward svc/kibana-oauth-proxy 4180:4180
+# 브라우저: http://localhost:4180 → sign-in → Google 로그인 → Kibana
+```
+
+이메일 목록·client secret 변경 시 위를 다시 실행
+(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+
+**우회 차단·break-glass**: anonymous access가 켜지면 Kibana 5601 직접 접속이
+무인증 viewer가 되므로, `elastic-ingress`는 노드→5601 직접 경로를 열지 않고 사람
+접근을 proxy(4180)로만 강제한다(proxy→Kibana는 same-ns라 정상). 따라서 proxy 장애나
+`kibana-oauth` 미주입 시 Kibana는 일시적으로 접근 불가다. operator break-glass는
+`elastic-ingress`에 5601 ingress를 임시로 되살린 뒤(terraform 또는 `kubectl`) `elastic`
+계정으로 직접 접속하고, 복구 후 되돌린다.
+
 ## 로그 수집 (#100)
 
 | 항목 | 값 | 비고 |

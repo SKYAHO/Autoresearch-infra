@@ -66,8 +66,12 @@ resource "kubernetes_network_policy_v1" "elastic_ingress" {
       }
     }
 
-    # kubectl port-forward 경로(#116 교훈): 노드 대역 → Kibana 5601.
-    # Kibana CR은 #99에서 추가되지만 경계는 미리 선언해 둔다.
+    # kubectl port-forward 경로(#116 교훈): 노드 대역 → #293 oauth2-proxy 4180만.
+    # Kibana 5601 직접 ingress는 의도적으로 열지 않는다 — anonymous access(#293)가
+    # 켜지면 5601 직접 접속이 무인증 viewer가 되어 Google 로그인 게이트를 우회하게
+    # 되므로, 사람 접근은 인증 proxy(4180)로만 강제한다. proxy→Kibana(5601)는
+    # same-ns pod_selector ingress로 커버되어 영향 없다. operator break-glass로
+    # 5601 직접 접근이 필요하면 이 규칙을 임시로 되살린다(README/runbook).
     ingress {
       from {
         ip_block {
@@ -76,7 +80,7 @@ resource "kubernetes_network_policy_v1" "elastic_ingress" {
       }
 
       ports {
-        port     = "5601"
+        port     = "4180"
         protocol = "TCP"
       }
     }
@@ -128,6 +132,14 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
       ports {
         protocol = "TCP"
         port     = "9200"
+      }
+
+      # #293 oauth2-proxy → Kibana Service VIP(5601). #122대로 Calico가 egress를
+      # pre-DNAT(VIP) 평가하므로 same-ns pod_selector로는 안 잡혀 services CIDR
+      # ipBlock으로 열어야 proxy→Kibana upstream이 성립한다.
+      ports {
+        protocol = "TCP"
+        port     = "5601"
       }
     }
 
@@ -216,6 +228,13 @@ resource "kubernetes_network_policy_v1" "elastic_egress" {
     }
   }
 }
+
+# #293 oauth2-proxy(google provider)의 서버사이드 Google 호출(token redeem
+# oauth2.googleapis.com, JWKS/userinfo www.googleapis.com)은 모두 *.googleapis.com
+# 이고, #138 private DNS zone이 이를 private.googleapis.com VIP(199.36.153.8/30)로
+# 유도한다. 이 VIP:443은 elastic-egress가 이미 전체 pod에 열어두므로(ES snapshot용)
+# proxy 전용 egress 정책은 불필요하다. 로그인 authorize 리다이렉트(accounts.google.com)는
+# 사용자 브라우저가 수행하는 client-side라 proxy egress 대상이 아니다.
 
 # #97 ECK operator 최소 설치. CRD는 chart의 crds/ 경로로 설치되며 helm
 # uninstall이 CRD를 삭제하지 않는다(rollouts와 동일 주의 — CRD를 지우면

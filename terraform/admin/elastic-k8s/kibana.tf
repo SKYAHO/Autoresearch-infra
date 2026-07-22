@@ -19,6 +19,24 @@ resource "kubernetes_manifest" "kibana" {
         name = "autoresearch"
       }
 
+      # #293 앞단 oauth2-proxy(Google 로그인)를 통과한 요청을 재로그인 없이
+      # 익명 사용자로 자동 로그인. anonymous(order 0)를 기본으로, basic(order 1)은
+      # elastic 슈퍼유저 break-glass용(`/login`)으로 유지한다. credentials
+      # 키워드가 ES의 anonymous 사용자(elasticsearch.tf)를 그대로 쓴다.
+      # publicBaseUrl은 proxy 뒤 접근 URL(port-forward라 localhost:4180).
+      config = {
+        "xpack.security.authc.providers" = {
+          "anonymous.anonymous1" = {
+            order       = 0
+            credentials = "elasticsearch_anonymous_user"
+          }
+          "basic.basic1" = {
+            order = 1
+          }
+        }
+        "server.publicBaseUrl" = var.kibana_public_base_url
+      }
+
       podTemplate = {
         # 서버(ECK)가 빈 metadata를 정규화 결과로 유지하므로 동일하게
         # 선언해 desired와 server 상태를 일치시킨다(왕복 안정화, #99).

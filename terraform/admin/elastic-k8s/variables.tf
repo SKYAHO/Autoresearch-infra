@@ -88,3 +88,23 @@ variable "elasticsearch_version" {
   type        = string
   default     = "9.2.0"
 }
+
+# --- #293 Kibana Google 로그인 (oauth2-proxy + anonymous access) ---
+
+variable "kibana_anonymous_role" {
+  description = "#293 Kibana anonymous 사용자에게 매핑할 ES role. 기본 내장 viewer(읽기 전용). 저장 객체 생성이 필요하면 editor, 더 넓히려면 커스텀 role. 전원이 이 역할을 공유한다(Basic 라이선스 한계)."
+  type        = string
+  default     = "viewer"
+}
+
+variable "kibana_public_base_url" {
+  description = "#293 oauth2-proxy 뒤 Kibana가 인식하는 외부 접근 URL. port-forward라 localhost:4180."
+  type        = string
+  default     = "http://localhost:4180"
+}
+
+variable "oauth2_proxy_image" {
+  description = "#293 Kibana 앞단 oauth2-proxy 이미지(pin). MLflow(#232)와 동일 버전."
+  type        = string
+  default     = "quay.io/oauth2-proxy/oauth2-proxy:v7.7.1"
+}
