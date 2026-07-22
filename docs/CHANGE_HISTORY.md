@@ -3,6 +3,30 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-23: Inference Server dev GKE 배포 설계 확정 (#302) — 매니페스트는 앱 저장소 #266 선행 대기
+
+- FastAPI Inference Server를 임시 검증 Pod가 아니라 상시 관리 workload로
+  승격한다. 핵심 결정 네 가지를 고정했다.
+  - **이미지 소유 경계**: build/push는 앱 저장소 `release.yml`(#187 WIF 재사용)이
+    맡고, infra repo는 결과 digest만 `deploy/serving/deployment.yaml`에
+    하드코딩해 소비한다. 인프라 저장소 IAM 변경은 없다.
+  - **workload 형태**: Deployment + ArgoCD manual sync로 시작하고, Argo
+    Rollout 적용은 후속 이슈로 분리한다 — dev는 replica 1이라 canary 가중치
+    조절이 무의미하고, 첫 배포의 목표는 E2E 증명이기 때문이다.
+  - **probe 계약**: readiness/startup은 `httpGet /healthcheck`, liveness는
+    `tcpSocket :8000`으로 분리한다. 의존성 상태를 liveness에 결합하면 Redis/
+    MLflow 장애가 재시작 backoff(최대 5분)로 증폭되므로 분리를 불변식으로 둔다.
+  - **IAM 추가 없음**: `gke_app` GSA가 Redis 연결, CA secretAccessor, Feast
+    registry 접근, Workload Identity를 이미 보유해 추가 권한이 필요 없다.
+- 코드 측 Task 1(ArgoCD AppProject destination + Application)·Task 2
+  (`autoresearch-egress` NetworkPolicy MLflow 5000 egress)는 이 저장소에
+  구현·커밋 완료. Task 3(`deploy/serving` 매니페스트)은 앱 저장소
+  [SKYAHO/Autoresearch#266](https://github.com/SKYAHO/Autoresearch/issues/266)의
+  digest 산출이 선행돼야 착수 가능하다. 실제 apply·sync·E2E 검증은 사용자
+  승인 후 별도로 수행한다.
+- 설계: `superpowers/specs/2026-07-23-inference-server-gke-deploy-design.md`,
+  순서: `superpowers/plans/2026-07-23-inference-server-gke-deploy.md`.
+
 ## 2026-07-22: BigQuery raw/feature layer 분리 — data_lake_raw dataset 신설 (#285) — apply 대기
 
 - `feast_offline_store` 안에 raw 적재 테이블(`data_lake_*`)과 Feast 피처 테이블이
