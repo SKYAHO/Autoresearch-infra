@@ -615,20 +615,30 @@ memory가 limit 2Gi에 근접하면 limit을 올리고, 512Mi 미만이면 reque
 임의로 만든 ID는 online store에 피처가 없어 실패한다. 실제 materialize된 ID를 offline
 store에서 조회해 쓴다:
 
+2026-07-23 조회로 확인한 실제 피처 테이블은 `user_dynamic_feature`,
+`user_static_feature`, `user_category_similarity`, `video_feature` 4종이다.
+
 ```bash
 bq query --project_id=ar-infra-501607 --use_legacy_sql=false --format=csv \
-  'SELECT user_id FROM `ar-infra-501607.feast_offline_store.user_features`
+  'SELECT user_id FROM `ar-infra-501607.feast_offline_store.user_dynamic_feature`
    ORDER BY event_timestamp DESC LIMIT 3'
 
 bq query --project_id=ar-infra-501607 --use_legacy_sql=false --format=csv \
-  'SELECT video_id FROM `ar-infra-501607.feast_offline_store.video_features`
+  'SELECT video_id FROM `ar-infra-501607.feast_offline_store.video_feature`
    ORDER BY event_timestamp DESC LIMIT 5'
 ```
 
-테이블명이 다르면 `bq ls ar-infra-501607:feast_offline_store`로 실제 피처 테이블을
-확인한다. offline store에 있어도 materialize되지 않았으면 online 조회가 비므로,
-앱 저장소 `docs/runbooks/2026-07-15-feast-redis-gke-validation.md`의 materialize
-확인 절차와 대조한다. #203 검증에서 쓴 ID가 남아 있으면 그것을 우선 사용한다.
+2026-07-23 기준 조회 결과(변할 수 있으므로 실행 시 재조회할 것):
+
+| 종류 | 값 |
+|---|---|
+| user_id | `vu_0823`, `vu_0948`, `vu_0755` |
+| video_id | `X2VMsizee2M`, `sD61ZG10TlQ`, `XMcCN0R_Ifk`, `2AtpQpmpXTc`, `Y9kMIkohLVw` |
+
+**주의: 위는 offline store 기준이다.** online store(Redis)에 materialize되지
+않았으면 `/rerank`가 피처를 찾지 못한다. 앱 저장소
+`docs/runbooks/2026-07-15-feast-redis-gke-validation.md`의 materialize 확인 절차와
+대조하고, #203 검증에서 쓴 ID가 남아 있으면 그것을 우선 사용한다.
 
 - [ ] **Step 2: port-forward**
 
