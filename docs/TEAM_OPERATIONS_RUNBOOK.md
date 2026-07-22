@@ -259,6 +259,63 @@ kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
 계정은 운영자에게 요청한다. 검색 방법과 KQL 예시는
 [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) 참조.
 
+## Inference Server 운영 (#302)
+
+FastAPI Inference Server(`autoresearch-serving`)는 인터넷에 공개하지 않고
+`autoresearch` namespace에 ClusterIP로만 둔다. 접근은 port-forward만 사용한다.
+
+```bash
+kubectl -n autoresearch port-forward svc/autoresearch-serving 8000:8000
+```
+
+**Redis 접속 정보 Secret 주입**: 파드가 Feast Online Store(Redis)에 접속하려면
+operator가 주입하는 `autoresearch-serving-redis` Secret이 있어야 한다(Git·
+Terraform state 어디에도 값이 없음). 값은 dev root output에서 그대로 가져온다.
+
+```bash
+REDIS_HOST=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_address)
+REDIS_PORT=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_port)
+kubectl -n autoresearch create secret generic autoresearch-serving-redis \
+  --from-literal=REDIS_HOST="$REDIS_HOST" \
+  --from-literal=REDIS_PORT="$REDIS_PORT"
+```
+
+값을 화면·로그·PR 본문에 출력하지 않는다. 이 저장소는 public이다.
+
+**E2E 검증**: 검증기는 앱 저장소(`SKYAHO/Autoresearch`)의
+`scripts/verify_serving_e2e.py`를 그대로 쓰며, 인프라 저장소에서 새로 만들지
+않는다.
+
+```bash
+kubectl -n autoresearch port-forward svc/autoresearch-serving 8000:8000
+# 앱 저장소 체크아웃에서
+python scripts/verify_serving_e2e.py --base-url http://127.0.0.1:8000 \
+    --user-id <실제 user id> --video-ids <실제 video id들>
+```
+
+`--user-id`/`--video-ids`는 materialize된 실제 값을 써야 한다. 임의로 만든
+ID는 online store에 피처가 없어 실패한다.
+
+**모델 교체 함정**: MLflow Model Registry의 `ctr-model@champion` alias를
+재지정해도 **실행 중인 파드는 모델을 바꾸지 않는다.** 모델은 FastAPI
+lifespan에서 1회만 로드되고 재조회 경로가 없기 때문이다. 새 모델을 반영하려면
+파드를 재시작해야 한다.
+
+```bash
+kubectl -n autoresearch rollout restart deployment/autoresearch-serving
+```
+
+이는 **이미지 digest 롤백과 별개의 축**이다 — digest를 바꾸지 않고 champion
+alias만 재지정한 경우에도 재시작이 없으면 이전 모델이 계속 서빙된다.
+
+**digest 배포·롤백**: 이미지는 tag가 아니라 immutable digest로
+`deploy/serving/deployment.yaml`에 고정한다.
+
+| 구분 | 절차 |
+|---|---|
+| 배포 | 앱 저장소 `release.yml`이 이미지를 GAR에 push해 digest 확보 → infra repo PR로 `deployment.yaml`의 digest 갱신 → merge → ArgoCD에서 diff 확인 후 manual sync |
+| 롤백 | 이전 digest로 되돌리는 커밋 → merge → ArgoCD manual sync. git 이력이 곧 배포 이력이다 |
+
 ## SOCKS 프록시 보조 경로
 
 내부 DNS 이름 자체를 브라우저에서 확인해야 할 때만 SOCKS 프록시를 쓴다.

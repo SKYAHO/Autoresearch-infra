@@ -11,9 +11,11 @@ AppProject와 샘플 Application을 추가했다.
 | `argocd` namespace | 예 | `prevent_destroy`로 실수 삭제 방지 |
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
-| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). 샘플 제거 후 infra repo Application 전용(#183). sourceRepos=infra repo, destinations=`monitoring`·`kube-system`(control-plane exporter)·`argo-rollouts`(#186), cluster-wide는 필요한 kind만 |
+| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). 샘플 제거 후 infra repo Application 전용(#183). sourceRepos=infra repo, destinations=`monitoring`·`kube-system`(control-plane exporter)·`argo-rollouts`(#186)·`mlflow`(#94)·`autoresearch`(#302), cluster-wide는 필요한 kind만 |
 | Application `monitoring` | 예 (#183) | infra repo `deploy/monitoring` umbrella chart, manual sync. helm_release에서 이관 |
 | Application `argo-rollouts` | 예 (#186) | infra repo `deploy/argo-rollouts` umbrella chart, manual sync. helm_release에서 이관 |
+| Application `mlflow` | 예 (#94) | infra repo `deploy/mlflow` plain 매니페스트, manual sync. 신규 배포(adopt 아님) |
+| Application `serving` | 예 (#302) | infra repo `deploy/serving`(Deployment/Service/ServiceMonitor) plain 매니페스트, destination `var.app_namespace`(`autoresearch-k8s` 소유), manual sync. 신규 배포(adopt 아님). 이미지 digest는 앱 저장소 `release.yml`이 GAR에 push한 값 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 
 ## 설치 구성 (#84)
@@ -207,6 +209,27 @@ repo Application 전용으로 좁혔다(현재 `monitoring`·`argo-rollouts`).
 - **NetworkPolicy enforcement(#116)가 apply되기 전에는** argocd namespace
   경계가 선언 상태다. 실제 repo credential 도입 전에 enforcement 적용을
   권장한다.
+
+## Inference Server Application (#302)
+
+`application_serving`은 infra repo `deploy/serving`(Deployment/Service/
+ServiceMonitor plain 매니페스트)을 `var.app_namespace`(`autoresearch`,
+`autoresearch-k8s` 소유)에 manual sync로 배포한다. `mlflow`와 마찬가지로 helm
+adopt가 아니라 신규 배포이므로 `CreateNamespace=false`다. 이미지는 tag가 아니라
+앱 저장소 `release.yml`이 GAR에 push한 immutable digest로 `deployment.yaml`에
+고정되며, 배포·롤백은 이 digest를 커밋하고 sync하는 것으로 완결된다(digest
+갱신 절차는 `docs/TEAM_OPERATIONS_RUNBOOK.md` "Inference Server 운영" 참조).
+
+`var.serving_target_revision`(기본 `main`)은 다른 Application과 동일한 패턴으로
+pin한다. 특정 커밋을 추적하려면 apply 시 `-var`로 해당 SHA를 주입한다.
+
+```bash
+terraform -chdir=terraform/admin/argocd-k8s apply \
+  -var="serving_target_revision=<merge commit SHA>"
+```
+
+pin을 풀고 다시 `main` HEAD를 따라가려면 `-var` 없이(또는 `main` 값으로) 다시
+apply한다.
 
 ## Secret 처리 원칙
 

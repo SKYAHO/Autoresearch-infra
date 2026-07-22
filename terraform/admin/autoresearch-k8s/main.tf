@@ -158,6 +158,39 @@ resource "kubernetes_network_policy_v1" "app_egress" {
         port     = "443"
       }
     }
+
+    # #302 MLflow tracking server: registry alias 해석과 모델 artifact 다운로드.
+    # artifact는 mlflow-artifacts:/ 스킴이라 서버를 경유하므로 GCS 직접 egress는
+    # 필요 없다. DNS 규칙과 같은 이중 패턴을 쓴다 — Calico가 service 트래픽을 DNAT
+    # 이전에 평가하므로 ClusterIP VIP는 services CIDR로 열고, DNAT 이후 평가하는
+    # dataplane을 위해 namespace selector 규칙을 함께 둔다.
+    egress {
+      to {
+        ip_block {
+          cidr = var.cluster_services_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "5000"
+      }
+    }
+
+    egress {
+      to {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "mlflow"
+          }
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "5000"
+      }
+    }
   }
 
   depends_on = [kubernetes_namespace_v1.autoresearch]

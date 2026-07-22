@@ -246,6 +246,12 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
           server    = "https://kubernetes.default.svc"
           namespace = var.mlflow_namespace
         },
+        {
+          # #302 앱 namespace는 terraform/admin/autoresearch-k8s가 소유(ns/KSA/NP).
+          # ArgoCD는 deploy/serving(Deployment/Service/ServiceMonitor)만 배포한다.
+          server    = "https://kubernetes.default.svc"
+          namespace = var.app_namespace
+        },
       ]
       # #183 kube-prometheus-stack이 요구하는 cluster-wide kind만 허용.
       clusterResourceWhitelist = [
@@ -366,6 +372,40 @@ resource "kubernetes_manifest" "application_mlflow" {
       destination = {
         server    = "https://kubernetes.default.svc"
         namespace = var.mlflow_namespace
+      }
+      syncPolicy = {
+        syncOptions = [
+          "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+# #302 Inference Server Application — infra repo의 deploy/serving(plain 매니페스트:
+# Deployment/Service/ServiceMonitor)을 배포한다. namespace는 autoresearch-k8s가
+# 소유하므로 CreateNamespace=false. manual sync(초기 원칙).
+# 이미지는 manifest에 immutable digest로 고정되며, 롤백은 이전 digest 커밋 후 sync다.
+resource "kubernetes_manifest" "application_serving" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "serving"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/serving"
+        targetRevision = var.serving_target_revision
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.app_namespace
       }
       syncPolicy = {
         syncOptions = [

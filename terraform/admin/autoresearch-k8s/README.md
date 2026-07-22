@@ -72,11 +72,21 @@ NetworkPolicy는 namespace 전체 pod를 egress isolation 대상으로 삼습니
 | Redis data nodes | `redis_psc_subnet_cidr` | TCP 11000-13047 |
 | GKE metadata | link-local endpoint | TCP 80, 987, 988 |
 | HTTPS API | `0.0.0.0/0` | TCP 443 |
+| MLflow tracking (#302) | services CIDR(`cluster_services_cidr`) + `mlflow` namespace selector | TCP 5000 |
 
 Redis Cluster client는 discovery endpoint에서 topology를 받은 뒤 node endpoint로
 직접 연결합니다. 따라서 TCP 6379만 열면 연결이 완료되지 않으며 11000-13047도
 같은 전용 PSC `/29` 안에서 허용해야 합니다. 앱이 다른 포트를 사용한다면 배포 전
 최소 CIDR/port 규칙을 별도로 검토합니다.
+
+MLflow tracking 규칙(#302)은 Inference Server 파드가 `RERANK_MODEL_SOURCE=registry`로
+`ctr-model@champion` alias를 해석하고 모델 artifact를 내려받는 데 필요합니다.
+`mlflow` namespace의 ClusterIP:5000은 DNS·Cloud SQL 등 기존 규칙 어디에도 걸리지
+않아 별도로 추가했습니다. 이 클러스터의 Calico는 service 트래픽을 DNAT 이전에
+평가하므로 ClusterIP VIP는 services CIDR로 열고, DNAT 이후 평가하는 dataplane을
+위해 namespace selector 규칙을 함께 둡니다(기존 DNS 규칙과 동일한 이중 패턴).
+모델 artifact는 `mlflow-artifacts:/` 스킴으로 MLflow 서버를 경유하므로 파드가
+GCS에 직접 접근할 필요는 없습니다.
 
 ## Cluster 및 hash tag smoke test
 
@@ -116,6 +126,31 @@ MGET feature:{user:100}:age feature:{user:200}:age
 
 hash tag는 함께 조회·갱신해야 하는 관련 key에만 사용합니다. 모든 key에 동일한
 tag를 넣으면 하나의 shard에 부하가 집중되어 2-shard 구성의 목적을 잃습니다.
+
+## Inference Server Redis 접속 정보 Secret (#302)
+
+Inference Server(`deploy/serving`)가 Feast Online Store(Redis)에 접속하려면
+`autoresearch-serving-redis` Secret이 `autoresearch` namespace에 있어야 합니다.
+manifest에는 endpoint를 평문으로 두지 않고(공개 저장소, MLflow와 동일 원칙),
+운영자가 dev root output 값을 그대로 주입합니다. Git·Terraform state 어디에도
+값이 남지 않습니다.
+
+```bash
+REDIS_HOST=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_address)
+REDIS_PORT=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_port)
+kubectl -n autoresearch create secret generic autoresearch-serving-redis \
+  --from-literal=REDIS_HOST="$REDIS_HOST" \
+  --from-literal=REDIS_PORT="$REDIS_PORT"
+```
+
+값을 화면·로그·PR 본문에 출력하지 않습니다. Redis TLS CA는 이 Secret에 두지
+않고, 파드가 `REDIS_CA_SECRET_ID`로 런타임에 Secret Manager에서 직접 읽습니다.
+
+롤백은 Secret을 삭제하는 것으로 완결됩니다.
+
+```bash
+kubectl -n autoresearch delete secret autoresearch-serving-redis
+```
 
 ## 팀원 접근 (#252)
 
