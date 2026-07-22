@@ -289,7 +289,7 @@ IAM 조건은 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 
 | 데이터 | 원본 보관 | 분석/조회 |
 |---|---|---|
 | YouTube KR trending 원본 | GCS `data_lake/youtube_trending_kr/` | BigQuery `dt` 일 단위 partitioned table로 정제 적재 (#199) |
-| 가상 유저 | GCS `asset/virtual_user/` | feature/user dimension 후보 |
+| 가상 유저 | GCS `asset/virtual_user/` | `data_lake_raw.asset_virtual_user_vu_1000` raw 테이블 (#300) |
 | 액션 로그 원본 | GCS `data_lake/action_log/` | BigQuery `dt` 일 단위 partitioned table (#199) |
 | 액션 로그 격리 | GCS `data_lake/action_log_quarantine/` | 품질 점검·재처리 후보 |
 | 페르소나 원본 스냅샷 | GCS `data/raw/personas/` | BigQuery dimension/reference table 후보 |
@@ -303,7 +303,7 @@ BigQuery dataset을 계층별로 나눈다. 이름과 내용이 어긋나지 않
 
 | Dataset | 계층 | 테이블 |
 | --- | --- | --- |
-| `data_lake_raw` | raw | `data_lake_action_log`, `data_lake_youtube_trending_kr` |
+| `data_lake_raw` | raw | `data_lake_action_log`, `data_lake_youtube_trending_kr`, `asset_virtual_user_vu_1000` |
 | `feast_offline_store` | feature | `user_static_feature`, `user_dynamic_feature`, `video_feature`, `user_category_similarity` |
 | `autoresearch_dev_analytics` | analytics | 분석/집계 테이블 |
 

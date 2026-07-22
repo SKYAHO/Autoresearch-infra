@@ -3,6 +3,31 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-22: 가상 유저 raw 테이블 data_lake_raw 편입 (#300) — apply 대기
+
+- 가상 유저 페르소나 원본(`vu_1000.parquet`, 정적 자산)을 BigQuery로 적재하는
+  `asset_virtual_user_vu_1000` 테이블이 Terraform 미관리 상태였다. 재생성 시 삭제
+  보호·관리 라벨·dataset 소속이 사라지는 것을 막기 위해 `google_bigquery_table`로
+  편입했다.
+- 다른 raw 테이블(`data_lake_action_log`, `data_lake_youtube_trending_kr`)은 hive
+  partitioned라 `dt` 일 단위 파티션을 갖지만, 이 테이블은 정적 자산이라
+  `time_partitioning` 없이 생성한다. 경계는 #199과 동일하게 구조(존재·라벨·
+  `deletion_protection = true`)는 Terraform이, 스키마/데이터는 앱 적재 스크립트
+  (`scripts/load_raw_to_bigquery.py`, WRITE_TRUNCATE + parquet autodetect)가
+  소유하며 `ignore_changes = [schema]`로 둔다.
+- parquet의 LIST<string> 필드는 BigQuery load 시 flat `ARRAY<STRING>`이 아니라
+  wrapper record(`RECORD NULLABLE { list: RECORD REPEATED { element: STRING } }`)로
+  적재된다. `feature_materialize.py`의 `_string_array()` 헬퍼가
+  `UNNEST(<col>.list)`로 언래핑하는 계약과 일치한다. seed 스키마는 `user_id`만
+  두고 실제 wrapper 구조는 적재 job이 만든다.
+- 이슈 #300 인수 조건에 따라 `managed_by=terraform`, `owner=infra` 라벨을
+  추가했다(기존 raw 테이블 두 종에는 없는 관리 라벨로, 역적용은 별도 정리).
+- IAM 영향 없음: `data_lake_raw` dataset이 #285에서 GKE app·Airflow·Airflow batch
+  SA에 `roles/bigquery.dataEditor`를 부여 중이며, dataEditor가 SELECT과
+  WRITE_TRUNCATE를 모두 커버해 새 IAM 리소스는 불필요하다.
+- 비용 영향 없음, 리전은 `asia-northeast3`로 동일. 롤백은 `terraform state rm`
+  후 코드 revert로 테이블·데이터를 유지한 채 Terraform 관리만 제거한다.
+
 ## 2026-07-22: BigQuery raw/feature layer 분리 — data_lake_raw dataset 신설 (#285) — apply 대기
 
 - `feast_offline_store` 안에 raw 적재 테이블(`data_lake_*`)과 Feast 피처 테이블이
