@@ -114,7 +114,63 @@ kubectl -n argocd delete secret argocd-initial-admin-secret
 ```
 
 변경한 admin 비밀번호는 팀 비밀번호 관리 경로로만 공유한다. Git, PR,
-Terraform state, values 파일에 저장하지 않는다.
+Terraform state, values 파일에 저장하지 않는다. 로컬 `admin` 계정은 OIDC 도입
+후에도 CLI·자동화·break-glass용으로 유지한다(#289).
+
+## Google(Gmail) OIDC 로그인 (#289)
+
+팀원이 Gmail 계정으로 UI에 로그인하고, 이메일 기준으로 권한(admin/readonly)을
+나눈다. Dex 없이 ArgoCD 내장 **직접 OIDC**로 Google을 연결한다. Airflow/MLflow와
+동일하게 **client id/secret은 Git·Terraform state에 두지 않고** 별도 Secret으로
+주입하며, 허용 이메일은 로컬 `terraform.tfvars`에만 둔다.
+
+**1) Google OAuth 클라이언트 생성(콘솔 수동)**
+
+- 유형: Web application
+- redirect URI: `https://localhost:8443/auth/callback` (`argocd_server_url` +
+  `/auth/callback`). port-forward → localhost 접근이라 이 값이 불변이다.
+- 발급된 client id / client secret은 아래 Secret으로만 넣고 어디에도 남기지 않는다.
+
+**2) `argocd-google-oidc` Secret 주입(Terraform 밖, Secret Manager 경유)**
+
+`oidc.config`는 값이 아니라 `$argocd-google-oidc:<key>`를 참조하므로, 실제 값은
+이 Secret에만 있다. label `app.kubernetes.io/part-of=argocd`가 있어야 ArgoCD가
+`$` 참조로 읽는다. 시크릿을 명령행에 노출하지 않도록 `--from-env-file`을 쓴다(#213).
+
+```bash
+umask 077
+env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
+# client id/secret을 Secret Manager에 저장해 두고 회수(예시 secret 이름)
+CID="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-id --project ar-infra-501607)"
+CSECRET="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-secret --project ar-infra-501607)"
+printf 'clientId=%s\nclientSecret=%s\n' "$CID" "$CSECRET" > "$env_file"; unset CID CSECRET
+kubectl create secret generic argocd-google-oidc -n argocd --from-env-file="$env_file" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl label secret argocd-google-oidc -n argocd app.kubernetes.io/part-of=argocd --overwrite
+rm -f "$env_file"; trap - EXIT
+kubectl -n argocd rollout restart deployment/argo-cd-argocd-server   # 새 oidc.config 반영
+```
+
+**3) 허용 이메일 지정(로컬 `terraform.tfvars`)**
+
+```hcl
+argocd_admin_user_emails    = ["you@gmail.com"]
+argocd_readonly_user_emails = ["teammate@gmail.com"]
+```
+
+apply하면 `argocd-rbac-cm`의 `policy.csv`에 `g, <email>, role:admin|readonly`가
+렌더된다. `policy.default`는 빈 값(거부)이라 목록 밖 계정은 로그인해도 권한이 없다.
+
+**4) 로그인 확인**
+
+port-forward 후 `https://localhost:8443`에서 **LOG IN VIA GOOGLE**로 로그인한다.
+admin(내장 `role:admin`)은 app sync/rollback을 포함해 repo·project·설정·RBAC까지
+전체를 관리하고, readonly는 조회만 가능하다. 로컬 `admin` 로그인도 그대로 된다.
+(admin 티어를 더 좁히려면 sync/rollback만 허용하는 커스텀 role을 별도로 정의한다.)
+
+**로테이션/회수**: client secret은 Secret Manager 새 version → 위 2)로 재주입 →
+`rollout restart`. 팀원 제거는 `terraform.tfvars`에서 이메일을 빼고 apply한다.
+이미 발급된 세션 토큰은 만료까지 유효하다.
 
 ## 샘플 sync/diff/rollback 검증 (#85, 완료 후 제거)
 

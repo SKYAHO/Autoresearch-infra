@@ -27,10 +27,20 @@ kubectl -n argocd port-forward svc/argo-cd-argocd-server 8443:443
 ```
 
 브라우저에서 `https://localhost:8443`으로 접속한다. self-signed 인증서 경고는
-dev 내부 경로 특성상 허용한다. admin 계정 credential 처리(초기 비밀번호 회수,
-변경, 초기 secret 삭제)는
+dev 내부 경로 특성상 허용한다.
+
+로그인은 두 가지다(#289):
+
+- **Google(Gmail) 로그인(기본)**: **LOG IN VIA GOOGLE**. 허용 이메일만 접근하며
+  admin은 내장 `role:admin`(app sync/rollback 포함 repo·project·설정·RBAC까지 전체
+  관리), readonly는 조회만 가능하다. 목록 밖 계정은 로그인해도
+  권한이 없다(`policy.default` 거부).
+- **로컬 `admin`**: CLI·자동화·break-glass용으로 유지한다.
+
+Google OIDC client secret 주입, redirect URI, 허용 이메일(`terraform.tfvars`) 절차와
+admin credential 처리(초기 비밀번호 회수·변경·secret 삭제)는
 [`terraform/admin/argocd-k8s/README.md`](../terraform/admin/argocd-k8s/README.md)를
-단일 원본으로 한다. 비밀번호는 문서, PR, 채팅에 남기지 않는다.
+단일 원본으로 한다. 비밀번호·client secret은 문서, PR, 채팅에 남기지 않는다.
 
 ## 상태 확인 순서
 
