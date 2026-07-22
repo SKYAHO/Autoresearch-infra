@@ -46,6 +46,44 @@ resource "google_bigquery_dataset_iam_member" "feast_offline_store_gke_app_data_
   member     = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
+# #285 raw layer 전용 dataset
+#
+# GCS data lake 원천 적재 테이블(data_lake_*)을 Feast 피처 테이블과 같은
+# dataset에 두면 dataset 단위 IAM·비용·수명주기 정책을 계층별로 다르게 걸 수
+# 없다. raw는 이 dataset, feature는 feast_offline_store로 분리한다.
+#
+# ⚠️ 이 dataset과 하위 raw 테이블 2종은 운영자가 bq로 이미 생성·복사해 둔
+# 실물이다. apply 전에 반드시 terraform import로 state에 편입해야 하며,
+# 구 주소(feast_offline_store 하위)는 terraform state rm으로 분리한다.
+# 절차는 docs/TERRAFORM_DEV.md "raw/feature layer 분리 state 재조정"을 따른다.
+resource "google_bigquery_dataset" "data_lake_raw" {
+  dataset_id                 = local.data_lake_raw_dataset_id
+  friendly_name              = "Autoresearch dev data lake raw"
+  description                = "Raw data lake layer: GCS dt-partition 원천 적재 테이블 전용 (feast_offline_store는 feature 전용으로 분리)"
+  location                   = var.bigquery_location
+  delete_contents_on_destroy = var.bigquery_delete_contents_on_destroy
+
+  labels = {
+    data_class = "raw"
+    purpose    = "data-lake-raw"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# dataset 이전으로 기존 접근 주체가 권한을 잃지 않도록, feast_offline_store가
+# 가진 dataset 레벨 IAM 주체를 그대로 복제한다.
+# - GKE app SA: 아래
+# - Airflow SA / Airflow batch SA: airflow.tf
+# - 팀원 계정: terraform/admin/gke-team-access (별도 state, 별도 apply 필요)
+resource "google_bigquery_dataset_iam_member" "data_lake_raw_gke_app_data_editor" {
+  dataset_id = google_bigquery_dataset.data_lake_raw.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
 resource "google_project_iam_member" "gke_app_bigquery_job_user" {
   project = var.project_id
   role    = "roles/bigquery.jobUser"
@@ -64,8 +102,11 @@ resource "google_project_iam_member" "gke_app_bigquery_read_session" {
 # #199 data lake 테이블 dt 파티션 고정
 # 스키마/데이터는 SKYAHO/Autoresearch scripts/load_raw_to_bigquery.py가 소유하고
 # (autodetect + WRITE_TRUNCATE), Terraform은 존재와 dt 일 단위 파티셔닝만 보장한다.
+#
+# #285 dataset을 feast_offline_store → data_lake_raw로 이전. 스키마·파티션·
+# deletion_protection은 데이터 유실 방지를 위해 이전 정의와 완전히 동일하다.
 resource "google_bigquery_table" "data_lake_action_log" {
-  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  dataset_id          = google_bigquery_dataset.data_lake_raw.dataset_id
   table_id            = "data_lake_action_log"
   description         = "GCS data_lake/action_log raw parquet 적재 테이블. dt 일 단위 파티션."
   deletion_protection = true
@@ -96,7 +137,7 @@ resource "google_bigquery_table" "data_lake_action_log" {
 }
 
 resource "google_bigquery_table" "data_lake_youtube_trending_kr" {
-  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  dataset_id          = google_bigquery_dataset.data_lake_raw.dataset_id
   table_id            = "data_lake_youtube_trending_kr"
   description         = "GCS data_lake/youtube_trending_kr raw parquet 적재 테이블. dt 일 단위 파티션."
   deletion_protection = true

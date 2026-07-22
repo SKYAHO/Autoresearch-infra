@@ -274,7 +274,8 @@ IAM 조건은 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 
 | 항목 | 값 | 비고 |
 |---|---|---|
 | Dataset | `autoresearch_dev_analytics` | `${resource_prefix}_analytics`에서 `-`를 `_`로 변환 |
-| Feast offline store | `feast_offline_store` | Feast feature offline store 전용 dataset |
+| Feast offline store | `feast_offline_store` | Feast feature table 전용 dataset (#285에서 raw 분리) |
+| Data lake raw | `data_lake_raw` | GCS 원천 적재(raw) 테이블 전용 dataset (#285) |
 | Location | `asia-northeast3` | `var.bigquery_location`, GCS raw bucket과 동일 리전 |
 | 용도 | 구조화 분석 데이터 | GCS raw에서 적재/정제된 테이블 저장 |
 | Destroy 보호 | `prevent_destroy=true` | 분석 테이블 유실 방지 |
@@ -295,11 +296,105 @@ IAM 조건은 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 
 
 GCS는 원본 파일 보존, BigQuery는 SQL 분석과 downstream feature 생성을 담당한다.
 
+### raw / feature layer 분리 (#285)
+
+BigQuery dataset을 계층별로 나눈다. 이름과 내용이 어긋나지 않게 하고, dataset
+단위 IAM·비용·수명주기 정책을 계층별로 다르게 걸기 위해서다.
+
+| Dataset | 계층 | 테이블 |
+| --- | --- | --- |
+| `data_lake_raw` | raw | `data_lake_action_log`, `data_lake_youtube_trending_kr` |
+| `feast_offline_store` | feature | `user_static_feature`, `user_dynamic_feature`, `video_feature`, `user_category_similarity` |
+| `autoresearch_dev_analytics` | analytics | 분석/집계 테이블 |
+
+dataset 이전으로 접근 주체가 권한을 잃지 않도록, `feast_offline_store`가 가진
+dataset 레벨 IAM 주체를 `data_lake_raw`에 **그대로 복제**한다.
+
+| 주체 | 역할 | 정의 위치 |
+| --- | --- | --- |
+| GKE app SA | `roles/bigquery.dataEditor` | `bigquery.tf` |
+| Airflow SA | `roles/bigquery.dataEditor` | `airflow.tf` |
+| Airflow batch SA | `roles/bigquery.dataEditor` | `airflow.tf` |
+| 팀원 계정 | `roles/bigquery.dataEditor` | `terraform/admin/gke-team-access` (**별도 state, 별도 apply**) |
+
+연동 저장소는 dataset 이름을 환경변수/Airflow Variable로 참조하므로 cutover 시
+아래 값을 함께 바꾼다. `FEAST_BQ_DATASET`(feast materialize)는 피처 테이블만
+읽으므로 `feast_offline_store` 그대로 둔다.
+
+| 저장소 | 설정 | 변경 후 |
+| --- | --- | --- |
+| `SKYAHO/Autoresearch-airflow` | Airflow Variable `LAKE_TO_BQ_DATASET` | `data_lake_raw` |
+| `SKYAHO/Autoresearch` | `BQ_DATASET` (`scripts/load_raw_to_bigquery.py`) | `data_lake_raw` |
+| `SKYAHO/Autoresearch` | `CTR_TRAINING_BQ_DATASET` (raw 테이블 참조분) | `data_lake_raw` |
+
+### raw/feature layer 분리 state 재조정 (#285)
+
+`data_lake_raw` dataset과 하위 raw 테이블 2종은 **운영자가 `bq`로 이미 생성·복사해
+둔 실물**이다. Terraform이 이를 신규 생성하려 하면 `Already Exists`로 실패하고,
+구 주소는 `deletion_protection = true`라 destroy 시도 자체가 실패한다. 따라서
+apply 전에 반드시 아래 state 재조정을 먼저 수행한다.
+
+```bash
+cd terraform/envs/dev
+terraform init
+
+# 1. 신규 dataset을 state에 편입
+terraform import google_bigquery_dataset.data_lake_raw \
+  projects/ar-infra-501607/datasets/data_lake_raw
+
+# 2. 이전된 raw 테이블 2종을 새 주소로 편입
+terraform import google_bigquery_table.data_lake_action_log \
+  projects/ar-infra-501607/datasets/data_lake_raw/tables/data_lake_action_log
+terraform import google_bigquery_table.data_lake_youtube_trending_kr \
+  projects/ar-infra-501607/datasets/data_lake_raw/tables/data_lake_youtube_trending_kr
+```
+
+> `terraform import`는 리소스 주소가 이미 state에 있으면 실패한다. 위 2번은
+> 같은 주소(`google_bigquery_table.data_lake_action_log`)가 구 dataset을 가리킨
+> 채 state에 남아 있으므로, **아래 `state rm`을 먼저 실행한 뒤 import**한다.
+
+```bash
+# 0. (2번보다 먼저) 구 주소를 state에서만 분리 — 실제 테이블은 그대로 남는다
+terraform state rm google_bigquery_table.data_lake_action_log
+terraform state rm google_bigquery_table.data_lake_youtube_trending_kr
+```
+
+정리하면 실행 순서는 **`state rm` 2건 → `import` 3건**이다.
+
+- `state rm`은 state에서만 분리하며 GCP 리소스를 삭제하지 않는다.
+- `deletion_protection = true`이므로 `state rm` 없이 apply하면 구 테이블 destroy
+  시도가 오류로 중단된다. 반드시 선행한다.
+- **물리 구 테이블(`feast_offline_store.data_lake_*`) 삭제는 Terraform이 하지
+  않는다.** cutover 확인 후 운영자가 수동 `bq rm`으로 수행한다.
+
+재조정 후 검증 기준:
+
+```bash
+terraform plan
+```
+
+- raw 테이블 2종에 `create`/`destroy`가 **나오면 안 된다** (no-op이어야 한다).
+- 허용되는 diff는 `google_bigquery_dataset_iam_member` 추가분뿐이다
+  (`data_lake_raw`의 gke_app / airflow / airflow_batch dataEditor 3건).
+  dataset 자체가 `labels`/`friendly_name` 차이로 in-place update로 잡히면 정의와
+  실물을 대조한 뒤 진행한다.
+- 팀원 dataEditor는 별도 root에서 적용한다.
+
+```bash
+cd terraform/admin/gke-team-access
+terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors 추가분만
+```
+
+롤백은 `dataset_id`를 `feast_offline_store`로 되돌린 뒤 같은 방식으로 state를
+재조정하면 된다. 구 테이블을 물리적으로 삭제하기 전까지 원본 데이터가 남아 있어
+되돌리기가 가능하므로, `bq rm`은 cutover 검증이 끝난 뒤에만 수행한다.
+
 ### data lake 테이블 dt 파티션 (#199)
 
-`feast_offline_store` dataset의 `data_lake_action_log`,
-`data_lake_youtube_trending_kr`는 Terraform이 존재와 `dt` 일 단위 파티셔닝을
-보장한다 (`google_bigquery_table`, `deletion_protection = true`).
+`data_lake_raw` dataset(#285 이전에는 `feast_offline_store`)의
+`data_lake_action_log`, `data_lake_youtube_trending_kr`는 Terraform이 존재와
+`dt` 일 단위 파티셔닝을 보장한다 (`google_bigquery_table`,
+`deletion_protection = true`).
 
 | 소유권 | 주체 | 내용 |
 | --- | --- | --- |
@@ -701,7 +796,8 @@ clusterViewer→viewer로 확대) `gcloud container clusters get-credentials`를
 일반 PR Terraform plan에는 팀원 이메일과 사람 IAM 변경이 나오지 않게 분리한다.
 
 #215부터 같은 admin root가 팀원에게 프로젝트 수준 `roles/bigquery.jobUser`와
-`autoresearch_dev_analytics`·`feast_offline_store` 두 dataset의
+`autoresearch_dev_analytics`·`feast_offline_store`·`data_lake_raw`
+(#285에서 추가) 세 dataset의
 `roles/bigquery.dataEditor`를 함께 관리한다. `dataEditor`는 dataset 단위로만
 부여하며 프로젝트 수준 Data Editor/Editor/Owner를 부여하지 않는다. `jobUser`는
 프로젝트 범위의 job 생성 권한이므로 query/load job은 `maximum_bytes_billed` 같은
@@ -985,8 +1081,8 @@ Airflow는 두 Terraform root로 나눈다.
 | Cloud SQL DB | `airflow` | 기존 dev 인스턴스 내 신규 database(metadata DB) |
 | Secret Manager | `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` | secret payload는 Terraform 밖에서 주입. secret metadata와 Airflow SA/batch SA accessor만 Terraform 관리 |
 | GCS buckets | `ar-infra-501607-autoresearch-dev-airflow-dags`, `...-airflow-logs` | DAG 버전관리 / task log 영속화. `prevent_destroy=true` |
-| Airflow SA 접근 권한 | Cloud SQL client, Secret Manager accessor(Airflow API/OAuth secrets), BigQuery jobUser(project), GCS objectAdmin(dags/logs/feast_registry/feast_staging), GCS objectViewer+objectCreator(raw_data), BigQuery dataEditor(feast_offline_store) | raw_data는 읽기+새 객체 생성만 허용해 기존 원본 삭제/덮어쓰기를 차단 |
-| Airflow batch SA 접근 권한 | Secret Manager accessor(YouTube/OpenRouter), BigQuery jobUser(project), GCS objectViewer+objectCreator(raw_data), GCS objectAdmin(feast_registry/feast_staging), BigQuery dataEditor(feast_offline_store) | app GSA에서 Airflow API key 접근권을 제거하고 batch 실행에 필요한 권한만 분리 |
+| Airflow SA 접근 권한 | Cloud SQL client, Secret Manager accessor(Airflow API/OAuth secrets), BigQuery jobUser(project), GCS objectAdmin(dags/logs/feast_registry/feast_staging), GCS objectViewer+objectCreator(raw_data), BigQuery dataEditor(feast_offline_store, data_lake_raw) | raw_data는 읽기+새 객체 생성만 허용해 기존 원본 삭제/덮어쓰기를 차단 |
+| Airflow batch SA 접근 권한 | Secret Manager accessor(YouTube/OpenRouter), BigQuery jobUser(project), GCS objectViewer+objectCreator(raw_data), GCS objectAdmin(feast_registry/feast_staging), BigQuery dataEditor(feast_offline_store, data_lake_raw) | app GSA에서 Airflow API key 접근권을 제거하고 batch 실행에 필요한 권한만 분리 |
 
 ### 설치 담당자 Helm 적용 경로
 

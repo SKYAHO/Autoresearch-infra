@@ -331,3 +331,18 @@ resource "google_bigquery_dataset_iam_member" "airflow_batch_feast_data_editor" 
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
+
+# #285 raw 테이블이 data_lake_raw dataset으로 이전되면서, lake_to_bigquery
+# DAG(Airflow SA)와 배치 job(Airflow batch SA)이 기존 권한을 잃지 않도록
+# feast_offline_store와 동일한 dataEditor를 새 dataset에도 부여한다.
+resource "google_bigquery_dataset_iam_member" "airflow_data_lake_raw_data_editor" {
+  dataset_id = google_bigquery_dataset.data_lake_raw.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.airflow.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "airflow_batch_data_lake_raw_data_editor" {
+  dataset_id = google_bigquery_dataset.data_lake_raw.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.airflow_batch.email}"
+}

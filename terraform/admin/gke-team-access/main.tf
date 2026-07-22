@@ -55,6 +55,18 @@ resource "google_bigquery_dataset_iam_member" "team_bigquery_feast_data_editors"
   member     = "user:${each.value}"
 }
 
+# #285 raw 테이블 2종이 feast_offline_store → data_lake_raw로 이전되면서
+# 팀원이 raw 데이터 조회/편집 권한을 잃지 않도록 동일 범위를 새 dataset에도 부여한다.
+# dev root(terraform/envs/dev)와 별도 state이므로 이 root도 따로 apply해야 한다.
+resource "google_bigquery_dataset_iam_member" "team_bigquery_data_lake_raw_data_editors" {
+  for_each = var.team_member_emails
+
+  project    = var.project_id
+  dataset_id = var.bigquery_data_lake_raw_dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "user:${each.value}"
+}
+
 # #47 Bastion IAP 터널 접속 3종. 모두 읽기/접속용이며 리소스 변경 권한 없음.
 # - iap.tunnelResourceAccessor: IAP TCP forwarding 통과
 # - compute.osLogin: SSH 키 배포 없이 IAM 기반 SSH 로그인

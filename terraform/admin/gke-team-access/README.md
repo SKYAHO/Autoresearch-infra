@@ -34,9 +34,10 @@ terraform apply
 | --- | --- | --- |
 | 프로젝트 | `roles/bigquery.jobUser` | query/load/export BigQuery job 실행 |
 | `autoresearch_dev_analytics` dataset | `roles/bigquery.dataEditor` | 분석 테이블 생성·갱신·삭제 |
-| `feast_offline_store` dataset | `roles/bigquery.dataEditor` | Feast/data lake 테이블 생성·갱신·삭제 |
+| `feast_offline_store` dataset | `roles/bigquery.dataEditor` | Feast 피처 테이블 생성·갱신·삭제 |
+| `data_lake_raw` dataset | `roles/bigquery.dataEditor` | GCS 원천 적재(raw) 테이블 생성·갱신·삭제 (#285) |
 
-`dataEditor`는 두 dataset에만 부여합니다. 프로젝트 수준
+`dataEditor`는 위 세 dataset에만 부여합니다. 프로젝트 수준
 `roles/bigquery.dataEditor`, `roles/editor`, `roles/owner`는 부여하지 않습니다.
 `jobUser`는 프로젝트 범위의 job 생성 권한이므로, 팀원이 실행하는 query/load job은
 `maximum_bytes_billed` 등 job 수준 비용 제한을 함께 사용해야 합니다.
