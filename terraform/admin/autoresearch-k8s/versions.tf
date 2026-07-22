@@ -34,7 +34,6 @@ data "google_container_cluster" "dev" {
 }
 
 provider "kubernetes" {
-  host                   = "https://${data.google_container_cluster.dev.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.dev.master_auth[0].cluster_ca_certificate)
+  host  = "https://${data.google_container_cluster.dev.control_plane_endpoints_config[0].dns_endpoint_config[0].endpoint}"
+  token = data.google_client_config.default.access_token
 }
