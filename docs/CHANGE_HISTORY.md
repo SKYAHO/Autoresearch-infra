@@ -36,9 +36,10 @@
   `redirect_uri_mismatch`. 상세는 runbook `KIBANA_OPERATIONS_RUNBOOK.md`.
 - 검증(2026-07-23): oauth2-proxy(4181) 경유 Google 로그인 → Kibana `/login` basic
   진입 동작. `auth = { fileRealm = [] }`로 elastic-k8s plan `No changes` 수렴.
-- 보안 후속: 디버깅 중 Kibana OAuth client secret이 노출돼 로테이션 필요
-  (client-id `185508640491-k7rr497...`, Google Console 재발급 후 `kibana-oauth`
-  secret 재주입 — runbook 절차).
+- 보안 후속(**미완료, 추적 #329**): 디버깅 중 Kibana OAuth client secret이 노출돼
+  로테이션 필요(client-id `185508640491-k7rr497...`는 비밀 아님). Google Console에서
+  즉시 revoke·재발급 후 `kibana-oauth` secret 재주입(runbook 절차)까지 #329에서 open
+  관리한다 — 이 항목은 로그인 후퇴(apply·검증 완료)와 별개의 미완료 액션이다.
 
 ## 2026-07-23: admin root gated CI apply — 파일럿→8개 K8s root 일괄 확장 (#307/#312/#314/#318/#319) — apply·검증 완료
 
