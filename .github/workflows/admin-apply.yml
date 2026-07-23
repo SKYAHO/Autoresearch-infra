@@ -22,9 +22,12 @@ concurrency:
 
 env:
   TF_IN_AUTOMATION: "true"
-  # apply 순서: 의존성 고려(namespace/IAM 소유 root 먼저, argocd는 다른 namespace를
-  # 참조하므로 마지막).
-  ROOTS: "gke-team-access autoresearch-k8s airflow-k8s monitoring-k8s elastic-k8s vault-k8s mlflow-k8s argo-rollouts-k8s argocd-k8s"
+  # apply 순서: 의존성 고려(namespace 소유 root 먼저, argocd는 다른 namespace를
+  # 참조하므로 마지막). gke-team-access는 제외한다(#314): 프로젝트 IAM 외에
+  # BigQuery dataset·Artifact Registry repo IAM까지 관리해 apply SA에 bigquery.admin
+  # + artifactregistry.admin까지 필요한 과도한 escalation이라, 사람 IAM은 로컬
+  # break-glass로 유지한다.
+  ROOTS: "autoresearch-k8s airflow-k8s monitoring-k8s elastic-k8s vault-k8s mlflow-k8s argo-rollouts-k8s argocd-k8s"
   PLAN_PREFIX: gs://autoresearch-dev-tfstate/admin-apply-plans
   # allowlist: 삭제 시 접근이 상실되는 값은 '|| []' 폴백을 두지 않는다. Secret
   # 미설정/빈 값이면 빈 문자열이 되어 terraform이 halt한다(#305류 차단). optional
@@ -37,8 +40,6 @@ env:
   TF_VAR_installer_user_emails: ${{ secrets.AIRFLOW_INSTALLER_USER_EMAILS }}
   TF_VAR_monitoring_port_forward_user_emails: ${{ secrets.MONITORING_PORT_FORWARD_USER_EMAILS }}
   TF_VAR_mlflow_viewer_user_emails: ${{ secrets.MLFLOW_VIEWER_USER_EMAILS }}
-  TF_VAR_team_member_emails: ${{ secrets.GKE_TEAM_MEMBER_EMAILS }}
-  TF_VAR_training_image_ar_writer_emails: ${{ secrets.TRAINING_IMAGE_AR_WRITER_EMAILS || '[]' }}
 
 jobs:
   plan:
@@ -62,7 +63,6 @@ jobs:
           A3: ${{ secrets.AIRFLOW_INSTALLER_USER_EMAILS }}
           A4: ${{ secrets.MONITORING_PORT_FORWARD_USER_EMAILS }}
           A5: ${{ secrets.MLFLOW_VIEWER_USER_EMAILS }}
-          A6: ${{ secrets.GKE_TEAM_MEMBER_EMAILS }}
         run: |
           missing=""
           [ -z "$A1" ] && missing="$missing ARGOCD_ADMIN_USER_EMAILS"
@@ -70,7 +70,6 @@ jobs:
           [ -z "$A3" ] && missing="$missing AIRFLOW_INSTALLER_USER_EMAILS"
           [ -z "$A4" ] && missing="$missing MONITORING_PORT_FORWARD_USER_EMAILS"
           [ -z "$A5" ] && missing="$missing MLFLOW_VIEWER_USER_EMAILS"
-          [ -z "$A6" ] && missing="$missing GKE_TEAM_MEMBER_EMAILS"
           if [ -n "$missing" ]; then
             echo "::error::allowlist Secret 미설정:$missing — 빈 값으로 apply하면 해당 접근이 삭제됩니다(#305). 설정 후 재실행하세요."
             exit 1
