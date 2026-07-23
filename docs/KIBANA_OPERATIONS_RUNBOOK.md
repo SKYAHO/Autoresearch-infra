@@ -10,11 +10,12 @@ dev GKE의 ELK 스택(`elastic` namespace, #96~#102) 운영·검색 절차.
 Kibana는 인터넷에 공개하지 않는다. 접근은 kubectl port-forward만 사용한다.
 로그인은 두 가지다(#293).
 
-**(A) Google(Gmail) 로그인 — 기본.** 앞단 oauth2-proxy Service(4180)를 로컬
-4181로 접속한다. MLflow의 로컬 4180과 충돌하지 않는다. 허용
-이메일만 통과하고, Kibana는 anonymous 인증으로 재로그인 없이 자동 로그인된다.
-익명 역할은 `var.kibana_anonymous_role`(기본 `viewer`=읽기 전용, 전원 공유).
-로컬 HTTP port-forward에서 세션을 유지하도록 Kibana secure cookie는 비활성화되어 있다.
+**(A) Google(Gmail) 접근 통제 + Kibana basic 로그인 — 기본(#325).** 앞단
+oauth2-proxy Service(4180)를 로컬 4181로 접속한다(MLflow 로컬 4180과 충돌 방지).
+허용 이메일만 proxy를 통과하고, **Kibana `/login`에서 다시 `elastic`(또는 별도
+사용자)로 로그인**한다. Kibana anonymous 자동 로그인은 9.2 호환성 문제로 폐기했다
+(#323). 로컬 HTTP port-forward라 Kibana secure cookie는 비활성이다. `elastic` 비번은
+`autoresearch-es-elastic-user` Secret에서 회수(문서/PR/채팅 미기재).
 
 ```bash
 kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
@@ -25,13 +26,11 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 [terraform/admin/elastic-k8s/README.md](../terraform/admin/elastic-k8s/README.md)를
 단일 원본으로 한다. client secret은 문서/PR/채팅에 남기지 않는다.
 
-**(B) `elastic` 슈퍼유저 — break-glass.** 두 경로가 있다.
-
-- **평상시**: proxy(A)로 Google 로그인 후 Kibana `/login`에서 basic 인증(`elastic`).
-- **proxy 장애 시**: Kibana 5601 직접 경로는 기본 차단돼 있다(#293 — anonymous 우회
-  방지). operator가 `elastic-ingress`에 노드→5601 ingress를 임시로 되살린 뒤
-  (`terraform/admin/elastic-k8s` 규칙 복원 apply 또는 `kubectl` 패치) 직접 접속하고,
-  복구 후 되돌린다.
+**(B) proxy 장애 시 break-glass.** Kibana 5601 직접 경로는 평상시 차단돼 있다
+(#294 — proxy를 단일 접근 경로로 유지). proxy·`kibana-oauth` 장애로 (A)가 불가하면
+operator가 `elastic-ingress`에 노드→5601 ingress를 임시로 되살린 뒤
+(`terraform/admin/elastic-k8s` 규칙 복원 apply 또는 `kubectl` 패치) `elastic`로 직접
+접속하고, 복구 후 되돌린다.
 
 ```bash
 # 임시 복원 후:

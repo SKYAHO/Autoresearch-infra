@@ -67,47 +67,21 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 상세 운영 절차(검색, 정기 점검, 장애 대응, 업그레이드 주의)는
 [docs/KIBANA_OPERATIONS_RUNBOOK.md](../../../docs/KIBANA_OPERATIONS_RUNBOOK.md)(#103)를 따른다.
 
-## Kibana Google(Gmail) 로그인 (#293)
+## Kibana Google(Gmail) 로그인 (#293/#325)
 
-팀원이 Gmail로 로그인한다. ECK Basic 라이선스라 네이티브 OIDC(Platinum)를 못 쓰므로
-**oauth2-proxy 앞단 + Kibana anonymous access** 조합을 쓴다(MLflow #232 패턴).
+팀원이 Gmail로 접근을 통제한다. ECK Basic 라이선스라 네이티브 OIDC(Platinum)를
+못 쓰고, Kibana 9.2에서 anonymous 자동 로그인이 안정적으로 동작하지 않아(#323),
+**oauth2-proxy(Google 로그인 + 허용 이메일)로 접근을 통제하고 Kibana는 기본 basic
+인증(`elastic` 등 실제 사용자)으로 로그인**한다(이중 로그인이나 신뢰도 우선).
 
-- 사용자는 Kibana(5601)가 아니라 **oauth2-proxy Service(4180)** 를 로컬
-  **4181** 포트로 port-forward 한다(MLflow의 로컬 4180과 충돌 방지).
-  proxy가 Google 로그인 + 허용 이메일로 인증한 뒤 Kibana로 프록시하고, Kibana는
-  anonymous 인증(`kibana.tf`/`elasticsearch.tf`)으로 재로그인 없이 자동 로그인된다.
-  Kibana 내부 TLS와 로컬 HTTP port-forward의 경계 때문에 세션 쿠키는
-  `xpack.security.secureCookies=false`로 설정한다.
-- anonymous 사용자는 실제 ES 사용자 `kibana_anon`(role `viewer`, 읽기 전용)이다.
-  Kibana 9.2에서 `elasticsearch_anonymous_user` credential이 deprecated돼(#323),
-  fileRealm 사용자 + keystore 비번 방식으로 바꿨다. 역할은 `kibana-anon-user`
-  Secret의 users_roles가 소유한다(전원 공유, Basic 한계 — 개별 RBAC은 Platinum).
-- `elastic` 슈퍼유저(basic 인증)는 break-glass용으로 계속 동작(`/login`).
-
-**operator secret 주입 — `kibana-anon-user`(ES fileRealm) + `kibana-anon-keystore`(Kibana keystore)** (#323):
-
-anonymous 사용자 `kibana_anon`의 비번을 생성해, ES엔 bcrypt로(fileRealm), Kibana엔
-평문으로(keystore) 넣는다. 값은 명령행에 남기지 않는다.
-
-```bash
-umask 077
-PW="$(openssl rand -base64 24)"
-HASH="$(htpasswd -nbB kibana_anon "$PW" | cut -d: -f2)"   # bcrypt (apache2-utils)
-# ES fileRealm: 사용자 + role 매핑
-kubectl create secret generic kibana-anon-user -n elastic \
-  --from-literal=users="kibana_anon:${HASH}" \
-  --from-literal=users_roles="viewer:kibana_anon" \
-  --dry-run=client -o yaml | kubectl apply -f -
-# Kibana keystore: anonymous 비번(키 이름 정확히 일치해야 함)
-kubectl create secret generic kibana-anon-keystore -n elastic \
-  --from-literal="xpack.security.authc.providers.anonymous.anonymous1.credentials.password=${PW}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-unset PW HASH
-```
-
-두 Secret은 ES/Kibana CR이 참조하며(`elasticsearch.tf`/`kibana.tf`), ECK operator가
-자동 반영한다. 비번 로테이션 시 위를 다시 실행한다. 역할 변경은 `kibana-anon-user`의
-`users_roles`(예: `editor:kibana_anon`)를 바꾼다.
+- 사용자는 Kibana(5601)가 아니라 **oauth2-proxy Service(4180)** 를 로컬 **4181**
+  포트로 port-forward 한다(MLflow의 로컬 4180과 충돌 방지). proxy가 Google 로그인 +
+  허용 이메일로 인증한 뒤 Kibana로 프록시하고, **Kibana `/login`에서 다시** `elastic`
+  (또는 별도 사용자)로 로그인한다. http port-forward라 세션 쿠키는
+  `xpack.security.secureCookies=false`로 둔다.
+- `elastic` 비밀번호는 `autoresearch-es-elastic-user` Secret에서 회수한다(문서/PR/
+  채팅 미기재). 팀원별 read-only 사용자가 필요하면 ES fileRealm/native 사용자를 별도
+  발급한다.
 
 **operator secret 주입 — `kibana-oauth`** (값을 명령행·히스토리에 남기지 않도록 file 기반):
 
@@ -145,12 +119,12 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 이메일 목록·client secret 변경 시 위를 다시 실행
 (`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
 
-**우회 차단·break-glass**: anonymous access가 켜지면 Kibana 5601 직접 접속이
-무인증 viewer가 되므로, `elastic-ingress`는 노드→5601 직접 경로를 열지 않고 사람
-접근을 proxy(4181로 노출되는 Service 4180)로만 강제한다(proxy→Kibana는 same-ns라 정상). 따라서 proxy 장애나
-`kibana-oauth` 미주입 시 Kibana는 일시적으로 접근 불가다. operator break-glass는
-`elastic-ingress`에 5601 ingress를 임시로 되살린 뒤(terraform 또는 `kubectl`) `elastic`
-계정으로 직접 접속하고, 복구 후 되돌린다.
+**접근 경로·break-glass**: 사람 접근은 proxy(4181로 노출되는 Service 4180)로 강제한다
+— `elastic-ingress`는 노드→5601 직접 경로를 열지 않는다(proxy→Kibana는 same-ns라 정상).
+anonymous를 폐기(#325)해 Kibana 5601은 이제 항상 basic 로그인을 요구하므로 무인증
+우회 위험은 없지만, proxy를 단일 접근 경로로 유지한다. proxy 장애·`kibana-oauth`
+미주입 시 operator break-glass는 `elastic-ingress`에 5601 ingress를 임시로 되살린 뒤
+(terraform 또는 `kubectl`) `elastic`로 직접 접속하고 복구 후 되돌린다.
 
 ## 로그 수집 (#100)
 
