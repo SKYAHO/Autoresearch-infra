@@ -86,3 +86,39 @@ resource "google_project_iam_member" "airflow_deployer_cluster_viewer" {
   role    = "roles/container.clusterViewer"
   member  = "serviceAccount:${google_service_account.airflow_deployer.email}"
 }
+
+# #307 admin root CI apply 전용 service account.
+# admin-apply.yml 워크플로우가 WIF로 가장해 terraform/admin/*-k8s를 apply한다.
+# argocd-k8s는 CRD/ClusterRole/ClusterRoleBinding을 설치하므로 K8s cluster-admin이
+# 불가피하다. GKE는 roles/container.admin에 cluster-admin RBAC를 자동 매핑한다.
+# 광범위한 권한이므로 (1) 전용 SA, (2) admin-apply.yml@main repo@ref 제한,
+# (3) GitHub Environment 승인 게이트 3중으로 사용을 제한한다. clusterViewer +
+# scoped ClusterRoleBinding 하드닝은 후속(#307 참고).
+resource "google_service_account" "admin_apply" {
+  account_id   = "${local.resource_prefix}-admin-apply"
+  display_name = "Autoresearch dev admin root CI apply SA"
+  description  = "Impersonated by Autoresearch-infra admin-apply.yml via WIF to apply terraform/admin/*-k8s roots."
+}
+
+# admin-apply.yml@main workflow_ref만 이 SA 가장 허용. 임의 브랜치/다른
+# workflow의 가장을 차단한다(application_pusher와 동일 패턴).
+resource "google_service_account_iam_member" "admin_apply_wi" {
+  service_account_id = google_service_account.admin_apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.admin_apply_workflow_ref}"
+}
+
+# GKE 접속 + K8s cluster-admin(자동 매핑). CRD/ClusterRole 설치가 필요한
+# admin root apply의 불가피한 요건.
+resource "google_project_iam_member" "admin_apply_container_admin" {
+  project = var.project_id
+  role    = "roles/container.admin"
+  member  = "serviceAccount:${google_service_account.admin_apply.email}"
+}
+
+# Terraform state 읽기/쓰기(apply는 state를 갱신하므로 objectAdmin).
+resource "google_storage_bucket_iam_member" "admin_apply_state" {
+  bucket = "autoresearch-dev-tfstate"
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.admin_apply.email}"
+}

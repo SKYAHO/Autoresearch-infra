@@ -570,6 +570,12 @@ variable "airflow_deploy_ref" {
   default     = "refs/heads/main"
 }
 
+variable "admin_apply_workflow_ref" {
+  description = "#307 admin root CI apply SA를 가장할 수 있는 정확한 admin-apply.yml workflow_ref. main의 이 workflow만 허용해 임의 브랜치/workflow의 가장을 막는다."
+  type        = string
+  default     = "SKYAHO/Autoresearch-infra/.github/workflows/admin-apply.yml@refs/heads/main"
+}
+
 variable "application_release_workflow_ref" {
   description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. workflow_dispatch는 main source ref로 제한한다."
   type        = string

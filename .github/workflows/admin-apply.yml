@@ -1,0 +1,134 @@
+# #307 admin root(terraform/admin/*-k8s) gated apply.
+# 운영자가 수동 트리거 → plan 요약 → GitHub Environment(admin-apply) 승인 → apply.
+# 민감 tfvars(admin 이메일 등)는 로컬 tfvars가 아니라 GitHub Secrets 단일 원천에서
+# 온다(#305 재발 방지). OAuth client secret 등 K8s Secret payload는 이 워크플로우가
+# 아니라 operator가 별도 주입한다(terraform 밖).
+#
+# 공개 저장소 정책(#211): plan/apply 원문(허용 이메일 등 속성값 포함)을 공개
+# Actions 로그·artifact에 노출하지 않는다. terraform 출력은 파일로 리다이렉트하고
+# 요약(리소스 헤더/Plan: 라인)만 STEP_SUMMARY에 남긴다. plan 바이너리는 공개
+# artifact가 아니라 private state 버킷으로 job 간 전달한다.
+name: admin-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      root:
+        description: "apply할 admin root"
+        required: true
+        type: choice
+        default: argocd-k8s
+        options:
+          - argocd-k8s
+
+permissions:
+  id-token: write # GitHub OIDC → GCP WIF
+  contents: read
+
+concurrency:
+  group: admin-apply-${{ github.event.inputs.root }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  ROOT_DIR: terraform/admin/${{ github.event.inputs.root }}
+  PLAN_GCS: gs://autoresearch-dev-tfstate/admin-apply-plans/${{ github.event.inputs.root }}/${{ github.run_id }}.tfplan
+  # 대상 root 선택 시 함께 주입할 값. 존재하지 않는 변수는 terraform이 무시한다.
+  # admin 이메일에는 '|| []' 폴백을 두지 않는다: Secret 미설정/빈 값이면 빈 문자열이
+  # 되어 terraform이 "Missing expression"으로 halt한다(#305의 policy.csv 삭제 방지).
+  # readonly는 비어도 안전하므로 폴백을 둔다.
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_argocd_admin_user_emails: ${{ secrets.ARGOCD_ADMIN_USER_EMAILS }}
+  TF_VAR_argocd_readonly_user_emails: ${{ secrets.ARGOCD_READONLY_USER_EMAILS || '[]' }}
+  TF_VAR_argocd_server_url: ${{ vars.ARGOCD_SERVER_URL || 'https://localhost:8443' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      # #305 방어(명시): admin 이메일이 비면 apply 자체를 막는다. terraform도
+      # 뒤에서 halt하지만, 여기서 명확한 메시지로 먼저 실패시킨다.
+      - name: Guard admin emails
+        run: |
+          if [ -z "${TF_VAR_argocd_admin_user_emails}" ]; then
+            echo "::error::ARGOCD_ADMIN_USER_EMAILS Secret이 비어 있습니다. admin 계정 없이 apply하면 policy.csv가 삭제돼 전원 접근 불가가 됩니다(#305). Secret 설정 후 재실행하세요."
+            exit 1
+          fi
+
+      - name: Init
+        run: terraform -chdir="$ROOT_DIR" init -input=false -no-color
+
+      # plan 원문은 공개 로그로 새지 않게 파일로만 받는다(#211).
+      - name: Plan
+        run: terraform -chdir="$ROOT_DIR" plan -input=false -no-color -out=tfplan.bin > plan.txt 2>&1
+
+      - name: Plan summary (masked)
+        if: always()
+        run: |
+          echo "### admin-apply plan: ${{ github.event.inputs.root }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' "$ROOT_DIR/plan.txt" \
+            >> "$GITHUB_STEP_SUMMARY" || echo '(plan 요약 없음 — 실패 시 재현 로컬 확인)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # plan 바이너리(속성값 포함)는 공개 artifact가 아니라 private state 버킷으로
+      # 전달한다(#211). apply job이 같은 run_id 경로에서 받아 그대로 apply한다.
+      - name: Upload plan to private GCS
+        run: gcloud storage cp "$ROOT_DIR/tfplan.bin" "$PLAN_GCS"
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    # 승인 게이트: 이 environment의 required reviewers가 승인해야 apply가 실행된다.
+    environment: admin-apply
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Init
+        run: terraform -chdir="$ROOT_DIR" init -input=false -no-color
+
+      - name: Download plan from private GCS
+        run: gcloud storage cp "$PLAN_GCS" "$ROOT_DIR/tfplan.bin"
+
+      # 승인 시점에 검토한 plan을 그대로 적용. apply 원문도 공개 로그로 새지 않게
+      # 파일로 받고 요약만 남긴다(#211). 실패 시 이메일 패턴을 마스킹해 출력한다.
+      - name: Apply
+        run: |
+          set +e
+          terraform -chdir="$ROOT_DIR" apply -input=false -no-color tfplan.bin > apply.txt 2>&1
+          rc=$?
+          mask='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<email>/g'
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::apply 실패(상세는 재현 로컬에서 확인). 마스킹된 오류:"
+            grep -iE "error" "$ROOT_DIR/apply.txt" | sed -E "$mask" | head -20
+            exit "$rc"
+          fi
+          grep -E '^Apply complete' "$ROOT_DIR/apply.txt" | sed -E "$mask" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup plan
+        if: always()
+        run: gcloud storage rm "$PLAN_GCS" || true
