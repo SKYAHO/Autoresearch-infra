@@ -5,7 +5,8 @@
 ## 변경 (코드, 이 PR)
 
 1. `terraform/admin/elastic-k8s/variables.tf`: `kibana_anonymous_role`(기본 viewer),
-   `kibana_public_base_url`(localhost:4180), `oauth2_proxy_image` 추가.
+   `kibana_public_base_url`(localhost:4181), `oauth2_proxy_image` 추가. MLflow의
+   로컬 4180과 충돌하지 않도록 Kibana의 로컬 포트는 4181을 사용한다.
 2. `elasticsearch.tf`: `nodeSets[].config`에 `xpack.security.authc.anonymous`
    (username/roles=var/authz_exception) 추가.
 3. `kibana.tf`: `spec.config`에 anonymous(order 0)+basic(order 1) provider,
@@ -21,7 +22,7 @@
 
 ## 운영 적용 (apply 단계, 이 PR 이후)
 
-1. Google OAuth Web client 생성, redirect URI `http://localhost:4180/oauth2/callback`.
+1. Google OAuth Web client 생성, redirect URI `http://localhost:4181/oauth2/callback`.
 2. `kibana-oauth` Secret 주입(client-id/secret/cookie-secret/authenticated-emails,
    file 기반). README 절차.
 3. `terraform apply`(필요 시 Kibana/ES CR config 반영 확인) → `rollout restart

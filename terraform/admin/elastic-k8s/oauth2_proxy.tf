@@ -15,6 +15,13 @@ resource "kubernetes_deployment_v1" "kibana_oauth_proxy" {
     }
   }
 
+  # secret 갱신 시 운영자가 `kubectl rollout restart`로 붙이는
+  # kubectl.kubernetes.io/restartedAt 어노테이션은 terraform이 관리하지 않으므로
+  # 무시한다(그렇지 않으면 restart마다 CI plan에 in-place drift가 재발).
+  lifecycle {
+    ignore_changes = [spec[0].template[0].metadata[0].annotations]
+  }
+
   spec {
     replicas = 1
 
@@ -47,7 +54,7 @@ resource "kubernetes_deployment_v1" "kibana_oauth_proxy" {
             # 인증 후 프록시 대상 = 내부 Kibana Service(https, ECK self-signed).
             "--upstream=https://autoresearch-kb-http.${kubernetes_namespace_v1.elastic.metadata[0].name}.svc:5601",
             "--ssl-upstream-insecure-skip-verify=true",
-            # port-forward 시 브라우저는 localhost:4180. Google OAuth callback.
+            # port-forward 시 브라우저는 localhost:4181. Google OAuth callback.
             "--redirect-url=${var.kibana_public_base_url}/oauth2/callback",
             # 실제 제한은 authenticated-emails-file(허용 목록)로 한다.
             "--email-domain=*",
@@ -146,7 +153,7 @@ resource "kubernetes_deployment_v1" "kibana_oauth_proxy" {
   depends_on = [kubernetes_manifest.kibana]
 }
 
-# 접근: kubectl port-forward svc/kibana-oauth-proxy 4180:4180 → localhost:4180.
+# 접근: kubectl port-forward svc/kibana-oauth-proxy 4181:4180 → localhost:4181.
 # ClusterIP(외부 노출 없음, Kibana와 동일 접근 모델). Kibana와 달리 사용자는 이
 # proxy로 붙는다.
 resource "kubernetes_service_v1" "kibana_oauth_proxy" {

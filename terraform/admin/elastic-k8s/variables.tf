@@ -98,9 +98,9 @@ variable "kibana_anonymous_role" {
 }
 
 variable "kibana_public_base_url" {
-  description = "#293 oauth2-proxy 뒤 Kibana가 인식하는 외부 접근 URL. port-forward라 localhost:4180."
+  description = "#298 oauth2-proxy 뒤 Kibana가 인식하는 외부 접근 URL. MLflow와 분리한 port-forward라 localhost:4181."
   type        = string
-  default     = "http://localhost:4180"
+  default     = "http://localhost:4181"
 }
 
 variable "oauth2_proxy_image" {

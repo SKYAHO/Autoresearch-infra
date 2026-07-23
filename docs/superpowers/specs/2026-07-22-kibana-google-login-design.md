@@ -20,14 +20,14 @@ ECK 기본 **Basic 라이선스**라 ES/Kibana 네이티브 OIDC/SAML realm(Plat
 ## 구성
 
 ```
-브라우저(localhost:4180) → oauth2-proxy(Google 로그인 + 허용 이메일)
+브라우저(localhost:4181) → oauth2-proxy(Google 로그인 + 허용 이메일)
   → https://autoresearch-kb-http:5601 (Kibana) → anonymous 인증(자동 로그인)
 ```
 
 - **oauth2-proxy**(elastic ns, Terraform 관리): MLflow 매니페스트 패턴. Google
   provider, `--authenticated-emails-file`로 허용 이메일 제한, upstream은 Kibana
   https(self-signed → `--ssl-upstream-insecure-skip-verify`). Service는 ClusterIP
-  (Kibana와 동일 port-forward 접근, `localhost:4180`).
+  (Kibana와 동일 port-forward 접근, Service 4180을 `localhost:4181`로 노출).
 - **Kibana anonymous provider**(`spec.config`): `anonymous.anonymous1`(order 0,
   `credentials: elasticsearch_anonymous_user`) + `basic.basic1`(order 1). proxy
   통과자를 재로그인 없이 익명 사용자로 자동 로그인. `basic`은 `elastic` 슈퍼유저
@@ -48,7 +48,7 @@ ECK 기본 **Basic 라이선스**라 ES/Kibana 네이티브 OIDC/SAML realm(Plat
   file-based 주입(#213 패턴). 매니페스트엔 Secret 참조만.
 - **우회 차단**: anonymous access가 켜지면 Kibana 5601 직접 접속이 무인증 viewer가
   되므로, `elastic-ingress`에서 노드→5601 직접 경로를 **제거**하고 사람 접근을
-  proxy(4180)로만 강제한다(proxy→Kibana는 same-ns라 유지). proxy 장애·secret 미주입
+  proxy(4181로 노출되는 Service 4180)로만 강제한다(proxy→Kibana는 same-ns라 유지). proxy 장애·secret 미주입
   시 Kibana는 일시 접근 불가이며, operator break-glass는 5601 ingress를 임시 복원한다.
 - **proxy egress는 신규 정책 불필요**: google provider의 서버사이드 호출은 전부
   `*.googleapis.com`이고 #138 private DNS가 이를 private VIP(199.36.153.8/30)로
