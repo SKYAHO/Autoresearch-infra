@@ -558,6 +558,12 @@ variable "batch_od_gke_machine_type" {
   default     = "e2-standard-2"
 }
 
+variable "ctr_retrain_gke_node_count_max" {
+  description = "CTR 재학습 노드풀 autoscaling 최대 노드 수(#316, #330에서 1→2 상향). min은 0 고정(평시 비용 0) — 병렬 재학습/HPO 대비."
+  type        = number
+  default     = 2
+}
+
 variable "batch_od_gke_node_count_max" {
   description = "batch on-demand pool autoscaling 최대 노드 수(#297). min은 0 고정(평시 비용 0)."
   type        = number
