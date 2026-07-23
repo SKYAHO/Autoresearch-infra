@@ -3,6 +3,35 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-23: admin root gated CI apply — argocd-k8s 파일럿 (#307, PR #308) — apply·검증 완료
+
+- admin root(`terraform/admin/*-k8s`) apply가 각 운영자의 로컬 gitignored tfvars에
+  의존해 팀원 간 값이 달라 사고가 났다(#305: `argocd_admin_user_emails` 누락 시
+  `policy.csv`가 삭제되고 `policy.default=""`와 결합해 전원 접근 불가). 민감 tfvars를
+  GitHub Secrets 단일 원천으로 옮기고 apply를 승인 게이트 워크플로우로 이관했다.
+- 구성: `admin-apply.yml`(`workflow_dispatch`, 입력 `root`) → plan job(요약 STEP_SUMMARY
+  + plan 바이너리를 private state 버킷으로 전달) → apply job(`environment: admin-apply`
+  required reviewer 승인 → plan 그대로 apply). 전용 apply SA
+  `autoresearch-dev-admin-apply`(WIF `admin-apply.yml@main` 제한, `roles/container.admin`
+  + `compute.viewer` + state objectAdmin). admin 이메일은 Secret `ARGOCD_ADMIN_USER_EMAILS`.
+- **공개 저장소(#211) 준수**: plan/apply 원문(허용 이메일 등 속성값)을 공개 로그·artifact에
+  노출하지 않는다. 출력을 파일로 리다이렉트하고 요약만 STEP_SUMMARY에, plan 바이너리는
+  공개 artifact가 아니라 private state 버킷으로 전달(apply 후 삭제), apply 오류는 이메일 마스킹.
+- **#305 재발 근본 차단(실증)**: admin 이메일에 `[]` 폴백을 두지 않아 Secret 미설정 시
+  `TF_VAR`가 빈 문자열이 되어 terraform이 halt한다(명시 guard 스텝도 추가). 파일럿 apply
+  결과 `policy.csv`에 팀원 5명 admin이 GitHub Secrets 값으로 유지됨을 확인했다.
+- 파일럿에서 드러난 권한 갭 2건을 보완했다: (1) plan 실패 시 CI 로그에 원인이 안 남던 문제를
+  마스킹 오류 표면화로 수정(#309), (2) `data.google_container_cluster`가 node pool
+  InstanceGroupManager를 조회하는데 `container.admin`(container.*)엔 compute 권한이 없어
+  `compute.instanceGroupManagers.list` 403 — `compute.viewer` 추가로 해결(#310).
+- 리스크·완화: apply SA 권한(container.admin + compute.viewer)이 넓다. 3중 제한(전용 SA /
+  `admin-apply.yml@main` ref / Environment 승인)으로 완화. 하드닝(clusterViewer + argocd
+  전용 scoped ClusterRole, compute IGM list/get만 담은 custom role)은 후속. 로컬 apply는
+  break-glass로 유지(GCS backend lock이 동시성 방지).
+- 검증(2026-07-23): 워크플로우 run success(plan+apply), `policy.csv` 5명 유지, apply 후 로컬
+  plan `No changes`, private GCS plan 정리 확인. 다른 admin root로 확장은 후속.
+- 롤백: 워크플로우·apply SA·IAM revert 후 로컬 apply 복귀. GitHub Secrets/Environment 제거.
+
 ## 2026-07-23: Inference Server dev GKE 배포 설계 확정 (#302) — 매니페스트는 앱 저장소 #266 선행 대기
 
 - FastAPI Inference Server를 임시 검증 Pod가 아니라 상시 관리 workload로
