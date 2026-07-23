@@ -122,3 +122,14 @@ resource "google_storage_bucket_iam_member" "admin_apply_state" {
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.admin_apply.email}"
 }
+
+# admin root의 versions.tf가 쓰는 data.google_container_cluster는 클러스터를 읽을 때
+# node pool의 InstanceGroupManager까지 조회하는데, 이는 compute.* 권한이라
+# container.admin(container.*)으로는 부족하다(compute.instanceGroupManagers.list
+# 403). 읽기 전용 compute viewer로 보완한다. 하드닝 시 compute
+# instanceGroupManagers list/get만 담은 커스텀 role로 축소 가능(#307 후속).
+resource "google_project_iam_member" "admin_apply_compute_viewer" {
+  project = var.project_id
+  role    = "roles/compute.viewer"
+  member  = "serviceAccount:${google_service_account.admin_apply.email}"
+}
