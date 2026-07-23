@@ -1,0 +1,107 @@
+# #307 admin root(terraform/admin/*-k8s) gated apply.
+# 운영자가 수동 트리거 → plan 출력 → GitHub Environment(admin-apply) 승인 → apply.
+# 민감 tfvars(admin 이메일 등)는 로컬 tfvars가 아니라 GitHub Secrets 단일 원천에서
+# 온다(#305 재발 방지). OAuth client secret 등 K8s Secret payload는 이 워크플로우가
+# 아니라 operator가 별도 주입한다(terraform 밖).
+name: admin-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      root:
+        description: "apply할 admin root"
+        required: true
+        type: choice
+        default: argocd-k8s
+        options:
+          - argocd-k8s
+
+permissions:
+  id-token: write # GitHub OIDC → GCP WIF
+  contents: read
+
+concurrency:
+  # 같은 root 동시 apply 방지(GCS state lock 보완).
+  group: admin-apply-${{ github.event.inputs.root }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  # 대상 root 선택 시 함께 주입할 민감/설정 값. 존재하지 않는 변수는 terraform이
+  # 무시하므로 root별 superset을 넘겨도 안전하다.
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_argocd_admin_user_emails: ${{ secrets.ARGOCD_ADMIN_USER_EMAILS }}
+  TF_VAR_argocd_readonly_user_emails: ${{ secrets.ARGOCD_READONLY_USER_EMAILS || '[]' }}
+  TF_VAR_argocd_server_url: ${{ vars.ARGOCD_SERVER_URL || 'https://localhost:8443' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      chdir: terraform/admin/${{ github.event.inputs.root }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Init
+        run: terraform -chdir=terraform/admin/${{ github.event.inputs.root }} init -input=false -no-color
+
+      - name: Plan
+        run: |
+          terraform -chdir=terraform/admin/${{ github.event.inputs.root }} \
+            plan -input=false -no-color -out=tfplan.bin | tee plan.txt
+
+      # plan 원문은 리소스 헤더/요약만 남기고 속성값은 제외한다(#211 정책).
+      - name: Plan summary
+        if: always()
+        run: |
+          echo '### admin-apply plan: ${{ github.event.inputs.root }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' plan.txt \
+            >> "$GITHUB_STEP_SUMMARY" || echo '(plan 요약 없음)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.event.inputs.root }}
+          path: terraform/admin/${{ github.event.inputs.root }}/tfplan.bin
+          retention-days: 1
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    # 승인 게이트: 이 environment의 required reviewers가 승인해야 apply가 실행된다.
+    environment: admin-apply
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Init
+        run: terraform -chdir=terraform/admin/${{ github.event.inputs.root }} init -input=false -no-color
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ github.event.inputs.root }}
+          path: terraform/admin/${{ github.event.inputs.root }}
+
+      # plan 시점과 동일 계획을 적용(승인 후 재-plan으로 인한 drift 방지).
+      - name: Apply
+        run: terraform -chdir=terraform/admin/${{ github.event.inputs.root }} apply -input=false -no-color tfplan.bin
