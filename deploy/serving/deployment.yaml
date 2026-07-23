@@ -1,0 +1,96 @@
+# #302 Inference Server. ArgoCD(deploy/serving)가 이 매니페스트를 배포한다.
+# 이미지: 앱 저장소 deploy/serving/Dockerfile을 앱 저장소 release.yml이 빌드해 GAR에
+# push한 것(SKYAHO/Autoresearch#266). tag가 아니라 immutable digest로 고정하며,
+# 롤백은 이 digest를 이전 값으로 되돌리는 커밋 + sync다.
+# Redis discovery endpoint(private IP)는 공개 저장소에 넣지 않고 operator 주입 Secret
+# `autoresearch-serving-redis`에서 받는다(autoresearch-k8s README 참조).
+# Redis TLS CA 본문은 어디에도 두지 않고 REDIS_CA_SECRET_ID로 런타임에 Secret
+# Manager에서 읽는다. 인증은 Workload Identity(KSA autoresearch-app)로 처리한다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autoresearch-serving
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: autoresearch-serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: autoresearch-serving
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: autoresearch-serving
+    spec:
+      serviceAccountName: autoresearch-app
+      containers:
+        - name: serving
+          image: asia-northeast3-docker.pkg.dev/ar-infra-501607/autoresearch-dev-docker/autoresearch-serving@sha256:efd10acd04a39c66fe658d78c94f84bdd804bc38e794337768737246a1232c9b
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: GCP_PROJECT_ID
+              value: "ar-infra-501607"
+            # CA 본문이 아니라 secret id만. 실제 통제는 Secret Manager IAM이 한다.
+            - name: REDIS_CA_SECRET_ID
+              value: "autoresearch-dev-redis-server-ca"
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.mlflow.svc.cluster.local:5000"
+            - name: RERANK_MODEL_SOURCE
+              value: "registry"
+            - name: RERANK_REGISTRY_MODEL_NAME
+              value: "ctr-model"
+            - name: RERANK_REGISTRY_ALIAS
+              value: "champion"
+            - name: RERANK_FEATURE_REPO_PATH
+              value: "feature_repo"
+            - name: GCS_REGISTRY_PATH
+              value: "gs://ar-infra-501607-feast-registry/registry.db"
+            # online 조회에는 쓰이지 않지만 feature_store.yaml이 ${VAR} 치환으로
+            # 파싱하므로 없으면 Feast 초기화가 실패한다.
+            - name: GCS_STAGING_LOCATION
+              value: "gs://ar-infra-501607-feast-staging/"
+            - name: BQ_DATASET
+              value: "feast_offline_store"
+            # discovery endpoint(private IP)는 operator 주입 Secret에서만.
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: autoresearch-serving-redis
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: autoresearch-serving-redis
+                  key: REDIS_PORT
+          # 의존성 상태는 readiness가, 프로세스 생존은 liveness가 담당한다.
+          # liveness를 /healthcheck에 연결하지 않는다 — 앱이 /healthcheck를 실시간
+          # 의존성 조회로 전환할 예정이며, 결합하면 Redis 장애가 재시작 루프로
+          # 증폭된다(CrashLoopBackOff 간격 최대 5분). 설계서 "probe 계약" 참조.
+          # startupProbe는 반대로 필요하다 — lifespan이 초기화 예외를 삼키고 기동하므로
+          # 모델 로드 실패 파드가 Ready 상태로 영구히 503을 반환하는 것을 막는다.
+          startupProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi

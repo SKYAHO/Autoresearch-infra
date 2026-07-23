@@ -1,0 +1,20 @@
+# #302 /metrics를 기존 kube-prometheus-stack이 수집하도록 등록한다.
+# `release: kube-prometheus-stack` 라벨은 필수다. 이 클러스터의 Prometheus는
+# serviceMonitorSelector={"matchLabels":{"release":"kube-prometheus-stack"}}이며
+# 라벨이 없으면 에러 없이 조용히 무시된다(namespace 제약은 없음).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: autoresearch-serving
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: autoresearch-serving
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: autoresearch-serving
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
