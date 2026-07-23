@@ -10,7 +10,10 @@ resource "google_container_node_pool" "ctr_model_retrain" {
   }
 
   node_config {
-    machine_type    = "e2-standard-8" # 32GB. online_features 피크(6Gi+ 초과, 미상) 넉넉히 덮음
+    # n2-highmem-4 = 4 vCPU / 32GB. e2-standard-8(8 vCPU/32GB)과 메모리는 같지만
+    # E2_CPUS 리전 쿼터(한도 8, 기존 E2 노드가 이미 소진)에 막혀 scale-up이 실패해
+    # N2 계열로 전환한다(N2_CPUS 쿼터 0/32로 여유). online_features 피크 헤드룸용 32GB.
+    machine_type    = "n2-highmem-4"
     disk_size_gb    = 30
     disk_type       = "pd-standard" # SSD_TOTAL_GB quota 여유 없음(#98 교훈)
     spot            = false         # 1회성 재학습이라 중간 evict 방지(batch_spot과 다른 점)
