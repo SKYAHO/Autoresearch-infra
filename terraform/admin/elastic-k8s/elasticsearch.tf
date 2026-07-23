@@ -35,19 +35,6 @@ resource "kubernetes_manifest" "elasticsearch" {
       # README 롤백 절의 수동 단계로만 수행한다.
       volumeClaimDeletePolicy = "DeleteOnScaledownOnly"
 
-      # #323 Kibana anonymous 프로바이더가 쓸 read-only 사용자 `kibana_anon`.
-      # Kibana 9.2에서 deprecated된 `elasticsearch_anonymous_user` 대신 실제
-      # username/password 사용자를 쓴다. users(bcrypt)·users_roles(role 매핑)는
-      # operator 주입 Secret `kibana-anon-user`에 두고 Git·state엔 두지 않는다
-      # (README 절차). 기본 role은 `viewer`(읽기 전용).
-      auth = {
-        fileRealm = [
-          {
-            secretName = "kibana-anon-user"
-          },
-        ]
-      }
-
       nodeSets = [
         {
           name  = "default"
