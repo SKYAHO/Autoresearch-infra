@@ -3,6 +3,43 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-23: Kibana 로그인 — anonymous 자동 로그인 폐기, oauth2-proxy+elastic basic 후퇴 (#293/#325/#326) — apply·검증 완료
+
+- Kibana(ECK, Basic 라이선스)에 "Google 로그인 + 허용 이메일"을 붙이는 목표는
+  유지하되, 구현을 **anonymous 자동 로그인 → oauth2-proxy 앞단 + Kibana 기본 basic
+  로그인**으로 후퇴시켰다. Kibana 네이티브 OIDC/SAML은 Platinum 전용이라 Basic에서
+  불가한 게 출발점이었다.
+- **폐기한 첫 설계**: oauth2-proxy(Google+허용 이메일) 통과자를 Kibana anonymous
+  provider로 자동 로그인시켜 재로그인을 없애려 했다(MLflow #232 패턴 응용). 그러나
+  Kibana 9.2에서 `elasticsearch_anonymous_user` credential이 deprecated되고, 권장
+  대체안(fileRealm 사용자 `kibana_anon` + username/password를 keystore
+  `spec.secureSettings`로 주입)에서도 **Kibana가 keystore 비밀번호를 anonymous
+  provider config에 병합하지 않아** 인증을 시도조차 하지 않았다(#323 디버깅:
+  ES fileRealm 사용자·keystore 키 로드는 정상 확인, anonymous만 401). "Oops!
+  Something went wrong" 증상의 원인.
+- **결정(#325 approach B)**: anonymous를 폐기했다. 접근 통제는 앞단 oauth2-proxy가
+  전담하고 Kibana는 기본 basic(`elastic` 등 실제 사용자)으로 로그인한다(이중 로그인이나
+  확실히 동작하는 쪽 우선). `elastic-ingress`는 5601 직접 경로를 열지 않아 proxy가 단일
+  접근 경로이며, proxy 장애 시 operator가 5601 ingress를 임시 복원해 elastic 직접
+  접속(break-glass).
+- **terraform 정합(#326)**: ES CR에서 fileRealm 사용자를 제거했다. ECK 스키마상
+  `spec.auth`는 object 필수(null 불가)인데 terraform `kubernetes_manifest`가 빈 객체를
+  null로 pruning해 apply가 `spec.auth: Invalid value: "null"`로 실패했다 → `auth =
+  { fileRealm = [] }`(빈 리스트)로 유효 object를 유지. Kibana CR은 anonymous provider·
+  secureSettings를 제거하고 `server.publicBaseUrl` + `xpack.security.secureCookies =
+  false`(proxy 뒤 http 접속이라 Secure 쿠키 불가)만 남겼다. keystore·fileRealm secret은
+  삭제.
+- **재사용 교훈**: (1) 앱/라이선스가 OIDC를 실제 지원하는지부터 확인해야 헛수고를
+  막는다(ECK Basic은 OIDC 탈락 → oauth2-proxy 또는 anonymous만 후보). (2) oauth2-proxy
+  `cookie-secret`은 정확히 16/24/32바이트(`openssl rand -hex 16`=32); 44자 base64는
+  crashloop. (3) client-id는 앱마다 별도 — 다른 앱 client-id 주입 시
+  `redirect_uri_mismatch`. 상세는 runbook `KIBANA_OPERATIONS_RUNBOOK.md`.
+- 검증(2026-07-23): oauth2-proxy(4181) 경유 Google 로그인 → Kibana `/login` basic
+  진입 동작. `auth = { fileRealm = [] }`로 elastic-k8s plan `No changes` 수렴.
+- 보안 후속: 디버깅 중 Kibana OAuth client secret이 노출돼 로테이션 필요
+  (client-id `185508640491-k7rr497...`, Google Console 재발급 후 `kibana-oauth`
+  secret 재주입 — runbook 절차).
+
 ## 2026-07-23: admin root gated CI apply — 파일럿→8개 K8s root 일괄 확장 (#307/#312/#314/#318/#319) — apply·검증 완료
 
 - admin root(`terraform/admin/*`) apply가 각 운영자의 로컬 gitignored tfvars에
