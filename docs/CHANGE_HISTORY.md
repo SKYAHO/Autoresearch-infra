@@ -3,6 +3,47 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-23: admin root gated CI apply — 파일럿→8개 K8s root 일괄 확장 (#307/#312/#314/#318/#319) — apply·검증 완료
+
+- admin root(`terraform/admin/*`) apply가 각 운영자의 로컬 gitignored tfvars에
+  의존해 팀원 간 값이 달라 사고가 났다(#305: allowlist 이메일 누락 시 삭제→접근 상실).
+  민감 tfvars를 GitHub Secrets 단일 원천으로 옮기고 apply를 승인 게이트 워크플로우로
+  이관했다. `argocd-k8s` 파일럿(#307/#308) 후 **K8s admin root 8개 일괄 apply**로
+  확장(#312), gke-team-access는 제외(#314)로 수렴했다.
+- **워크플로우**(`admin-apply.yml`): `workflow_dispatch`로 8개 root(autoresearch→
+  airflow→monitoring→elastic→vault→mlflow→argo-rollouts→argocd, argocd는 namespace
+  참조라 마지막)를 순차 plan(요약 STEP_SUMMARY + plan은 private state 버킷, fail-fast)
+  → `admin-apply` Environment reviewer 승인 → 순차 apply. 전용 apply SA
+  `autoresearch-dev-admin-apply`(WIF `admin-apply.yml@main` 제한, `container.admin`+
+  `compute.viewer`+state objectAdmin).
+- **#305 재발 차단(실증)**: 삭제-위험 allowlist는 `[]` 폴백 없이 주입해 Secret 미설정
+  시 terraform halt + guard 스텝. 각 root allowlist를 Secrets로(`ARGOCD_ADMIN_*`,
+  `AUTORESEARCH_VIEWER_*`, `AIRFLOW_INSTALLER_*`, `MONITORING_PORT_FORWARD_*`,
+  `MLFLOW_VIEWER_*`). 일괄 apply 후 각 root 로컬 plan `No changes` 확인.
+- **#211(PUBLIC repo)**: plan/apply 원문(이메일 등)을 공개 로그·artifact에 노출하지
+  않는다. 출력 파일 리다이렉트·요약만 STEP_SUMMARY·plan 바이너리는 private GCS 전달
+  (성공 시 삭제)·오류 이메일 마스킹.
+- **gke-team-access 제외(#314/#315)**: 첫 일괄 실행에서 gke-team-access plan이
+  BigQuery dataset·Artifact Registry repo IAM `getIamPolicy` 403으로 실패했다. 이
+  root는 프로젝트 IAM 외에 BigQuery·AR 리소스 IAM까지 관리해 apply SA에 projectIamAdmin
+  +bigquery.admin+artifactregistry.admin이 필요한 과도한 escalation이 된다. 사람 IAM은
+  로컬 break-glass로 유지하고 CI에서 제외, projectIamAdmin도 회수했다.
+- **파일럿·확장이 잡아낸 정합 문제 4건**: (1) plan 실패가 CI 로그에 안 남던 문제를
+  마스킹 오류 표면화(#309), (2) `data.google_container_cluster`의 node pool IGM 조회에
+  compute 권한 부족 → `compute.viewer`(#310), (3) autoresearch/mlflow-k8s의 required
+  `private_services_cidr` 미주입(#318), (4) **Kibana oauth2-proxy 로컬 4181 +
+  `secureCookies=false`가 라이브에만 있고 코드 미반영 → CI plan이 되돌리려 해 로그인
+  파손 직전, 코드를 라이브에 맞춰 정합(#319)**. CI가 코드-라이브 정합을 강제한 셈.
+- 리스크·완화: apply SA 권한(container.admin+compute.viewer)이 넓다. 3중 제한(전용
+  SA / `admin-apply.yml@main` ref / Environment 승인)으로 완화. 하드닝(clusterViewer +
+  scoped ClusterRole, compute IGM만 담은 custom role)은 후속. 로컬 apply는 break-glass.
+- 운영 주의: 부분 적용(fail-fast)은 root 독립 state라 복구=재실행. stale plan은
+  `apply <plan>`이 오류로 안전 실패. 상세는 spec
+  `superpowers/specs/2026-07-23-admin-apply-all-roots-design.md`.
+- 검증(2026-07-23): 8개 root 일괄 run success(plan+apply), 각 root 로컬 plan `No changes`
+  (elastic-k8s Kibana 4181/secureCookies 보존 포함), private GCS plan 정리. gke-team-access는
+  로컬 유지. 필요 GitHub 설정은 `TERRAFORM_DEV.md` admin-apply 절 참조.
+
 ## 2026-07-23: Inference Server dev GKE 배포 설계 확정 (#302) — 매니페스트는 앱 저장소 #266 선행 대기
 
 - FastAPI Inference Server를 임시 검증 Pod가 아니라 상시 관리 workload로
