@@ -133,15 +133,8 @@ resource "google_project_iam_member" "admin_apply_compute_viewer" {
   role    = "roles/compute.viewer"
   member  = "serviceAccount:${google_service_account.admin_apply.email}"
 }
-
-# #312 gke-team-access root는 팀원 프로젝트 IAM(container.viewer, bastion 접근,
-# BigQuery)을 google_project_iam_member로 관리하므로, 이를 apply하려면 apply SA가
-# 프로젝트 IAM 정책을 변경할 수 있어야 한다. projectIamAdmin은 프로젝트 IAM 전체를
-# 바꿀 수 있는 강한 권한이다 — repo@ref(admin-apply.yml@main) + Environment 승인으로
-# 사용을 제한한다. 하드닝 시 gke-team-access가 실제 부여하는 role 집합으로 조건부
-# custom role/IAM condition으로 축소 가능(#312 후속).
-resource "google_project_iam_member" "admin_apply_project_iam_admin" {
-  project = var.project_id
-  role    = "roles/resourcemanager.projectIamAdmin"
-  member  = "serviceAccount:${google_service_account.admin_apply.email}"
-}
+# #314 gke-team-access(팀원 프로젝트/BigQuery/AR IAM)는 CI apply에서 제외한다 —
+# 그 root를 apply하려면 apply SA에 projectIamAdmin + bigquery.admin +
+# artifactregistry.admin까지 필요해 과도한 escalation이 된다. 사람 IAM은 로컬
+# break-glass로 유지하고, apply SA는 K8s admin root 범위(container.admin +
+# compute.viewer + state)로만 둔다. (이전 #312의 projectIamAdmin 부여는 회수됨.)
