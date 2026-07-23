@@ -33,6 +33,9 @@ env:
   # 미설정/빈 값이면 빈 문자열이 되어 terraform이 halt한다(#305류 차단). optional
   # (readonly, training_image_ar_writer)은 폴백을 둔다.
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  # autoresearch-k8s·mlflow-k8s가 Cloud SQL private services CIDR을 required로 쓴다
+  # (default 없음). dev root와 동일 Variable에서 주입.
+  TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
   TF_VAR_argocd_admin_user_emails: ${{ secrets.ARGOCD_ADMIN_USER_EMAILS }}
   TF_VAR_argocd_readonly_user_emails: ${{ secrets.ARGOCD_READONLY_USER_EMAILS || '[]' }}
   TF_VAR_argocd_server_url: ${{ vars.ARGOCD_SERVER_URL || 'https://localhost:8443' }}
