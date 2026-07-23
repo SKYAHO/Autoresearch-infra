@@ -35,6 +35,19 @@ resource "kubernetes_manifest" "elasticsearch" {
       # README 롤백 절의 수동 단계로만 수행한다.
       volumeClaimDeletePolicy = "DeleteOnScaledownOnly"
 
+      # #323 Kibana anonymous 프로바이더가 쓸 read-only 사용자 `kibana_anon`.
+      # Kibana 9.2에서 deprecated된 `elasticsearch_anonymous_user` 대신 실제
+      # username/password 사용자를 쓴다. users(bcrypt)·users_roles(role 매핑)는
+      # operator 주입 Secret `kibana-anon-user`에 두고 Git·state엔 두지 않는다
+      # (README 절차). 기본 role은 `viewer`(읽기 전용).
+      auth = {
+        fileRealm = [
+          {
+            secretName = "kibana-anon-user"
+          },
+        ]
+      }
+
       nodeSets = [
         {
           name  = "default"
@@ -44,15 +57,6 @@ resource "kubernetes_manifest" "elasticsearch" {
             # mmap 비활성: vm.max_map_count sysctl(privileged initContainer)
             # 요구를 피한다 — PSS baseline 라벨과 충돌하지 않는 dev 최소 구성.
             "node.store.allow_mmap" = false
-
-            # #293 anonymous access — Kibana 앞단 oauth2-proxy(Google 로그인)를
-            # 통과한 요청을 재로그인 없이 익명 사용자로 자동 로그인시키기 위함.
-            # role은 변수(기본 viewer=읽기 전용). authz_exception=true면 익명 역할에
-            # 없는 권한 요청 시 401 대신 403을 반환(정상 인증 흐름 유지).
-            # elastic 슈퍼유저(basic 인증)는 break-glass용으로 계속 동작한다.
-            "xpack.security.authc.anonymous.username"        = "anonymous_kibana"
-            "xpack.security.authc.anonymous.roles"           = var.kibana_anonymous_role
-            "xpack.security.authc.anonymous.authz_exception" = true
           }
 
           podTemplate = {

@@ -19,16 +19,29 @@ resource "kubernetes_manifest" "kibana" {
         name = "autoresearch"
       }
 
-      # #293 앞단 oauth2-proxy(Google 로그인)를 통과한 요청을 재로그인 없이
+      # #323 keystore(secureSettings)로 anonymous 사용자 비밀번호를 주입한다. key는
+      # `xpack.security.authc.providers.anonymous.anonymous1.credentials.password`.
+      # config엔 username만 두고 비번은 평문으로 두지 않는다. operator 주입 Secret.
+      secureSettings = [
+        {
+          secretName = "kibana-anon-keystore"
+        },
+      ]
+
+      # #293/#323 앞단 oauth2-proxy(Google 로그인)를 통과한 요청을 재로그인 없이
       # 익명 사용자로 자동 로그인. anonymous(order 0)를 기본으로, basic(order 1)은
-      # elastic 슈퍼유저 break-glass용(`/login`)으로 유지한다. credentials
-      # 키워드가 ES의 anonymous 사용자(elasticsearch.tf)를 그대로 쓴다.
+      # elastic 슈퍼유저 break-glass용(`/login`)으로 유지한다. Kibana 9.2에서
+      # deprecated된 elasticsearch_anonymous_user 대신 실제 사용자 `kibana_anon`
+      # (elasticsearch.tf fileRealm) username/password를 쓴다 — 비번은 위 keystore.
       # publicBaseUrl은 proxy 뒤 접근 URL(port-forward라 localhost:4181).
       config = {
         "xpack.security.authc.providers" = {
           "anonymous.anonymous1" = {
-            order       = 0
-            credentials = "elasticsearch_anonymous_user"
+            order = 0
+            credentials = {
+              username = "kibana_anon"
+              # password는 keystore(secureSettings)에서 병합된다.
+            }
           }
           "basic.basic1" = {
             order = 1
