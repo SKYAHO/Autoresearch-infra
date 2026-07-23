@@ -35,6 +35,13 @@ resource "kubernetes_manifest" "elasticsearch" {
       # README 롤백 절의 수동 단계로만 수행한다.
       volumeClaimDeletePolicy = "DeleteOnScaledownOnly"
 
+      # #325 anonymous 폐기로 fileRealm 사용자를 제거한다. ECK 스키마상 spec.auth는
+      # object여야 해(null 불가), terraform이 빈 객체를 null로 pruning하므로 빈
+      # fileRealm 리스트로 유효한 object를 유지한다 — 사용자 없음.
+      auth = {
+        fileRealm = []
+      }
+
       nodeSets = [
         {
           name  = "default"
