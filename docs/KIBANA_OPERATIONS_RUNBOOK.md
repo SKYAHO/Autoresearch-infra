@@ -10,13 +10,15 @@ dev GKE의 ELK 스택(`elastic` namespace, #96~#102) 운영·검색 절차.
 Kibana는 인터넷에 공개하지 않는다. 접근은 kubectl port-forward만 사용한다.
 로그인은 두 가지다(#293).
 
-**(A) Google(Gmail) 로그인 — 기본.** 앞단 oauth2-proxy(4180)로 접속한다. 허용
+**(A) Google(Gmail) 로그인 — 기본.** 앞단 oauth2-proxy Service(4180)를 로컬
+4181로 접속한다. MLflow의 로컬 4180과 충돌하지 않는다. 허용
 이메일만 통과하고, Kibana는 anonymous 인증으로 재로그인 없이 자동 로그인된다.
 익명 역할은 `var.kibana_anonymous_role`(기본 `viewer`=읽기 전용, 전원 공유).
+로컬 HTTP port-forward에서 세션을 유지하도록 Kibana secure cookie는 비활성화되어 있다.
 
 ```bash
-kubectl -n elastic port-forward svc/kibana-oauth-proxy 4180:4180
-# 브라우저: http://localhost:4180 → sign-in → Google 로그인
+kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
+# 브라우저: http://localhost:4181 → sign-in → Google 로그인
 ```
 
 `kibana-oauth` Secret 주입·허용 이메일·redirect URI 절차는

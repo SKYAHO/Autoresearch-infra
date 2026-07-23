@@ -23,7 +23,7 @@ resource "kubernetes_manifest" "kibana" {
       # 익명 사용자로 자동 로그인. anonymous(order 0)를 기본으로, basic(order 1)은
       # elastic 슈퍼유저 break-glass용(`/login`)으로 유지한다. credentials
       # 키워드가 ES의 anonymous 사용자(elasticsearch.tf)를 그대로 쓴다.
-      # publicBaseUrl은 proxy 뒤 접근 URL(port-forward라 localhost:4180).
+      # publicBaseUrl은 proxy 뒤 접근 URL(port-forward라 localhost:4181).
       config = {
         "xpack.security.authc.providers" = {
           "anonymous.anonymous1" = {
@@ -35,6 +35,9 @@ resource "kubernetes_manifest" "kibana" {
           }
         }
         "server.publicBaseUrl" = var.kibana_public_base_url
+        # ECK가 Kibana 내부 TLS를 활성화하지만, 사용자는 로컬 HTTP
+        # port-forward(4181)로 접속하므로 세션 쿠키를 Secure로 만들지 않는다.
+        "xpack.security.secureCookies" = false
       }
 
       podTemplate = {
