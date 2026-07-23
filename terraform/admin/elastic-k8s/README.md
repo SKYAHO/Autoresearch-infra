@@ -78,9 +78,36 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
   anonymous 인증(`kibana.tf`/`elasticsearch.tf`)으로 재로그인 없이 자동 로그인된다.
   Kibana 내부 TLS와 로컬 HTTP port-forward의 경계 때문에 세션 쿠키는
   `xpack.security.secureCookies=false`로 설정한다.
-- anonymous 역할은 `var.kibana_anonymous_role`(기본 `viewer`=읽기 전용). 전원이 이
-  역할을 공유한다(Basic 한계 — 개별 Kibana RBAC은 Platinum 필요).
+- anonymous 사용자는 실제 ES 사용자 `kibana_anon`(role `viewer`, 읽기 전용)이다.
+  Kibana 9.2에서 `elasticsearch_anonymous_user` credential이 deprecated돼(#323),
+  fileRealm 사용자 + keystore 비번 방식으로 바꿨다. 역할은 `kibana-anon-user`
+  Secret의 users_roles가 소유한다(전원 공유, Basic 한계 — 개별 RBAC은 Platinum).
 - `elastic` 슈퍼유저(basic 인증)는 break-glass용으로 계속 동작(`/login`).
+
+**operator secret 주입 — `kibana-anon-user`(ES fileRealm) + `kibana-anon-keystore`(Kibana keystore)** (#323):
+
+anonymous 사용자 `kibana_anon`의 비번을 생성해, ES엔 bcrypt로(fileRealm), Kibana엔
+평문으로(keystore) 넣는다. 값은 명령행에 남기지 않는다.
+
+```bash
+umask 077
+PW="$(openssl rand -base64 24)"
+HASH="$(htpasswd -nbB kibana_anon "$PW" | cut -d: -f2)"   # bcrypt (apache2-utils)
+# ES fileRealm: 사용자 + role 매핑
+kubectl create secret generic kibana-anon-user -n elastic \
+  --from-literal=users="kibana_anon:${HASH}" \
+  --from-literal=users_roles="viewer:kibana_anon" \
+  --dry-run=client -o yaml | kubectl apply -f -
+# Kibana keystore: anonymous 비번(키 이름 정확히 일치해야 함)
+kubectl create secret generic kibana-anon-keystore -n elastic \
+  --from-literal="xpack.security.authc.providers.anonymous.anonymous1.credentials.password=${PW}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+unset PW HASH
+```
+
+두 Secret은 ES/Kibana CR이 참조하며(`elasticsearch.tf`/`kibana.tf`), ECK operator가
+자동 반영한다. 비번 로테이션 시 위를 다시 실행한다. 역할 변경은 `kibana-anon-user`의
+`users_roles`(예: `editor:kibana_anon`)를 바꾼다.
 
 **operator secret 주입 — `kibana-oauth`** (값을 명령행·히스토리에 남기지 않도록 file 기반):
 
@@ -93,7 +120,7 @@ d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 read -rs -p 'client-secret: ' CS; echo
 printf '%s' "$CS" > "$d/client-secret"; unset CS
 printf '%s' '<CLIENT_ID>.apps.googleusercontent.com' > "$d/client-id"
-python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"   # 정확히 32바이트(oauth2-proxy 요구)
 cat > "$d/authenticated-emails" <<'EMAILS'
 someone@gmail.com
 EMAILS

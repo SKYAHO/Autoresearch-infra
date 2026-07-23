@@ -91,11 +91,10 @@ variable "elasticsearch_version" {
 
 # --- #293 Kibana Google 로그인 (oauth2-proxy + anonymous access) ---
 
-variable "kibana_anonymous_role" {
-  description = "#293 Kibana anonymous 사용자에게 매핑할 ES role. 기본 내장 viewer(읽기 전용). 저장 객체 생성이 필요하면 editor, 더 넓히려면 커스텀 role. 전원이 이 역할을 공유한다(Basic 라이선스 한계)."
-  type        = string
-  default     = "viewer"
-}
+# #323 kibana_anonymous_role 변수는 제거됐다 — Kibana 9.2에서 deprecated된
+# elasticsearch_anonymous_user 대신 실제 fileRealm 사용자를 쓰면서, anonymous
+# 사용자의 role은 operator 주입 Secret `kibana-anon-user`의 users_roles가 소유한다
+# (기본 viewer). 역할 변경은 그 Secret을 수정한다.
 
 variable "kibana_public_base_url" {
   description = "#298 oauth2-proxy 뒤 Kibana가 인식하는 외부 접근 URL. MLflow와 분리한 port-forward라 localhost:4181."
