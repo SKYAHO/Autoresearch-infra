@@ -71,9 +71,19 @@ jobs:
       - name: Init
         run: terraform -chdir="$ROOT_DIR" init -input=false -no-color
 
-      # plan 원문은 공개 로그로 새지 않게 파일로만 받는다(#211).
+      # plan 원문은 공개 로그로 새지 않게 파일로만 받는다(#211). 단 실패 시에는
+      # 원인 파악을 위해 오류 라인을 이메일 마스킹해 표면화한다.
       - name: Plan
-        run: terraform -chdir="$ROOT_DIR" plan -input=false -no-color -out=tfplan.bin > plan.txt 2>&1
+        run: |
+          set +e
+          terraform -chdir="$ROOT_DIR" plan -input=false -no-color -out=tfplan.bin > plan.txt 2>&1
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::plan 실패(rc=$rc). 마스킹된 오류:"
+            grep -iE "error|denied|forbidden|unauthorized|refused|no such host|timeout|cannot|failed" \
+              "$ROOT_DIR/plan.txt" | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<email>/g' | head -40
+            exit "$rc"
+          fi
 
       - name: Plan summary (masked)
         if: always()
