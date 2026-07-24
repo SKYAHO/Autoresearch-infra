@@ -174,6 +174,11 @@ output "github_actions_airflow_deployer_service_account_email" {
   value       = google_service_account.airflow_deployer.email
 }
 
+output "github_actions_feast_apply_service_account_email" {
+  description = "GitHub Actions (Autoresearch) WIF가 가장하여 feast apply로 GCS registry를 갱신하는 SA email(#332). Autoresearch 저장소 secrets.FEAST_APPLY_SA 값으로 사용."
+  value       = google_service_account.feast_apply.email
+}
+
 output "cloud_build_bucket_name" {
   description = "Autoresearch-airflow build가 사용하는 Cloud Build 기본 staging bucket 이름."
   value       = local.cloud_build_bucket_name

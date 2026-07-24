@@ -3,6 +3,27 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-24: feast apply GHA용 SA·WIF 바인딩 (#332)
+
+- `SKYAHO/Autoresearch`의 `feast-apply.yml` 워크플로우(main merge 시 `feast
+  apply`로 GCS registry 갱신)가 WIF로 가장할 전용 service account를
+  `github_actions.tf`에 4번째 목적별 SA로 추가한다. 기존 목적별 SA 관례
+  (`code_uploader` 등)를 따른다.
+- 리소스: SA `autoresearch-dev-feast-apply` + WIF 바인딩 + `feast_registry`
+  버킷 IAM 2종 + `feast_offline_store` dataset IAM.
+- 최소권한 경계: feast apply SA는 **정확한 `feast-apply.yml@refs/heads/main`
+  `workflow_ref`만** 가장 허용(#175/#221 관례, 임의 브랜치·워크플로우 차단).
+  권한은 `feast_registry` 버킷 한정 `roles/storage.objectAdmin`(registry blob
+  전체 덮어쓰기 방식이라 get/create/delete 필요)과 `roles/storage.legacyBucketReader`
+  (#204 선례: Feast GCS registry client가 read/write 시 `bucket.reload()`로
+  `storage.buckets.get`을 호출하므로 objectAdmin을 보강, 동일 버킷을 쓰는 gke_app/
+  airflow SA와 동일 조합), `feast_offline_store` dataset 한정
+  `roles/bigquery.metadataViewer`(source validation의 `tables.get`만 필요,
+  dataViewer/jobUser 불필요)로 제한한다. project-level IAM은 신설하지 않는다.
+- `SKYAHO/Autoresearch`는 이미 WIF 허용 목록이라 bootstrap 변경 불필요. output
+  `github_actions_feast_apply_service_account_email`을 Autoresearch 저장소
+  secret `FEAST_APPLY_SA`에 등록(앱팀, apply 이후).
+
 ## 2026-07-23: Kibana 로그인 — anonymous 자동 로그인 폐기, oauth2-proxy+elastic basic 후퇴 (#293/#325/#326) — apply·검증 완료
 
 - Kibana(ECK, Basic 라이선스)에 "Google 로그인 + 허용 이메일"을 붙이는 목표는

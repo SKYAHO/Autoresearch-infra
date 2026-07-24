@@ -57,8 +57,10 @@
   - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
   - `vault.tf` — #132 Vault auto-unseal용 KMS key/GSA/WI
   - `elastic.tf` — #102 Elasticsearch GCS snapshot bucket/GSA
-  - `github_actions.tf` — WIF pusher SA 3종(각각 최소권한·repo@ref 제한): GAR
-    pusher, app image pusher, Airflow deployer(container.clusterViewer)
+  - `github_actions.tf` — WIF pusher SA 4종(각각 최소권한·repo@ref 제한): GAR
+    pusher, app image pusher, Airflow deployer(container.clusterViewer),
+    feast apply SA(#332, feast_registry 버킷 objectAdmin + feast_offline_store
+    dataset metadataViewer)
   - `code_artifacts.tf` — #238 코드 아카이브 배포 GCS 버킷 + 업로더 SA(WIF,
     `code-archive.yml@main` workflow_ref 제한, 버킷 objectAdmin) + 파드 read IAM
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
