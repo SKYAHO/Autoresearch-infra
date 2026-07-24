@@ -46,14 +46,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # plan job은 승인 게이트 이전에 돌므로 최강 apply SA가 아니라 읽기 전용
+      # CI SA로 인증한다(리뷰 반영). plan refresh는 terraform-plan.yml이 같은
+      # SA로 매 PR 수행해 read 충분성이 검증돼 있고, state lock/plan 업로드는
+      # 이 SA의 state 버킷 objectAdmin으로 가능하다. tfplan.bin은 자격증명을
+      # 담지 않으므로 apply job이 다른 SA로 적용해도 무방하다.
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
-          service_account: ${{ vars.DEV_APPLY_SA_EMAIL }}
+          service_account: ${{ vars.CI_SA_EMAIL }}
       - uses: google-github-actions/setup-gcloud@v2
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.13.5
+
+      # 승인 거부/미승인으로 apply job이 안 돌면 그 run의 plan이 버킷에 남는다
+      # (plan 바이너리는 민감 속성값 포함 가능). 새 run 시작 시 이전 orphan을
+      # 일괄 정리한다 — concurrency group이 동시 실행을 막아 승인 대기 중인
+      # 다른 run의 plan을 지울 수 없다(리뷰 반영).
+      - name: Cleanup stale plans
+        run: gcloud storage rm "$PLAN_PREFIX/*.tfplan" 2>/dev/null || true
 
       - name: Plan dev root
         run: |
