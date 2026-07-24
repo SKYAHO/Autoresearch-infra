@@ -32,6 +32,7 @@
 | Terraform 스타일·구성 | `.claude/docs/agent-terraform-reference.md` | `.claude/docs/architecture-overview.md` |
 | 워크플로우, 커밋, PR | `.claude/docs/agent-workflow-reference.md` | `.claude/docs/agent-prohibitions.md` |
 | 보안, 시크릿, IAM | `.claude/docs/agent-security-guidelines.md` | `.claude/docs/agent-prohibitions.md` |
+| 모델 선택·에이전트 위임 | `.claude/docs/agent-model-selection.md` | `.claude/docs/agent-peer-review.md` |
 | 코드 리뷰 | `.claude/docs/agent-peer-review.md` | `.claude/docs/agent-workflow-reference.md` |
 | 계획 리뷰 | `.claude/docs/agent-plan-review.md` | `.claude/docs/agent-peer-review.md` |
 
