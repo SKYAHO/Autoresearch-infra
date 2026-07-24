@@ -3,6 +3,44 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-24: dev root 승인 게이트 CI apply 가동 (#341/#342) — 첫 run 검증 완료
+
+- admin root 8개(#307~#319)와 달리 dev root만 로컬 수동 apply라 "머지≠적용" 갭이
+  남아 매일 drift 알림이 발화했다(#306 실증). `dev-apply.yml`을 신설해 dev root도
+  **머지 → CI plan 요약 → Environment(`dev-apply`) 승인 → apply**가 표준 경로가
+  됐다. 로컬 tfvars apply는 break-glass·`terraform import` 선행용으로만 남는다.
+- **admin-apply와 분리(핵심 결정)**: dev root apply SA는 projectIamAdmin 포함
+  사실상 프로젝트 최강 자격증명이라, admin-apply `ROOTS` 편입 대신 별도 workflow로
+  사용 경로를 고정했다. SA 권한은 editor가 아니라 **리소스 타입 전수 스캔 기준
+  role 19종 열거**(감사 가능한 크기 명시). 통제 3중: 전용 SA
+  `autoresearch-dev-dev-apply` / WIF `dev-apply.yml@refs/heads/main` workflow_ref
+  제한 / Environment required reviewer.
+- **리뷰가 잡은 설계 결함 2건 반영**: (1) 승인 게이트 **이전**에 도는 plan job이
+  apply SA로 인증하면 승인 없이 최강 토큰이 발급된다 → plan은 읽기 전용
+  CI SA(`terraform-ci`), apply만 전용 SA로 분리. (2) 승인 거부 시 GCS에 남는
+  orphan plan(민감 속성 포함 가능)은 다음 run 시작 시 일괄 정리 —
+  admin-apply.yml에도 소급 적용. stale plan은 state serial 불일치로 하드 실패라
+  "승인한 diff와 다른 변경 적용" 경로는 없다.
+- 변수는 terraform-plan.yml과 동일 GitHub Vars 단일 원천(신규 Secret 0 — dev root엔
+  삭제-위험 allowlist 없음). 승인자 주의(#306 교훈): 요약의 in-place가 접근
+  변경(MAN·IAM)을 숨길 수 있어 해당 리소스가 보이면 상세 diff 확인 후 승인.
+- 검증(2026-07-24): SA IaC apply 21건, 첫 run e2e(plan→승인→apply) success, 로컬
+  plan `No changes`. 설계는 `superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md`.
+
+## 2026-07-24: dev root drift #306 해소 — placeholder 유입 경로 차단 (#339/#340)
+
+- 일일 drift 감지가 이틀 연속 보고한 dev root 불일치 2건을 해소했다. (1) BQ 테이블
+  `asset_virtual_user_vu_1000` "will be created": 앱 적재 스크립트가 테이블을 스스로
+  생성·소유(autodetect+WRITE_TRUNCATE)하므로 IaC 리소스는 이중 소유 → 코드 제거
+  +`terraform state rm`(원격 이미 부재라 데이터 영향 0). (2) GKE
+  `master_authorized_networks`의 `203.0.113.10/32`("user"): tfvars.example의
+  placeholder(RFC 5737 문서 전용 대역 — 실제 접근 경로 불가)가 로컬 tfvars를 거쳐
+  라이브에 유입된 잔재 → apply로 제거, example을 `[]`로 바꿔 재유입 차단.
+- 리뷰 교훈: drift 이슈 요약의 "in-place 1건"이 실제로는 **컨트롤플레인 접근 IP
+  회수**였다 — 요약만 보고 판단하지 말고 plan diff를 확인한다. 또한 "빨간 drift
+  run"은 workflow 고장이 아니라 `-detailed-exitcode` 기반 **드리프트 알림 설계**다.
+- 검증: 연속 plan `No changes`, drift run green 복귀, #306 close.
+
 ## 2026-07-24: feast-apply 403 잔여 원인 — `FEAST_APPLY_SA` secret 미등록 (#334/#335)
 
 - #333 apply 후에도 feast-apply가 같은 403(`storage.buckets.get`)으로
