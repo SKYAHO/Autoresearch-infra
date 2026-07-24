@@ -537,7 +537,7 @@ flowchart TB
 |---|---|---|
 | YouTube raw | GCS raw data bucket `data_lake/youtube_trending_kr/` | 원본 landing |
 | Action log raw | GCS raw data bucket `data_lake/action_log/` | 원본 action log |
-| Virtual user raw | GCS raw data bucket `asset/virtual_user/` | 가상 유저 원본, BigQuery `data_lake_raw.asset_virtual_user_vu_1000` (#300) |
+| Virtual user raw | GCS raw data bucket `asset/virtual_user/` | 가상 유저 원본, BigQuery `data_lake_raw.asset_virtual_user_vu_1000` — 앱 적재 스크립트가 자동 생성·소유(IaC 미관리, #339) |
 | Persona raw snapshot | GCS raw data bucket `data/raw/personas/` | 페르소나 원본 스냅샷 |
 | Analytics table | BigQuery `autoresearch_dev_analytics` | 분석/집계용 |
 | Feast offline store | BigQuery `feast_offline_store` | feature table 저장 |
