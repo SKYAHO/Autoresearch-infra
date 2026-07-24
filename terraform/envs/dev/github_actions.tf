@@ -8,6 +8,7 @@ locals {
   gar_pusher_sa_name         = "${local.resource_prefix}-gar-pusher"
   application_pusher_sa_name = "${local.resource_prefix}-app-pusher"
   airflow_deployer_sa_name   = "${local.resource_prefix}-airflow-cd"
+  feast_apply_sa_name        = "${local.resource_prefix}-feast-apply"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).
@@ -138,3 +139,50 @@ resource "google_project_iam_member" "admin_apply_compute_viewer" {
 # artifactregistry.admin까지 필요해 과도한 escalation이 된다. 사람 IAM은 로컬
 # break-glass로 유지하고, apply SA는 K8s admin root 범위(container.admin +
 # compute.viewer + state)로만 둔다. (이전 #312의 projectIamAdmin 부여는 회수됨.)
+
+# #332 Autoresearch feast-apply.yml 전용 service account.
+# main merge 시 `feast apply`로 GCS registry를 갱신하는 워크플로우가 WIF로
+# 가장한다. 기존 목적별 SA 관례(code_uploader 등)와 동일하게 전용 SA로 분리한다.
+resource "google_service_account" "feast_apply" {
+  account_id   = local.feast_apply_sa_name
+  display_name = "Autoresearch dev feast apply SA"
+  description  = "Impersonated by Autoresearch GitHub Actions via WIF to run feast apply against the GCS registry."
+}
+
+# 정확한 feast-apply workflow(main)만 이 SA 가장 허용(#175/#221 관례:
+# repository 단독이 아니라 workflow_ref로 임의 브랜치·워크플로우 가장 차단).
+# push(main)·workflow_dispatch(main) 모두 workflow_ref가 동일해 단일 바인딩으로 충분.
+resource "google_service_account_iam_member" "feast_apply_wi" {
+  service_account_id = google_service_account.feast_apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.feast_apply_workflow_ref}"
+}
+
+# feast apply는 registry blob 전체를 덮어쓰는 방식이라 objects.get/create/delete가
+# 모두 필요해 bucket-level objectAdmin을 부여한다(feast_registry_gke_app_object_user와
+# 동일 role).
+resource "google_storage_bucket_iam_member" "feast_apply_registry_object_admin" {
+  bucket = google_storage_bucket.feast_registry.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.feast_apply.email}"
+}
+
+# Feast GCS registry client는 read/write 시 bucket.reload()로 storage.buckets.get을
+# 호출하는데 objectAdmin에는 이 권한이 없다. feast apply도 동일한 Feast SDK
+# GCSRegistryStore 경로로 registry를 read/write하므로 gke_app과 동일하게
+# legacyBucketReader로 그 권한만 보강한다(#204: #203 검증에서 feast registry 접근
+# 403으로 발견된 것과 동일한 요구사항).
+resource "google_storage_bucket_iam_member" "feast_apply_registry_bucket_reader" {
+  bucket = google_storage_bucket.feast_registry.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.feast_apply.email}"
+}
+
+# feast apply의 source validation은 테이블 존재 확인(bigquery.tables.get)만
+# 수행하므로 dataViewer(tables.getData 포함)나 project-level jobUser는 부여하지
+# 않고 dataset-level metadataViewer로 최소화한다.
+resource "google_bigquery_dataset_iam_member" "feast_apply_offline_store_metadata_viewer" {
+  dataset_id = google_bigquery_dataset.feast_offline_store.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:${google_service_account.feast_apply.email}"
+}

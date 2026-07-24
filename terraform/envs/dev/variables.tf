@@ -593,3 +593,9 @@ variable "application_release_workflow_event_path" {
   type        = string
   default     = "release:SKYAHO/Autoresearch/.github/workflows/release.yml"
 }
+
+variable "feast_apply_workflow_ref" {
+  description = "feast apply SA를 가장할 수 있는 정확한 Autoresearch feast-apply workflow_ref (#332). push(main)·workflow_dispatch(main) 모두 이 ref다."
+  type        = string
+  default     = "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main"
+}
