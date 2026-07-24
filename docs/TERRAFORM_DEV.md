@@ -290,7 +290,7 @@ IAM 조건은 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 
 | 데이터 | 원본 보관 | 분석/조회 |
 |---|---|---|
 | YouTube KR trending 원본 | GCS `data_lake/youtube_trending_kr/` | BigQuery `dt` 일 단위 partitioned table로 정제 적재 (#199) |
-| 가상 유저 | GCS `asset/virtual_user/` | `data_lake_raw.asset_virtual_user_vu_1000` raw 테이블 (#300) |
+| 가상 유저 | GCS `asset/virtual_user/` | `data_lake_raw.asset_virtual_user_vu_1000` raw 테이블 — 앱 적재 스크립트가 자동 생성·소유(IaC 미관리, #339) |
 | 액션 로그 원본 | GCS `data_lake/action_log/` | BigQuery `dt` 일 단위 partitioned table (#199) |
 | 액션 로그 격리 | GCS `data_lake/action_log_quarantine/` | 품질 점검·재처리 후보 |
 | 페르소나 원본 스냅샷 | GCS `data/raw/personas/` | BigQuery dimension/reference table 후보 |
@@ -304,7 +304,7 @@ BigQuery dataset을 계층별로 나눈다. 이름과 내용이 어긋나지 않
 
 | Dataset | 계층 | 테이블 |
 | --- | --- | --- |
-| `data_lake_raw` | raw | `data_lake_action_log`, `data_lake_youtube_trending_kr`, `asset_virtual_user_vu_1000` |
+| `data_lake_raw` | raw | `data_lake_action_log`, `data_lake_youtube_trending_kr` (`asset_virtual_user_vu_1000`은 앱 자동 생성 — IaC 미관리, #339) |
 | `feast_offline_store` | feature | `user_static_feature`, `user_dynamic_feature`, `video_feature`, `user_category_similarity` |
 | `autoresearch_dev_analytics` | analytics | 분석/집계 테이블 |
 
@@ -1402,7 +1402,9 @@ PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자�
 - **drift 감지(#153)**: `.github/workflows/terraform-drift.yml`이 매일 09:23 KST에 dev root `plan -detailed-exitcode`를 실행하고, drift/오류 시 `[DRIFT]` 이슈를 생성(중복 시 코멘트)한다. 공개 이슈에는 리소스 주소·요약만 올리고 plan 원문은 게시하지 않는다(#211). CI SA viewer 권한만 사용 — apply 권한 없음. admin root는 master 접근 불가로 대상 외이며 운영자 로컬 plan으로 확인한다.
 - **admin root gated 일괄 apply(#307/#312/#314)**: `.github/workflows/admin-apply.yml`이 `workflow_dispatch`로 **K8s admin root 8개**를 일괄 apply한다(순서: autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→vault-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s). plan job이 전 root를 순차 plan(요약 STEP_SUMMARY, plan은 private GCS, fail-fast) → `admin-apply` Environment reviewer 승인 → apply job이 순차 apply한다. 전용 apply SA(`autoresearch-dev-admin-apply`, WIF `admin-apply.yml@main` 제한, `roles/container.admin`+`compute.viewer`+state objectAdmin)를 쓴다. 민감 tfvars(허용 이메일)는 로컬 파일이 아니라 GitHub Secrets 단일 원천에서 와 팀원 간 tfvars 불일치 사고(#305)를 전 root에서 막는다. 삭제-위험 allowlist는 폴백 없이 주입해 Secret 미설정 시 halt(guard 스텝 포함). OAuth client secret 등 K8s Secret payload는 여전히 operator 주입(CI 밖). 로컬 apply는 break-glass. **`gke-team-access`(사람 프로젝트/BigQuery/AR IAM)는 CI에서 제외(#314)** — apply SA에 과도한 IAM(projectIamAdmin+bigquery.admin+artifactregistry.admin)이 필요해 로컬 break-glass로만 관리한다.
 
-필요 GitHub variables: `GCP_PROJECT_ID`, `WIF_POOL_ID`, `WIF_PROVIDER_ID`, `CI_SA_EMAIL`(plan/drift), `ADMIN_APPLY_SA_EMAIL`(#307). Secrets(#307/#312, JSON 리스트): `ARGOCD_ADMIN_USER_EMAILS`, `AUTORESEARCH_VIEWER_USER_EMAILS`, `AIRFLOW_INSTALLER_USER_EMAILS`, `MONITORING_PORT_FORWARD_USER_EMAILS`, `MLFLOW_VIEWER_USER_EMAILS`(+optional `ARGOCD_READONLY_USER_EMAILS`). Environment: `admin-apply`+required reviewers.
+- **dev root gated apply(#341)**: `.github/workflows/dev-apply.yml`이 `workflow_dispatch`로 `terraform/envs/dev`를 plan(요약 STEP_SUMMARY, plan은 private GCS `dev-apply-plans/`) → `dev-apply` Environment reviewer 승인 → apply한다. 전용 SA `autoresearch-dev-dev-apply`(WIF `dev-apply.yml@main` 제한, dev root 리소스 전수 기준 **role 19종 열거** — projectIamAdmin 포함 최강 자격증명이라 전용 SA/workflow_ref/승인 게이트 3중 통제, 설계는 `docs/superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md`). 변수는 terraform-plan.yml과 동일 GitHub Vars 단일 원천. **로컬 tfvars apply는 break-glass로만** 사용한다. 승인 주의: 요약의 in-place가 접근 변경(MAN·IAM)을 숨길 수 있으니(#306 교훈) 해당 리소스가 보이면 상세 diff 확인 후 승인. `terraform import`가 필요한 변경은 CI가 수행하지 못하므로 로컬 break-glass로 선행한다.
+
+필요 GitHub variables: `GCP_PROJECT_ID`, `WIF_POOL_ID`, `WIF_PROVIDER_ID`, `CI_SA_EMAIL`(plan/drift), `ADMIN_APPLY_SA_EMAIL`(#307), `DEV_APPLY_SA_EMAIL`(#341). Secrets(#307/#312, JSON 리스트): `ARGOCD_ADMIN_USER_EMAILS`, `AUTORESEARCH_VIEWER_USER_EMAILS`, `AIRFLOW_INSTALLER_USER_EMAILS`, `MONITORING_PORT_FORWARD_USER_EMAILS`, `MLFLOW_VIEWER_USER_EMAILS`(+optional `ARGOCD_READONLY_USER_EMAILS`). Environment: `admin-apply`·`dev-apply` 각각 required reviewers.
 
 ## State drift 정리 기록 (#39)
 

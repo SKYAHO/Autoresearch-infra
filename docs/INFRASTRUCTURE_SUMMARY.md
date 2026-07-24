@@ -213,14 +213,14 @@ flowchart TB
 | Vertex AI | BigQuery↔Vertex `CLOUD_RESOURCE` connection(#281) | BigQuery ML `ML.GENERATE_EMBEDDING` 다국어 임베딩 호출 |
 | MLflow | `mlflow` ns — tracking server(#94), 전용 Cloud SQL DB/user + Secret(#93), artifact GCS bucket + 전용 GSA(#92), OAuth2-proxy + 내부 ILB(#232/#244) | 실험 추적 UI. 내부 ILB + Google OAuth |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata, MLflow DB secret | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), Vault SA(#132), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307) | 워크로드별 최소 권한과 Workload Identity |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), Vault SA(#132), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드별 최소 권한과 Workload Identity |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155) | 운영 관측 dashboard. 접근은 port-forward |
 | GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85, `autoresearch` destination #303). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`serving`(Inference Server #303) | ArgoCD Application으로 관리(manual sync). UI는 Google 로그인 + 이메일 RBAC |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, Google 로그인 #294/#319), Filebeat allowlist 수집(#100), ILM(#101)/snapshot(#102)/runbook(#103) — `elastic` ns | airflow/autoresearch 로그 검색·분석. Kibana는 oauth2-proxy + anonymous로 Google 로그인 |
 | Secret(학습) | Vault single-node + KMS auto-unseal(#132/#134/#136) — `vault` ns | 학습·검증용. 실 서비스 secret은 Secret Manager 유지 |
 | KMS | `autoresearch-dev-vault`/`vault-unseal` key (#132) | Vault auto-unseal. key 삭제 금지(데이터 복호화 불능) |
 | DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | Google API 고정 VIP 유도 — vault egress 443 축소 기반 |
-| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 8개는 Environment 승인 후 CI apply, dev root apply는 수동 |
+| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) + **dev root 승인 게이트 CI apply**(#341, `dev-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 8개·dev root 모두 Environment 승인 후 CI apply, 로컬 apply는 break-glass |
 
 ## 인프라별 상세 구조
 
@@ -265,7 +265,7 @@ flowchart LR
 | `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application(`monitoring` #183, `argo-rollouts` #186)을 관리한다. |
 | `terraform-plan.yml` | GitHub Actions | PR마다 fmt/validate/plan을 실행하고 결과를 댓글/check로 보여준다. |
 | WIF/OIDC | GitHub Actions -> GCP | service account JSON key 없이 CI가 GCP 권한을 얻는다. 키 파일 유출 위험을 줄이기 위한 설정이다. |
-| Apply 수동 운영 | 운영자 로컬 | plan은 자동, apply는 수동이다. 실제 비용/권한/삭제 영향이 있는 변경은 사람이 확인하고 적용한다. |
+| Apply 승인 게이트 | GitHub Environment | plan은 자동, apply는 Environment required reviewer 승인 후 CI가 수행한다(admin-apply·dev-apply). 로컬 apply는 break-glass·import 선행용으로만 남긴다. |
 
 ### 2. 네트워크 / NAT / Bastion / DNS
 
@@ -531,13 +531,99 @@ flowchart TB
 | Airflow batch IAM | Airflow batch GSA | batch pod 실행에 필요한 API key, raw data, Feast, BigQuery 권한만 부여한다. |
 | Secret payload | Terraform 밖에서 주입 | Terraform state에 민감값이 남지 않도록 payload 관리는 분리한다. |
 
+## 리소스(CPU·메모리) 지정 계층
+
+"CPU·메모리가 어디서 정해지는가"를 계층 순서대로 정리한다(2026-07-24 코드+라이브
+대조). 각 계층은 소유 파일이 다르므로 변경 시 해당 소유처를 수정한다.
+
+### 계층 0 — GCP 프로젝트/리전 quota (모든 것의 상한)
+
+| Quota | 한도 | 실측 영향 |
+| --- | --- | --- |
+| `E2_CPUS` (리전) | 8 | 기존 E2 노드가 소진 → retrain 풀이 E2 대신 N2 계열 선택(#316) |
+| `N2_CPUS` (리전) | 32 | retrain n2-highmem-4 여유 |
+| `SSD_TOTAL_GB` (리전) | 250 | pd-balanced 실패 사례(#98) → 노드/ES 디스크는 pd-standard |
+
+### 계층 1 — 클러스터 (용량 직접 지정 없음)
+
+클러스터 수준 CPU/메모리 지정은 없다. 용량은 전적으로 노드풀 합이며, NAP(Node
+Auto-Provisioning)가 꺼져 있어 클러스터 수준 `resourceLimits`도 없다(켜는 경우에만
+등장). zonal(`asia-northeast3-a`) 단일 존.
+
+### 계층 2 — 노드풀 (머신타입 × autoscaling) — `terraform/envs/dev/gke.tf`
+
+| 풀 | 머신(vCPU/메모리) | autoscaling | 용도 |
+| --- | --- | --- | --- |
+| `dev-default` | e2-standard-4 (4/16GB) | min1 / max2 | 앱·플랫폼 상주 워크로드 |
+| `airflow-dev` | e2-standard-2 (2/8GB) | min1 / max2 | Airflow 제어영역 고정 |
+| `batch-spot` | e2-standard-2 (2/8GB) Spot | min0 / max2(#331로 8 예정) | 재시도 내성 KPO |
+| `batch-od` | e2-standard-2 (2/8GB) | min0 / max2 | 재시도 내성 없는 KPO(#297) |
+| `ctr-model-retrain` | n2-highmem-4 (4/32GB) | min0 / max1(#331로 2 예정) | 재학습(#316). 라이브 선적용, main 편입은 #331 |
+
+min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된다. max는 상한일 뿐
+비용이 아니다 — 상세는 CHANGE_HISTORY·#330.
+
+### 계층 3 — 노드 (capacity vs allocatable, GKE 자동)
+
+머신 스펙 전부를 파드가 쓰는 게 아니다. GKE가 OS/kubelet/eviction 예약을 뺀
+**allocatable** 기준으로 스케줄링한다(실측):
+
+| 머신 | capacity | allocatable |
+| --- | --- | --- |
+| e2-standard-4 | 4 CPU / 16GB | **3920m / ~13.0GB** |
+| e2-standard-2 | 2 CPU / 8GB | **1930m / ~5.9GB** |
+
+### 계층 4 — 네임스페이스 (ResourceQuota / LimitRange) — `terraform/admin/airflow-k8s`
+
+- **airflow ns에만** ResourceQuota: `requests.cpu 4, requests.memory 8Gi, pods 20,
+  PVC 4`. KPO 폭주가 노드풀을 넘어 확장돼도 ns 수준에서 잘린다.
+- **airflow ns에만** LimitRange: request/limit 미지정 컨테이너에 기본값 주입
+  (request 250m/256Mi → limit 500m/512Mi). 명시 spec이 있으면 그것이 우선.
+- 다른 ns(autoresearch·mlflow·elastic·argocd 등)는 quota/limitrange 없음.
+
+### 계층 5 — 파드/컨테이너 (requests/limits) — 소유 저장소별
+
+스케줄링은 **requests** 기준(노드 allocatable에서 차감), 실행 상한은 **limits**
+(CPU는 throttle, 메모리는 OOMKill).
+
+| 워크로드 | requests → limits | 소유 |
+| --- | --- | --- |
+| serving | 250m/1Gi → 1/2Gi | infra `deploy/serving`(ArgoCD) |
+| Airflow scheduler | 200m/512Mi → 1500m/1536Mi (+git-sync 250m/256Mi→500m/512Mi) | 앱 airflow repo Helm values |
+| Airflow webserver ×2 | 100m/512Mi → 500m/1Gi | 〃 |
+| KPO collect/merge | 500m/1Gi → 2/4Gi | airflow repo dags |
+| KPO action-log shard | 250m/512Mi → 2/4Gi | 〃 |
+| KPO feast materialize | 2/4Gi → 4/8Gi | 〃 |
+| KPO ctr training | 1/2Gi → 4/8Gi | 〃 |
+| Elasticsearch | 500m/2Gi → 3Gi(limit) **+ JVM heap은 별도 `ES_JAVA_OPTS -Xms1g -Xmx1g`** | `terraform/admin/elastic-k8s` |
+| Kibana | 200m/1Gi → 1Gi | 〃 |
+| MLflow | 100m/512Mi → 500m/1Gi (gunicorn workers 2, #95 OOM 교훈) | `terraform/admin/mlflow-k8s` |
+| oauth2-proxy(공통) | 10m/32Mi → 100m/128Mi | 각 admin root |
+| Prometheus | 100m/1Gi → 2Gi | `terraform/admin/monitoring-k8s` |
+| Grafana | 50m/384Mi → 768Mi | 〃 |
+| Vault | 250m/256Mi → 512Mi | `terraform/admin/vault-k8s` |
+| filebeat(DaemonSet) | 100m/150Mi → 300Mi | `terraform/admin/elastic-k8s` |
+| **ArgoCD 전 컴포넌트** | **미지정(BestEffort)** — 메모리 압박 시 최우선 eviction 대상. 하드닝 백로그 | `terraform/admin/argocd-k8s` |
+
+HPA는 어느 워크로드에도 없다(파드 수 고정, 노드만 오토스케일). replica 확장은
+수동이며, 운영 승격 시 HPA·PDB가 선행 항목이다(#330 논의).
+
+### 계층 6 — GKE 밖 인스턴스 — `terraform/envs/dev/*.tf`
+
+| 리소스 | 스펙 | 파일 |
+| --- | --- | --- |
+| Cloud SQL `autoresearch-dev-pg` | db-g1-small (shared-core) | `cloud_sql.tf` |
+| Redis Cluster | `REDIS_SHARED_CORE_NANO` × 2 shard | `redis.tf` |
+| bastion | e2-micro | `bastion.tf` |
+| Cloud Run proxy | 1 CPU / 512Mi, min instances 0, `cpu_idle` | `cloud_run.tf` |
+
 ## 데이터 저장 위치
 
 | 데이터 | 저장소 | 비고 |
 |---|---|---|
 | YouTube raw | GCS raw data bucket `data_lake/youtube_trending_kr/` | 원본 landing |
 | Action log raw | GCS raw data bucket `data_lake/action_log/` | 원본 action log |
-| Virtual user raw | GCS raw data bucket `asset/virtual_user/` | 가상 유저 원본, BigQuery `data_lake_raw.asset_virtual_user_vu_1000` (#300) |
+| Virtual user raw | GCS raw data bucket `asset/virtual_user/` | 가상 유저 원본, BigQuery `data_lake_raw.asset_virtual_user_vu_1000` — 앱 적재 스크립트가 자동 생성·소유(IaC 미관리, #339) |
 | Persona raw snapshot | GCS raw data bucket `data/raw/personas/` | 페르소나 원본 스냅샷 |
 | Analytics table | BigQuery `autoresearch_dev_analytics` | 분석/집계용 |
 | Feast offline store | BigQuery `feast_offline_store` | feature table 저장 |
