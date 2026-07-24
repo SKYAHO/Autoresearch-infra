@@ -1,0 +1,116 @@
+# #341 dev root(terraform/envs/dev) gated CI apply.
+# 운영자가 수동 트리거 → plan 요약 → GitHub Environment(dev-apply) 승인 → apply.
+# admin-apply(#307/#312)와 분리: dev root apply SA는 projectIamAdmin 포함 최강
+# 자격증명이라 사용 경로를 이 workflow 하나로 고정한다(설계:
+# docs/superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md).
+#
+# 변수는 terraform-plan.yml과 동일한 GitHub Vars 단일 원천(#305류 차단). 로컬
+# tfvars apply는 break-glass로만 남긴다.
+#
+# 공개 저장소(#211): plan/apply 원문을 공개 로그·artifact에 노출하지 않는다.
+# 출력은 파일 리다이렉트 + 요약(리소스 헤더/Plan: 라인)만 STEP_SUMMARY, plan
+# 바이너리는 private state 버킷으로 job 간 전달, 오류는 이메일 마스킹.
+#
+# 승인 주의(#306 교훈): 요약의 "will be updated in-place"가 접근 변경(GKE
+# master_authorized_networks, IAM 계열)을 숨길 수 있다. 승인 전 해당 리소스가
+# 보이면 Actions 로그의 상세 diff를 확인한다.
+name: dev-apply
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # GitHub OIDC → GCP WIF
+  contents: read
+
+concurrency:
+  group: dev-apply
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  ROOT_DIR: terraform/envs/dev
+  PLAN_PREFIX: gs://autoresearch-dev-tfstate/dev-apply-plans
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_dev_subnet_cidr: ${{ vars.DEV_SUBNET_CIDR }}
+  TF_VAR_labels: ${{ vars.TF_LABELS_JSON || '{}' }}
+  TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
+  TF_VAR_gke_master_ipv4_cidr: ${{ vars.GKE_MASTER_IPV4_CIDR }}
+  TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
+  TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
+  # MAN은 빈 목록이 정상 상태(기본 접속은 DNS 엔드포인트 #45)라 폴백을 둔다.
+  TF_VAR_master_authorized_networks: ${{ vars.MASTER_AUTHORIZED_NETWORKS || '[]' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.DEV_APPLY_SA_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Plan dev root
+        run: |
+          mask='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<email>/g'
+          echo "::group::plan dev"
+          terraform -chdir="$ROOT_DIR" init -input=false -no-color > /tmp/step.txt 2>&1 || { echo "::error::init 실패"; grep -iE "error" /tmp/step.txt | sed -E "$mask" | head -20; exit 1; }
+          set +e
+          terraform -chdir="$ROOT_DIR" plan -input=false -no-color -out=tfplan.bin > /tmp/plan.txt 2>&1
+          rc=$?
+          set -e
+          {
+            echo "### dev root"
+            echo '```text'
+            grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' /tmp/plan.txt || echo '(요약 없음)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::plan 실패(rc=$rc):"
+            grep -iE "error|denied|forbidden|refused|cannot|failed" /tmp/plan.txt | sed -E "$mask" | head -30
+            exit "$rc"
+          fi
+          gcloud storage cp "$ROOT_DIR/tfplan.bin" "$PLAN_PREFIX/${{ github.run_id }}.tfplan"
+          echo "::endgroup::"
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: dev-apply
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.DEV_APPLY_SA_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Apply dev root
+        run: |
+          mask='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<email>/g'
+          echo "::group::apply dev"
+          terraform -chdir="$ROOT_DIR" init -input=false -no-color > /tmp/step.txt 2>&1 || { echo "::error::init 실패"; exit 1; }
+          gcloud storage cp "$PLAN_PREFIX/${{ github.run_id }}.tfplan" "$ROOT_DIR/tfplan.bin"
+          set +e
+          terraform -chdir="$ROOT_DIR" apply -input=false -no-color tfplan.bin > /tmp/apply.txt 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::apply 실패(rc=$rc):"
+            grep -iE "error" /tmp/apply.txt | sed -E "$mask" | head -30
+            exit "$rc"
+          fi
+          echo "dev: $(grep -E '^Apply complete' /tmp/apply.txt | sed -E "$mask")" >> "$GITHUB_STEP_SUMMARY"
+          echo "::endgroup::"
+
+      - name: Cleanup plan
+        if: always()
+        run: gcloud storage rm "$PLAN_PREFIX/${{ github.run_id }}.tfplan" || true

@@ -213,14 +213,14 @@ flowchart TB
 | Vertex AI | BigQuery↔Vertex `CLOUD_RESOURCE` connection(#281) | BigQuery ML `ML.GENERATE_EMBEDDING` 다국어 임베딩 호출 |
 | MLflow | `mlflow` ns — tracking server(#94), 전용 Cloud SQL DB/user + Secret(#93), artifact GCS bucket + 전용 GSA(#92), OAuth2-proxy + 내부 ILB(#232/#244) | 실험 추적 UI. 내부 ILB + Google OAuth |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata, MLflow DB secret | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), Vault SA(#132), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307) | 워크로드별 최소 권한과 Workload Identity |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), Vault SA(#132), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드별 최소 권한과 Workload Identity |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155) | 운영 관측 dashboard. 접근은 port-forward |
 | GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85, `autoresearch` destination #303). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`serving`(Inference Server #303) | ArgoCD Application으로 관리(manual sync). UI는 Google 로그인 + 이메일 RBAC |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, Google 로그인 #294/#319), Filebeat allowlist 수집(#100), ILM(#101)/snapshot(#102)/runbook(#103) — `elastic` ns | airflow/autoresearch 로그 검색·분석. Kibana는 oauth2-proxy + anonymous로 Google 로그인 |
 | Secret(학습) | Vault single-node + KMS auto-unseal(#132/#134/#136) — `vault` ns | 학습·검증용. 실 서비스 secret은 Secret Manager 유지 |
 | KMS | `autoresearch-dev-vault`/`vault-unseal` key (#132) | Vault auto-unseal. key 삭제 금지(데이터 복호화 불능) |
 | DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | Google API 고정 VIP 유도 — vault egress 443 축소 기반 |
-| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 8개는 Environment 승인 후 CI apply, dev root apply는 수동 |
+| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) + **dev root 승인 게이트 CI apply**(#341, `dev-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 8개·dev root 모두 Environment 승인 후 CI apply, 로컬 apply는 break-glass |
 
 ## 인프라별 상세 구조
 
@@ -265,7 +265,7 @@ flowchart LR
 | `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application(`monitoring` #183, `argo-rollouts` #186)을 관리한다. |
 | `terraform-plan.yml` | GitHub Actions | PR마다 fmt/validate/plan을 실행하고 결과를 댓글/check로 보여준다. |
 | WIF/OIDC | GitHub Actions -> GCP | service account JSON key 없이 CI가 GCP 권한을 얻는다. 키 파일 유출 위험을 줄이기 위한 설정이다. |
-| Apply 수동 운영 | 운영자 로컬 | plan은 자동, apply는 수동이다. 실제 비용/권한/삭제 영향이 있는 변경은 사람이 확인하고 적용한다. |
+| Apply 승인 게이트 | GitHub Environment | plan은 자동, apply는 Environment required reviewer 승인 후 CI가 수행한다(admin-apply·dev-apply). 로컬 apply는 break-glass·import 선행용으로만 남긴다. |
 
 ### 2. 네트워크 / NAT / Bastion / DNS
 
