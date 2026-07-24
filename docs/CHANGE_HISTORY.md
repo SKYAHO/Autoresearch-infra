@@ -3,6 +3,22 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-24: feast-apply 403 잔여 원인 — `FEAST_APPLY_SA` secret 미등록 (#334/#335)
+
+- #333 apply 후에도 feast-apply가 같은 403(`storage.buckets.get`)으로
+  실패했다. 버킷 IAM(`legacyBucketReader`)은 정상 반영돼 있었고(#334는 권한
+  부족으로 오진), 실제 원인은 앱 리포 secret `FEAST_APPLY_SA` 미등록 —
+  `auth@v2`에 빈 `service_account`가 전달되면 **SA 가장 없이 Direct WIF로
+  폴백**해 호출자가 federated principal이 되고, 이 신원은 버킷 IAM이 없어 첫
+  호출인 `storage.buckets.get`에서 403이 난다.
+- 진단 근거: 실패 run 로그의 auth 단계 `with:` 블록에 `service_account` 입력
+  부재 + `gh secret list`에 `FEAST_APPLY_SA` 없음. 이전 run의 "`gcloud storage
+  objects describe` 통과"는 해당 단계 `|| true`가 오류를 삼킨 것으로 권한
+  증거가 아니었다.
+- 조치는 Terraform 변경 없음: #332 plan의 후속 운영 단계였던 secret 등록
+  누락분을 등록하고 `workflow_dispatch` 재실행으로 검증한다. WIF SA 가장
+  경로는 `TERRAFORM_DEV.md`의 "feast apply registry 갱신" 섹션으로 문서화.
+
 ## 2026-07-24: feast apply GHA용 SA·WIF 바인딩 (#332)
 
 - `SKYAHO/Autoresearch`의 `feast-apply.yml` 워크플로우(main merge 시 `feast
