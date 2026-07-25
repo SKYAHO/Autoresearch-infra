@@ -394,6 +394,40 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
         port     = "5000"
       }
     }
+
+    # #344 Inference Server(champion 리랭킹, autoresearch 네임스페이스
+    # autoresearch-serving:8000). Calico가 egress를 DNAT 이전(service VIP 기준)에
+    # 평가하므로 namespace_selector가 VIP에 매칭되지 않는다 — 위 MLflow와 같은
+    # 이유로 services CIDR ipBlock을 사용한다.
+    egress {
+      to {
+        ip_block {
+          cidr = var.cluster_services_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "8000"
+      }
+    }
+
+    # DNAT 후 평가하는 dataplane용 autoresearch namespace selector 규칙(방어적
+    # 유지, 위 MLflow 패턴과 동일).
+    egress {
+      to {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "autoresearch"
+          }
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "8000"
+      }
+    }
   }
 
   depends_on = [kubernetes_namespace_v1.airflow]
