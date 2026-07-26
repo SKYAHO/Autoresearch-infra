@@ -26,7 +26,7 @@ spec:
       serviceAccountName: autoresearch-app
       containers:
         - name: serving
-          image: asia-northeast3-docker.pkg.dev/ar-infra-501607/autoresearch-dev-docker/autoresearch-serving@sha256:efd10acd04a39c66fe658d78c94f84bdd804bc38e794337768737246a1232c9b
+          image: asia-northeast3-docker.pkg.dev/ar-infra-501607/autoresearch-dev-docker/autoresearch-serving@sha256:303dbf34037b999b45d732ba430d3e76f541f7998d4f2ee983926b474f468cfb
           ports:
             - name: http
               containerPort: 8000
