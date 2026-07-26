@@ -1,0 +1,299 @@
+{
+  "title": "AutoResearch / K8s 네트워크",
+  "uid": "ar-k8s-network",
+  "tags": [
+    "autoresearch",
+    "as-code"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "query": "label_values(kube_pod_info, namespace)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${ds}"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "네임스페이스별 수신 트래픽",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\"}[5m]))",
+          "legendFormat": "{{namespace}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "네임스페이스별 송신 트래픽",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\"}[5m]))",
+          "legendFormat": "{{namespace}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "파드 트래픽 Top 10 (수신+송신)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (namespace, pod) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\"}[5m]) + rate(container_network_transmit_bytes_total{namespace=~\"$namespace\"}[5m])))",
+          "legendFormat": "{{namespace}}/{{pod}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "네트워크 에러·드랍 (클러스터 전체)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_receive_errors_total[5m]))",
+          "legendFormat": "rx errors",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(rate(container_network_transmit_errors_total[5m]))",
+          "legendFormat": "tx errors",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(rate(container_network_receive_packets_dropped_total[5m]))",
+          "legendFormat": "rx dropped",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(rate(container_network_transmit_packets_dropped_total[5m]))",
+          "legendFormat": "tx dropped",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "노드별 TCP 소켓 (in-use / TIME_WAIT)",
+      "description": "in-use 지속 증가는 커넥션 누수, TIME_WAIT 폭증은 짧은 커넥션 남발(keep-alive 미사용) 신호.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "node_sockstat_TCP_inuse * on (instance) group_left(nodename) node_uname_info",
+          "legendFormat": "{{nodename}} in-use",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "node_sockstat_TCP_tw * on (instance) group_left(nodename) node_uname_info",
+          "legendFormat": "{{nodename}} time-wait",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "노드별 TCP 재전송률",
+      "description": "OutSegs 대비 RetransSegs 비율. 지속 1% 이상이면 네트워크 품질/혼잡 점검.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "(rate(node_netstat_Tcp_RetransSegs[5m]) / rate(node_netstat_Tcp_OutSegs[5m])) * on (instance) group_left(nodename) node_uname_info",
+          "legendFormat": "{{nodename}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "노드별 conntrack 사용률",
+      "description": "1.0 도달 시 신규 커넥션이 드랍된다(NAT/서비스 통신 장애).",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "(node_nf_conntrack_entries / node_nf_conntrack_entries_limit) * on (instance) group_left(nodename) node_uname_info",
+          "legendFormat": "{{nodename}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      }
+    }
+  ]
+}

@@ -110,6 +110,30 @@ Grafana dashboard 검색 키워드:
 dashboard 이름은 chart 버전에 따라 조금 달라질 수 있다. 이름이 다르면 위 키워드로
 검색한다.
 
+## 커스텀 대시보드 as-code (#355)
+
+커스텀 대시보드는 UI에서 만들지 않고 Git으로 관리한다. `deploy/monitoring/dashboards/`
+의 JSON 파일이 `templates/grafana-dashboards.yaml`을 통해
+`grafana_dashboard: "1"` 라벨 ConfigMap으로 렌더링되고, Grafana sidecar가 자동
+로드한다(ArgoCD `monitoring` Application sync 경로).
+
+- 현재 대시보드: `AutoResearch / K8s 리소스`(uid `ar-k8s-resources` — 노드별
+  requests 점유율 vs 실사용률, namespace/pod CPU·메모리),
+  `AutoResearch / K8s 네트워크`(uid `ar-k8s-network` — namespace/pod 트래픽,
+  에러·드랍, TCP 소켓·재전송·conntrack). 둘 다 `namespace` 변수로 필터.
+- **대시보드 추가**: JSON 파일을 `dashboards/`에 추가하고 PR → 머지 → ArgoCD
+  sync. UI 클릭으로만 만든 대시보드는 재구축 시 소실된다.
+  - 파일명 제약: ConfigMap 이름이 `grafana-dashboard-<파일명>`으로 생성되므로
+    소문자·숫자·하이픈만 사용한다(DNS-1123 — 밑줄·공백·대문자 불가).
+  - 전제: monitoring Application의 `targetRevision`이 `main`일 때 머지+sync로
+    반영된다(2026-07-26 live 확인). 커밋 SHA로 pin된 상태라면
+    `terraform/admin/argocd-k8s`의 `monitoring_target_revision` 갱신(admin-apply)
+    이 선행돼야 한다.
+- **대시보드 수정**: UI에서 편집했으면 Share → Export JSON을 같은 파일에
+  덮어써 커밋한다(sidecar 대시보드는 UI 저장이 유지되지 않는다).
+- 검증: `helm template deploy/monitoring --show-only
+  templates/grafana-dashboards.yaml` 렌더링과 JSON 파싱 확인.
+
 ## GKE Node 상태
 
 먼저 node가 Ready인지 확인한다.
