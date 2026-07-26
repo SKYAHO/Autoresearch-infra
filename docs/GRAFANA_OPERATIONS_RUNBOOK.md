@@ -121,6 +121,14 @@ dashboard 이름은 chart 버전에 따라 조금 달라질 수 있다. 이름�
   requests 점유율 vs 실사용률, namespace/pod CPU·메모리),
   `AutoResearch / K8s 네트워크`(uid `ar-k8s-network` — namespace/pod 트래픽,
   에러·드랍, TCP 소켓·재전송·conntrack). 둘 다 `namespace` 변수로 필터.
+  `AutoResearch / 스케일 판단`(uid `ar-scale-decision`, #356 — 판정 기준
+  텍스트 패널 + 노드풀별 노드 수/unschedulable 파드/requests 점유율 vs
+  실사용률(분모 allocatable 정렬)/throttling/OOMKill. "지금 스케일이
+  필요한가"는 이 대시보드로 판단한다).
+  - **동기화 의무**: 노드풀 autoscaling(min/max)·머신타입을 변경하면(#331 등)
+    `autoresearch-scale-decision.json`의 판정 기준 텍스트 패널과 노드 수 패널
+    description의 max 수치를 같은 PR에서 갱신한다 — 이 값이 틀리면 "max 도달"
+    판정 자체가 틀린다. 클러스터명은 `cluster` 상수 변수 한 곳에서 관리한다.
 - **대시보드 추가**: JSON 파일을 `dashboards/`에 추가하고 PR → 머지 → ArgoCD
   sync. UI 클릭으로만 만든 대시보드는 재구축 시 소실된다.
   - 파일명 제약: ConfigMap 이름이 `grafana-dashboard-<파일명>`으로 생성되므로

@@ -1,0 +1,280 @@
+{
+  "title": "AutoResearch / 스케일 판단",
+  "uid": "ar-scale-decision",
+  "tags": [
+    "autoresearch",
+    "as-code"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      },
+      {
+        "name": "cluster",
+        "type": "constant",
+        "query": "autoresearch-dev-gke",
+        "hide": 2,
+        "current": {
+          "text": "autoresearch-dev-gke",
+          "value": "autoresearch-dev-gke"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "판정 기준과 상한",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### 판정 기준 — \"지금 스케일이 필요한가?\"\n\n| 신호 | 판정 |\n|---|---|\n| **unschedulable 파드 지속(5분+)** 그리고 해당 풀 노드 수 **max 도달** | 그 풀의 max 증설 검토 (#330/#331) |\n| **unschedulable 파드 지속인데 노드 수 max 미달** | CA가 늘리지 **못하는** 상태 — GCP quota(`E2_CPUS` 8 등) 소진, Spot 재고 부족 등. `kubectl get events`(FailedScaleUp)·콘솔 quota 확인. **max 증설로 해결 안 됨** |\n| requests 점유율 높음(80%+) 그런데 실사용률 낮음 | 스케일 아웃이 아니라 **requests 재조정** |\n| CPU throttling 지속 25%+ | 해당 컨테이너 CPU limit/requests 상향 (노드 증설로 해결 안 됨) |\n| OOMKill 발생 + 재시작 반복 | memory limit 재조정 (노드 증설로 해결 안 됨) |\n| 위 신호 전부 없음 | **스케일 불필요** |\n\n**상한(벽) — 이 이상은 자동으로 늘지 않는다**: 노드풀 max = dev-default 1–2(e2-std-4) · airflow-dev 1–2(e2-std-2) · batch-spot 0–2(Spot) · batch-od 0–2 · ctr-model-retrain 0–1(n2-highmem-4) — *#331 증설 시 이 표와 노드 수 패널 description을 함께 갱신할 것(runbook 참조)*. 리전 `E2_CPUS` quota 8 — E2 풀들이 max까지 다 늘기엔 quota가 먼저 소진된다(#316에서 실측). NAP 비활성(새 노드풀 자동 생성 없음), HPA 없음(replica 자동 증감 없음 — 노드가 늘어도 파드 수는 그대로)."
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "노드풀별 노드 수 (CA scale-up/down = 계단)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "count by (pool) (label_replace(label_replace(kube_node_info, \"pool\", \"$1\", \"node\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\"))",
+          "legendFormat": "{{pool}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "max: dev-default 2 / airflow-dev 2 / batch-spot 2 / batch-od 2 / ctr-model-retrain 1 (#331 증설 시 갱신). 선이 max에 붙은 채 unschedulable이 쌓이면 증설 검토, max 미달인데 쌓이면 quota/재고 확인."
+    },
+    {
+      "type": "timeseries",
+      "title": "스케줄 불가(unschedulable) 파드",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace) (kube_pod_status_unschedulable)",
+          "legendFormat": "{{namespace}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(kube_pod_status_unschedulable) or vector(0)",
+          "legendFormat": "total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "PodScheduled=False(Unschedulable) 조건만 집계 — phase Pending 전체가 아니므로 이미지 pull·볼륨 대기 중인 파드는 오탐하지 않는다. total 0 라인이 정상."
+    },
+    {
+      "type": "timeseries",
+      "title": "노드풀별 CPU: requests 점유율 vs 실사용률",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pool) (label_replace(label_replace(kube_pod_container_resource_requests{resource=\"cpu\"} * on (namespace, pod) group_left() max by (namespace, pod) (kube_pod_status_phase{phase=\"Running\"} == 1), \"pool\", \"$1\", \"node\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\")) / sum by (pool) (label_replace(label_replace(kube_node_status_allocatable{resource=\"cpu\"}, \"pool\", \"$1\", \"node\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\"))",
+          "legendFormat": "{{pool}} requests",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum by (pool) (label_replace(label_replace(sum by (instance) (rate(node_cpu_seconds_total{mode!=\"idle\"}[5m])) * on (instance) group_left(nodename) node_uname_info, \"pool\", \"$1\", \"nodename\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\")) / sum by (pool) (label_replace(label_replace(kube_node_status_allocatable{resource=\"cpu\"}, \"pool\", \"$1\", \"node\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\"))",
+          "legendFormat": "{{pool}} 실사용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "두 시리즈 모두 분모 allocatable로 정렬(겹쳐 읽기 정합). requests만 높고 실사용이 낮으면 requests 과대 산정 — 증설이 아니라 재조정 대상."
+    },
+    {
+      "type": "timeseries",
+      "title": "노드풀별 메모리: requests 점유율 vs 실사용률",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pool) (label_replace(label_replace(kube_pod_container_resource_requests{resource=\"memory\"} * on (namespace, pod) group_left() max by (namespace, pod) (kube_pod_status_phase{phase=\"Running\"} == 1), \"pool\", \"$1\", \"node\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\")) / sum by (pool) (label_replace(label_replace(kube_node_status_allocatable{resource=\"memory\"}, \"pool\", \"$1\", \"node\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\"))",
+          "legendFormat": "{{pool}} requests",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum by (pool) (label_replace(label_replace((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) * on (instance) group_left(nodename) node_uname_info, \"pool\", \"$1\", \"nodename\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\")) / sum by (pool) (label_replace(label_replace(kube_node_status_allocatable{resource=\"memory\"}, \"pool\", \"$1\", \"node\", \"gke-${cluster}-(.+)-[0-9a-f]+-[0-9a-z]+\"), \"pool\", \"unmatched\", \"pool\", \"^$\"))",
+          "legendFormat": "{{pool}} 실사용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "분모 allocatable 정렬. 실사용에는 시스템 오버헤드가 포함되므로 1.0을 약간 넘을 수 있다."
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU throttling 상위 컨테이너",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{container!=\"\"}[5m])) / sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{container!=\"\"}[5m])) > 0)",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "지속 25%+ 는 CPU limit 부족 — 노드 증설이 아니라 해당 컨테이너 limit/requests 조정."
+    },
+    {
+      "type": "timeseries",
+      "title": "OOMKill·재시작 (불안정 신호)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace, pod) (kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\"})",
+          "legendFormat": "OOMKilled(발생 여부) {{namespace}}/{{pod}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "topk(10, sum by (namespace, pod, container) (increase(kube_pod_container_status_restarts_total[1h])) > 0)",
+          "legendFormat": "restarts/1h {{namespace}}/{{pod}}/{{container}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "OOMKilled는 '마지막 종료 사유' gauge — 발생 후 파드 생존 동안 1로 유지되며 횟수가 아니다. 반복 여부는 restarts 시리즈로 판단한다. No data = 정상(발생 없음)."
+    }
+  ]
+}
