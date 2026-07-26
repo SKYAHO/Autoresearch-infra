@@ -3,6 +3,29 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-26: airflow-egress에 autoresearch:8000 egress 추가 (#344/#345)
+
+- action_log DAG(Autoresearch-airflow#135)가 champion 리랭킹 서버
+  (`autoresearch-serving.autoresearch:8000`)를 호출할 수 있도록 `airflow-k8s`의
+  `airflow_egress`에 egress 규칙 2개(`ip_block` + `namespace_selector`)를
+  추가했다. 기존 MLflow 규칙(#234)과 동일한 2-블록 패턴 — Calico가 egress를
+  DNAT 이전(서비스 VIP 기준)에 평가해 `namespace_selector` 단독으로는 매칭되지
+  않는다.
+- **admin-apply 토큰 만료 실증(운영 교훈)**: 첫 트리거(07-25) 후 승인이 약
+  1일 지연되며 `provider "kubernetes"`의
+  `token = data.google_client_config.default.access_token`(plan 시점 값이
+  `tfplan.bin`에 고정 저장됨)가 만료돼 apply가 `the server has asked for the
+  client to provide credentials`로 실패했다. `autoresearch-k8s`는 이번 run에
+  K8s 리소스 변경이 없어 통과했고, 실제 patch가 필요한 `airflow-k8s`에서만
+  드러났다. 재트리거 후 승인을 13분 안에 받아 정상 완료 — **승인이 크게
+  지연되면(대략 1시간 액세스 토큰 수명 초과) 재트리거가 필요**하다는 점을
+  운영 참고로 남긴다. 근본 해결(apply 시점에 토큰을 새로 발급하는 `exec`
+  기반 인증 등)은 이번 범위 밖.
+- 검증(2026-07-26): apply 후 `kubectl get networkpolicy airflow-egress`
+  실측으로 신규 규칙 2건(포트 8000, `ip_block`+`namespace_selector`) 확인,
+  `airflow-scheduler-0` 파드에서
+  `curl autoresearch-serving.autoresearch:8000/healthcheck` → `200` 확인.
+
 ## 2026-07-24: dev root 승인 게이트 CI apply 가동 (#341/#342) — 첫 run 검증 완료
 
 - admin root 8개(#307~#319)와 달리 dev root만 로컬 수동 apply라 "머지≠적용" 갭이
