@@ -1,0 +1,273 @@
+{
+  "title": "AutoResearch / 스케일 판단",
+  "uid": "ar-scale-decision",
+  "tags": [
+    "autoresearch",
+    "as-code"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "판정 기준과 상한",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### 판정 기준 — \"지금 스케일이 필요한가?\"\n\n| 신호 | 판정 |\n|---|---|\n| **Pending 파드 지속(5분+)** 그리고 해당 풀 노드 수가 max에 붙음 | 그 풀의 max 증설 검토 (#330 논의) |\n| requests 점유율 높음(80%+) 그런데 실사용률 낮음 | 스케일 아웃이 아니라 **requests 재조정** |\n| CPU throttling 지속 25%+ | 해당 파드 CPU limit/requests 상향 (노드 증설로 해결 안 됨) |\n| OOMKill·재시작 반복 | memory limit 재조정 (노드 증설로 해결 안 됨) |\n| 위 신호 전부 없음 | **스케일 불필요** |\n\n**상한(벽) — 이 이상은 자동으로 늘지 않는다**: 노드풀 max = dev-default 1–2(e2-std-4) · airflow-dev 1–2(e2-std-2) · batch-spot 0–2(Spot) · batch-od 0–2 · ctr-model-retrain 0–1(n2-highmem-4). 리전 `E2_CPUS` quota 8. NAP 비활성(새 노드풀 자동 생성 없음), HPA 없음(replica 자동 증감 없음 — 노드가 늘어도 파드 수는 그대로)."
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "노드풀별 노드 수 (CA scale-up/down = 계단)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "count by (pool) (label_replace(kube_node_info, \"pool\", \"$1\", \"node\", \"gke-autoresearch-dev-gke-(.+)-[0-9a-f]+-[0-9a-z]+\"))",
+          "legendFormat": "{{pool}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "max: dev-default 2 / airflow-dev 2 / batch-spot 2 / batch-od 2 / ctr-model-retrain 1. 선이 max에 붙은 채 Pending이 쌓이면 증설 검토."
+    },
+    {
+      "type": "timeseries",
+      "title": "Pending 파드 (스케줄 실패 = CA 트리거)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace) (kube_pod_status_phase{phase=\"Pending\"})",
+          "legendFormat": "{{namespace}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(kube_pod_status_phase{phase=\"Pending\"})",
+          "legendFormat": "total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "0이 정상. 지속(5분+) 양수면 어떤 풀이 막혔는지 노드 수 패널과 대조."
+    },
+    {
+      "type": "timeseries",
+      "title": "노드풀별 CPU: requests 점유율 vs 실사용률",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pool) (label_replace(kube_pod_container_resource_requests{resource=\"cpu\"} * on (namespace, pod) group_left() max by (namespace, pod) (kube_pod_status_phase{phase=\"Running\"} == 1), \"pool\", \"$1\", \"node\", \"gke-autoresearch-dev-gke-(.+)-[0-9a-f]+-[0-9a-z]+\")) / sum by (pool) (label_replace(kube_node_status_allocatable{resource=\"cpu\"}, \"pool\", \"$1\", \"node\", \"gke-autoresearch-dev-gke-(.+)-[0-9a-f]+-[0-9a-z]+\"))",
+          "legendFormat": "{{pool}} requests",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "avg by (pool) (label_replace((1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))) * on (instance) group_left(nodename) node_uname_info, \"pool\", \"$1\", \"nodename\", \"gke-autoresearch-dev-gke-(.+)-[0-9a-f]+-[0-9a-z]+\"))",
+          "legendFormat": "{{pool}} 실사용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "requests만 높고 실사용이 낮으면 requests 과대 산정 — 증설이 아니라 재조정 대상."
+    },
+    {
+      "type": "timeseries",
+      "title": "노드풀별 메모리: requests 점유율 vs 실사용률",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pool) (label_replace(kube_pod_container_resource_requests{resource=\"memory\"} * on (namespace, pod) group_left() max by (namespace, pod) (kube_pod_status_phase{phase=\"Running\"} == 1), \"pool\", \"$1\", \"node\", \"gke-autoresearch-dev-gke-(.+)-[0-9a-f]+-[0-9a-z]+\")) / sum by (pool) (label_replace(kube_node_status_allocatable{resource=\"memory\"}, \"pool\", \"$1\", \"node\", \"gke-autoresearch-dev-gke-(.+)-[0-9a-f]+-[0-9a-z]+\"))",
+          "legendFormat": "{{pool}} requests",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "avg by (pool) (label_replace((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * on (instance) group_left(nodename) node_uname_info, \"pool\", \"$1\", \"nodename\", \"gke-autoresearch-dev-gke-(.+)-[0-9a-f]+-[0-9a-z]+\"))",
+          "legendFormat": "{{pool}} 실사용",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU throttling 상위 파드",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total[5m])) / sum by (namespace, pod) (rate(container_cpu_cfs_periods_total[5m])) > 0)",
+          "legendFormat": "{{namespace}}/{{pod}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "지속 25%+ 는 CPU limit 부족 — 노드 증설이 아니라 해당 워크로드 limit/requests 조정."
+    },
+    {
+      "type": "timeseries",
+      "title": "OOMKill·재시작 (불안정 신호)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace, pod) (kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\"})",
+          "legendFormat": "OOMKilled {{namespace}}/{{pod}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "topk(10, increase(kube_pod_container_status_restarts_total[1h]) > 0)",
+          "legendFormat": "restarts/1h {{namespace}}/{{pod}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "반복되면 memory limit 재조정 대상. No data = 정상(발생 없음)."
+    }
+  ]
+}
