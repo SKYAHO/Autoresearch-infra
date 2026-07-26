@@ -41,5 +41,5 @@ jobs:
             - Prefix each understanding-check inline comment with "이해도 확인:".
             - The author is expected to answer in the same inline thread, validate the answer with a local agent if needed, and then resolve the thread.
           claude_args: |
-            --model "claude-opus-4-8"
+            --model "claude-opus-5"
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
