@@ -348,3 +348,37 @@ resource "google_bigquery_table" "user_category_similarity" {
     purpose    = "feast-feature-table"
   }
 }
+
+# 학습 데이터셋 spine(impression 기준행 + 30분 click 라벨). Feast PIT 조회의
+# entity dataframe이며 SKYAHO/Autoresearch feature_store_build --tables
+# training_entity가 일 단위 증분 DELETE+INSERT로 적재한다(스키마 계약 #355).
+resource "google_bigquery_table" "training_entity" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "training_entity"
+  description         = "학습 데이터셋 spine(impression 기준행 + 30분 click 라벨). Feast PIT 조회의 entity dataframe."
+  deletion_protection = true
+
+  # event_timestamp(impression 시각) 기준 DAY 파티션.
+  # 주의: feature_store_build의 predicate는 KST(DATE(event_timestamp,'Asia/Seoul'))인데
+  # BQ 파티션은 UTC 캘린더 일 기준이라 경계가 어긋난다 — KST 하루 쿼리가 UTC 파티션
+  # 2개(training_entity는 후보 CTE가 D∪D+1의 KST 2일을 스캔하므로 최대 3개)에 걸친다.
+  # 그래도 전체 스캔보다는 훨씬 저렴하다(video_feature도 동일 조합).
+  time_partitioning {
+    type  = "DAY"
+    field = "event_timestamp"
+  }
+
+  schema = jsonencode([
+    { name = "dataset_id", type = "STRING", mode = "REQUIRED" },
+    { name = "user_id", type = "STRING", mode = "REQUIRED" },
+    { name = "video_id", type = "STRING", mode = "REQUIRED" },
+    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+    { name = "clicked", type = "INTEGER", mode = "REQUIRED" },
+    { name = "source_event_id", type = "STRING", mode = "REQUIRED" },
+  ])
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-training-spine"
+  }
+}
