@@ -183,6 +183,25 @@ resource "kubernetes_network_policy_v1" "airflow_ingress" {
       }
     }
 
+    # #358 Prometheus(monitoring ns) → statsd-exporter(9102) scrape 허용.
+    # 이 규칙이 없으면 ServiceMonitor가 등록돼도 타깃이 context deadline
+    # exceeded로 down이 된다(#358 검증 실측). 포트를 9102로 한정해
+    # webserver(8080) 등 다른 표면은 열지 않는다.
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "monitoring"
+          }
+        }
+      }
+
+      ports {
+        port     = "9102"
+        protocol = "TCP"
+      }
+    }
+
     # #48 Airflow UI 내부 노출: dev subnet(Bastion 등 VPC 내부)에서
     # webserver 8080으로 오는 트래픽만 추가 허용. 전제: Service에
     # externalTrafficPolicy=Local(Helm values, 문서 참조) — 이때만 internal
