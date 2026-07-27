@@ -116,9 +116,12 @@ POST https://asia-northeast3-aiplatform.googleapis.com/v1/projects/ar-infra-5016
 - 기존 4개 테이블의 더미 데이터 300~600행이 소실된다(요청자 승인 완료).
 - `roles/aiplatform.user`는 project 수준 권한이다. Vertex AI에 dataset 수준 IAM이
   없어 최소 단위가 project다. `aiplatform.admin`이 아닌 `user`로 제한한다.
-- 아래 3개는 임베딩 모델·차원 변경 시 스키마가 따라 바뀌고 Feast가 직접 읽지 않아
+- 아래 2개는 임베딩 모델·차원 변경 시 스키마가 따라 바뀌고 Feast가 직접 읽지 않아
   계약이 아니므로 Terraform 관리에서 제외한다. 배치 job이 `CREATE OR REPLACE`로
-  관리한다: `user_topic_embedding`, `category_embedding`, `training_entity`.
+  관리한다: `user_topic_embedding`, `category_embedding`.
+  (후속: `training_entity`는 이 제외 목록에서 빠져 Terraform 스키마 관리로 편입됐다 —
+  스키마 계약 `SKYAHO/Autoresearch#355`, 적재는 파티션 단위 DELETE+INSERT. `TERRAFORM_DEV.md`
+  "Feast 피처 테이블 스키마 소유권" 참조.)
 - BigQuery ML remote model(`CREATE MODEL ... REMOTE WITH CONNECTION`)도 배치 job이
   멱등하게 생성한다.
 
