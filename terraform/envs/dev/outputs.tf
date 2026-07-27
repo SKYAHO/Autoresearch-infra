@@ -179,6 +179,21 @@ output "github_actions_feast_apply_service_account_email" {
   value       = google_service_account.feast_apply.email
 }
 
+output "feast_apply_k8s_namespace" {
+  description = "feast apply Job이 실행되는 전용 Kubernetes namespace(#346). 앱 저장소 feast-apply.yml과 terraform/admin/autoresearch-k8s가 공유하는 계약 값."
+  value       = var.feast_apply_k8s_namespace
+}
+
+output "feast_apply_k8s_service_account" {
+  description = "feast apply Job Pod가 사용하는 KSA 이름(#346). Job spec의 serviceAccountName."
+  value       = var.feast_apply_k8s_service_account
+}
+
+output "feast_apply_workload_identity_principal" {
+  description = "feast apply KSA가 가장하는 principal 식별자(#346). KSA annotation 검증에 사용."
+  value       = local.feast_apply_workload_identity_principal
+}
+
 output "cloud_build_bucket_name" {
   description = "Autoresearch-airflow build가 사용하는 Cloud Build 기본 staging bucket 이름."
   value       = local.cloud_build_bucket_name

@@ -11,6 +11,15 @@ app_k8s_service_account = "autoresearch-app"
 # autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
 app_gcp_service_account_email = ""
 
+# #346 feast apply GKE Job 전용 namespace/KSA.
+# terraform/envs/dev의 feast_apply_k8s_namespace/service_account와 같은 값이어야 한다.
+feast_apply_k8s_namespace       = "feast-apply"
+feast_apply_k8s_service_account = "feast-apply"
+
+# Optional. Empty value derives:
+# autoresearch-dev-feast-apply@<project_id>.iam.gserviceaccount.com
+feast_apply_gcp_service_account_email = ""
+
 # terraform/envs/dev private_services_cidr, redis_psc_subnet_cidr, gke_services_cidr values.
 private_services_cidr = "192.168.0.0/20"
 redis_psc_subnet_cidr = "10.10.16.0/29"

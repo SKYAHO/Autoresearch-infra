@@ -235,3 +235,27 @@ resource "google_bigquery_dataset_iam_member" "feast_apply_offline_store_metadat
   role       = "roles/bigquery.metadataViewer"
   member     = "serviceAccount:${google_service_account.feast_apply.email}"
 }
+
+# #346 feast apply 실행 주체를 GHA 러너에서 VPC 안 GKE Job으로 옮긴다.
+# GHA는 Job을 생성·판정만 하고, 실제 `feast apply`는 전용 namespace의 KSA가
+# Workload Identity로 이 GSA를 가장해 실행한다. 같은 GSA를 GHA(가장)와
+# Pod(WI)가 공유하지만, Job을 만들 수 있는 주체는 어차피 그 KSA로 실행할 수
+# 있으므로 분리해도 실질적 경계가 늘지 않는다.
+# gke_app_wi와 동일하게 cluster의 workload identity pool이 존재한 뒤에만
+# 바인딩이 성립하므로 depends_on이 필요하다.
+resource "google_service_account_iam_member" "feast_apply_ksa_wi" {
+  service_account_id = google_service_account.feast_apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.feast_apply_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
+# GKE DNS endpoint 접속과 cluster metadata 조회만 GCP IAM으로 허용한다.
+# Job 생성·조회·삭제 권한은 feast-apply namespace의 Kubernetes RoleBinding이
+# 통제한다(airflow_deployer_cluster_viewer와 동일 패턴).
+resource "google_project_iam_member" "feast_apply_cluster_viewer" {
+  project = var.project_id
+  role    = "roles/container.clusterViewer"
+  member  = "serviceAccount:${google_service_account.feast_apply.email}"
+}

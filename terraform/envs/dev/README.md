@@ -94,6 +94,24 @@ BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있
 
 기존 app GSA(`gke_app`)의 Redis/CA/코드 아카이브 권한은 변경하지 않았습니다.
 
+## feast apply GKE Job 권한 (#346)
+
+`feast apply`를 GitHub Actions 러너 대신 VPC 안 GKE Job으로 실행하도록 옮기면서,
+기존 `feast_apply` GSA(#332)에 다음을 추가했습니다. 상세 배경과 namespace 분리
+근거는 `docs/TERRAFORM_DEV.md`의 "feast apply를 GKE Job으로 실행 (#346)" 절을
+참조합니다.
+
+| 대상 | Role | 범위 | 용도 |
+|---|---|---|---|
+| project (condition 제한) | `roles/redis.dbConnectionUser` | dev Online Store cluster 한정 (`redis.tf`) | 고아 키 정리(`full_scan_for_deletion`)용 Redis IAM 인증 |
+| `autoresearch-dev-redis-server-ca` secret | `roles/secretmanager.secretAccessor` | secret 단위 (`secret_manager.tf`) | Redis TLS 검증용 CA 조회 |
+| `feast_apply` GSA | `roles/iam.workloadIdentityUser` | member `<project>.svc.id.goog[feast-apply/feast-apply]` (`github_actions.tf`) | Job Pod의 KSA → GSA 가장 |
+| project | `roles/container.clusterViewer` | 프로젝트 (`github_actions.tf`) | GHA의 DNS endpoint 접속·cluster metadata 조회. Job 생성 권한은 K8s RBAC이 통제 |
+
+namespace(`feast-apply`)·KSA·RBAC·NetworkPolicy는
+`terraform/admin/autoresearch-k8s`가 만듭니다. 두 root의
+`feast_apply_k8s_namespace` / `feast_apply_k8s_service_account` 값은 같아야 합니다.
+
 Kubernetes 쪽에서는 `terraform/admin/airflow-k8s`의 `airflow-egress`
 NetworkPolicy에 Redis PSC subnet(`10.10.16.0/29`) egress를 추가했습니다. Redis
 Cluster client는 discovery 후 data node에 직접 연결하므로 두 포트 범위가 모두

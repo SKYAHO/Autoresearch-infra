@@ -1,0 +1,179 @@
+{
+  "title": "AutoResearch / MLflow",
+  "uid": "ar-mlflow",
+  "tags": [
+    "autoresearch",
+    "as-code"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "요청률 (상태코드별, oauth2-proxy 경유)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (code) (rate(oauth2_proxy_requests_total{namespace=\"mlflow\"}[5m]))",
+          "legendFormat": "{{code}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "oauth2-proxy(4180)가 MLflow UI/API의 유일한 인입 경로라 전체 사용량이 여기서 관측된다(#357 폴백 — 서버 자체 /metrics는 이미지에 prometheus_flask_exporter 부재). 403/401 증가는 허용 이메일 밖 접근 시도."
+    },
+    {
+      "type": "timeseries",
+      "title": "응답 지연 p95 · 동시 요청",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in-flight"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, method) (rate(oauth2_proxy_response_duration_seconds_bucket{namespace=\"mlflow\"}[5m])))",
+          "legendFormat": "p95 {{method}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(oauth2_proxy_requests_in_flight{namespace=\"mlflow\"})",
+          "legendFormat": "in-flight",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "proxy 측정 지연 = proxy 처리 + MLflow 응답. in-flight(우측 축, 단위 '개')는 replica 증설에도 동작하도록 sum으로 집계."
+    },
+    {
+      "type": "timeseries",
+      "title": "컨테이너 CPU (mlflow namespace)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"mlflow\", container!=\"\"}[5m]))",
+          "legendFormat": "{{pod}}/{{container}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "mlflow 서버(gunicorn workers 2, requests 250m/limit 1)와 oauth2-proxy(10m/100m)."
+    },
+    {
+      "type": "timeseries",
+      "title": "컨테이너 메모리 working set (mlflow namespace)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod, container) (container_memory_working_set_bytes{namespace=\"mlflow\", container!=\"\"})",
+          "legendFormat": "{{pod}}/{{container}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "mlflow limit 1Gi(#95 OOM 실측 후 상향). limit 근접 시 gunicorn worker OOM 재발 신호 — 스케일 판단 대시보드의 OOMKill 패널과 대조."
+    }
+  ]
+}

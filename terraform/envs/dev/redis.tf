@@ -85,3 +85,20 @@ resource "google_project_iam_member" "airflow_batch_redis_connection" {
     expression  = "resource.name == 'projects/${var.project_id}/locations/${var.region}/clusters/${local.redis_cluster_name}'"
   }
 }
+
+# #346 feast apply를 VPC 안 GKE Job으로 옮기면서 online store 고아 키 정리
+# (`full_scan_for_deletion: true`)를 켜려면 feast_apply GSA도 IAM auth가 필요하다.
+# 삭제 스캔은 SCAN + DEL/HDEL이라 read-only로는 부족한데, 같은 role로 materialize
+# write를 수행하는 airflow_batch(위) 선례로 충분성이 확인된다. condition은 위
+# 두 바인딩과 동일하게 이 cluster 하나로 제한한다.
+resource "google_project_iam_member" "feast_apply_redis_connection" {
+  project = var.project_id
+  role    = "roles/redis.dbConnectionUser"
+  member  = "serviceAccount:${google_service_account.feast_apply.email}"
+
+  condition {
+    title       = "autoresearch-dev-redis-cluster-only"
+    description = "Allow the feast apply job to authenticate only to the dev Online Store cluster."
+    expression  = "resource.name == 'projects/${var.project_id}/locations/${var.region}/clusters/${local.redis_cluster_name}'"
+  }
+}
