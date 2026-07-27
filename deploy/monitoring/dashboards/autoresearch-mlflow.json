@@ -70,7 +70,24 @@
         "defaults": {
           "unit": "s"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in-flight"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
       },
       "datasource": {
         "type": "prometheus",
@@ -86,7 +103,7 @@
           }
         },
         {
-          "expr": "oauth2_proxy_requests_in_flight{namespace=\"mlflow\"}",
+          "expr": "sum(oauth2_proxy_requests_in_flight{namespace=\"mlflow\"})",
           "legendFormat": "in-flight",
           "datasource": {
             "type": "prometheus",
@@ -94,7 +111,7 @@
           }
         }
       ],
-      "description": "proxy 측정 지연 = proxy 처리 + MLflow 응답. in-flight 시리즈는 단위가 '개'라 축이 다르지만 추세 대조용으로 겹쳐 둔다."
+      "description": "proxy 측정 지연 = proxy 처리 + MLflow 응답. in-flight(우측 축, 단위 '개')는 replica 증설에도 동작하도록 sum으로 집계."
     },
     {
       "type": "timeseries",

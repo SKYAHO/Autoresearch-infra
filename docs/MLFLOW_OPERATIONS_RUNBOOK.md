@@ -138,6 +138,19 @@ Build 재빌드 + digest re-point가 필요하다. dev "사용량 확인" 요구
 proxy 메트릭 + cAdvisor로 충분해 서버 계측은 보류 — 엔드포인트별 정밀
 메트릭이 필요해지면 그때 앱 저장소 runtime에 exporter를 추가한다.
 
+메트릭명은 v7.7.1 런타임 실측으로 확정(2026-07-27, 1회용 파드):
+`oauth2_proxy_requests_total{code}`, `oauth2_proxy_response_duration_seconds`
+(histogram, `method`), `oauth2_proxy_requests_in_flight`. 시리즈는 **첫 요청이
+4180을 통과한 뒤에야 생성**되므로 배포 직후 상위 두 패널의 "No data"는 정상.
+
+반영 경로가 두 갈래라 증상으로 원인을 구분한다:
+
+| 증상 | 원인 | 확인 위치 |
+|---|---|---|
+| 대시보드 자체가 없음 | `monitoring` Application 미sync | ArgoCD app `monitoring` |
+| 패널은 있는데 타깃이 목록에 없음 | `mlflow` Application 미sync 또는 PodMonitor `release` 라벨 누락 | **Prometheus UI Status → Service Discovery**에 `podMonitor/mlflow/...` 항목 부재가 가장 빠른 신호 |
+| 타깃 up인데 빈 그래프 | 트래픽 0(위 지연 등록) 또는 PromQL 이름 불일치 | proxy로 요청 1회 보낸 뒤 재확인 |
+
 ## 장애 대응
 
 | 증상 | 원인·조치 |
