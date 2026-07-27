@@ -1073,14 +1073,15 @@ metadata와 resource-level IAM만 `4 added, 0 changed, 0 destroyed`로
 recommender/controller를 제공한다. scheduler VPA resource는 Helm release 소유이므로
 Autoresearch-airflow#159가 배포한다.
 
-LocalExecutor task는 scheduler Pod 안에서 실행되므로 `Auto`와 `Recreate` mode를
-사용하지 않는다. 초기 VPA는 `updateMode: "Off"`로 recommendation만 수집하며,
-scheduler `values.yaml` resource 변경은 recommendation, namespace quota, node
-allocatable resource를 검토한 후 별도 이슈에서 수동으로 한다.
+LocalExecutor task는 scheduler Pod 안에서 실행되므로 `Auto`와 `Recreate` mode가
+scheduler Pod eviction을 일으켜 장시간 task를 중단할 수 있다. 따라서 초기 VPA는
+`updateMode: "Off"`만 사용하여 recommendation만 수집하며, scheduler `values.yaml`
+resource 변경은 recommendation, namespace quota, node allocatable resource를 검토한
+후 별도 이슈에서 수동으로 한다.
 
 적용 순서는 다음과 같다.
 
-1. `terraform -chdir=terraform/envs/dev validate`와 `terraform -chdir=terraform/envs/dev plan`으로 VPA addon 변경을 검토한다.
+1. `terraform -chdir=terraform/envs/dev validate`와 `terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars`로 VPA addon 변경을 검토한다.
 2. 승인 후 dev root를 apply한다.
 3. VPA CRD와 controller readiness를 확인한 뒤 Autoresearch-airflow#159의
    `airflow-scheduler` VPA CR을 배포한다.
