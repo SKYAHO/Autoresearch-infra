@@ -1122,7 +1122,9 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
    Autoresearch-airflow#159의 `deploy-gke-dev.yml` preflight이며, 이 workflow가 GitHub
    Actions WIF deployer GSA 자격증명으로 인증한 context에서 VPA lifecycle 모든 동사를
    확인한다. 운영자 개인 kubeconfig로 WIF identity를 흉내 내거나 `--as` impersonation을
-   사용하지 않는다. 이 preflight가 성공해야 Airflow merge/deploy gate를 통과한다.
+   사용하지 않는다. 이 preflight는 `refs/heads/main`의 main push 배포 workflow에서
+   실행되므로 Airflow PR merge 전 gate가 아니라 merge 후 deployment gate다. 따라서
+   Role/RoleBinding은 Airflow merge 전에 `admin-apply`로 적용·검토되어야 한다.
 
    ```bash
    set -e
