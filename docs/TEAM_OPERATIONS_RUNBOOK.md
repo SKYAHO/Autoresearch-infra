@@ -153,11 +153,12 @@ helm upgrade --install airflow apache-airflow/airflow \
 
 ## VPA 관측 확인 (#373)
 
-`dev-apply`는 DAG가 실행 중이지 않은 운영 창에서만 승인한다. GKE VPA addon 변경은
-비동기 GKE operation이므로 workflow 성공만으로 readiness 검사를 시작하지 말고, 해당
-operation 완료를 먼저 확인한다. 그 다음 `admin-apply` 승인 workflow로 Task 4의
-namespace-scoped `airflow-vpa` Role과 RoleBinding을 먼저 적용한다. GKE addon 내부 RBAC나
-`admin` ClusterRole aggregation이 필요한 VPA 권한을 제공한다고 가정하지 않는다.
+`admin-apply` 승인 workflow로 Task 4의 namespace-scoped `airflow-vpa` Role과 RoleBinding을
+먼저 적용하고 완료를 확인한다. 이 단계는 GKE addon `dev-apply`보다 먼저 끝나야 하며, GKE
+addon 내부 RBAC나 `admin` ClusterRole aggregation이 필요한 VPA 권한을 제공한다고 가정하지
+않는다. `admin-apply` 완료 후에만 `dev-apply`를 DAG가 실행 중이지 않은 운영 창에서
+승인한다. GKE VPA addon 변경은 비동기 GKE operation이므로 workflow 성공만으로 readiness
+검사를 시작하지 말고, 해당 operation 완료를 먼저 확인한다.
 
 CRD가 아직 없으면 condition-only `kubectl wait`는 즉시 NotFound으로 실패한다. 생성,
 Established, served API discovery를 아래 순서로 확인한다. 대화형 shell을 종료하지 않도록
@@ -189,8 +190,11 @@ bash -c '
 제한해 API server 또는 네트워크 hang이 polling deadline을 넘기지 않게 한다. timeout이면
 실패한다.
 
-Autoresearch-airflow#159를 merge하기 전에 실제 Helm deployer identity로 VPA lifecycle
-모든 동사를 확인한다.
+Autoresearch-airflow#159를 merge하기 전에 `airflow_deployer_service_account_email`로 구성된
+Airflow Helm deployer GSA의 실제 WIF 자격증명으로 인증된 kubeconfig context에서 VPA
+lifecycle 모든 동사를 확인한다. 운영자의 현재 context에서 실행한 결과는 이 검증으로
+인정하지 않으며, `--as` impersonation은 실제 deployer identity 인증을 대체하지 않으므로
+사용하지 않는다.
 
 ```bash
 for verb in get list watch create update patch delete; do

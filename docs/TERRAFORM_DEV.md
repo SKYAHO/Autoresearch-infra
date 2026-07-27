@@ -1081,16 +1081,18 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
 
 적용 순서는 다음과 같다.
 
-1. DAG가 실행 중이지 않은 운영 창에서만 `.github/workflows/dev-apply.yml`을 수동
-   실행해 dev root plan을 만들고, `dev-apply` Environment reviewer 게이트에서
-   승인한다. 승인된 workflow만 같은 plan을 apply한다. GKE VPA addon 변경은 비동기
+1. `admin-apply` 승인 workflow로 Task 4의 namespace-scoped `airflow-vpa` Role과
+   RoleBinding을 먼저 적용하고 완료를 확인한다. 이 단계는 GKE addon `dev-apply`보다
+   먼저 끝나야 한다. GKE addon 내부 RBAC 또는 `admin` ClusterRole aggregation은 이
+   권한을 제공한다고 가정하지 않는다.
+2. `admin-apply` 완료 후에만 DAG가 실행 중이지 않은 운영 창에서
+   `.github/workflows/dev-apply.yml`을 수동 실행해 dev root plan을 만들고,
+   `dev-apply` Environment reviewer 게이트에서 승인한다. 승인 전 상세 plan에서
+   `google_container_cluster.dev`의 in-place VPA 변경만 있는지, destroy/replace와 IAM,
+   node pool, network, Secret 변경이 없는지 확인한다.
+3. 승인된 `dev-apply` workflow만 같은 plan을 apply한다. GKE VPA addon 변경은 비동기
    GKE operation이므로, workflow 성공만으로 다음 단계로 진행하지 않고 해당 operation의
    완료를 확인한 뒤 readiness 검사를 시작한다.
-2. 승인 전 상세 plan에서 `google_container_cluster.dev`의 in-place VPA 변경만 있는지,
-   destroy/replace와 IAM, node pool, network, Secret 변경이 없는지 확인한다.
-3. `admin-apply` 승인 workflow로 Task 4의 namespace-scoped `airflow-vpa` Role과
-   RoleBinding을 먼저 적용한다. GKE addon 내부 RBAC 또는 `admin` ClusterRole aggregation은
-   이 권한을 제공한다고 가정하지 않는다.
 4. CRD가 아직 없으면 condition-only `kubectl wait`가 즉시 NotFound으로 실패하므로,
    생성, Established, served API discovery를 아래 순서로 확인한다. 대화형 shell을
    종료하지 않도록 polling은 `bash -c` 서브셸에서 실행한다.
@@ -1115,8 +1117,11 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
    '
    ```
 
-5. Autoresearch-airflow#159를 merge하기 전에 실제 Helm deployer identity로 VPA
-   lifecycle 모든 동사를 확인한다.
+5. Autoresearch-airflow#159를 merge하기 전에 `airflow_deployer_service_account_email`로
+   구성된 Airflow Helm deployer GSA의 실제 WIF 자격증명으로 인증된 kubeconfig context에서
+   VPA lifecycle 모든 동사를 확인한다. 운영자의 현재 context 결과는 이 검증으로 인정하지
+   않으며, `--as` impersonation은 실제 deployer identity 인증을 대체하지 않으므로 사용하지
+   않는다.
 
    ```bash
    for verb in get list watch create update patch delete; do
