@@ -4,6 +4,12 @@ name: PR Report Archive
 # 검색 인덱스를 Pages 루트에 갱신합니다. workflow_run은 권한이 높은
 # 컨텍스트이므로 PR 코드나 artifact를 사용하지 않고 main의 생성기와
 # 정적인 gh-pages 콘텐츠만 읽습니다.
+#
+# 이 저장소는 fork가 아닌 브랜치 기반으로만 기여를 받습니다
+# (CONTRIBUTING.md 협업 흐름 참고) — fork PR의 pull_request:closed는
+# GITHUB_TOKEN이 read-only로 내려와 contents:write가 필요한 gh-pages
+# push가 실패합니다. fork 기여를 받기 시작하면 이 워크플로우도 함께
+# 재검토해야 합니다.
 
 on:
   pull_request:
@@ -19,10 +25,12 @@ permissions:
 
 jobs:
   publish-archive:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.merged == true) &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     concurrency:
-      group: pr-report-publish
+      group: pr-report-archive-publish
       cancel-in-progress: false
     steps:
       - name: Checkout main

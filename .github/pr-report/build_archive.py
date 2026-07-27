@@ -94,13 +94,18 @@ class _ReportDataParser(HTMLParser):
 def run(command: list[str]) -> str:
     """Run one external command and return stdout."""
 
-    return subprocess.run(
+    completed = subprocess.run(
         command,
-        check=True,
         capture_output=True,
         text=True,
         encoding="utf-8",
-    ).stdout
+    )
+    if completed.returncode != 0:
+        raise ArchiveBuildError(
+            f"command failed ({completed.returncode}): "
+            f"{' '.join(command)}\n{completed.stderr.strip()}"
+        )
+    return completed.stdout
 
 
 def discover_report_pages(pages_root: Path) -> dict[int, Path]:
@@ -186,7 +191,7 @@ def fetch_merged_pull_requests(
     try:
         raw = run(command)
         pages = json.loads(raw)
-    except (subprocess.CalledProcessError, OSError, json.JSONDecodeError) as error:
+    except (OSError, json.JSONDecodeError) as error:
         raise ArchiveBuildError(
             f"failed to fetch merged pull requests for {repository}: {error}"
         ) from error
@@ -299,7 +304,7 @@ def render_archive(
         raise ArchiveBuildError(
             f"{ARCHIVE_PLACEHOLDER} not found in archive template {template_path}"
         )
-    data = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+    data = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
     return template.replace(ARCHIVE_PLACEHOLDER, data, 1)
 
 
