@@ -151,6 +151,77 @@ helm upgrade --install airflow apache-airflow/airflow \
 저장소에서 관리한다. 이 인프라 저장소는 namespace, RBAC, Workload Identity,
 내부망 접근 경계만 제공한다.
 
+## VPA 관측 확인 (#373)
+
+`admin-apply` 승인 workflow로 Task 4의 namespace-scoped `airflow-vpa` Role과 RoleBinding을
+먼저 적용하고 완료를 확인한다. 이 단계는 GKE addon `dev-apply`보다 먼저 끝나야 하며, GKE
+addon 내부 RBAC나 `admin` ClusterRole aggregation이 필요한 VPA 권한을 제공한다고 가정하지
+않는다. `admin-apply` 완료 후에만 `dev-apply`를 DAG가 실행 중이지 않은 운영 창에서
+승인한다. GKE VPA addon 변경은 비동기 GKE operation이므로 workflow 성공만으로 readiness
+검사를 시작하지 말고, 해당 operation 완료를 먼저 확인한다.
+
+CRD가 아직 없으면 condition-only `kubectl wait`는 즉시 NotFound으로 실패한다. 생성,
+Established, served API discovery를 아래 순서로 확인한다. 대화형 shell을 종료하지 않도록
+polling은 `bash -c` 서브셸에서 실행한다.
+
+```bash
+bash -c '
+  set -euo pipefail
+  kubectl wait --for=create --timeout=120s \
+    crd/verticalpodautoscalers.autoscaling.k8s.io
+  kubectl wait --for=condition=Established --timeout=120s \
+    crd/verticalpodautoscalers.autoscaling.k8s.io
+  deadline=$((SECONDS + 120))
+  while ! kubectl api-resources --request-timeout=5s \
+    --api-group=autoscaling.k8s.io \
+    | awk "\$1 == \"verticalpodautoscalers\" { found = 1 } END { exit !found }"
+  do
+    if (( SECONDS >= deadline )); then
+      printf "%s\\n" "VPA served API discovery timed out after 120 seconds." >&2
+      exit 1
+    fi
+    sleep 5
+  done
+'
+```
+
+첫 대기는 CRD 생성 자체를, 두 번째 대기는 Established 상태를 확인한다. 이어지는 polling은
+`kubectl api-resources --request-timeout=5s --api-group=autoscaling.k8s.io` 출력에
+`verticalpodautoscalers`가 나타날 때까지 총 120초 동안 기다리고, 각 API 요청은 5초로
+제한해 API server 또는 네트워크 hang이 polling deadline을 넘기지 않게 한다. timeout이면
+실패한다.
+
+실제 Helm deployer WIF context의 생성과 검증은 로컬 runbook 책임이 아니다. 정본은
+Autoresearch-airflow#159의 `deploy-gke-dev.yml` preflight이며, 이 workflow가 GitHub Actions
+WIF deployer GSA 자격증명으로 인증한 context에서 VPA lifecycle 모든 동사를 확인한다.
+운영자 개인 kubeconfig로 WIF identity를 흉내 내거나 `--as` impersonation을 사용하지 않는다.
+이 preflight는 `refs/heads/main`의 main push 배포 workflow에서 실행되므로 Airflow PR merge 전
+gate가 아니라 merge 후 deployment gate다. 따라서 Role/RoleBinding은 Airflow merge 전에
+`admin-apply`로 적용·검토되어야 한다.
+
+```bash
+set -e
+for verb in get list watch create update patch delete; do
+  kubectl auth can-i --quiet "$verb" verticalpodautoscalers.autoscaling.k8s.io --namespace airflow
+done
+```
+
+하나라도 권한이 없거나 명령 오류가 발생하면 `set -e`가 preflight를 즉시 실패시킨다. Helm
+배포를 중단하고 Task 4 Role/RoleBinding을 수정하며, 권한 오류를 cluster-wide RBAC로
+우회하지 않는다.
+
+Autoresearch-airflow#159가 `airflow-scheduler` VPA CR을 배포한 후에는 해당 VPA와
+recommendation을 확인한다.
+
+```bash
+kubectl get vpa airflow-scheduler --namespace airflow
+kubectl describe vpa airflow-scheduler --namespace airflow
+```
+
+실제 workload 데이터가 충분히 누적되기 전에는 recommendation이 비어 있을 수 있다.
+초기 VPA는 observation-only `updateMode: "Off"`이므로 이 절차는 scheduler resource를
+자동 변경하지 않는다.
+
 ## Bastion 접속
 
 Bastion은 외부 IP가 없고 IAP 터널로만 접속한다. SSH 단독 접속은 점검용이다.

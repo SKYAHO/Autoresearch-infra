@@ -1066,6 +1066,82 @@ metadata와 resource-level IAM만 `4 added, 0 changed, 0 destroyed`로
 - 비밀번호 rotation: `random_password` 재생성(수동 `terraform -replace=random_password.db_app_password` 또는 keepers) → SQL user(`cloud_sql.tf`)와 Secret version(`secret_manager.tf`)에 동일 값 반영. 같은 소스라 parity 유지.
 - 롤백: `terraform destroy`로 dev stack 제거. state는 GCS backend에 남으며, 비용 리소스(Cloud SQL/GKE/NAT) 삭제 여부를 반드시 확인한다.
 
+## GKE VPA 관측 (#373)
+
+`google_container_cluster.dev`의 최상위
+`vertical_pod_autoscaling { enabled = true }`는 GKE VPA CRD와
+recommender/controller를 제공한다. scheduler VPA resource는 Helm release 소유이므로
+Autoresearch-airflow#159가 배포한다.
+
+LocalExecutor task는 scheduler Pod 안에서 실행되므로 `Auto`와 `Recreate` mode가
+scheduler Pod eviction을 일으켜 장시간 task를 중단할 수 있다. 따라서 초기 VPA는
+`updateMode: "Off"`만 사용하여 recommendation만 수집하며, scheduler `values.yaml`
+resource 변경은 recommendation, namespace quota, node allocatable resource를 검토한
+후 별도 이슈에서 수동으로 한다.
+
+적용 순서는 다음과 같다.
+
+1. `admin-apply` 승인 workflow로 Task 4의 namespace-scoped `airflow-vpa` Role과
+   RoleBinding을 먼저 적용하고 완료를 확인한다. 이 단계는 GKE addon `dev-apply`보다
+   먼저 끝나야 한다. GKE addon 내부 RBAC 또는 `admin` ClusterRole aggregation은 이
+   권한을 제공한다고 가정하지 않는다.
+2. `admin-apply` 완료 후에만 DAG가 실행 중이지 않은 운영 창에서
+   `.github/workflows/dev-apply.yml`을 수동 실행해 dev root plan을 만들고,
+   `dev-apply` Environment reviewer 게이트에서 승인한다. 승인 전 상세 plan에서
+   `google_container_cluster.dev`의 in-place VPA 변경만 있는지, destroy/replace와 IAM,
+   node pool, network, Secret 변경이 없는지 확인한다.
+3. 승인된 `dev-apply` workflow만 같은 plan을 apply한다. GKE VPA addon 변경은 비동기
+   GKE operation이므로, workflow 성공만으로 다음 단계로 진행하지 않고 해당 operation의
+   완료를 확인한 뒤 readiness 검사를 시작한다.
+4. CRD가 아직 없으면 condition-only `kubectl wait`가 즉시 NotFound으로 실패하므로,
+   생성, Established, served API discovery를 아래 순서로 확인한다. 대화형 shell을
+   종료하지 않도록 polling은 `bash -c` 서브셸에서 실행한다.
+
+   ```bash
+   bash -c '
+     set -euo pipefail
+     kubectl wait --for=create --timeout=120s \
+       crd/verticalpodautoscalers.autoscaling.k8s.io
+     kubectl wait --for=condition=Established --timeout=120s \
+       crd/verticalpodautoscalers.autoscaling.k8s.io
+     deadline=$((SECONDS + 120))
+     while ! kubectl api-resources --request-timeout=5s \
+       --api-group=autoscaling.k8s.io \
+       | awk "\$1 == \"verticalpodautoscalers\" { found = 1 } END { exit !found }"
+     do
+       if (( SECONDS >= deadline )); then
+         printf "%s\\n" "VPA served API discovery timed out after 120 seconds." >&2
+         exit 1
+       fi
+       sleep 5
+     done
+   '
+   ```
+
+5. 실제 Helm deployer WIF context의 생성과 검증은 로컬 runbook 책임이 아니다. 정본은
+   Autoresearch-airflow#159의 `deploy-gke-dev.yml` preflight이며, 이 workflow가 GitHub
+   Actions WIF deployer GSA 자격증명으로 인증한 context에서 VPA lifecycle 모든 동사를
+   확인한다. 운영자 개인 kubeconfig로 WIF identity를 흉내 내거나 `--as` impersonation을
+   사용하지 않는다. 이 preflight는 `refs/heads/main`의 main push 배포 workflow에서
+   실행되므로 Airflow PR merge 전 gate가 아니라 merge 후 deployment gate다. 따라서
+   Role/RoleBinding은 Airflow merge 전에 `admin-apply`로 적용·검토되어야 한다.
+
+   ```bash
+   set -e
+   for verb in get list watch create update patch delete; do
+     kubectl auth can-i --quiet "$verb" verticalpodautoscalers.autoscaling.k8s.io --namespace airflow
+   done
+   ```
+
+   하나라도 권한이 없거나 명령 오류가 발생하면 `set -e`가 preflight를 즉시 실패시킨다.
+   Helm 배포를 중단하고 Task 4 Role/RoleBinding을 수정하며, 이를 cluster-wide RBAC로
+   우회하지 않는다.
+6. 로컬 `terraform.tfvars` plan/apply는 CI를 사용할 수 없는 경우의 break-glass로만
+   사용하며, 같은 변경 제한과 별도 승인을 적용한다.
+
+롤백 시에는 Airflow VPA CR을 먼저 제거하고, recommender/controller가 더 이상
+필요하지 않은 것을 확인한 뒤 addon 비활성화 변경을 별도 plan과 승인으로 적용한다.
+
 ## dev Airflow (#32)
 
 Airflow 구성요소가 배포되는 GKE namespace 경계와, 거기에 물릴 GCP 권한(Cloud SQL / GCS / BigQuery)을 IaC로 관리한다. Airflow Helm chart values, executor, fernet key, DAG, image 설정은 이 저장소 범위 밖이며 [`SKYAHO/Autoresearch-airflow`](https://github.com/SKYAHO/Autoresearch-airflow)에서 관리한다.

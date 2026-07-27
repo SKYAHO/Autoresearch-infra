@@ -48,6 +48,49 @@ resource "kubernetes_role_v1" "airflow_components" {
   }
 }
 
+resource "kubernetes_role_v1" "airflow_vpa" {
+  metadata {
+    name      = "airflow-vpa"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  rule {
+    api_groups = ["autoscaling.k8s.io"]
+    resources  = ["verticalpodautoscalers"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+
+resource "kubernetes_role_binding_v1" "airflow_vpa" {
+  metadata {
+    name      = "airflow-vpa"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role_v1.airflow_vpa.metadata[0].name
+  }
+
+  dynamic "subject" {
+    for_each = toset(concat(
+      [local.airflow_deployer_service_account_email],
+      tolist(var.installer_user_emails),
+    ))
+
+    content {
+      api_group = "rbac.authorization.k8s.io"
+      kind      = "User"
+      name      = subject.value
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+
 resource "kubernetes_role_binding_v1" "airflow_sa" {
   metadata {
     name      = "airflow-sa"

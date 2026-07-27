@@ -87,6 +87,10 @@ resource "google_container_cluster" "dev" {
     }
   }
 
+  vertical_pod_autoscaling {
+    enabled = true
+  }
+
   # private nodes. 마스터 접근 기본 경로는 DNS 엔드포인트(#45, IAM 검증)이고,
   # public IP 엔드포인트 + master_authorized_networks는 예비 경로로 병행 유지.
   private_cluster_config {
