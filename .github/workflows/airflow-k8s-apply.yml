@@ -1,0 +1,101 @@
+# Airflow Kubernetes admin root만 수동 plan/apply 한다. 공개 로그에는 allowlist와
+# plan 원문을 남기지 않고, plan 바이너리는 private state 버킷으로 job 간 전달한다.
+name: airflow-k8s-apply
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # GitHub OIDC -> GCP WIF
+  contents: read
+
+concurrency:
+  group: airflow-k8s-apply
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  PLAN_PATH: gs://autoresearch-dev-tfstate/airflow-k8s-apply-plans/${{ github.run_id }}.tfplan
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_installer_user_emails: ${{ secrets.AIRFLOW_INSTALLER_USER_EMAILS }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Guard required installer allowlist secret
+        env:
+          AIRFLOW_INSTALLER_USER_EMAILS: ${{ secrets.AIRFLOW_INSTALLER_USER_EMAILS }}
+        run: |
+          if [ -z "$AIRFLOW_INSTALLER_USER_EMAILS" ]; then
+            echo "::error::AIRFLOW_INSTALLER_USER_EMAILS Secret 미설정: 빈 값으로 apply하면 설치자 접근이 삭제됩니다. 설정 후 재실행하세요."
+            exit 1
+          fi
+
+      - name: Plan airflow-k8s root
+        run: |
+          d="terraform/admin/airflow-k8s"
+          mask='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<email>/g'
+          terraform -chdir="$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::airflow-k8s init 실패"; grep -iE "error" "$d/step.txt" | sed -E "$mask" | head -20; exit 1; }
+          set +e
+          terraform -chdir="$d" plan -input=false -no-color -out=tfplan.bin > "$d/plan.txt" 2>&1
+          rc=$?
+          set -e
+          {
+            echo "### airflow-k8s"
+            echo '```text'
+            grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' "$d/plan.txt" | sed -E "$mask" || echo '(요약 없음)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::airflow-k8s plan 실패(rc=$rc):"
+            grep -iE "error|denied|forbidden|refused|cannot|failed" "$d/plan.txt" | sed -E "$mask" | head -30
+            exit "$rc"
+          fi
+          gcloud storage cp "$d/tfplan.bin" "$PLAN_PATH"
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: airflow-k8s-apply
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+
+      - name: Apply airflow-k8s root
+        run: |
+          d="terraform/admin/airflow-k8s"
+          mask='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<email>/g'
+          terraform -chdir="$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::airflow-k8s init 실패"; exit 1; }
+          gcloud storage cp "$PLAN_PATH" "$d/tfplan.bin"
+          set +e
+          terraform -chdir="$d" apply -input=false -no-color tfplan.bin > "$d/apply.txt" 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::airflow-k8s apply 실패(rc=$rc):"
+            grep -iE "error" "$d/apply.txt" | sed -E "$mask" | head -30
+            exit "$rc"
+          fi
+          grep -E '^Apply complete' "$d/apply.txt" | sed -E "$mask" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup plan
+        if: always()
+        run: gcloud storage rm "$PLAN_PATH" || true
