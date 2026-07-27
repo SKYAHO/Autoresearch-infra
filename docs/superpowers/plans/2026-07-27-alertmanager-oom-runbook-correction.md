@@ -36,7 +36,7 @@
 
 **Interfaces:**
 - Consumes: `ContainerOOMKilled` query `kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1` and its confirmed `for: 1m` firing behavior.
-- Produces: Every actionable OOM test instruction uses `restartPolicy: Always` and explains why the Pod must restart before the rule can fire.
+- Produces: Every actionable OOM test instruction uses `restartPolicy: Always`, waits for `.status.containerStatuses[0].lastState.terminated.reason`, and explains why the Pod must restart before the rule can fire.
 
 - [ ] **Step 1: Prove the stale contract exists before editing**
 
@@ -81,6 +81,8 @@ Replace the stale expected result with:
 Expected: container restart 뒤 `ContainerOOMKilled`가 pending을 거쳐 one-minute rule delay 후 firing하며 warning 이메일이 도착한다.
 ```
 
+In the executable `kubectl wait` command, replace `.status.containerStatuses[0].state.terminated.reason` with `.status.containerStatuses[0].lastState.terminated.reason` so the OOMKilled reason remains observable after the `restartPolicy: Always` container restarts.
+
 Keep the explicit deletion and resolved-email contract unchanged.
 
 - [ ] **Step 4: Run static contract checks**
@@ -94,9 +96,12 @@ grep -n "restartPolicy: Always" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
 grep -n "last_terminated_reason" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+grep -n "lastState.terminated.reason" \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-oom-runbook-correction.md
 ```
 
-Expected: the negative check exits zero; the remaining output shows the new restart policy and metric explanation in the changed documents.
+Expected: the negative check exits zero; the remaining output shows the new restart policy, metric explanation, and post-restart `lastState.terminated.reason` selector in the changed documents.
 
 ### Task 2: Alertmanager 운영 상태 정정
 

@@ -421,7 +421,7 @@ spec:
 EOF
 
 kubectl -n monitoring wait \
-  --for=jsonpath='{.status.containerStatuses[0].state.terminated.reason}'=OOMKilled \
+  --for=jsonpath='{.status.containerStatuses[0].lastState.terminated.reason}'=OOMKilled \
   pod/alertmanager-oom-test --timeout=5m
 ```
 
