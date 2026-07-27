@@ -71,7 +71,7 @@ elastic-k8s README 복구 절 참조). Grafana as-code처럼 자동 반영되는
 | 목적 | KQL 예시 (구조화 후) | 전환 전 폴백 |
 |---|---|---|
 | Airflow 에러 | `kubernetes.namespace: "airflow" and log.level: (ERROR or CRITICAL)` | `message: "ERROR"` |
-| 특정 DAG task (KPO) | `kubernetes.labels.dag_id: "<dag>" and kubernetes.labels.task_id: "<task>"` — 파드 라벨 기반이라 Airflow 설정과 무관하게 동작(#147 실측). LocalExecutor 인프로세스 태스크 로그는 GCS/웹서버 UI에서 본다 | 동일 |
+| 특정 DAG task (KPO) | `kubernetes.labels.dag_id: "<dag>" and kubernetes.labels.task_id: "<task>"` — 파드 라벨 기반이라 Airflow 설정과 무관하게 동작(#147 실측). LocalExecutor 인프로세스 태스크 로그는 GCS/웹서버 UI에서 본다 | K8s 라벨 값 제약(63자 초과·특수문자 시 KPO가 잘라내거나 치환)으로 정확 일치가 빗나가면 접두 와일드카드 `kubernetes.labels.dag_id: <앞부분>*` 또는 `kubernetes.pod.name: <task명 기반 접두>*` |
 | 앱 에러 로그 | `kubernetes.namespace: "autoresearch" and log.level: ERROR` | `message: "ERROR"` |
 | uvicorn 5xx | `log.logger: "uvicorn.access" and message: *500*` — **오탐 포함**(클라이언트 포트 `50xxx` 등도 매칭). 정확한 5xx 판정용 아님, #352 이후 `http.response.status_code >= 500` 필드로 교체 예정 | — |
 | JSON 파싱 실패율 점검 | `error.type: json` — Beat 단 디코딩 실패만 계측. 앱 전환 완료 후 0에 수렴해야 정상 | — |
