@@ -7,6 +7,8 @@ Kubernetes 측 경계를 별도 state로 관리합니다.
 - app GCP service account와 연결된 `autoresearch-app` KSA
 - DNS, Cloud SQL, Redis Cluster PSC, Workload Identity, HTTPS만 허용하는 egress
   NetworkPolicy
+- `feast-apply` namespace + KSA + GitHub Actions용 Job RBAC + 전용 egress
+  NetworkPolicy (#346, `feast_apply.tf`)
 
 GCP Redis Cluster, PSC subnet/policy, TLS CA Secret Manager, app GSA와 Workload
 Identity IAM member는 `terraform/envs/dev`에서 관리합니다. 애플리케이션
@@ -193,6 +195,102 @@ kubectl auth can-i get secrets                           -n autoresearch --as=<�
 
 롤백: 대상 계정을 `autoresearch_viewer_user_emails`에서 제거하고 다시 apply하면
 해당 RoleBinding이 삭제된다.
+
+## feast apply GKE Job 경계 (#346)
+
+`feast apply`의 online store 고아 키 정리(`full_scan_for_deletion: true`)는
+Redis(PSC, VPC 내부)에 직접 닿아야 해서 GitHub Actions 러너에서는 불가능하다.
+실행 주체만 VPC 안 GKE Job으로 옮기고, GHA는 Job 생성·결과 판정만 한다.
+GCP IAM(Redis·Secret Manager·Workload Identity·`container.clusterViewer`)은
+`terraform/envs/dev`가 관리하며, 여기서는 Kubernetes 측 경계만 만든다
+(`feast_apply.tf`).
+
+| 리소스 | 이름 | 비고 |
+|---|---|---|
+| Namespace | `feast-apply` (`feast_apply_k8s_namespace`) | 앱 namespace와 분리 |
+| KSA | `feast-apply` (`feast_apply_k8s_service_account`) | `iam.gke.io/gcp-service-account` = `autoresearch-dev-feast-apply@…` |
+| Role | `feast-apply-job-runner` | 아래 동사 |
+| RoleBinding | `feast-apply-job-runner` | subject `kind: User`, name = feast apply GSA email |
+| NetworkPolicy | `feast-apply-egress` | 아래 표 |
+
+**앱 namespace(`autoresearch`)를 재사용하지 않은 이유**: 그 namespace에
+`batch/jobs: create`를 주면 Job의 `serviceAccountName`을 `autoresearch-app`으로
+지정해 `autoresearch-dev-app` GSA(DB 비밀번호 secret·Cloud SQL·BQ dataEditor)로
+임의 컨테이너를 실행할 수 있다. `jobs: create` 보유 주체는 Pod spec으로
+namespace 내 임의 K8s Secret도 볼륨/`envFrom`으로 마운트할 수 있어, RBAC에서
+`secrets`를 빼는 것만으로는 차단되지 않는다. 전용 namespace에 KSA를 하나만 두어
+"Job을 만들 수 있다" = "feast-apply GSA로만 실행할 수 있다"가 성립하게 한다.
+
+### RBAC 동사 (앱 저장소와의 계약)
+
+| 리소스 | 동사 |
+|---|---|
+| `batch/jobs` | `get`, `list`, `watch`, `create`, `delete` |
+| `pods` | `get`, `list` |
+| `pods/log` | `get` |
+
+- `watch`는 필수다. `kubectl wait`가 list+watch로 동작해 누락 시 403이 된다.
+- `update`/`patch`는 주지 않는다. Job spec은 대부분 immutable이라 `kubectl apply`로
+  갱신되지 않으므로, 워크플로우는 **"delete 후 create"** 절차를 전제로 한다.
+- `pods/exec`와 cluster-admin은 부여하지 않는다.
+
+### NetworkPolicy
+
+앱 namespace의 `autoresearch-egress`는 `pod_selector {}`로 그 namespace에만
+적용되므로 전용 namespace에는 걸리지 않는다. 필요한 범위만 이식했다.
+
+| 대상 | CIDR/selector | Port |
+|---|---|---|
+| DNS | services CIDR, `kube-system` | UDP/TCP 53 |
+| Redis discovery | `redis_psc_subnet_cidr` | TCP 6379 |
+| Redis data nodes | `redis_psc_subnet_cidr` | TCP 11000-13047 |
+| GKE metadata | link-local endpoint | TCP 80, 987, 988 |
+| HTTPS API | `0.0.0.0/0` | TCP 443 |
+
+Cloud SQL(`private_services_cidr`:5432)은 `feast apply`에 불필요해 이식하지
+않았다. HTTPS 규칙은 Secret Manager(Redis CA)·GCS(registry)·BigQuery(source
+validation) 호출에 쓰인다.
+
+### 적용과 검증
+
+`terraform-plan.yml`은 경로 필터·실행 대상이 `terraform/envs/dev`로 고정돼 있어
+admin root는 PR 시점에 fmt/validate/plan이 돌지 않는다. **로컬 검증이 필수다.**
+
+```bash
+terraform -chdir=terraform/admin/autoresearch-k8s fmt -check
+terraform -chdir=terraform/admin/autoresearch-k8s validate
+terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvars
+```
+
+plan에는 namespace 1 + KSA 1 + Role 1 + RoleBinding 1 + NetworkPolicy 1, 총 5건만
+add로 보여야 하고 기존 `autoresearch` namespace 리소스에는 변경이 없어야 한다.
+
+`admin-apply.yml`은 `ROOTS` 8개를 일괄 plan/apply하므로, 승인 전 나머지 7개 root의
+미반영 drift가 함께 적용되지 않는지 전 root plan 요약을 확인한다.
+
+적용 후 검증:
+
+```bash
+kubectl get ns feast-apply
+kubectl -n feast-apply get sa feast-apply -o jsonpath='{.metadata.annotations}'
+kubectl auth can-i create jobs -n feast-apply \
+  --as=autoresearch-dev-feast-apply@<project>.iam.gserviceaccount.com   # → yes
+kubectl auth can-i get secrets -n feast-apply \
+  --as=autoresearch-dev-feast-apply@<project>.iam.gserviceaccount.com   # → no
+```
+
+> GKE에서는 Google 계정/GSA를 `--as`로 impersonate한 `can-i` 결과가 IAM 경로 때문에
+> 실제 권한과 다르게 나올 수 있다. 확실한 확인은
+> `kubectl -n feast-apply get rolebinding feast-apply-job-runner -o yaml`로
+> subject와 `roleRef`를 직접 대조하는 것이다.
+
+**순서**: dev root(GCP IAM)와 이 root(K8s) 사이에는 순서 제약이 없다. 다만 둘 다
+앱 저장소의 `feast-apply.yml` 머지 전에 완료돼야 한다.
+
+롤백: `feast_apply.tf`를 제거하고 apply하면 namespace와 하위 오브젝트가 함께
+삭제된다. 앱 저장소의 `feast-apply.yml`이 아직 이 경로를 쓰고 있으면 워크플로우가
+실패하므로, 앱 쪽을 먼저 GHA 러너 실행 + `full_scan_for_deletion: false`로
+되돌린 뒤 제거한다.
 
 ## 장애 복구와 롤백
 

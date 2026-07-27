@@ -118,4 +118,7 @@ locals {
   es_snapshot_bucket_name        = "${var.project_id}-${local.resource_prefix}-es-snapshots"
   es_snapshot_sa_name            = "${local.resource_prefix}-es-snapshot"
   es_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.elastic_k8s_namespace}/${var.es_k8s_service_account}]"
+
+  # #346 feast apply Job Pod가 feast_apply GSA를 가장할 principal.
+  feast_apply_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.feast_apply_k8s_namespace}/${var.feast_apply_k8s_service_account}]"
 }
