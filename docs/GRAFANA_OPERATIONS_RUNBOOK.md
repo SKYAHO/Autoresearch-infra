@@ -169,7 +169,20 @@ print("Alertmanager config generated without displaying SMTP values.")
 PY
 ```
 
-생성 직후 다음 절차로 Secret을 create-or-replace한다. 기존 Secret이 있으면
+생성 직후, Kubernetes Secret API를 변경하기 전에 로컬 설정을 검증한다. 이 명령은
+생성한 `alertmanager.yaml`만 읽으며 Secret payload를 출력하지 않는다.
+
+```bash
+docker run --rm \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  amtool check-config /work/alertmanager.yaml
+```
+
+`amtool` 호출은 성공해야 하며, 그 입력 또는 출력을 티켓, 터미널 녹화, 로그에
+복사하지 않는다.
+
+검증이 성공한 경우에만 다음 절차로 Secret을 create-or-replace한다. 기존 Secret이 있으면
 `resourceVersion`을 포함한 전체 객체를 in-place replace하므로, 이전 `data` 키가
 남지 않고 결과는 `alertmanager.yaml` 키 하나만 가진다. Alertmanager가 참조 중일 수
 있으므로 delete-and-recreate는 사용하지 않는다. 모든 Secret payload는 mode-0600 임시
@@ -217,14 +230,13 @@ else
   kubectl -n monitoring create -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
 fi
 
-kubectl -n monitoring describe secret alertmanager-smtp-config
-docker run --rm \
-  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
-  quay.io/prometheus/alertmanager:v0.33.1 \
-  amtool check-config /work/alertmanager.yaml
+kubectl -n monitoring get secret alertmanager-smtp-config \
+  -o custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type,RESOURCE-VERSION:.metadata.resourceVersion,CREATED:.metadata.creationTimestamp
 ```
 
-`describe`에는 `alertmanager.yaml` 키 하나만 보여야 한다. `amtool` 호출은 성공해야 하며, 그 입력 또는 출력을 티켓, 터미널 녹화, 로그에 복사하지 않는다.
+update 뒤에는 위와 같이 Secret metadata만 확인한다. payload를 출력하거나 복사하지
+않는다. create-or-replace 입력은 `alertmanager.yaml` 키 하나만 포함하므로 결과 Secret도
+그 키 하나만 가진다.
 
 ### Cluster 검증, 해소 알림, 롤백
 
