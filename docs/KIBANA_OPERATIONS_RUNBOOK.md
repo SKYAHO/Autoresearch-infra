@@ -42,24 +42,38 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 
 `elastic` 비밀번호는 ECK operator가 관리하므로 임의 변경하지 않는다.
 
-## 최초 1회: data view 생성
+## data view·저장 검색·대시보드 (#359)
 
-Discover가 비어 보이면 data view부터 만든다:
-좌측 메뉴 → Stack Management → Data views → Create data view →
-Index pattern `filebeat-*`, Timestamp field `@timestamp`.
+data view(`filebeat-*` + `@timestamp`), 저장 검색 4종(Airflow 에러 / DAG
+task 로그 / 앱 에러 / uvicorn 5xx), 대시보드 **Logs Overview**(로그량·
+log.level 분포·에러 logger Top 10·최근 에러)가 저장돼 있다. Discover가
+비어 보이면 좌측 메뉴 → Dashboards → `Logs Overview` 또는 Discover에서
+저장 검색을 연다.
+
+이 객체들의 복원 원본은 저장소
+`terraform/admin/elastic-k8s/kibana-saved-objects/logs-overview.ndjson`이다.
+재해복구 또는 재구축 시:
+Stack Management → Saved Objects → Import (또는
+`POST /api/saved_objects/_import?overwrite=true`). **Kibana UI에서 객체를
+수정했으면 같은 경로에서 export해 이 파일에 덮어써 커밋한다**(Grafana
+대시보드 as-code와 동일 원칙).
 
 ## 로그 검색 (Discover, KQL)
 
 수집 범위는 `airflow`·`autoresearch` namespace 컨테이너 로그다(#100 —
-시스템 로그는 Cloud Logging에서 본다).
+시스템 로그는 Cloud Logging에서 본다). Filebeat이 JSON 한 줄 로그를
+최상위 필드로 전개하므로(#359 ndjson parser), 구조화 로깅(#352/#147)
+전환 후에는 필드 기반 KQL을 쓴다. 전환 전 로그는 `message` 전문 매칭으로
+폴백한다(비JSON 라인은 `error.type: json` 마커와 함께 원문 보존).
 
-| 목적 | KQL 예시 |
-|---|---|
-| Airflow scheduler 로그 | `kubernetes.namespace: "airflow" and kubernetes.container.name: "scheduler"` |
-| Airflow DAG/task 실패 | `kubernetes.namespace: "airflow" and (message: "ERROR" or message: "Task failed")` |
-| 특정 DAG 실행 pod (KPO) | `kubernetes.namespace: "airflow" and kubernetes.pod.name: <pod-name>*` |
-| 앱 에러 로그 | `kubernetes.namespace: "autoresearch" and message: "ERROR"` |
-| 특정 컨테이너 | `kubernetes.container.name: "webserver"` |
+| 목적 | KQL 예시 (구조화 후) | 전환 전 폴백 |
+|---|---|---|
+| Airflow 에러 | `kubernetes.namespace: "airflow" and log.level: (ERROR or CRITICAL)` | `message: "ERROR"` |
+| 특정 DAG task | `dag_id: "<dag>" and task_id: "<task>"` | `kubernetes.pod.name: <pod-name>*` |
+| 앱 에러 로그 | `kubernetes.namespace: "autoresearch" and log.level: ERROR` | `message: "ERROR"` |
+| uvicorn 5xx | `log.logger: "uvicorn.access" and message: *500*` | — |
+| JSON 파싱 실패율 점검 | `error.type: json` — 앱 전환 완료 후 0에 수렴해야 정상 | — |
+| 특정 컨테이너 | `kubernetes.container.name: "webserver"` | — |
 
 Kubernetes 이벤트(스케줄 실패, OOMKilled 등)는 컨테이너 stdout이 아니라
 API 오브젝트라 ELK 수집 범위 밖이다 — `kubectl get events` 또는

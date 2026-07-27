@@ -166,6 +166,19 @@ resource "kubernetes_manifest" "filebeat" {
                         ]
                         parsers = [
                           { container = {} },
+                          # #359 구조화(JSON 한 줄) 로그를 최상위 필드로 전개.
+                          # add_error_key: 비JSON 라인은 message 원문이 그대로
+                          # 남고 error.type=json 마커만 붙는다 — JSON/평문
+                          # 혼재기에 안전해 앱 전환(#352/#147) 전 선행 배포
+                          # 가능. overwrite_keys: 앱이 찍은 @timestamp 등이
+                          # Filebeat 기본값을 이긴다.
+                          {
+                            ndjson = {
+                              target         = ""
+                              add_error_key  = true
+                              overwrite_keys = true
+                            }
+                          },
                         ]
                       },
                     ]
