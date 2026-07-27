@@ -28,6 +28,7 @@ Cloud Monitoring은 GCP managed resource의 기본 관측 수단으로 유지한
 현재 Cloud Logging/Monitoring은 GKE와 GCP 리소스의 기본 로그/지표를 제공한다.
 Prometheus/Grafana는 이를 대체하지 않고, Kubernetes application metric과 운영
 dashboard를 다루는 별도 계층으로 둔다.
+Slack 등 즉시 알림 채널은 SMTP 이메일 운영의 선행 조건이 아닌 후속 범위로 둔다.
 
 ## 설계 결정
 
