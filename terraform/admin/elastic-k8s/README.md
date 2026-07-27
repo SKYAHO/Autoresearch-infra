@@ -131,7 +131,7 @@ anonymous를 폐기(#325)해 Kibana 5601은 이제 항상 basic 로그인을 요
 | 항목 | 값 | 비고 |
 |---|---|---|
 | 수집기 | Filebeat (ECK `Beat` CR, DaemonSet) | Elastic Agent 대신 단일 용도로 단순화(#96) |
-| 수집 범위 | **`airflow`·`autoresearch` namespace 컨테이너 로그만** | autodiscover 조건 allowlist. 시스템/플랫폼 로그는 Cloud Logging 담당 — 중복 수집 방지 기준(#96 역할 분리) |
+| 수집 범위 | **`airflow`·`autoresearch` namespace 컨테이너 로그 + `elastic` ns의 filebeat 컨테이너(자기 로그, #365)** | autodiscover 조건 allowlist. 그 외 시스템/플랫폼 로그는 Cloud Logging 담당 — 중복 수집 방지 기준(#96 역할 분리) |
 | RBAC | 전용 SA + 읽기 전용 ClusterRole | pods/namespaces/nodes/replicasets/jobs get·list·watch만 |
 | PSS | hostPath(/var/log) read가 baseline 위반 — **audit/warn만 발생(비강제), 수용** | 로그 수집기의 본질적 요구. enforce 전환 시 Beat 전용 예외 설계 필요 |
 | 인덱스 | data stream `filebeat-<version>` | 템플릿 replicas 0(#101 — single-node green 전제) |
@@ -207,8 +207,9 @@ curl -sk -u "elastic:$PW" "https://localhost:19200/_snapshot/gcs_snapshots/_all?
 
 > 주의(#359): SLM 정책은 `include_global_state: false`이고 아래 절차는
 > `.ds-filebeat-*`만 restore하므로 **Kibana saved object(`.kibana*`)는
-> 스냅샷·복구 범위 밖**이다. saved object 복원은 저장소의
-> `kibana-saved-objects/logs-overview.ndjson` import로 별도 수행한다.
+> 스냅샷·복구 범위 밖**이다. saved object는 apply 시
+> `kibana_saved_objects.tf` Job이 저장소 ndjson에서 자동 복원한다(#365 —
+> 수동 import는 폴백).
 
 ```bash
 # 1) snapshot 목록에서 대상 확인
@@ -275,12 +276,15 @@ terraform apply -target=helm_release.eck_operator
 terraform apply
 ```
 
-apply 후 **Kibana saved object import를 잊지 말 것**(#359): data view·저장
-검색·Logs Overview 대시보드는 `.kibana` 시스템 인덱스에 살고 아래 SLM
-스냅샷 범위 밖이라, 저장소의
+Kibana saved object(data view·저장 검색·Logs Overview 대시보드)는 `.kibana`
+시스템 인덱스에 살고 아래 SLM 스냅샷 범위 밖이라, 저장소의
 `kibana-saved-objects/logs-overview.ndjson`이 유일한 복구 원본이다.
-Stack Management → Saved Objects → Import (또는
-`POST /api/saved_objects/_import?overwrite=true`).
+**#365부터 자동 import** — `kibana_saved_objects.tf`의 Job이 ndjson 해시가
+바뀔 때(파일 변경)와 완전 재구성 시 `_import?overwrite=true`(멱등)를
+실행한다(Kibana 기동 전이면 선폴링+backoff로 흡수). **파일이 그대로인 채
+객체만 삭제된 경우 apply는 No changes** — 복원 강제는
+`terraform apply -replace=kubernetes_job_v1.kibana_saved_objects_import`.
+수동 import는 폴백: Stack Management → Saved Objects → Import.
 
 로컬 검증:
 

@@ -53,17 +53,28 @@ log.level 분포·에러 logger Top 10·최근 에러)가 저장돼 있다. Disc
 이 객체들의 **유일한 복원 원본**은 저장소
 `terraform/admin/elastic-k8s/kibana-saved-objects/logs-overview.ndjson`이다
 (saved object가 사는 `.kibana*` 인덱스는 SLM 스냅샷 범위 밖 —
-elastic-k8s README 복구 절 참조). Grafana as-code처럼 자동 반영되는 게
-아니라 **사람이 import해야 반영되는 저장소 백업본**이므로:
-재해복구·재구축 시 Stack Management → Saved Objects → Import (또는
-`POST /api/saved_objects/_import?overwrite=true`)를 수동 수행하고,
-**UI에서 객체를 수정했으면 export해 이 파일에 덮어써 커밋한다.**
-자동 import(Job/ArgoCD PostSync) 전환은 후속 이슈로 추적한다.
+elastic-k8s README 복구 절 참조). **#365부터 자동 import** —
+`kibana_saved_objects.tf`(elastic-k8s root)의 Job이
+`_import?overwrite=true`(멱등)를 실행한다. 재실행 트리거는 ① ndjson 내용
+변경 ② 완전 재구성뿐이므로, **파일이 그대로인 채 UI에서 객체만
+삭제·훼손된 경우에는** apply가 No changes로 지나간다 — 복원 강제:
+
+```bash
+terraform -chdir=terraform/admin/elastic-k8s apply \
+  -replace=kubernetes_job_v1.kibana_saved_objects_import
+```
+
+이 파일이 정본이고 재import 시 UI 상태를 덮어쓰므로, **UI에서 객체를
+수정했으면 반드시 export해 이 파일에 덮어써 커밋한다**. Job 결과 확인:
+`kubectl -n elastic get jobs -l app.kubernetes.io/name=kibana-so-import`
+(부분 실패도 본문 검증으로 Failed 처리). 수동 import(Stack Management →
+Saved Objects → Import)는 폴백.
 
 ## 로그 검색 (Discover, KQL)
 
-수집 범위는 `airflow`·`autoresearch` namespace 컨테이너 로그다(#100 —
-시스템 로그는 Cloud Logging에서 본다). Filebeat이 JSON 한 줄 로그를
+수집 범위는 `airflow`·`autoresearch` namespace 컨테이너 로그 + Filebeat
+자기 로그(`elastic` ns의 filebeat 컨테이너만, #365 색인 거부 관측용)다
+(#100 — 그 외 시스템·플랫폼 로그는 Cloud Logging에서 본다). Filebeat이 JSON 한 줄 로그를
 최상위 필드로 전개하므로(#359 ndjson parser), 구조화 로깅(#352/#147)
 전환 후에는 필드 기반 KQL을 쓴다. 전환 전 로그는 `message` 전문 매칭으로
 폴백한다(비JSON 라인은 `error.type: json` 마커와 함께 원문 보존).
@@ -75,16 +86,23 @@ elastic-k8s README 복구 절 참조). Grafana as-code처럼 자동 반영되는
 | 앱 에러 로그 | `kubernetes.namespace: "autoresearch" and log.level: ERROR` | `message: "ERROR"` |
 | uvicorn 5xx | `log.logger: "uvicorn.access" and message: *500*` — **오탐 포함**(클라이언트 포트 `50xxx` 등도 매칭). 정확한 5xx 판정용 아님, #352 이후 `http.response.status_code >= 500` 필드로 교체 예정 | — |
 | JSON 파싱 실패율 점검 | `error.type: json` — Beat 단 디코딩 실패만 계측. 앱 전환 완료 후 0에 수렴해야 정상 | — |
+| 특정 컨테이너 | `kubernetes.container.name: "webserver"` | — |
 
 `error.type: json`이 못 보는 손실 경로 — **ES 색인 거부**(매핑 충돌 400,
 예: 예약 object 키를 스칼라로 찍은 경우)는 문서 자체가 안 남아 무음이다.
-전환기(#352/#147 배포 전후)에는 Filebeat 파드 로그로 점검한다:
+#365부터 Filebeat이 자기 로그(filebeat 컨테이너 한정)를 수집하므로
+**저장 검색 `Filebeat 색인 거부 (Cannot index event)`로 상시 관측한다**
+(0건 정상 — 반복되면 로그 스키마 예약 키 계약 위반 의심). Filebeat 수집
+자체가 죽은 경우의 폴백은 파드 로그 직접 확인:
 
 ```bash
-kubectl -n elastic logs -l beat.k8s.elastic.co/name=filebeat --tail 200 \
+kubectl -n elastic logs -l beat.k8s.elastic.co/name=autoresearch --tail 200 \
   | grep -i "Cannot index event"   # 결과 0줄이 정상
 ```
-| 특정 컨테이너 | `kubernetes.container.name: "webserver"` | — |
+
+참고: elasticsearch-exporter 기반 Grafana 관측은 실측 탈락 — v1.9.0
+`/metrics` 전수 확인 결과 색인 실패(failed) 계열 메트릭이 존재하지 않는다
+(#365 기록).
 
 Kubernetes 이벤트(스케줄 실패, OOMKilled 등)는 컨테이너 stdout이 아니라
 API 오브젝트라 ELK 수집 범위 밖이다 — `kubectl get events` 또는

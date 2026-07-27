@@ -145,6 +145,21 @@ resource "kubernetes_manifest" "filebeat" {
                       or = [
                         { equals = { "kubernetes.namespace" = "airflow" } },
                         { equals = { "kubernetes.namespace" = "autoresearch" } },
+                        # #365 Filebeat "자기 로그만" 수집 — ES 색인 거부
+                        # (매핑 충돌 400 등)는 문서가 안 남아 무음인데,
+                        # Filebeat이 "Cannot index event" 경고를 자기 로그에
+                        # 남기므로 filebeat 컨테이너로 한정해 수집한다
+                        # (저장 검색 ar-search-filebeat-index-rejects).
+                        # ns 전체를 열지 않는 이유: ES/Kibana/operator 로그는
+                        # 플랫폼 로그라 상단 원칙(Cloud Logging 담당)과 충돌
+                        # (리뷰 반영). elasticsearch-exporter 대안은 실측
+                        # 탈락 — v1.9.0에 색인 실패 계열 메트릭이 없다.
+                        {
+                          and = [
+                            { equals = { "kubernetes.namespace" = "elastic" } },
+                            { equals = { "kubernetes.container.name" = "filebeat" } },
+                          ]
+                        },
                       ]
                     }
                     # Filebeat 9.x는 container/log input이 제거되어
