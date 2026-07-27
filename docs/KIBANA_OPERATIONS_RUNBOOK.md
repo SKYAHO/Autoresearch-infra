@@ -50,13 +50,15 @@ log.level 분포·에러 logger Top 10·최근 에러)가 저장돼 있다. Disc
 비어 보이면 좌측 메뉴 → Dashboards → `Logs Overview` 또는 Discover에서
 저장 검색을 연다.
 
-이 객체들의 복원 원본은 저장소
-`terraform/admin/elastic-k8s/kibana-saved-objects/logs-overview.ndjson`이다.
-재해복구 또는 재구축 시:
-Stack Management → Saved Objects → Import (또는
-`POST /api/saved_objects/_import?overwrite=true`). **Kibana UI에서 객체를
-수정했으면 같은 경로에서 export해 이 파일에 덮어써 커밋한다**(Grafana
-대시보드 as-code와 동일 원칙).
+이 객체들의 **유일한 복원 원본**은 저장소
+`terraform/admin/elastic-k8s/kibana-saved-objects/logs-overview.ndjson`이다
+(saved object가 사는 `.kibana*` 인덱스는 SLM 스냅샷 범위 밖 —
+elastic-k8s README 복구 절 참조). Grafana as-code처럼 자동 반영되는 게
+아니라 **사람이 import해야 반영되는 저장소 백업본**이므로:
+재해복구·재구축 시 Stack Management → Saved Objects → Import (또는
+`POST /api/saved_objects/_import?overwrite=true`)를 수동 수행하고,
+**UI에서 객체를 수정했으면 export해 이 파일에 덮어써 커밋한다.**
+자동 import(Job/ArgoCD PostSync) 전환은 후속 이슈로 추적한다.
 
 ## 로그 검색 (Discover, KQL)
 
@@ -71,8 +73,17 @@ Stack Management → Saved Objects → Import (또는
 | Airflow 에러 | `kubernetes.namespace: "airflow" and log.level: (ERROR or CRITICAL)` | `message: "ERROR"` |
 | 특정 DAG task | `dag_id: "<dag>" and task_id: "<task>"` | `kubernetes.pod.name: <pod-name>*` |
 | 앱 에러 로그 | `kubernetes.namespace: "autoresearch" and log.level: ERROR` | `message: "ERROR"` |
-| uvicorn 5xx | `log.logger: "uvicorn.access" and message: *500*` | — |
-| JSON 파싱 실패율 점검 | `error.type: json` — 앱 전환 완료 후 0에 수렴해야 정상 | — |
+| uvicorn 5xx | `log.logger: "uvicorn.access" and message: *500*` — **오탐 포함**(클라이언트 포트 `50xxx` 등도 매칭). 정확한 5xx 판정용 아님, #352 이후 `http.response.status_code >= 500` 필드로 교체 예정 | — |
+| JSON 파싱 실패율 점검 | `error.type: json` — Beat 단 디코딩 실패만 계측. 앱 전환 완료 후 0에 수렴해야 정상 | — |
+
+`error.type: json`이 못 보는 손실 경로 — **ES 색인 거부**(매핑 충돌 400,
+예: 예약 object 키를 스칼라로 찍은 경우)는 문서 자체가 안 남아 무음이다.
+전환기(#352/#147 배포 전후)에는 Filebeat 파드 로그로 점검한다:
+
+```bash
+kubectl -n elastic logs -l beat.k8s.elastic.co/name=filebeat --tail 200 \
+  | grep -i "Cannot index event"   # 결과 0줄이 정상
+```
 | 특정 컨테이너 | `kubernetes.container.name: "webserver"` | — |
 
 Kubernetes 이벤트(스케줄 실패, OOMKilled 등)는 컨테이너 stdout이 아니라
