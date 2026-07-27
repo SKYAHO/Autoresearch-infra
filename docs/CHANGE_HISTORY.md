@@ -3,6 +3,38 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-27: 관측 스택 구축 — Grafana 대시보드 5장 as-code + 구조화 로깅 파이프라인 (#352~#365)
+
+- **배경**: 14회차 멘토 피드백(K8s 메트릭·서비스 사용량 대시보드, ELK 구조화
+  로깅). 3-에이전트 병렬 조사로 8개 이슈로 분해(infra 5 + 앱 1 + airflow 2),
+  1.5일 만에 전부 배포·검증.
+- **핵심 결정 — 대시보드 as-code(#355)**: 커스텀 대시보드는 UI가 아니라
+  `deploy/monitoring/dashboards/*.json` → sidecar ConfigMap(ArgoCD)으로 관리.
+  Kibana saved object도 같은 원칙 — 저장소 ndjson이 정본, 내용 해시 트리거
+  Job이 apply 시 자동 import(#365, 객체만 삭제된 경우는 `-replace` 강제).
+- **핵심 결정 — 스케일 판단 대시보드(#356)**: HPA가 없으므로 "오토스케일
+  대시보드"가 아니라 판정 표 기반 근거 대시보드로 정의. 리뷰가 quota-blocked
+  분기(E2_CPUS 8 < E2 풀 max 합 — max 미달인데 unschedulable) 누락을 잡음.
+- **핵심 결정 — 폴백 채택(#357)**: MLflow 서버 계측은 이미지에
+  prometheus_flask_exporter 부재(실측)로 기각, 유일한 인입 경로인
+  oauth2-proxy /metrics + PodMonitor로 충족.
+- **로그 스키마 계약(#359)**: Filebeat ndjson(expand_keys, 원문 보존 폴백) +
+  앱/airflow와 계약 — 대문자 `log.level`, 예약 object 키(log/error/host/…)
+  스칼라 금지(위반 시 ES 400 무음 드랍). 색인 거부는 Filebeat 자기 로그
+  수집(#365)으로 관측. Airflow는 `[logging] json_format`이 존재하지 않는
+  설정으로 판명(실측) — task 로그는 GCS 원격 로깅(airflow#147), dag 필터는
+  KPO 파드 라벨(`kubernetes.labels.dag_id`)로 충족.
+- **교차 ns 수집 패턴**: ServiceMonitor는 monitoring ns +
+  namespaceSelector(워크로드 root에 CRD plan 의존 없음). airflow처럼 ingress
+  deny ns는 scrape 포트 명시 허용 필요(#358 fix — 증상 context deadline
+  exceeded).
+- **검증 중 실증된 운영 결함**: scheduler OOMKilled(12h 태스크 종반,
+  airflow#158 후속), filebeat autodiscover가 재기동 후 신규 파드를 놓치는
+  간헐 결함(daemonset 재시작으로 회복 — 증상: 기존 파드만 수집).
+- **롤백**: 대시보드/SM/파서는 해당 파일 삭제 후 sync/apply. 계측·로깅은
+  앱 revert. 비용 영향: 상주 추가는 statsd-exporter 1개(10m/32Mi)뿐,
+  airflow 시리즈 119개(head 0.1%).
+
 ## 2026-07-27: feast apply를 VPC 안 GKE Job으로 전환 (#346) — 인프라 측
 
 - **문제**: `full_scan_for_deletion: false`(GHA 러너가 private Redis에 못 닿아 끈
