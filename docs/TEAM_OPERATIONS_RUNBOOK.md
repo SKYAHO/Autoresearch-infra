@@ -156,9 +156,14 @@ helm upgrade --install airflow apache-airflow/airflow \
 infra apply 직후에는 VPA API와 controller readiness를 먼저 확인한다.
 
 ```bash
-kubectl get crd verticalpodautoscalers.autoscaling.k8s.io
+kubectl wait --for=condition=Established --timeout=120s crd/verticalpodautoscalers.autoscaling.k8s.io
+kubectl api-resources --api-group=autoscaling.k8s.io | rg '^verticalpodautoscalers'
 kubectl get pods --all-namespaces | rg 'vpa|vertical-pod-autoscaler'
 ```
+
+첫 명령은 CRD가 Established 상태인지, 두 번째 명령은 discovery API가 VPA resource를
+served하는지 확인한다. 마지막 pod 목록은 GKE managed addon의 내부 component Pod 이름이나
+label을 전제하지 않는 진단용 보조 명령이다.
 
 Autoresearch-airflow#159가 `airflow-scheduler` VPA CR을 배포한 후에는 해당 VPA와
 recommendation을 확인한다.

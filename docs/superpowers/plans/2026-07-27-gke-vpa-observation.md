@@ -77,7 +77,7 @@ Run:
 terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
 ```
 
-Expected: `google_container_cluster.dev`의 in-place addon 변경만 나타나며 destroy/replace, IAM, node pool, network 변경이 없다. plan 출력의 add/change/destroy 수와 VPA block diff를 PR 본문에 기록한다.
+Expected: `google_container_cluster.dev`의 in-place VPA 변경만 나타나며 destroy/replace, IAM, node pool, network, Secret 변경이 없다. plan 출력의 add/change/destroy 수와 VPA block diff를 PR 본문에 기록한다.
 
 - [ ] **Step 5: 인프라 선언만 커밋한다**
 
@@ -112,7 +112,7 @@ Expected: 새 VPA 운영 절차가 아직 없음을 확인한다.
 `docs/TERRAFORM_DEV.md`의 GKE 운영 설명 뒤에 `## GKE VPA 관측 (#373)` section을 추가한다. 다음 내용을 빠짐없이 기록한다.
 
 ```markdown
-`google_container_cluster.dev.addons_config.vertical_pod_autoscaling`은 GKE VPA
+`google_container_cluster.dev.vertical_pod_autoscaling`은 GKE VPA
 CRD와 recommender/controller를 제공한다. scheduler VPA resource는 Helm release
 소유이므로 Autoresearch-airflow#159가 배포한다.
 
@@ -178,7 +178,7 @@ Run:
 terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
 ```
 
-Expected: `google_container_cluster.dev`의 VPA addon in-place 변경 외 destroy/replace가 없다. 다르면 apply하지 않고 plan 원인을 해결한다.
+Expected: `google_container_cluster.dev`의 in-place VPA 변경만 나타나며 destroy/replace, IAM, node pool, network, Secret 변경이 없다. 다르면 apply하지 않고 plan 원인을 해결한다.
 
 - [ ] **Step 2: 사용자의 명시적 승인 뒤에만 apply한다**
 

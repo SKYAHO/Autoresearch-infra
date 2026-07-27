@@ -1081,9 +1081,10 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
 
 적용 순서는 다음과 같다.
 
-1. `terraform -chdir=terraform/envs/dev validate`와 `terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars`로 VPA addon 변경을 검토한다.
-2. 승인 후 dev root를 apply한다.
-3. VPA CRD와 controller readiness를 확인한 뒤 Autoresearch-airflow#159의
+1. 기본 경로로 `.github/workflows/dev-apply.yml`을 수동 실행해 dev root plan을 만들고, `dev-apply` Environment reviewer 게이트에서 승인한다. 승인된 workflow만 같은 plan을 apply한다.
+2. 승인 전 상세 plan에서 `google_container_cluster.dev`의 in-place VPA 변경만 있는지, destroy/replace와 IAM, node pool, network, Secret 변경이 없는지 확인한다.
+3. 로컬 `terraform.tfvars` plan/apply는 CI를 사용할 수 없는 경우의 break-glass로만 사용하며, 같은 변경 제한과 별도 승인을 적용한다.
+4. VPA CRD와 controller readiness를 확인한 뒤 Autoresearch-airflow#159의
    `airflow-scheduler` VPA CR을 배포한다.
 
 롤백 시에는 Airflow VPA CR을 먼저 제거하고, recommender/controller가 더 이상
