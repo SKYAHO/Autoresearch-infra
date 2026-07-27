@@ -205,6 +205,11 @@ curl -sk -u "elastic:$PW" "https://localhost:19200/_snapshot/gcs_snapshots/_all?
 
 ### 복구 절차 (#102 완료 조건)
 
+> 주의(#359): SLM 정책은 `include_global_state: false`이고 아래 절차는
+> `.ds-filebeat-*`만 restore하므로 **Kibana saved object(`.kibana*`)는
+> 스냅샷·복구 범위 밖**이다. saved object 복원은 저장소의
+> `kibana-saved-objects/logs-overview.ndjson` import로 별도 수행한다.
+
 ```bash
 # 1) snapshot 목록에서 대상 확인
 curl -sk -u "elastic:$PW" "https://localhost:19200/_snapshot/gcs_snapshots/_all?verbose=false"
@@ -269,6 +274,13 @@ terraform apply
 terraform apply -target=helm_release.eck_operator
 terraform apply
 ```
+
+apply 후 **Kibana saved object import를 잊지 말 것**(#359): data view·저장
+검색·Logs Overview 대시보드는 `.kibana` 시스템 인덱스에 살고 아래 SLM
+스냅샷 범위 밖이라, 저장소의
+`kibana-saved-objects/logs-overview.ndjson`이 유일한 복구 원본이다.
+Stack Management → Saved Objects → Import (또는
+`POST /api/saved_objects/_import?overwrite=true`).
 
 로컬 검증:
 
