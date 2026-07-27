@@ -153,33 +153,53 @@ helm upgrade --install airflow apache-airflow/airflow \
 
 ## VPA 관측 확인 (#373)
 
-infra apply 직후에는 VPA API와 controller readiness를 먼저 확인한다.
+`dev-apply`는 DAG가 실행 중이지 않은 운영 창에서만 승인한다. GKE VPA addon 변경은
+비동기 GKE operation이므로 workflow 성공만으로 readiness 검사를 시작하지 말고, 해당
+operation 완료를 먼저 확인한다. 그 다음 `admin-apply` 승인 workflow로 Task 4의
+namespace-scoped `airflow-vpa` Role과 RoleBinding을 먼저 적용한다. GKE addon 내부 RBAC나
+`admin` ClusterRole aggregation이 필요한 VPA 권한을 제공한다고 가정하지 않는다.
+
+CRD가 아직 없으면 condition-only `kubectl wait`는 즉시 NotFound으로 실패한다. 생성,
+Established, served API discovery를 아래 순서로 확인한다. 대화형 shell을 종료하지 않도록
+polling은 `bash -c` 서브셸에서 실행한다.
 
 ```bash
-kubectl wait --for=condition=Established --timeout=120s crd/verticalpodautoscalers.autoscaling.k8s.io
-
-# CRD Established 뒤 served API discovery가 반영될 때까지 최대 120초 대기한다.
-deadline=$((SECONDS + 120))
-while ! kubectl api-resources --request-timeout=5s --api-group=autoscaling.k8s.io \
-  | awk '$1 == "verticalpodautoscalers" { found = 1 } END { exit !found }'
-do
-  if (( SECONDS >= deadline )); then
-    printf '%s\n' 'VPA served API discovery timed out after 120 seconds.' >&2
-    exit 1
-  fi
-  sleep 5
-done
-
-kubectl get pods --all-namespaces
+bash -c '
+  kubectl wait --for=create --timeout=120s \
+    crd/verticalpodautoscalers.autoscaling.k8s.io
+  kubectl wait --for=condition=Established --timeout=120s \
+    crd/verticalpodautoscalers.autoscaling.k8s.io
+  deadline=$((SECONDS + 120))
+  while ! kubectl api-resources --request-timeout=5s \
+    --api-group=autoscaling.k8s.io \
+    | awk "\$1 == \"verticalpodautoscalers\" { found = 1 } END { exit !found }"
+  do
+    if (( SECONDS >= deadline )); then
+      printf "%s\\n" "VPA served API discovery timed out after 120 seconds." >&2
+      exit 1
+    fi
+    sleep 5
+  done
+'
 ```
 
-첫 명령은 CRD가 Established 상태인지 확인한다. 이어지는 polling은
+첫 대기는 CRD 생성 자체를, 두 번째 대기는 Established 상태를 확인한다. 이어지는 polling은
 `kubectl api-resources --request-timeout=5s --api-group=autoscaling.k8s.io` 출력에
 `verticalpodautoscalers`가 나타날 때까지 총 120초 동안 기다리고, 각 API 요청은 5초로
 제한해 API server 또는 네트워크 hang이 polling deadline을 넘기지 않게 한다. timeout이면
 실패한다.
-마지막 pod 목록은 GKE managed addon의 내부 component Pod 이름이나 label을 전제하지 않는
-진단용 보조 명령이다.
+
+Autoresearch-airflow#159를 merge하기 전에 실제 Helm deployer identity로 VPA lifecycle
+모든 동사를 확인한다.
+
+```bash
+for verb in get list watch create update patch delete; do
+  kubectl auth can-i "$verb" verticalpodautoscalers.autoscaling.k8s.io --namespace airflow
+done
+```
+
+하나라도 `no`이면 Helm 배포를 중단하고 Task 4 Role/RoleBinding을 수정한다. 권한 오류를
+cluster-wide RBAC로 우회하지 않는다. 모든 확인이 `yes`일 때만 Helm 배포를 진행한다.
 
 Autoresearch-airflow#159가 `airflow-scheduler` VPA CR을 배포한 후에는 해당 VPA와
 recommendation을 확인한다.

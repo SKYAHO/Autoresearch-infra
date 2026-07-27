@@ -1081,11 +1081,54 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
 
 적용 순서는 다음과 같다.
 
-1. 기본 경로로 `.github/workflows/dev-apply.yml`을 수동 실행해 dev root plan을 만들고, `dev-apply` Environment reviewer 게이트에서 승인한다. 승인된 workflow만 같은 plan을 apply한다.
-2. 승인 전 상세 plan에서 `google_container_cluster.dev`의 in-place VPA 변경만 있는지, destroy/replace와 IAM, node pool, network, Secret 변경이 없는지 확인한다.
-3. 로컬 `terraform.tfvars` plan/apply는 CI를 사용할 수 없는 경우의 break-glass로만 사용하며, 같은 변경 제한과 별도 승인을 적용한다.
-4. VPA CRD와 controller readiness를 확인한 뒤 Autoresearch-airflow#159의
+1. DAG가 실행 중이지 않은 운영 창에서만 `.github/workflows/dev-apply.yml`을 수동
+   실행해 dev root plan을 만들고, `dev-apply` Environment reviewer 게이트에서
+   승인한다. 승인된 workflow만 같은 plan을 apply한다. GKE VPA addon 변경은 비동기
+   GKE operation이므로, workflow 성공만으로 다음 단계로 진행하지 않고 해당 operation의
+   완료를 확인한 뒤 readiness 검사를 시작한다.
+2. 승인 전 상세 plan에서 `google_container_cluster.dev`의 in-place VPA 변경만 있는지,
+   destroy/replace와 IAM, node pool, network, Secret 변경이 없는지 확인한다.
+3. `admin-apply` 승인 workflow로 Task 4의 namespace-scoped `airflow-vpa` Role과
+   RoleBinding을 먼저 적용한다. GKE addon 내부 RBAC 또는 `admin` ClusterRole aggregation은
+   이 권한을 제공한다고 가정하지 않는다.
+4. CRD가 아직 없으면 condition-only `kubectl wait`가 즉시 NotFound으로 실패하므로,
+   생성, Established, served API discovery를 아래 순서로 확인한다. 대화형 shell을
+   종료하지 않도록 polling은 `bash -c` 서브셸에서 실행한다.
+
+   ```bash
+   bash -c '
+     kubectl wait --for=create --timeout=120s \
+       crd/verticalpodautoscalers.autoscaling.k8s.io
+     kubectl wait --for=condition=Established --timeout=120s \
+       crd/verticalpodautoscalers.autoscaling.k8s.io
+     deadline=$((SECONDS + 120))
+     while ! kubectl api-resources --request-timeout=5s \
+       --api-group=autoscaling.k8s.io \
+       | awk "\$1 == \"verticalpodautoscalers\" { found = 1 } END { exit !found }"
+     do
+       if (( SECONDS >= deadline )); then
+         printf "%s\\n" "VPA served API discovery timed out after 120 seconds." >&2
+         exit 1
+       fi
+       sleep 5
+     done
+   '
+   ```
+
+5. Autoresearch-airflow#159를 merge하기 전에 실제 Helm deployer identity로 VPA
+   lifecycle 모든 동사를 확인한다.
+
+   ```bash
+   for verb in get list watch create update patch delete; do
+     kubectl auth can-i "$verb" verticalpodautoscalers.autoscaling.k8s.io --namespace airflow
+   done
+   ```
+
+   하나라도 `no`이면 Helm 배포를 중단하고 Task 4 Role/RoleBinding을 수정한다. 이를
+   cluster-wide RBAC로 우회하지 않는다. 모두 `yes`인 경우에만
    `airflow-scheduler` VPA CR을 배포한다.
+6. 로컬 `terraform.tfvars` plan/apply는 CI를 사용할 수 없는 경우의 break-glass로만
+   사용하며, 같은 변경 제한과 별도 승인을 적용한다.
 
 롤백 시에는 Airflow VPA CR을 먼저 제거하고, recommender/controller가 더 이상
 필요하지 않은 것을 확인한 뒤 addon 비활성화 변경을 별도 plan과 승인으로 적용한다.
