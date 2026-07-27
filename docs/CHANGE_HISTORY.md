@@ -32,6 +32,15 @@
 - 주의: 파트 B(admin root)는 `terraform-plan.yml` 경로 필터 밖이라 PR CI 검증이
   없다(로컬 fmt/validate/plan 필수). `admin-apply.yml`은 `ROOTS` 8개 일괄 apply라
   승인 전 전 root plan 요약 확인이 필요하다.
+- **후속 누락 보완(#370)**: 위 작업에서 `feast_apply` GSA에 코드 아카이브 버킷
+  `roles/storage.objectViewer`가 빠졌다. `Dockerfile.feast`는 코드를 이미지에
+  넣지 않고 ENTRYPOINT 부트스트랩이 `code/<sha>.tar.gz`를 받아 `/app`에 푸는
+  구조라, 이 권한 없이는 Job이 apply를 시작하기도 전에 exit 2로 죽는다. GHA도
+  같은 GSA로 아카이브 업로드 완료를 폴링하므로 grant 1건이 두 경로를 함께
+  연다. 교훈: **"실행 주체를 옮기는" 변경은 대상 워크로드가 실행 전에 무엇을
+  읽는지(부트스트랩 의존)까지 권한 목록에 포함해야 한다** — Redis·Secret
+  Manager 같은 "새로 필요해진" 권한에만 집중해 기존 파드가 이미 갖고 있던
+  공통 권한을 빠뜨렸다.
 
 ## 2026-07-24: dev root 승인 게이트 CI apply 가동 (#341/#342) — 첫 run 검증 완료
 
