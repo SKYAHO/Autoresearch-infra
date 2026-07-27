@@ -121,6 +121,9 @@ dashboard 이름은 chart 버전에 따라 조금 달라질 수 있다. 이름�
   requests 점유율 vs 실사용률, namespace/pod CPU·메모리),
   `AutoResearch / K8s 네트워크`(uid `ar-k8s-network` — namespace/pod 트래픽,
   에러·드랍, TCP 소켓·재전송·conntrack). 둘 다 `namespace` 변수로 필터.
+  `AutoResearch / MLflow`(uid `ar-mlflow`, #357 — oauth2-proxy 경유 요청률·
+  상태코드·p95 지연 + 컨테이너 CPU/메모리. 서버 자체 /metrics가 아닌
+  폴백 채택 사유는 MLFLOW_OPERATIONS_RUNBOOK 관측 절 참조).
   `AutoResearch / 스케일 판단`(uid `ar-scale-decision`, #356 — 판정 기준
   텍스트 패널 + 노드풀별 노드 수/unschedulable 파드/requests 점유율 vs
   실사용률(분모 allocatable 정렬)/throttling/OOMKill. "지금 스케일이

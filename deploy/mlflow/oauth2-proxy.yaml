@@ -39,6 +39,9 @@ spec:
             - --skip-provider-button=false
             # port-forward는 http localhost라 secure 쿠키 불가.
             - --cookie-secure=false
+            # #357 사용량 메트릭 노출(요청 수·상태코드·지연). 4180과 분리된
+            # 포트라 ILB Service에는 노출되지 않고 PodMonitor가 직접 수집한다.
+            - --metrics-address=0.0.0.0:44180
           env:
             # client-id는 공개값이지만 secret/emails와 함께 관리해 매니페스트를
             # 환경 비종속으로 유지한다. 값은 operator 주입 Secret에서만.
@@ -60,6 +63,8 @@ spec:
           ports:
             - name: http
               containerPort: 4180
+            - name: metrics
+              containerPort: 44180
           volumeMounts:
             - name: emails
               mountPath: /etc/oauth2-proxy

@@ -124,6 +124,20 @@ kubectl -n argocd get application mlflow -o jsonpath='{.status.sync.status}/{.st
 앱팀이 자기 파이프라인으로 GAR에 이미지를 올리면 `deploy/mlflow`의 image를 그
 경로로 re-point한다(Dockerfile 동일이라 동작 동일).
 
+## 사용량 관측 (#357)
+
+Grafana `AutoResearch / MLflow`(uid `ar-mlflow`)에서 요청률(상태코드별)·p95
+지연·컨테이너 CPU/메모리를 본다. 수집 경로: oauth2-proxy
+`--metrics-address`(44180) → PodMonitor(`deploy/mlflow/podmonitor.yaml`,
+`release: kube-prometheus-stack` 라벨 필수) → kube-prometheus-stack.
+oauth2-proxy가 UI/API의 유일한 인입 경로라 전체 사용량이 여기서 관측된다.
+
+폴백 채택 사유(#357): MLflow 서버 자체 `--expose-prometheus`는 이미지에
+`prometheus_flask_exporter`가 없어(실측) 앱 저장소 runtime 변경 + Cloud
+Build 재빌드 + digest re-point가 필요하다. dev "사용량 확인" 요구에는
+proxy 메트릭 + cAdvisor로 충분해 서버 계측은 보류 — 엔드포인트별 정밀
+메트릭이 필요해지면 그때 앱 저장소 runtime에 exporter를 추가한다.
+
 ## 장애 대응
 
 | 증상 | 원인·조치 |
