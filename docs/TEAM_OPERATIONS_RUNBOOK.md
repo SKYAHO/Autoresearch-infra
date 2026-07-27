@@ -151,6 +151,27 @@ helm upgrade --install airflow apache-airflow/airflow \
 저장소에서 관리한다. 이 인프라 저장소는 namespace, RBAC, Workload Identity,
 내부망 접근 경계만 제공한다.
 
+## VPA 관측 확인 (#373)
+
+infra apply 직후에는 VPA API와 controller readiness를 먼저 확인한다.
+
+```bash
+kubectl get crd verticalpodautoscalers.autoscaling.k8s.io
+kubectl get pods --all-namespaces | rg 'vpa|vertical-pod-autoscaler'
+```
+
+Autoresearch-airflow#159가 `airflow-scheduler` VPA CR을 배포한 후에는 해당 VPA와
+recommendation을 확인한다.
+
+```bash
+kubectl get vpa airflow-scheduler --namespace airflow
+kubectl describe vpa airflow-scheduler --namespace airflow
+```
+
+실제 workload 데이터가 충분히 누적되기 전에는 recommendation이 비어 있을 수 있다.
+초기 VPA는 observation-only `updateMode: "Off"`이므로 이 절차는 scheduler resource를
+자동 변경하지 않는다.
+
 ## Bastion 접속
 
 Bastion은 외부 IP가 없고 IAP 터널로만 접속한다. SSH 단독 접속은 점검용이다.

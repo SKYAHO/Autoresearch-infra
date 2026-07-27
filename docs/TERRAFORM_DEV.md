@@ -1066,6 +1066,28 @@ metadata와 resource-level IAM만 `4 added, 0 changed, 0 destroyed`로
 - 비밀번호 rotation: `random_password` 재생성(수동 `terraform -replace=random_password.db_app_password` 또는 keepers) → SQL user(`cloud_sql.tf`)와 Secret version(`secret_manager.tf`)에 동일 값 반영. 같은 소스라 parity 유지.
 - 롤백: `terraform destroy`로 dev stack 제거. state는 GCS backend에 남으며, 비용 리소스(Cloud SQL/GKE/NAT) 삭제 여부를 반드시 확인한다.
 
+## GKE VPA 관측 (#373)
+
+`google_container_cluster.dev`의 최상위
+`vertical_pod_autoscaling { enabled = true }`는 GKE VPA CRD와
+recommender/controller를 제공한다. scheduler VPA resource는 Helm release 소유이므로
+Autoresearch-airflow#159가 배포한다.
+
+LocalExecutor task는 scheduler Pod 안에서 실행되므로 `Auto`와 `Recreate` mode를
+사용하지 않는다. 초기 VPA는 `updateMode: "Off"`로 recommendation만 수집하며,
+scheduler `values.yaml` resource 변경은 recommendation, namespace quota, node
+allocatable resource를 검토한 후 별도 이슈에서 수동으로 한다.
+
+적용 순서는 다음과 같다.
+
+1. `terraform -chdir=terraform/envs/dev validate`와 `terraform -chdir=terraform/envs/dev plan`으로 VPA addon 변경을 검토한다.
+2. 승인 후 dev root를 apply한다.
+3. VPA CRD와 controller readiness를 확인한 뒤 Autoresearch-airflow#159의
+   `airflow-scheduler` VPA CR을 배포한다.
+
+롤백 시에는 Airflow VPA CR을 먼저 제거하고, recommender/controller가 더 이상
+필요하지 않은 것을 확인한 뒤 addon 비활성화 변경을 별도 plan과 승인으로 적용한다.
+
 ## dev Airflow (#32)
 
 Airflow 구성요소가 배포되는 GKE namespace 경계와, 거기에 물릴 GCP 권한(Cloud SQL / GCS / BigQuery)을 IaC로 관리한다. Airflow Helm chart values, executor, fernet key, DAG, image 설정은 이 저장소 범위 밖이며 [`SKYAHO/Autoresearch-airflow`](https://github.com/SKYAHO/Autoresearch-airflow)에서 관리한다.
