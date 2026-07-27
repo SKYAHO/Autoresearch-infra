@@ -1341,6 +1341,14 @@ Job 생성이 가능하고, VPC 안이어야 하는 것은 Redis 데이터 경�
 | Redis 접속 | `roles/redis.dbConnectionUser` + condition으로 dev Online Store cluster 한정 | 삭제 스캔은 SCAN+DEL/HDEL이라 write 필요. 같은 role로 materialize write를 하는 `airflow_batch` 선례 |
 | Redis TLS CA | `redis_server_ca` secret 한정 `roles/secretmanager.secretAccessor` | 프로젝트 수준 Secret Manager 권한은 없음 |
 | GKE 접속 | `roles/container.clusterViewer` | DNS endpoint 접속·cluster metadata 조회만. 실제 변경은 K8s RBAC이 통제(`airflow_deployer`와 동일 패턴) |
+| 코드 아카이브 | `code_artifacts` 버킷 한정 `roles/storage.objectViewer` (#370) | `gke_app`·`airflow_batch`와 동일 패턴. read만, write는 업로더 SA 전용 |
+
+**코드 아카이브 read가 필요한 이유(#370)**: `Dockerfile.feast`는 코드를
+이미지에 넣지 않고 ENTRYPOINT 부트스트랩이 `code/<sha>.tar.gz`를 받아 `/app`에
+푼다. 이 권한이 없으면 Job이 `feast apply`를 시작하기도 전에 부트스트랩에서
+exit 2로 죽는다. 같은 GSA로 GitHub Actions가 Job 생성 전에 아카이브 업로드
+완료를 폴링하므로(코드 아카이브 워크플로우와 병렬 실행) grant 하나가 파드와
+러너 두 경로를 모두 연다.
 
 namespace·KSA·RBAC 오브젝트는 `terraform/admin/autoresearch-k8s`가 만든다(해당
 root README 참조). 두 root의 `feast_apply_k8s_namespace` /
@@ -1358,8 +1366,9 @@ RoleBinding subject가 모두 문자열이라 상호 참조가 없다. 다만 �
 `feast-apply.yml` 머지 전에 완료돼야 한다 — 순서가 뒤집히면 존재하지 않는 KSA로
 Job을 만들려다 main에서 실패한다.
 
-롤백: `redis.tf`/`secret_manager.tf`/`github_actions.tf`의 `feast_apply_*` 신규
-리소스를 제거하고 apply하면 GSA는 #332 시점 권한으로 되돌아간다. 그 경우 Job은
+롤백: `redis.tf`/`secret_manager.tf`/`github_actions.tf`/`code_artifacts.tf`의
+`feast_apply_*`·`code_artifacts_feast_apply_viewer` 신규 리소스를 제거하고
+apply하면 GSA는 #332 시점 권한으로 되돌아간다. 그 경우 Job은
 Redis 인증에 실패하므로 앱 저장소를 `full_scan_for_deletion: false` + GHA 러너
 실행으로 함께 되돌려야 한다.
 
