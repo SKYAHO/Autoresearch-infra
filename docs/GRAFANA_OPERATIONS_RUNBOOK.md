@@ -85,6 +85,116 @@ admin으로 로그인 → Administration → Users → New user:
 - 권한은 기본 Viewer(대시보드 편집 담당만 Editor).
 - 팀원 목록은 이 문서에 기록하지 않는다(이메일 비노출 원칙)
 
+## Alertmanager SMTP 알림 (#372)
+
+- Airflow scheduler의 DAG/task 실패 이메일과 Alertmanager의 Kubernetes workload 장애 이메일은 서로 대체하지 않는다.
+- Alertmanager는 `monitoring/alertmanager-smtp-config`의 `alertmanager.yaml`만 읽고, ArgoCD는 이 Secret을 관리하거나 prune하지 않는다.
+- `airflow/airflow-email-alerts`를 namespace를 넘어 직접 참조할 수 없으므로 두 Secret은 같은 SMTP 값을 별도로 보관한다.
+- SMTP 회전 시 두 Secret을 같은 비공개 입력으로 함께 교체한다.
+
+### Secret 검증과 설정 생성
+
+다음 절차는 기존 Airflow Secret을 mode-0600 임시 파일에만 읽고, 누락·빈 값·개행으로 끝나는 값을 거부한다. 현재 승인된 STARTTLS/587 설정을 확인한 뒤 로컬 `alertmanager.yaml`만 생성한다.
+
+```bash
+umask 077
+ALERTMANAGER_SECRET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alertmanager-smtp-config.XXXXXX")"
+trap 'rm -f -- "$ALERTMANAGER_SECRET_DIR"/*; rmdir "$ALERTMANAGER_SECRET_DIR"' EXIT
+
+kubectl -n airflow get secret airflow-email-alerts -o json > "$ALERTMANAGER_SECRET_DIR/source-secret.json"
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+expected = {
+    "smtp-host", "smtp-port", "smtp-starttls", "smtp-ssl",
+    "smtp-user", "smtp-password", "smtp-mail-from", "alert-recipients",
+}
+source = json.loads((root / "source-secret.json").read_text())
+actual = set(source.get("data", {}))
+if actual != expected:
+    raise SystemExit(
+        f"Secret key mismatch: missing={sorted(expected - actual)}, "
+        f"extra={sorted(actual - expected)}"
+    )
+
+values = {}
+for key in sorted(expected):
+    value = base64.b64decode(source["data"][key])
+    if not value:
+        raise SystemExit(f"Secret value is empty: {key}")
+    if value.endswith((b"\n", b"\r")):
+        raise SystemExit(f"Secret value has trailing CR/LF: {key}")
+    values[key] = value.decode("utf-8")
+
+if values["smtp-port"] != "587":
+    raise SystemExit("Alertmanager SMTP requires the approved STARTTLS port: 587")
+if values["smtp-starttls"].lower() != "true" or values["smtp-ssl"].lower() != "false":
+    raise SystemExit("Alertmanager SMTP requires smtp-starttls=true and smtp-ssl=false")
+
+def scalar(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+config = f"""global:
+  resolve_timeout: 5m
+  smtp_smarthost: {scalar(values['smtp-host'] + ':' + values['smtp-port'])}
+  smtp_from: {scalar(values['smtp-mail-from'])}
+  smtp_auth_username: {scalar(values['smtp-user'])}
+  smtp_auth_password: {scalar(values['smtp-password'])}
+  smtp_require_tls: true
+route:
+  receiver: "null"
+  group_by: [alertname, namespace, pod]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: email
+      matchers:
+        - severity=~\"warning|critical\"
+receivers:
+  - name: "null"
+  - name: email
+    email_configs:
+      - to: {scalar(values['alert-recipients'])}
+        send_resolved: true
+"""
+(root / "alertmanager.yaml").write_text(config)
+print("Alertmanager config generated without displaying SMTP values.")
+PY
+```
+
+생성 직후 다음 명령으로 Secret을 갱신하고 payload를 표시하지 않는 사전 동작 검증을 수행한다.
+
+```bash
+kubectl -n monitoring create secret generic alertmanager-smtp-config \
+  --from-file=alertmanager.yaml="$ALERTMANAGER_SECRET_DIR/alertmanager.yaml" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n monitoring describe secret alertmanager-smtp-config
+docker run --rm \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  amtool check-config /work/alertmanager.yaml
+```
+
+`describe`에는 `alertmanager.yaml` 키 하나만 보여야 한다. `amtool` 호출은 성공해야 하며, 그 입력 또는 출력을 티켓, 터미널 녹화, 로그에 복사하지 않는다.
+
+### Cluster 검증, 해소 알림, 롤백
+
+1. ArgoCD manual sync 전에 diff에서 `alertmanager-smtp-config` 참조와 `ContainerOOMKilled` 규칙만 추가되는지 확인한다.
+2. sync 뒤 Alertmanager StatefulSet이 Ready인지와 Alertmanager log에 config parse error가 없는지 확인한다.
+3. `restartPolicy: Never`와 낮은 memory limit을 가진 일회성 dummy Pod로 OOMKilled alert 이메일을 수신한다.
+4. dummy Pod를 삭제해 metric이 해소된 뒤 resolved 이메일을 수신한다.
+5. 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다.
+6. 검증 Pod는 즉시 삭제한다.
+
+config 오류 또는 메일 전달 실패 시 ArgoCD sync를 중단하거나 values를 기존 chart 생성 config로 되돌려 `null` receiver를 복원한다. Alertmanager가 `alertmanager-smtp-config`를 더 이상 참조하지 않는 것을 확인한 뒤에만 Secret을 삭제한다.
+
 ## 기본 확인 순서
 
 장애 알림이 없더라도 운영 점검은 아래 순서로 본다.
