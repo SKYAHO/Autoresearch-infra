@@ -1,0 +1,164 @@
+# Alertmanager OOM 검증 Runbook 정정 Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** OOMKilled 검증 절차를 `ContainerOOMKilled` metric 계약에 맞추고, Alertmanager SMTP의 실제 검증 상태를 운영 문서에 정확히 기록한다.
+
+**Architecture:** 운영 runbook과 과거 실행 plan은 재시작된 container의 previous-termination metric을 전제로 `restartPolicy: Always`를 사용한다. 관측 전략은 실제로 확인한 OOMKilled·CrashLooping warning/resolved 이메일만 운영 완료로 기록하고, critical 전달은 route 구성과 별도로 미실증으로 남긴다.
+
+**Tech Stack:** Markdown, Prometheus `kube_pod_container_status_last_terminated_reason`, Kubernetes Pod `restartPolicy`.
+
+## Global Constraints
+
+- `ContainerOOMKilled` 식, `for: 1m`, `severity: warning`은 변경하지 않는다.
+- SMTP Secret payload, receiver 주소, 계정, recipient, endpoint를 문서나 diff에 기록하지 않는다.
+- IAM, 네트워크, Helm values, PrometheusRule, live Kubernetes 리소스를 변경하지 않는다.
+- `restartPolicy: Always` 검증 Pod는 OOMKilled 뒤 재시작해야 `last_terminated_reason` metric을 제공하며, resolved 검증 뒤 명시적으로 삭제한다.
+- critical receiver route는 구성됐지만 critical 이메일을 별도로 실증하지 않았다고 기록한다.
+
+---
+
+## File Structure
+
+- Modify: `docs/GRAFANA_OPERATIONS_RUNBOOK.md`
+  - 현재 운영자가 복사해 따르는 OOM/해소 이메일 검증 계약을 제공한다.
+- Modify: `docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md`
+  - 과거 실행 plan의 직접 실행 가능한 OOM test Pod와 기대 결과를 현재 계약과 일치시킨다.
+- Modify: `docs/OBSERVABILITY_STRATEGY.md`
+  - Alertmanager SMTP의 배포 및 실제 검증 상태를 기록한다.
+
+### Task 1: OOM 검증 Pod 계약 정정
+
+**Files:**
+- Modify: `docs/GRAFANA_OPERATIONS_RUNBOOK.md:241-250`
+- Modify: `docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md:277-288,372-436`
+- Test: static Markdown assertions only
+
+**Interfaces:**
+- Consumes: `ContainerOOMKilled` query `kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1` and its confirmed `for: 1m` firing behavior.
+- Produces: Every actionable OOM test instruction uses `restartPolicy: Always` and explains why the Pod must restart before the rule can fire.
+
+- [ ] **Step 1: Prove the stale contract exists before editing**
+
+Run:
+
+```bash
+grep -n "restartPolicy: Never" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+```
+
+Expected: the runbook validation step and the two executable Pod manifests in the old plan are reported.
+
+- [ ] **Step 2: Replace the runbook validation step with the metric-compatible contract**
+
+Replace runbook step 3 with:
+
+```markdown
+3. `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다.
+```
+
+Keep steps 4 through 6 unchanged so explicit Pod deletion still validates the resolved email and removes the test workload.
+
+- [ ] **Step 3: Correct the historical plan’s prose and both executable manifests**
+
+In the Task 2 validation contract, replace line 284 with the same `restartPolicy: Always` metric explanation from Step 2.
+
+In both Pod specifications, replace only:
+
+```yaml
+restartPolicy: Never
+```
+
+with:
+
+```yaml
+restartPolicy: Always
+```
+
+Replace the stale expected result with:
+
+```markdown
+Expected: container restart 뒤 `ContainerOOMKilled`가 pending을 거쳐 one-minute rule delay 후 firing하며 warning 이메일이 도착한다.
+```
+
+Keep the explicit deletion and resolved-email contract unchanged.
+
+- [ ] **Step 4: Run static contract checks**
+
+Run:
+
+```bash
+! grep -n "restartPolicy: Never" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+grep -n "restartPolicy: Always" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+grep -n "last_terminated_reason" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+```
+
+Expected: the negative check exits zero; the remaining output shows the new restart policy and metric explanation in the changed documents.
+
+### Task 2: Alertmanager 운영 상태 정정
+
+**Files:**
+- Modify: `docs/OBSERVABILITY_STRATEGY.md:25,44`
+- Test: static Markdown assertions only
+
+**Interfaces:**
+- Consumes: verified #372 results: ArgoCD sync, OOMKilled warning/resolved email, and CrashLooping warning/resolved email.
+- Produces: current-state text that distinguishes verified warning/resolved delivery from an untested critical email.
+
+- [ ] **Step 1: Prove the stale pending-state text exists before editing**
+
+Run:
+
+```bash
+grep -n "아직 운영 중이 아님\|아직 운영하지 않음" \
+  docs/OBSERVABILITY_STRATEGY.md
+```
+
+Expected: the Alerting row and Alertmanager design-decision row are reported.
+
+- [ ] **Step 2: Replace the Alerting current-state row**
+
+Replace the Alerting row with:
+
+```markdown
+| Alerting | 기본 rule 설치됨. Alertmanager SMTP 이메일 설정을 ArgoCD manual sync했고, OOMKilled와 CrashLooping의 warning·resolved 이메일 전달을 실증했다. warning/critical receiver route는 구성됐지만 critical 이메일은 별도로 실증하지 않음 |
+```
+
+- [ ] **Step 3: Replace the Alertmanager design-decision row**
+
+Replace the Alertmanager row with:
+
+```markdown
+| Alertmanager | 설치·운영 중. SMTP 이메일 설정은 ArgoCD manual sync 뒤 OOMKilled와 CrashLooping warning·resolved 이메일로 실증했다. warning/critical receiver route는 구성됐지만 critical 이메일은 별도로 실증하지 않음. 설정 payload는 ArgoCD 관리 대상이 아닌 `monitoring` namespace의 운영자 주입 Secret으로 관리 |
+```
+
+- [ ] **Step 4: Validate scope and sensitive-data absence**
+
+Run:
+
+```bash
+! grep -n "아직 운영 중이 아님\|아직 운영하지 않음" \
+  docs/OBSERVABILITY_STRATEGY.md
+grep -n "critical 이메일은 별도로 실증하지 않음" \
+  docs/OBSERVABILITY_STRATEGY.md
+git diff --check
+git diff --check -- docs/GRAFANA_OPERATIONS_RUNBOOK.md \
+  docs/OBSERVABILITY_STRATEGY.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+git diff -- docs/GRAFANA_OPERATIONS_RUNBOOK.md \
+  docs/OBSERVABILITY_STRATEGY.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+```
+
+Expected: no stale operating-state wording remains, both rows preserve the critical-delivery qualification, no whitespace errors occur, and the diff contains no Secret payload, account, recipient, or endpoint.
+
+- [ ] **Step 5: Commit the documentation correction**
+
+```bash
+git add docs/GRAFANA_OPERATIONS_RUNBOOK.md \
+  docs/OBSERVABILITY_STRATEGY.md \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+```
