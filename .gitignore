@@ -11,6 +11,7 @@ __pycache__/
 agent.local.md
 docs/NOTION_PROGRESS_TIMELINE.md
 docs/TROUBLESHOOTING_2026-07-16-session.md
+docs/TROUBLESHOOTING_LOG.md
 
 # Local env / secrets
 keys/
