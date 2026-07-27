@@ -85,6 +85,170 @@ admin으로 로그인 → Administration → Users → New user:
 - 권한은 기본 Viewer(대시보드 편집 담당만 Editor).
 - 팀원 목록은 이 문서에 기록하지 않는다(이메일 비노출 원칙)
 
+## Alertmanager SMTP 알림 (#372)
+
+- Airflow scheduler의 DAG/task 실패 이메일과 Alertmanager의 Kubernetes workload 장애 이메일은 서로 대체하지 않는다.
+- Alertmanager는 `monitoring/alertmanager-smtp-config`의 `alertmanager.yaml`만 읽고, ArgoCD는 이 Secret을 관리하거나 prune하지 않는다.
+- `airflow/airflow-email-alerts`를 namespace를 넘어 직접 참조할 수 없으므로 두 Secret은 같은 SMTP 값을 별도로 보관한다.
+- SMTP 회전 시 두 Secret을 같은 비공개 입력으로 함께 교체한다.
+
+### Secret 검증과 설정 생성
+
+다음 절차는 기존 Airflow Secret을 mode-0600 임시 파일에만 읽고, 누락·빈 값·개행으로 끝나는 값을 거부한다. 현재 승인된 STARTTLS/587 설정을 확인한 뒤 로컬 `alertmanager.yaml`만 생성한다.
+
+```bash
+umask 077
+set -e
+ALERTMANAGER_SECRET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alertmanager-smtp-config.XXXXXX")"
+trap 'rm -f -- "$ALERTMANAGER_SECRET_DIR"/*; rmdir "$ALERTMANAGER_SECRET_DIR"' EXIT
+
+kubectl -n airflow get secret airflow-email-alerts -o json > "$ALERTMANAGER_SECRET_DIR/source-secret.json"
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+expected = {
+    "smtp-host", "smtp-port", "smtp-starttls", "smtp-ssl",
+    "smtp-user", "smtp-password", "smtp-mail-from", "alert-recipients",
+}
+source = json.loads((root / "source-secret.json").read_text())
+actual = set(source.get("data", {}))
+if actual != expected:
+    raise SystemExit(
+        f"Secret key mismatch: missing={sorted(expected - actual)}, "
+        f"extra={sorted(actual - expected)}"
+    )
+
+values = {}
+for key in sorted(expected):
+    value = base64.b64decode(source["data"][key])
+    if not value:
+        raise SystemExit(f"Secret value is empty: {key}")
+    if value.endswith((b"\n", b"\r")):
+        raise SystemExit(f"Secret value has trailing CR/LF: {key}")
+    values[key] = value.decode("utf-8")
+
+if values["smtp-port"] != "587":
+    raise SystemExit("Alertmanager SMTP requires the approved STARTTLS port: 587")
+if values["smtp-starttls"].lower() != "true" or values["smtp-ssl"].lower() != "false":
+    raise SystemExit("Alertmanager SMTP requires smtp-starttls=true and smtp-ssl=false")
+
+def scalar(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+config = f"""global:
+  resolve_timeout: 5m
+  smtp_smarthost: {scalar(values['smtp-host'] + ':' + values['smtp-port'])}
+  smtp_from: {scalar(values['smtp-mail-from'])}
+  smtp_auth_username: {scalar(values['smtp-user'])}
+  smtp_auth_password: {scalar(values['smtp-password'])}
+  smtp_require_tls: true
+route:
+  receiver: "null"
+  group_by: [alertname, namespace, pod]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: email
+      matchers:
+        - severity=~\"warning|critical\"
+receivers:
+  - name: "null"
+  - name: email
+    email_configs:
+      - to: {scalar(values['alert-recipients'])}
+        send_resolved: true
+"""
+(root / "alertmanager.yaml").write_text(config)
+print("Alertmanager config generated without displaying SMTP values.")
+PY
+```
+
+생성 직후, Kubernetes Secret API를 변경하기 전에 로컬 설정을 검증한다. 이 명령은
+생성한 `alertmanager.yaml`만 읽으며 Secret payload를 출력하지 않는다.
+
+```bash
+docker run --rm \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  amtool check-config /work/alertmanager.yaml
+```
+
+`amtool` 호출은 성공해야 하며, 그 입력 또는 출력을 티켓, 터미널 녹화, 로그에
+복사하지 않는다.
+
+검증이 성공한 경우에만 다음 절차로 Secret을 create-or-replace한다. 기존 Secret이 있으면
+`resourceVersion`을 포함한 전체 객체를 in-place replace하므로, 이전 `data` 키가
+남지 않고 결과는 `alertmanager.yaml` 키 하나만 가진다. Alertmanager가 참조 중일 수
+있으므로 delete-and-recreate는 사용하지 않는다. 모든 Secret payload는 mode-0600 임시
+디렉터리에만 쓰며 표준 출력으로 내보내지 않는다.
+
+```bash
+kubectl -n monitoring get secret alertmanager-smtp-config --ignore-not-found -o json \
+  > "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json"
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+config = (root / "alertmanager.yaml").read_bytes()
+if not config:
+    raise SystemExit("Generated Alertmanager config is empty")
+
+secret = {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {
+        "name": "alertmanager-smtp-config",
+        "namespace": "monitoring",
+    },
+    "type": "Opaque",
+    "data": {"alertmanager.yaml": base64.b64encode(config).decode("ascii")},
+}
+existing_path = root / "existing-alertmanager-secret.json"
+if existing_path.stat().st_size:
+    existing = json.loads(existing_path.read_text())
+    resource_version = existing.get("metadata", {}).get("resourceVersion")
+    if not resource_version:
+        raise SystemExit("Existing Secret has no resourceVersion")
+    secret["metadata"]["resourceVersion"] = resource_version
+
+(root / "alertmanager-secret.json").write_text(json.dumps(secret))
+PY
+
+if [ -s "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json" ]; then
+  kubectl -n monitoring replace -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+else
+  kubectl -n monitoring create -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+fi
+
+kubectl -n monitoring get secret alertmanager-smtp-config \
+  -o custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type,RESOURCE-VERSION:.metadata.resourceVersion,CREATED:.metadata.creationTimestamp
+```
+
+update 뒤에는 위와 같이 Secret metadata만 확인한다. payload를 출력하거나 복사하지
+않는다. create-or-replace 입력은 `alertmanager.yaml` 키 하나만 포함하므로 결과 Secret도
+그 키 하나만 가진다.
+
+### Cluster 검증, 해소 알림, 롤백
+
+1. ArgoCD manual sync 전에 diff에서 `alertmanager-smtp-config` 참조와 `ContainerOOMKilled` 규칙만 추가되는지 확인한다.
+2. sync 뒤 Alertmanager StatefulSet이 Ready인지와 Alertmanager log에 config parse error가 없는지 확인한다.
+3. `restartPolicy: Never`와 낮은 memory limit을 가진 일회성 dummy Pod로 OOMKilled alert 이메일을 수신한다.
+4. dummy Pod를 삭제해 metric이 해소된 뒤 resolved 이메일을 수신한다.
+5. 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다.
+6. 검증 Pod는 즉시 삭제한다.
+
+config 오류 또는 메일 전달 실패 시 ArgoCD sync를 중단하거나 values를 기존 chart 생성 config로 되돌려 `null` receiver를 복원한다. Alertmanager가 `alertmanager-smtp-config`를 더 이상 참조하지 않는 것을 확인한 뒤에만 Secret을 삭제한다.
+
 ## 기본 확인 순서
 
 장애 알림이 없더라도 운영 점검은 아래 순서로 본다.

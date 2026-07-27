@@ -101,6 +101,24 @@ kube-prometheus-stack:
 
   alertmanager:
     enabled: true
+    # SMTP payload와 Alertmanager route는 Git이 아닌 운영자 주입 Secret에 둔다.
+    # Secret이 없으면 sync 전에 먼저 주입해야 하며 ArgoCD는 이를 관리하거나 prune하지 않는다.
+    alertmanagerSpec:
+      useExistingSecret: true
+      configSecret: alertmanager-smtp-config
+
+  additionalPrometheusRulesMap:
+    container-oom-killed:
+      groups:
+        - name: autoresearch.container-termination
+          rules:
+            - alert: ContainerOOMKilled
+              expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+              for: 1m
+              labels:
+                severity: warning
+              annotations:
+                summary: Container terminated due to OOMKilled
 
   prometheusOperator:
     internalPort: 10250
