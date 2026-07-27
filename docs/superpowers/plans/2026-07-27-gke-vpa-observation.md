@@ -135,7 +135,7 @@ kubectl wait --for=condition=Established --timeout=120s crd/verticalpodautoscale
 
 # CRD Established 뒤 served API discovery가 반영될 때까지 최대 120초 대기한다.
 deadline=$((SECONDS + 120))
-while ! kubectl api-resources --api-group=autoscaling.k8s.io \
+while ! kubectl api-resources --request-timeout=5s --api-group=autoscaling.k8s.io \
   | awk '$1 == "verticalpodautoscalers" { found = 1 } END { exit !found }'
 do
   if (( SECONDS >= deadline )); then
@@ -216,7 +216,7 @@ kubectl wait --for=condition=Established --timeout=120s crd/verticalpodautoscale
 
 # CRD Established 뒤 served API discovery가 반영될 때까지 최대 120초 대기한다.
 deadline=$((SECONDS + 120))
-while ! kubectl api-resources --api-group=autoscaling.k8s.io \
+while ! kubectl api-resources --request-timeout=5s --api-group=autoscaling.k8s.io \
   | awk '$1 == "verticalpodautoscalers" { found = 1 } END { exit !found }'
 do
   if (( SECONDS >= deadline )); then
@@ -229,7 +229,9 @@ done
 kubectl get pods --all-namespaces
 ```
 
-Expected: CRD가 Established이고 `kubectl api-resources --api-group=autoscaling.k8s.io` 출력에
-`verticalpodautoscalers`가 120초 안에 나타난다. timeout이면 실패한다. 전체 pod 목록은
-GKE managed addon의 내부 Pod 이름이나 label을 가정하지 않는 진단용 보조 증적이다. 이
-증적을 #373과 Airflow#159에 남긴 뒤에만 Airflow Helm VPA 배포를 진행한다.
+Expected: CRD가 Established이고
+`kubectl api-resources --request-timeout=5s --api-group=autoscaling.k8s.io` 출력에
+`verticalpodautoscalers`가 120초 안에 나타난다. 각 API 요청은 5초로 제한하므로 API
+server 또는 네트워크 hang이 polling deadline을 넘기지 않는다. timeout이면 실패한다. 전체
+pod 목록은 GKE managed addon의 내부 Pod 이름이나 label을 가정하지 않는 진단용 보조
+증적이다. 이 증적을 #373과 Airflow#159에 남긴 뒤에만 Airflow Helm VPA 배포를 진행한다.

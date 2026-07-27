@@ -64,3 +64,27 @@ plan에서 허용된 cluster in-place VPA 변경만 있는지 다시 확인해�
 GKE managed addon의 control-plane 구현과 served API discovery 반영 시간은 관리형 동작이다.
 120초 timeout이 발생하면 Pod 이름이나 label로 readiness를 추정하지 말고, 전체 pod 목록과
 GKE 상태를 별도로 진단해야 한다.
+
+## 최종 재검토 수정 (2026-07-27)
+
+### 수정 범위
+
+- `docs/TEAM_OPERATIONS_RUNBOOK.md`와 계획 Tasks 2-3의 served VPA API polling
+  `kubectl api-resources` 호출에 `--request-timeout=5s`를 추가했다. 기존 120초 loop와
+  timeout 실패 동작은 유지하며, API server 또는 네트워크 hang이 전체 deadline을 무한히
+  초과하지 않게 한다.
+
+### 검증
+
+- 실제 `kubectl` 명령이나 원격 Kubernetes API 호출은 수행하지 않았다.
+- Red: 두 문서에 `--request-timeout=5s`가 없음을 정적 검사로 확인했다.
+- Green: 두 문서의 모든 served VPA API polling `kubectl api-resources` 호출이
+  `--request-timeout=5s`를 포함하고, 기존 120초 deadline, timeout 실패, 전체 pod 목록
+  진단 계약을 유지하는지 확인했다. Markdown Bash polling snippet은 `bash -n`으로 검증했다.
+- `git diff --check`를 실행했다.
+
+### 우려
+
+5초 요청 제한은 개별 discovery 요청의 무한 대기를 막지만, managed API server의 일시적
+지연은 전체 120초 관측 실패로 이어질 수 있다. 이 경우에도 내부 component Pod 이름이나
+label로 readiness를 추정하지 않는다.
