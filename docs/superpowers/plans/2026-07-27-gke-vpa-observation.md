@@ -131,15 +131,30 @@ allocatable resource를 검토한 후 별도 이슈에서 수동으로 한다.
 `## VPA 관측 확인 (#373)` section을 추가한다.
 
 ```bash
-kubectl get crd verticalpodautoscalers.autoscaling.k8s.io
-kubectl get pods --all-namespaces | rg 'vpa|vertical-pod-autoscaler'
+kubectl wait --for=condition=Established --timeout=120s crd/verticalpodautoscalers.autoscaling.k8s.io
+
+# CRD Established 뒤 served API discovery가 반영될 때까지 최대 120초 대기한다.
+deadline=$((SECONDS + 120))
+while ! kubectl api-resources --api-group=autoscaling.k8s.io \
+  | awk '$1 == "verticalpodautoscalers" { found = 1 } END { exit !found }'
+do
+  if (( SECONDS >= deadline )); then
+    printf '%s\n' 'VPA served API discovery timed out after 120 seconds.' >&2
+    exit 1
+  fi
+  sleep 5
+done
+
+kubectl get pods --all-namespaces
 kubectl get vpa airflow-scheduler --namespace airflow
 kubectl describe vpa airflow-scheduler --namespace airflow
 ```
 
-설명에는 첫 두 명령이 infra apply 직후 API/controller readiness를 확인하며,
-마지막 두 명령은 Autoresearch-airflow#159 배포 후 실행하고 recommendation은 실제
-workload 데이터가 누적되기 전에는 비어 있을 수 있음을 적는다.
+설명에는 CRD Established 뒤 `verticalpodautoscalers` served API discovery가 120초 안에
+반영되지 않으면 실패하며, 전체 pod 목록은 내부 component Pod 이름이나 label을 가정하지
+않는 진단용 보조 명령임을 적는다. 마지막 두 명령은 Autoresearch-airflow#159 배포 후
+실행하고 recommendation은 실제 workload 데이터가 누적되기 전에는 비어 있을 수 있음을
+적는다.
 
 - [ ] **Step 4: 문서 diff를 검증한다**
 
@@ -167,36 +182,54 @@ git commit -m "docs: GKE VPA 관측 절차 추가"
 - Test: live GKE API and VPA system components
 
 **Interfaces:**
-- Consumes: merge된 Task 1 Terraform 변경과 사용자가 명시적으로 승인한 `terraform apply`
+- Consumes: merge된 Task 1 Terraform 변경, PR의 `terraform-plan` 검토, 사용자의 명시적
+  `dev-apply` workflow-dispatch 요청과 `dev-apply` Environment reviewer 승인
 - Produces: Autoresearch-airflow#159의 Helm VPA 배포를 진행할 수 있는 readiness evidence
 
-- [ ] **Step 1: apply 전 Terraform diff를 마지막으로 확인한다**
+- [ ] **Step 1: PR의 dev root plan을 검토한다**
 
-Run:
+PR의 `terraform-plan` check와 상세 diff를 검토한다. 로컬 `terraform.tfvars` plan은 기본
+경로가 아니다.
 
-```bash
-terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
-```
+Expected: 변경 resource address는 `google_container_cluster.dev` 하나뿐이고, 그 resource의
+in-place `vertical_pod_autoscaling` addon 변경만 나타난다. 다른 resource address, destroy,
+replace, IAM, node pool, network, Secret 변경이 하나라도 있으면 merge하지 않고 plan 원인을
+해결한다. plan 출력의 add/change/destroy 수와 VPA block diff를 PR 본문에 기록한다.
 
-Expected: `google_container_cluster.dev`의 in-place VPA 변경만 나타나며 destroy/replace, IAM, node pool, network, Secret 변경이 없다. 다르면 apply하지 않고 plan 원인을 해결한다.
+- [ ] **Step 2: merge 후 사용자 요청으로 `dev-apply` workflow를 dispatch한다**
 
-- [ ] **Step 2: 사용자의 명시적 승인 뒤에만 apply한다**
+PR plan 검토를 통과하고 merge된 뒤, 사용자의 명시적 요청이 있을 때만 GitHub Actions의
+`dev-apply` workflow를 workflow-dispatch한다. `dev-apply` Environment reviewer가 plan을
+검토하고 승인해야 apply job이 실행된다.
 
-Run:
-
-```bash
-terraform -chdir=terraform/envs/dev apply -var-file=terraform.tfvars
-```
-
-Expected: apply가 성공하고 GKE cluster addon 변경만 완료된다. 이 명령은 사용자가 명시적으로 승인하지 않으면 실행하지 않는다.
+Expected: workflow의 plan job이 성공한 뒤 Environment 승인 게이트를 통과하면, 해당 run이
+저장한 plan으로 dev root apply가 실행된다. 로컬 `terraform.tfvars` apply는 CI 경로가
+사용 불가능한 break-glass 상황에서만 별도 사용자 승인으로 사용하며, 이 절차의 기본
+경로가 아니다.
 
 - [ ] **Step 3: VPA API와 controller/recommender를 확인한다**
 
 Run:
 
 ```bash
-kubectl get crd verticalpodautoscalers.autoscaling.k8s.io
-kubectl get pods --all-namespaces | rg 'vpa|vertical-pod-autoscaler'
+kubectl wait --for=condition=Established --timeout=120s crd/verticalpodautoscalers.autoscaling.k8s.io
+
+# CRD Established 뒤 served API discovery가 반영될 때까지 최대 120초 대기한다.
+deadline=$((SECONDS + 120))
+while ! kubectl api-resources --api-group=autoscaling.k8s.io \
+  | awk '$1 == "verticalpodautoscalers" { found = 1 } END { exit !found }'
+do
+  if (( SECONDS >= deadline )); then
+    printf '%s\n' 'VPA served API discovery timed out after 120 seconds.' >&2
+    exit 1
+  fi
+  sleep 5
+done
+
+kubectl get pods --all-namespaces
 ```
 
-Expected: VPA CRD가 존재하고 VPA 관련 system component가 Ready/Running 상태다. 이 증적을 #373과 Airflow#159에 남긴 뒤에만 Airflow Helm VPA 배포를 진행한다.
+Expected: CRD가 Established이고 `kubectl api-resources --api-group=autoscaling.k8s.io` 출력에
+`verticalpodautoscalers`가 120초 안에 나타난다. timeout이면 실패한다. 전체 pod 목록은
+GKE managed addon의 내부 Pod 이름이나 label을 가정하지 않는 진단용 보조 증적이다. 이
+증적을 #373과 Airflow#159에 남긴 뒤에만 Airflow Helm VPA 배포를 진행한다.

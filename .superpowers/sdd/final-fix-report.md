@@ -33,3 +33,34 @@ Terraform plan 증적과 VPA API/controller readiness 증적은 apply 전 pendin
 GKE managed addon의 실제 component Pod 구성은 관리형 구현 세부사항이므로 readiness
 판정에 Pod 이름이나 label을 사용하지 않는다. apply 전에는 `dev-apply` workflow의 상세
 plan에서 허용된 cluster in-place VPA 변경만 있는지 다시 확인해야 한다.
+
+## 재검토 수정 (2026-07-27)
+
+### 수정 범위
+
+- `docs/TEAM_OPERATIONS_RUNBOOK.md`와 계획 Tasks 2-3의 VPA readiness를 CRD Established
+  확인 뒤 `verticalpodautoscalers` served API discovery를 최대 120초 polling하는 동일한
+  명령 계약으로 정렬했다. timeout은 명시적으로 실패하며, 진단 pod 조회는 전체 namespace
+  목록만 출력한다.
+- Task 3의 기본 적용 경로를 PR `terraform-plan` 검토 → merge → 사용자 명시 요청의
+  `dev-apply` workflow-dispatch → `dev-apply` Environment reviewer 승인으로 변경했다.
+  로컬 `terraform.tfvars` apply는 break-glass 절차로만 제한했다.
+- PR plan 검토 기준을 `google_container_cluster.dev` 단일 resource address의 in-place
+  `vertical_pod_autoscaling` addon 변경으로 한정했다.
+
+### 검증
+
+- 실제 Terraform plan/apply, kubectl live 명령, GitHub workflow dispatch는 수행하지 않았다.
+- Markdown command structure red/green 검사 완료:
+  - Red: 직전 커밋의 runbook에는 120초 discovery polling이 없고 pod 이름 필터가 있었으며,
+    Task 3은 로컬 `terraform.tfvars` apply를 기본 명령으로 제시함을 확인했다.
+  - Green: 두 문서의 CRD Established/served API polling/timeout/전체 pod 목록 계약과 Task
+    3의 PR plan 검토, 단일 resource address, `dev-apply` dispatch, Environment 승인,
+    break-glass 제한을 확인했다. Markdown의 Bash polling snippet도 `bash -n`을 통과했다.
+- `git diff --check` 통과.
+
+### 우려
+
+GKE managed addon의 control-plane 구현과 served API discovery 반영 시간은 관리형 동작이다.
+120초 timeout이 발생하면 Pod 이름이나 label로 readiness를 추정하지 말고, 전체 pod 목록과
+GKE 상태를 별도로 진단해야 한다.

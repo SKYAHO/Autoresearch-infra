@@ -157,13 +157,27 @@ infra apply 직후에는 VPA API와 controller readiness를 먼저 확인한다.
 
 ```bash
 kubectl wait --for=condition=Established --timeout=120s crd/verticalpodautoscalers.autoscaling.k8s.io
-kubectl api-resources --api-group=autoscaling.k8s.io | rg '^verticalpodautoscalers'
-kubectl get pods --all-namespaces | rg 'vpa|vertical-pod-autoscaler'
+
+# CRD Established 뒤 served API discovery가 반영될 때까지 최대 120초 대기한다.
+deadline=$((SECONDS + 120))
+while ! kubectl api-resources --api-group=autoscaling.k8s.io \
+  | awk '$1 == "verticalpodautoscalers" { found = 1 } END { exit !found }'
+do
+  if (( SECONDS >= deadline )); then
+    printf '%s\n' 'VPA served API discovery timed out after 120 seconds.' >&2
+    exit 1
+  fi
+  sleep 5
+done
+
+kubectl get pods --all-namespaces
 ```
 
-첫 명령은 CRD가 Established 상태인지, 두 번째 명령은 discovery API가 VPA resource를
-served하는지 확인한다. 마지막 pod 목록은 GKE managed addon의 내부 component Pod 이름이나
-label을 전제하지 않는 진단용 보조 명령이다.
+첫 명령은 CRD가 Established 상태인지 확인한다. 이어지는 polling은
+`kubectl api-resources --api-group=autoscaling.k8s.io` 출력에
+`verticalpodautoscalers`가 나타날 때까지 총 120초 동안 기다리고, timeout이면 실패한다.
+마지막 pod 목록은 GKE managed addon의 내부 component Pod 이름이나 label을 전제하지 않는
+진단용 보조 명령이다.
 
 Autoresearch-airflow#159가 `airflow-scheduler` VPA CR을 배포한 후에는 해당 VPA와
 recommendation을 확인한다.
