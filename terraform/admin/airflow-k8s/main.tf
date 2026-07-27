@@ -183,10 +183,12 @@ resource "kubernetes_network_policy_v1" "airflow_ingress" {
       }
     }
 
-    # #358 Prometheus(monitoring ns) → statsd-exporter(9102) scrape 허용.
-    # 이 규칙이 없으면 ServiceMonitor가 등록돼도 타깃이 context deadline
-    # exceeded로 down이 된다(#358 검증 실측). 포트를 9102로 한정해
-    # webserver(8080) 등 다른 표면은 열지 않는다.
+    # #358 Prometheus scrape 허용 — 이 규칙이 없으면 ServiceMonitor가
+    # 등록돼도 타깃이 context deadline exceeded로 down(#358 검증 실측).
+    # 매칭 의미(정확히): monitoring ns의 모든 Pod → airflow ns 모든 Pod의
+    # 9102(containerPort 기준). 9102를 listen하는 것은 statsd-exporter뿐이라
+    # 포트 한정으로 충분 — webserver(8080) 등은 열리지 않는다. ingest
+    # (UDP 9125)는 scheduler→statsd same-ns 트래픽이라 기존 규칙으로 허용.
     ingress {
       from {
         namespace_selector {

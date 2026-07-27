@@ -124,7 +124,9 @@ dashboard 이름은 chart 버전에 따라 조금 달라질 수 있다. 이름�
   `AutoResearch / Airflow`(uid `ar-airflow`, #358 — scheduler heartbeat·
   executor 슬롯·DAG run duration/실패·schedule delay + 파드 리소스.
   statsd-exporter(airflow#146) 수집, ServiceMonitor는 monitoring ns에서
-  namespaceSelector로 airflow ns를 선택).
+  namespaceSelector로 airflow ns를 선택. **트러블슈팅**: airflow ns는
+  ingress deny-by-default라 admin root(airflow-k8s)의 9102 허용 규칙이
+  선행돼야 타깃이 UP — 타깃 down에 `context deadline exceeded`면 이 원인).
   `AutoResearch / Serving`(uid `ar-serving`, #358 — rerank 요청률·지연
   p95/p50·model_ready·unseen category + throttling·재시작).
   `AutoResearch / MLflow`(uid `ar-mlflow`, #357 — oauth2-proxy 경유 요청률·

@@ -154,6 +154,26 @@ plan은 `kubernetes_network_policy_v1.airflow_egress` 한 개의 in-place 변경
 문제가 생기면 이 변경에서 추가한 Redis egress 블록 하나만 제거하고 다시
 plan/apply합니다.
 
+## Prometheus statsd scrape ingress (#358)
+
+statsd-exporter(airflow#146)의 메트릭을 kube-prometheus-stack이 수집하려면
+`monitoring` 네임스페이스 → TCP **9102**(statsd-exporter 컨테이너 포트)
+ingress 허용이 필요합니다. `airflow-ingress`는 same-ns/kube-system 외
+deny라서, 이 규칙 없이는 ServiceMonitor가 등록돼도 Prometheus 타깃이
+`context deadline exceeded`로 down이 됩니다(#358 검증 실측).
+
+매칭 의미(정확히): 출발지는 monitoring ns의 **모든** Pod, 목적지는 airflow
+ns **모든** Pod의 9102 — 실질적으로 9102를 listen하는 것은 statsd-exporter
+뿐이라 포트 한정으로 충분하다고 판단했습니다(더 좁히려면 별도 정책에
+statsd pod_selector를 두는 방식). statsd ingest(UDP 9125)는 scheduler →
+statsd의 **same-ns 트래픽**이라 기존 규칙으로 이미 허용됩니다.
+
+plan은 `kubernetes_network_policy_v1.airflow_ingress` **in-place 1건**만
+보여야 합니다. 적용 후 검증: Prometheus UI Targets에서 `airflow-statsd`
+**UP** + `airflow_scheduler_heartbeat` 시리즈 유입. 롤백: 이 ingress 블록만
+제거 후 재 plan/apply — Airflow 워크로드 트래픽·IAM·GCP 리소스에는 영향이
+없습니다(Prometheus scrape만 다시 차단됨).
+
 ## Gmail SMTP egress (#277)
 
 `Autoresearch-airflow#87`의 DAG 성공·실패 메일 callback은 scheduler에서 Gmail
