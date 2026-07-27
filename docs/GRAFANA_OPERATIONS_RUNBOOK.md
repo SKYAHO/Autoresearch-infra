@@ -98,6 +98,7 @@ admin으로 로그인 → Administration → Users → New user:
 
 ```bash
 umask 077
+set -e
 ALERTMANAGER_SECRET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alertmanager-smtp-config.XXXXXX")"
 trap 'rm -f -- "$ALERTMANAGER_SECRET_DIR"/*; rmdir "$ALERTMANAGER_SECRET_DIR"' EXIT
 
@@ -168,12 +169,53 @@ print("Alertmanager config generated without displaying SMTP values.")
 PY
 ```
 
-생성 직후 다음 명령으로 Secret을 갱신하고 payload를 표시하지 않는 사전 동작 검증을 수행한다.
+생성 직후 다음 절차로 Secret을 create-or-replace한다. 기존 Secret이 있으면
+`resourceVersion`을 포함한 전체 객체를 in-place replace하므로, 이전 `data` 키가
+남지 않고 결과는 `alertmanager.yaml` 키 하나만 가진다. Alertmanager가 참조 중일 수
+있으므로 delete-and-recreate는 사용하지 않는다. 모든 Secret payload는 mode-0600 임시
+디렉터리에만 쓰며 표준 출력으로 내보내지 않는다.
 
 ```bash
-kubectl -n monitoring create secret generic alertmanager-smtp-config \
-  --from-file=alertmanager.yaml="$ALERTMANAGER_SECRET_DIR/alertmanager.yaml" \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n monitoring get secret alertmanager-smtp-config --ignore-not-found -o json \
+  > "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json"
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+config = (root / "alertmanager.yaml").read_bytes()
+if not config:
+    raise SystemExit("Generated Alertmanager config is empty")
+
+secret = {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {
+        "name": "alertmanager-smtp-config",
+        "namespace": "monitoring",
+    },
+    "type": "Opaque",
+    "data": {"alertmanager.yaml": base64.b64encode(config).decode("ascii")},
+}
+existing_path = root / "existing-alertmanager-secret.json"
+if existing_path.stat().st_size:
+    existing = json.loads(existing_path.read_text())
+    resource_version = existing.get("metadata", {}).get("resourceVersion")
+    if not resource_version:
+        raise SystemExit("Existing Secret has no resourceVersion")
+    secret["metadata"]["resourceVersion"] = resource_version
+
+(root / "alertmanager-secret.json").write_text(json.dumps(secret))
+PY
+
+if [ -s "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json" ]; then
+  kubectl -n monitoring replace -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+else
+  kubectl -n monitoring create -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+fi
 
 kubectl -n monitoring describe secret alertmanager-smtp-config
 docker run --rm \
