@@ -55,6 +55,37 @@ variable "app_gcp_service_account_email" {
   default     = ""
 }
 
+# #346 feast apply GKE Job 전용 경계. 앱 namespace를 재사용하면 jobs:create
+# 보유 주체가 autoresearch-app KSA(= app GSA)로 임의 컨테이너를 실행할 수 있어
+# GSA 분리 의미가 사라지므로 전용 namespace를 신설한다.
+variable "feast_apply_k8s_namespace" {
+  description = "Kubernetes namespace dedicated to the feast apply Job (#346). Must match terraform/envs/dev feast_apply_k8s_namespace."
+  type        = string
+  default     = "feast-apply"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_namespace))
+    error_message = "feast_apply_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "feast_apply_k8s_service_account" {
+  description = "Kubernetes service account mapped to the feast apply GCP service account (#346). Must match terraform/envs/dev feast_apply_k8s_service_account."
+  type        = string
+  default     = "feast-apply"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_service_account))
+    error_message = "feast_apply_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
+variable "feast_apply_gcp_service_account_email" {
+  description = "feast apply GCP service account email (#346). Used both as the KSA Workload Identity annotation and as the GitHub Actions RoleBinding subject. Empty value derives the dev default name."
+  type        = string
+  default     = ""
+}
+
 variable "private_services_cidr" {
   description = "Private Service Access CIDR containing the Cloud SQL private endpoint."
   type        = string

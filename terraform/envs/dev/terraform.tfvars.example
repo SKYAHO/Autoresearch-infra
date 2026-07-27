@@ -49,6 +49,12 @@ airflow_gke_node_disk_type        = "pd-standard"
 gke_app_k8s_namespace             = "autoresearch"
 gke_app_k8s_service_account       = "autoresearch-app"
 
+# #346 feast apply GKE Job 전용 namespace/KSA. 오브젝트 자체는
+# terraform/admin/autoresearch-k8s가 만들고, 여기서는 WI 바인딩 member만 만든다.
+# 두 root의 값이 반드시 같아야 한다.
+feast_apply_k8s_namespace       = "feast-apply"
+feast_apply_k8s_service_account = "feast-apply"
+
 # MLflow (#91 설계, #92 bucket/GSA, #93 Cloud SQL DB/user). K8s namespace/SA는 #94에서 생성.
 mlflow_k8s_namespace              = "mlflow"
 mlflow_k8s_service_account        = "mlflow"

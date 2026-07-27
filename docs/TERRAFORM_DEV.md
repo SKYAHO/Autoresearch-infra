@@ -1312,6 +1312,51 @@ federated principal은 버킷 IAM이 없어 `feast apply`가 `storage.buckets.ge
 bootstrap 변경은 불필요하다. 롤백은 `github_actions.tf`의 `feast_apply` 리소스
 제거 후 apply.
 
+### feast apply를 GKE Job으로 실행 (#346)
+
+`feature_store.yaml`의 `full_scan_for_deletion: false`는 GitHub Actions 러너가
+private Redis(PSC)에 닿을 수 없어 켠 완화책이고, 대체 수단인
+`key_ttl_seconds`(7일)는 고아를 절반만 지운다. Redis 키가 `join_keys + 엔티티 값
++ project`라 같은 엔티티를 쓰는 FeatureView들이 키를 공유하는데, TTL은 키 단위라
+매일 materialize가 EXPIRE를 리셋해 삭제된 FV의 HASH 필드가 영구히 남는다.
+
+그래서 **실행 주체만 VPC 안 GKE Job으로 옮긴다.** GHA는 VPC 밖에 그대로 두고 Job
+생성과 결과 판정만 한다. 컨트롤 플레인이 DNS 엔드포인트로 공개돼 있고
+IAM(`container.clusters.connect`)으로 검증되므로(`gke.tf`
+`enable_private_endpoint = false` + `allow_external_traffic = true`) VPC 밖에서도
+Job 생성이 가능하고, VPC 안이어야 하는 것은 Redis 데이터 경로뿐이다.
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| namespace | `feast-apply` (`feast_apply_k8s_namespace`) | 앱 namespace 재사용 안 함(아래) |
+| KSA | `feast-apply` (`feast_apply_k8s_service_account`) | Job spec의 `serviceAccountName` |
+| GSA | `autoresearch-dev-feast-apply@…` | #332 SA 재사용. GHA(가장)와 Pod(WI)가 공유 |
+| WI 바인딩 | `roles/iam.workloadIdentityUser`, member `<project>.svc.id.goog[feast-apply/feast-apply]` | `google_container_cluster.dev`에 `depends_on` |
+| Redis 접속 | `roles/redis.dbConnectionUser` + condition으로 dev Online Store cluster 한정 | 삭제 스캔은 SCAN+DEL/HDEL이라 write 필요. 같은 role로 materialize write를 하는 `airflow_batch` 선례 |
+| Redis TLS CA | `redis_server_ca` secret 한정 `roles/secretmanager.secretAccessor` | 프로젝트 수준 Secret Manager 권한은 없음 |
+| GKE 접속 | `roles/container.clusterViewer` | DNS endpoint 접속·cluster metadata 조회만. 실제 변경은 K8s RBAC이 통제(`airflow_deployer`와 동일 패턴) |
+
+namespace·KSA·RBAC 오브젝트는 `terraform/admin/autoresearch-k8s`가 만든다(해당
+root README 참조). 두 root의 `feast_apply_k8s_namespace` /
+`feast_apply_k8s_service_account` 값은 반드시 같아야 한다 — 어긋나면 WI 바인딩
+member가 실제 KSA와 달라져 Pod가 토큰 발급에 실패한다.
+
+**앱 namespace(`autoresearch`)를 재사용하지 않은 이유**: 그 namespace에
+`batch/jobs: create`를 주면 Job의 `serviceAccountName`을 `autoresearch-app`으로
+지정해 `gke_app` GSA(DB 비밀번호 secret·Cloud SQL·BQ dataEditor)로 임의 컨테이너를
+실행할 수 있다. `jobs: create` 보유 주체는 Pod spec으로 namespace 내 임의 K8s
+Secret도 마운트할 수 있어, RBAC에서 `secrets`를 빼는 것만으로는 막히지 않는다.
+
+**A(dev root)와 B(admin root) 사이에는 순서 제약이 없다.** WI 바인딩 member와
+RoleBinding subject가 모두 문자열이라 상호 참조가 없다. 다만 둘 다 앱 저장소의
+`feast-apply.yml` 머지 전에 완료돼야 한다 — 순서가 뒤집히면 존재하지 않는 KSA로
+Job을 만들려다 main에서 실패한다.
+
+롤백: `redis.tf`/`secret_manager.tf`/`github_actions.tf`의 `feast_apply_*` 신규
+리소스를 제거하고 apply하면 GSA는 #332 시점 권한으로 되돌아간다. 그 경우 Job은
+Redis 인증에 실패하므로 앱 저장소를 `full_scan_for_deletion: false` + GHA 러너
+실행으로 함께 되돌려야 한다.
+
 ## Vault auto-unseal 기반 (#132)
 
 HashiCorp Vault dev 도입 1단계(설계:

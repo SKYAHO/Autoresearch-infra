@@ -3,6 +3,36 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-27: feast apply를 VPC 안 GKE Job으로 전환 (#346) — 인프라 측
+
+- **문제**: `full_scan_for_deletion: false`(GHA 러너가 private Redis에 못 닿아 끈
+  것)의 대체 완화책 `key_ttl_seconds`(7일)가 고아를 절반만 지운다. Redis 키는
+  `join_keys + 엔티티 값 + project`라 같은 엔티티를 쓰는 FV들이 키를 공유하는데,
+  TTL은 **키 단위이지 HASH 필드 단위가 아니라** 매일 materialize가 EXPIRE를 리셋해
+  삭제된 FV의 필드가 영구히 남는다(`UserStaticView`/`UserDynamicView`가 해당).
+- **해결**: GHA는 VPC 밖에 두고 **실행 주체만 VPC 안 Pod로** 옮긴다. 컨트롤
+  플레인이 DNS 엔드포인트로 공개 + IAM 검증이라 VPC 밖에서도 Job 생성이 가능하고,
+  VPC 안이어야 하는 것은 Redis 데이터 경로뿐이다. Bastion IAP 터널은 기각 —
+  Cluster 클라이언트가 `CLUSTER SLOTS`로 받은 노드별 PSC 주소에 직접 접속해
+  `ssh -L` 단일 포워딩으로 동작하지 않고 TLS 호스트네임 검증도 깨진다.
+- **전용 namespace 신설(핵심 결정)**: 앱 namespace 재사용 시 `batch/jobs: create`
+  보유 주체가 Job의 `serviceAccountName`을 `autoresearch-app`으로 지정해 `gke_app`
+  GSA(DB 비밀번호·Cloud SQL·BQ dataEditor)로 임의 컨테이너를 실행할 수 있어 GSA
+  분리 의미가 사라진다. `jobs: create`는 namespace 내 임의 K8s Secret 마운트도
+  가능해 RBAC에서 `secrets`를 빼는 것으로는 막히지 않는다. 대가는 앱 namespace의
+  `autoresearch-egress`(`pod_selector {}`)가 적용되지 않아 NetworkPolicy를 새로
+  써야 한다는 점.
+- **RBAC 계약**: `batch/jobs`에 `get,list,watch,create,delete`. `watch`는
+  `kubectl wait`가 list+watch라 필수. `update`/`patch`는 주지 않고 재실행 시
+  이름 충돌은 **"delete 후 create"**로 처리(Job spec이 대부분 immutable이라
+  `kubectl apply` 갱신이 실패). `pods`/`pods/log` read만, `exec`·cluster-admin 없음.
+- GSA는 #332 `autoresearch-dev-feast-apply@` 재사용(`gke_app` 재사용은 딸려오는
+  권한 때문에 기각). GHA와 Pod가 같은 GSA를 공유하지만, Job을 만들 수 있는 주체는
+  어차피 그 KSA로 실행할 수 있어 분리해도 실질 경계가 늘지 않는다.
+- 주의: 파트 B(admin root)는 `terraform-plan.yml` 경로 필터 밖이라 PR CI 검증이
+  없다(로컬 fmt/validate/plan 필수). `admin-apply.yml`은 `ROOTS` 8개 일괄 apply라
+  승인 전 전 root plan 요약 확인이 필요하다.
+
 ## 2026-07-24: dev root 승인 게이트 CI apply 가동 (#341/#342) — 첫 run 검증 완료
 
 - admin root 8개(#307~#319)와 달리 dev root만 로컬 수동 apply라 "머지≠적용" 갭이
