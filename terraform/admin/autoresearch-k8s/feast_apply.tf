@@ -85,6 +85,26 @@ resource "kubernetes_role_binding_v1" "feast_apply_job_runner" {
   depends_on = [kubernetes_namespace_v1.feast_apply]
 }
 
+# feast apply Job은 아무것도 서빙하지 않으므로 ingress를 전면 차단한다.
+# policy_types에 Ingress를 넣고 ingress 규칙을 두지 않으면 deny-all이 된다.
+# 다른 admin namespace(argocd·vault·airflow·elastic·argo-rollouts)와 달리
+# 앱 namespace에는 ingress 정책이 없는데, 그 관행을 전용 namespace로
+# 옮기지 않는다. Job pod는 probe·metrics 수집 대상도 아니라 부작용이 없다.
+resource "kubernetes_network_policy_v1" "feast_apply_ingress" {
+  metadata {
+    name      = "feast-apply-ingress"
+    namespace = kubernetes_namespace_v1.feast_apply.metadata[0].name
+  }
+
+  spec {
+    pod_selector {}
+
+    policy_types = ["Ingress"]
+  }
+
+  depends_on = [kubernetes_namespace_v1.feast_apply]
+}
+
 # 앱 namespace의 autoresearch-egress는 pod_selector {}로 그 namespace에만
 # 적용되므로 전용 namespace에는 걸리지 않는다. feast apply에 필요한 범위만
 # 이식한다. Cloud SQL(private_services_cidr:5432)은 feast apply가 쓰지 않아

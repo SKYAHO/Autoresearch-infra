@@ -7,7 +7,7 @@ Kubernetes 측 경계를 별도 state로 관리합니다.
 - app GCP service account와 연결된 `autoresearch-app` KSA
 - DNS, Cloud SQL, Redis Cluster PSC, Workload Identity, HTTPS만 허용하는 egress
   NetworkPolicy
-- `feast-apply` namespace + KSA + GitHub Actions용 Job RBAC + 전용 egress
+- `feast-apply` namespace + KSA + GitHub Actions용 Job RBAC + 전용 egress/ingress
   NetworkPolicy (#346, `feast_apply.tf`)
 
 GCP Redis Cluster, PSC subnet/policy, TLS CA Secret Manager, app GSA와 Workload
@@ -212,6 +212,7 @@ GCP IAM(Redis·Secret Manager·Workload Identity·`container.clusterViewer`)은
 | Role | `feast-apply-job-runner` | 아래 동사 |
 | RoleBinding | `feast-apply-job-runner` | subject `kind: User`, name = feast apply GSA email |
 | NetworkPolicy | `feast-apply-egress` | 아래 표 |
+| NetworkPolicy | `feast-apply-ingress` | deny-all. Job pod는 아무것도 서빙하지 않는다 |
 
 **앱 namespace(`autoresearch`)를 재사용하지 않은 이유**: 그 namespace에
 `batch/jobs: create`를 주면 Job의 `serviceAccountName`을 `autoresearch-app`으로
@@ -251,6 +252,12 @@ Cloud SQL(`private_services_cidr`:5432)은 `feast apply`에 불필요해 이식�
 않았다. HTTPS 규칙은 Secret Manager(Redis CA)·GCS(registry)·BigQuery(source
 validation) 호출에 쓰인다.
 
+ingress는 `feast-apply-ingress`로 전면 차단한다. `policy_types`에 `Ingress`를
+넣고 규칙을 두지 않으면 deny-all이 된다. Job pod는 서비스도 probe·metrics 수집
+대상도 아니라 부작용이 없다. 앱 namespace에는 ingress 정책이 없으나, 다른 admin
+namespace(argocd·vault·airflow·elastic·argo-rollouts)는 모두 두고 있어 그쪽
+관행을 따랐다.
+
 ### 적용과 검증
 
 `terraform-plan.yml`은 경로 필터·실행 대상이 `terraform/envs/dev`로 고정돼 있어
@@ -262,7 +269,7 @@ terraform -chdir=terraform/admin/autoresearch-k8s validate
 terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvars
 ```
 
-plan에는 namespace 1 + KSA 1 + Role 1 + RoleBinding 1 + NetworkPolicy 1, 총 5건만
+plan에는 namespace 1 + KSA 1 + Role 1 + RoleBinding 1 + NetworkPolicy 2, 총 6건만
 add로 보여야 하고 기존 `autoresearch` namespace 리소스에는 변경이 없어야 한다.
 
 `admin-apply.yml`은 `ROOTS` 8개를 일괄 plan/apply하므로, 승인 전 나머지 7개 root의
