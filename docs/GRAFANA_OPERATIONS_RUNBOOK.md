@@ -242,7 +242,7 @@ update 뒤에는 위와 같이 Secret metadata만 확인한다. payload를 출�
 
 1. ArgoCD manual sync 전에 diff에서 `alertmanager-smtp-config` 참조와 `ContainerOOMKilled` 규칙만 추가되는지 확인한다.
 2. sync 뒤 Alertmanager StatefulSet이 Ready인지와 Alertmanager log에 config parse error가 없는지 확인한다.
-3. `restartPolicy: Never`와 낮은 memory limit을 가진 일회성 dummy Pod로 OOMKilled alert 이메일을 수신한다.
+3. `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다.
 4. dummy Pod를 삭제해 metric이 해소된 뒤 resolved 이메일을 수신한다.
 5. 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다.
 6. 검증 Pod는 즉시 삭제한다.
