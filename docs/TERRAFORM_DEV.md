@@ -305,7 +305,7 @@ BigQuery dataset을 계층별로 나눈다. 이름과 내용이 어긋나지 않
 | Dataset | 계층 | 테이블 |
 | --- | --- | --- |
 | `data_lake_raw` | raw | `data_lake_action_log`, `data_lake_youtube_trending_kr` (`asset_virtual_user_vu_1000`은 앱 자동 생성 — IaC 미관리, #339) |
-| `feast_offline_store` | feature | `user_static_feature`, `user_dynamic_feature`, `video_feature`, `user_category_similarity` |
+| `feast_offline_store` | feature | `user_static_feature`, `user_dynamic_feature`, `video_feature`, `user_category_similarity`, `training_entity`(학습 spine — FeatureView 소스 아님) |
 | `autoresearch_dev_analytics` | analytics | 분석/집계 테이블 |
 
 dataset 이전으로 접근 주체가 권한을 잃지 않도록, `feast_offline_store`가 가진
@@ -419,10 +419,12 @@ terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors �
 
 ### Feast 피처 테이블 스키마 소유권 (#280)
 
-`data_lake_*` 테이블과 달리, 아래 4개 Feast 피처 테이블은 **스키마를 Terraform이
+`data_lake_*` 테이블과 달리, 아래 Feast offline store 테이블은 **스키마를 Terraform이
 소유**한다. Feast `FeatureView`(`SKYAHO/Autoresearch`
 `feature_repo/feature_definitions.py`)가 컬럼명·타입·mode를 계약으로 선언하고
-있어, 계약 위반을 `terraform plan` 단계에서 잡기 위해서다.
+있어, 계약 위반을 `terraform plan` 단계에서 잡기 위해서다. `training_entity`는
+FeatureView 소스가 아니라 PIT 조회의 spine(entity dataframe)이지만, 같은 이유로
+스키마 계약(`SKYAHO/Autoresearch#355`)을 Terraform이 소유한다.
 
 | 테이블 | 파티셔닝 | Feast FeatureView |
 | --- | --- | --- |
@@ -430,6 +432,7 @@ terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors �
 | `user_dynamic_feature` | `event_timestamp` DAY | `UserDynamicView` |
 | `video_feature` | `event_timestamp` DAY | `VideoFeatureView` |
 | `user_category_similarity` | 없음 | `UserCategorySimilarityView` |
+| `training_entity` | `event_timestamp` DAY | 없음 — PIT 조회 spine(entity dataframe) |
 
 `user_static_feature`와 `user_category_similarity`는 `event_timestamp`가
 `1970-01-01` 고정값(정적 피처가 모든 action log보다 먼저 유효하다는 규약)이라
@@ -440,7 +443,8 @@ terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors �
 | 구조 + 스키마 | 이 저장소 (Terraform) | 테이블 존재, 컬럼·타입·mode, 파티셔닝, labels |
 | 데이터 | `SKYAHO/Autoresearch` | `autoresearch.jobs.feature_store_build`가 `createDisposition=CREATE_NEVER`로 적재 |
 
-> **주의 — 적재는 `WRITE_TRUNCATE`가 아니라 `TRUNCATE` + `INSERT INTO`를 쓴다.**
+> **주의 — 적재는 `WRITE_TRUNCATE`가 아니라 스키마를 보존하는 DML(정적 테이블은
+> `TRUNCATE`, 일 단위 증분 테이블은 파티션 단위 `DELETE`, 이어서 `INSERT INTO`)을 쓴다.**
 > `WRITE_TRUNCATE`는 대상 테이블의 스키마까지 결과 스키마로 덮어쓴다
 > (`CREATE_NEVER`는 테이블 신규 생성만 막는다). 2026-07-21 실측에서 `REQUIRED`
 > 컬럼이 `NULLABLE`로 파괴되는 것을 확인했다. 그대로 두면 job ↔ Terraform 간 영구
@@ -463,8 +467,10 @@ COMMIT TRANSACTION;
 `autoresearch_dev_analytics`(feature dataset이 아니라 analytics)에 **존재만
 관리하는 Terraform 리소스로 편입**했다 — `data_lake_*` 패턴처럼 `ignore_changes =
 [schema]`로 스키마는 적재 스크립트가 소유하고, 적재는 `WRITE_TRUNCATE`(테이블
-교체가 아니라 기존 테이블에 재적재)로 한다. `training_entity`는 여전히 Terraform
-관리에서 제외한다(배치 job이 `CREATE OR REPLACE`로 관리).
+교체가 아니라 기존 테이블에 재적재)로 한다. `training_entity`는 위 소유권 표대로
+이 저장소가 스키마를 소유하며(`SKYAHO/Autoresearch#355`), `feature_store_build`가
+파티션 단위 `DELETE FROM ... WHERE <파티션> + INSERT INTO`(#261)로 적재해 Terraform
+소유 스키마를 보존한다 — `CREATE OR REPLACE`를 쓰지 않는다.
 
 ### BigQuery ↔ Vertex AI connection (#280)
 
