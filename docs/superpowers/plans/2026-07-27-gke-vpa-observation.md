@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- `google_container_cluster.dev.addons_config.vertical_pod_autoscaling.enabled`는 정확히 `true`여야 한다.
+- `google_container_cluster.dev.vertical_pod_autoscaling.enabled`는 정확히 `true`여야 한다.
 - VPA `Auto` 또는 `Recreate` mode, scheduler request/limit, node pool, IAM, network, Secret은 변경하지 않는다.
 - `terraform apply`는 사용자가 명시적으로 승인한 경우에만 실행한다.
 - Airflow VPA CR 배포는 Autoresearch-airflow#159가 담당하며, 이 변경의 apply 후에만 진행한다.
@@ -31,7 +31,7 @@
 - Test: `terraform/envs/dev/gke.tf`의 rendered Terraform configuration
 
 **Interfaces:**
-- Consumes: `google_container_cluster.dev.addons_config`의 기존 `network_policy_config` block
+- Consumes: `google_container_cluster.dev`의 기존 `addons_config`와 `network_policy_config` block
 - Produces: GKE API가 `verticalpodautoscalers.autoscaling.k8s.io` CRD와 VPA controller/recommender를 제공하는 cluster configuration
 
 - [ ] **Step 1: 변경 전 구조 검사를 실행한다**
@@ -45,19 +45,15 @@ rg -n 'vertical_pod_autoscaling' terraform/envs/dev/gke.tf
 
 Expected: 첫 명령은 `network_policy_config`만 표시하고, 두 번째 명령은 결과가 없어 VPA addon 선언이 아직 없음을 확인한다.
 
-- [ ] **Step 2: `addons_config`에 최소 VPA block을 추가한다**
+- [ ] **Step 2: cluster 최상위에 최소 VPA block을 추가한다**
 
-`terraform/envs/dev/gke.tf`의 기존 block을 다음처럼 만든다. 기존 network policy 설정은 그대로 유지한다.
+`terraform/envs/dev/gke.tf`에서 기존 `addons_config`는 변경하지 않고, 그 직후에
+다음 최상위 block을 추가한다. google provider v7.39.0은
+`addons_config.vertical_pod_autoscaling`을 지원하지 않는다.
 
 ```hcl
-  addons_config {
-    network_policy_config {
-      disabled = false
-    }
-
-    vertical_pod_autoscaling {
-      enabled = true
-    }
+  vertical_pod_autoscaling {
+    enabled = true
   }
 ```
 

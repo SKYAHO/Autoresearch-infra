@@ -30,13 +30,14 @@ VPA CR을 infra Terraform state에 두지 않는다. CR은 Airflow Helm release�
 
 ## 설계
 
-`terraform/envs/dev/gke.tf`의 `google_container_cluster.dev.addons_config`에
-다음 구성을 추가한다.
+`terraform/envs/dev/gke.tf`의 `google_container_cluster.dev`에 다음 최상위
+구성을 추가한다. `vertical_pod_autoscaling`은 google provider v7.39.0에서
+`addons_config`의 하위 block이 아니다.
 
 ```hcl
-vertical_pod_autoscaling {
-  enabled = true
-}
+  vertical_pod_autoscaling {
+    enabled = true
+  }
 ```
 
 이는 GKE VPA CRD와 recommender/controller를 제공한다. workload의 resource
