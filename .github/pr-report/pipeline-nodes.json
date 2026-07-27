@@ -1,0 +1,37 @@
+{
+  "$comment": "PR 이해 리포트의 canonical 파이프라인 노드/에지 정본. 근거: README.md(## 저장소 구조), .claude/docs/architecture-overview.md. 에이전트는 이 카탈로그를 그대로 복사해 status만 판정하며, 노드를 임의로 발명하지 않습니다. 신규 구성요소 도입 PR에서만 'custom:' 접두 id로 노드를 추가할 수 있습니다. 저장소 구조가 바뀌면 README.md 갱신과 같은 PR에서 이 파일도 갱신합니다. lane 체계(batch/data/train/serve/cross/external)와 report.schema.json/template.html은 SKYAHO/Autoresearch 원본과 동일하게 유지합니다. label은 SVG 노드 박스(고정폭 172px, 줄바꿈 없음)에 맞춰 짧게 유지합니다 — 상세 설명은 paths/$comment에 담고 label은 20자 내외로 제한합니다.",
+  "lanes": ["batch", "data", "train", "serve", "cross", "external"],
+  "lane_labels": {
+    "batch": "부트스트랩·dev 환경 provisioning",
+    "data": "데이터 인프라",
+    "train": "학습·오케스트레이션 인프라",
+    "serve": "서빙·배포 인프라",
+    "cross": "네트워크·보안·관측·CI",
+    "external": "외부 저장소"
+  },
+  "nodes": [
+    { "id": "terraform_bootstrap", "label": "Terraform 부트스트랩", "lane": "batch", "order": 1, "paths": ["terraform/bootstrap/"] },
+    { "id": "terraform_dev_env", "label": "dev Terraform 환경", "lane": "batch", "order": 2, "paths": ["terraform/envs/dev/"] },
+    { "id": "data_storage", "label": "GCS·BigQuery 저장소", "lane": "data", "order": 1, "paths": ["terraform/envs/dev/storage.tf", "terraform/envs/dev/bigquery.tf"] },
+    { "id": "data_cloudsql_redis", "label": "Cloud SQL·Feast Redis", "lane": "data", "order": 2, "paths": ["terraform/envs/dev/cloud_sql.tf", "terraform/envs/dev/redis.tf"] },
+    { "id": "ml_platform_k8s", "label": "MLflow·Airflow GKE", "lane": "train", "order": 1, "paths": ["terraform/admin/mlflow-k8s/", "terraform/admin/airflow-k8s/", "terraform/envs/dev/airflow.tf", "terraform/envs/dev/cloud_build.tf", "terraform/envs/dev/gke.tf"] },
+    { "id": "serving_deploy", "label": "서빙 배포 (ArgoCD)", "lane": "serve", "order": 1, "paths": ["deploy/serving/", "deploy/mlflow/", "terraform/admin/autoresearch-k8s/", "terraform/admin/argo-rollouts-k8s/", "deploy/argo-rollouts/"] },
+    { "id": "team_access", "label": "팀 GKE 접근 경계", "lane": "serve", "order": 2, "paths": ["terraform/admin/gke-team-access/"] },
+    { "id": "network_security", "label": "네트워크·보안 경계", "lane": "cross", "order": 1, "paths": ["terraform/envs/dev/vpc.tf", "terraform/envs/dev/nat.tf", "terraform/envs/dev/bastion.tf", "terraform/envs/dev/dns.tf", "terraform/envs/dev/secret_manager.tf", "terraform/envs/dev/vault.tf", "terraform/admin/vault-k8s/"] },
+    { "id": "monitoring_observability", "label": "모니터링·관측 인프라", "lane": "cross", "order": 2, "paths": ["deploy/monitoring/", "terraform/admin/monitoring-k8s/", "terraform/admin/argocd-k8s/", "terraform/admin/elastic-k8s/", "terraform/envs/dev/elastic.tf"] },
+    { "id": "ci_release", "label": "CI·Terraform 워크플로우", "lane": "cross", "order": 3, "paths": [".github/workflows/", "terraform/modules/"] },
+    { "id": "docs", "label": "문서·운영 가이드", "lane": "cross", "order": 4, "paths": ["docs/", ".claude/docs/", "CLAUDE.md", "README.md", "terraform/README.md", "CONTRIBUTING.md"] },
+    { "id": "ext_app", "label": "(외부) 애플리케이션 코드", "lane": "external", "order": 1, "paths": ["SKYAHO/Autoresearch"] },
+    { "id": "ext_airflow", "label": "(외부) Airflow 오케스트레이션", "lane": "external", "order": 2, "paths": ["SKYAHO/Autoresearch-airflow"] }
+  ],
+  "edges": [
+    { "from": "terraform_bootstrap", "to": "terraform_dev_env" },
+    { "from": "network_security", "to": "terraform_dev_env", "style": "dashed" },
+    { "from": "data_storage", "to": "ml_platform_k8s", "style": "dashed" },
+    { "from": "ml_platform_k8s", "to": "serving_deploy", "style": "dashed" },
+    { "from": "ext_app", "to": "serving_deploy", "style": "dashed" },
+    { "from": "ext_airflow", "to": "ml_platform_k8s", "style": "dashed" },
+    { "from": "monitoring_observability", "to": "serving_deploy", "style": "dashed" },
+    { "from": "ci_release", "to": "terraform_dev_env", "style": "dashed" }
+  ]
+}
