@@ -214,23 +214,65 @@ print("Alertmanager config generated without displaying SMTP values.")
 PY
 ```
 
-- [ ] **Step 3: Document the Secret update and pre-sync checks**
+- [ ] **Step 3: Document local config validation, atomic Secret update, and metadata-only checks**
 
-Add these commands immediately after the generator. They display only resource metadata or validation status, never the payload.
+Add these commands immediately after the generator. Validate the locally generated
+`alertmanager.yaml` before any Kubernetes Secret create or replace mutation. Only if
+that validation succeeds, atomically create or replace the Secret; inspect only its
+metadata afterward. These commands never display the payload.
 
 ```bash
-kubectl -n monitoring create secret generic alertmanager-smtp-config \
-  --from-file=alertmanager.yaml="$ALERTMANAGER_SECRET_DIR/alertmanager.yaml" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl -n monitoring describe secret alertmanager-smtp-config
 docker run --rm \
   --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
   quay.io/prometheus/alertmanager:v0.33.1 \
   amtool check-config /work/alertmanager.yaml
+
+kubectl -n monitoring get secret alertmanager-smtp-config --ignore-not-found -o json \
+  > "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json"
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+config = (root / "alertmanager.yaml").read_bytes()
+if not config:
+    raise SystemExit("Generated Alertmanager config is empty")
+
+secret = {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {
+        "name": "alertmanager-smtp-config",
+        "namespace": "monitoring",
+    },
+    "type": "Opaque",
+    "data": {"alertmanager.yaml": base64.b64encode(config).decode("ascii")},
+}
+existing_path = root / "existing-alertmanager-secret.json"
+if existing_path.stat().st_size:
+    existing = json.loads(existing_path.read_text())
+    resource_version = existing.get("metadata", {}).get("resourceVersion")
+    if not resource_version:
+        raise SystemExit("Existing Secret has no resourceVersion")
+    secret["metadata"]["resourceVersion"] = resource_version
+
+(root / "alertmanager-secret.json").write_text(json.dumps(secret))
+PY
+
+if [ -s "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json" ]; then
+  kubectl -n monitoring replace -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+else
+  kubectl -n monitoring create -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+fi
+
+kubectl -n monitoring get secret alertmanager-smtp-config \
+  -o custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type,RESOURCE-VERSION:.metadata.resourceVersion,CREATED:.metadata.creationTimestamp
 ```
 
-State directly below the command that `describe` must show only one key named `alertmanager.yaml`, and the `amtool` invocation must succeed without copying its input or output into a ticket, terminal recording, or log.
+State directly below the command that `amtool` must succeed without copying its input or output into a ticket, terminal recording, or log. The create-or-replace input contains only the `alertmanager.yaml` key, preserves `resourceVersion` for an existing Secret, and must not use delete-and-recreate. The post-update command displays metadata columns only; do not display or copy payloads.
 
 - [ ] **Step 4: Document cluster validation, alert resolution, and rollback**
 
@@ -256,13 +298,13 @@ config 오류 또는 메일 전달 실패 시 ArgoCD sync를 중단하거나 val
 In `docs/OBSERVABILITY_STRATEGY.md`, replace the current Alerting row with this current-state statement.
 
 ```markdown
-| Alerting | 기본 rule + Alertmanager SMTP 이메일 (`warning`/`critical`, resolved 포함) |
+| Alerting | 기본 rule 설치됨. Alertmanager SMTP 이메일 설정 values/docs는 커밋됐으나 ArgoCD manual sync 및 OOM/CrashLoop 이메일 실증 전으로, `warning`/`critical`·resolved 이메일은 아직 운영 중이 아님 |
 ```
 
 Replace the Alertmanager design decision with this statement.
 
 ```markdown
-| Alertmanager | 설치와 SMTP 이메일 알림 운영. 설정 payload는 `monitoring` namespace의 운영자 주입 Secret으로 관리 |
+| Alertmanager | 설치됨. SMTP 이메일 설정은 ArgoCD manual sync와 OOM/CrashLoop 이메일 실증이 남아 있어 아직 운영하지 않음. 설정 payload는 ArgoCD 관리 대상이 아닌 `monitoring` namespace의 운영자 주입 Secret으로 관리 |
 ```
 
 Remove the completed “Alertmanager 알림 채널은 Slack, email, GitHub issue 중 무엇을 사용할지?” question from the future confirmation list. Keep Slack and other immediate channels as a future scope, not a prerequisite for email operation.
