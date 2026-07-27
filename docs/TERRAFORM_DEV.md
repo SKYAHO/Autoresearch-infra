@@ -1099,6 +1099,7 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
 
    ```bash
    bash -c '
+     set -euo pipefail
      kubectl wait --for=create --timeout=120s \
        crd/verticalpodautoscalers.autoscaling.k8s.io
      kubectl wait --for=condition=Established --timeout=120s \
@@ -1117,21 +1118,22 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
    '
    ```
 
-5. Autoresearch-airflow#159를 merge하기 전에 `airflow_deployer_service_account_email`로
-   구성된 Airflow Helm deployer GSA의 실제 WIF 자격증명으로 인증된 kubeconfig context에서
-   VPA lifecycle 모든 동사를 확인한다. 운영자의 현재 context 결과는 이 검증으로 인정하지
-   않으며, `--as` impersonation은 실제 deployer identity 인증을 대체하지 않으므로 사용하지
-   않는다.
+5. 실제 Helm deployer WIF context의 생성과 검증은 로컬 runbook 책임이 아니다. 정본은
+   Autoresearch-airflow#159의 `deploy-gke-dev.yml` preflight이며, 이 workflow가 GitHub
+   Actions WIF deployer GSA 자격증명으로 인증한 context에서 VPA lifecycle 모든 동사를
+   확인한다. 운영자 개인 kubeconfig로 WIF identity를 흉내 내거나 `--as` impersonation을
+   사용하지 않는다. 이 preflight가 성공해야 Airflow merge/deploy gate를 통과한다.
 
    ```bash
+   set -e
    for verb in get list watch create update patch delete; do
-     kubectl auth can-i "$verb" verticalpodautoscalers.autoscaling.k8s.io --namespace airflow
+     kubectl auth can-i --quiet "$verb" verticalpodautoscalers.autoscaling.k8s.io --namespace airflow
    done
    ```
 
-   하나라도 `no`이면 Helm 배포를 중단하고 Task 4 Role/RoleBinding을 수정한다. 이를
-   cluster-wide RBAC로 우회하지 않는다. 모두 `yes`인 경우에만
-   `airflow-scheduler` VPA CR을 배포한다.
+   하나라도 권한이 없거나 명령 오류가 발생하면 `set -e`가 preflight를 즉시 실패시킨다.
+   Helm 배포를 중단하고 Task 4 Role/RoleBinding을 수정하며, 이를 cluster-wide RBAC로
+   우회하지 않는다.
 6. 로컬 `terraform.tfvars` plan/apply는 CI를 사용할 수 없는 경우의 break-glass로만
    사용하며, 같은 변경 제한과 별도 승인을 적용한다.
 
