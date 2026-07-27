@@ -11,7 +11,8 @@
 ## Global Constraints
 
 - `google_container_cluster.dev.vertical_pod_autoscaling.enabled`는 정확히 `true`여야 한다.
-- VPA `Auto` 또는 `Recreate` mode, scheduler request/limit, node pool, IAM, network, Secret은 변경하지 않는다.
+- VPA `Auto` 또는 `Recreate` mode, scheduler request/limit, node pool, GCP IAM, network, Secret은 변경하지 않는다.
+- VPA CR lifecycle에는 `airflow` namespace의 `autoscaling.k8s.io/verticalpodautoscalers` 최소 RBAC만 추가한다. GKE managed addon의 내부 RBAC 또는 `admin` ClusterRole aggregation에 의존하지 않는다.
 - `terraform apply`는 사용자가 명시적으로 승인한 경우에만 실행한다.
 - Airflow VPA CR 배포는 Autoresearch-airflow#159가 담당하며, 이 변경의 apply 후에만 진행한다.
 - 롤백 시 Airflow VPA CR을 먼저 삭제하고, 그 뒤에만 애드온 비활성화를 검토한다.
@@ -235,3 +236,202 @@ Expected: CRD가 Established이고
 server 또는 네트워크 hang이 polling deadline을 넘기지 않는다. timeout이면 실패한다. 전체
 pod 목록은 GKE managed addon의 내부 Pod 이름이나 label을 가정하지 않는 진단용 보조
 증적이다. 이 증적을 #373과 Airflow#159에 남긴 뒤에만 Airflow Helm VPA 배포를 진행한다.
+
+---
+
+## Review Remediation Amendment
+
+이 amendment는 Task 2의 CRD readiness snippet과 Task 3의 운영 순서를 대체한다.
+VPA addon 활성화는 비동기 GKE cluster update operation이므로 DAG 실행이 없는 운영 창에서
+`dev-apply`를 승인하고, 완료된 operation을 확인한다. 이 계획은 addon 내부 RBAC를 공개
+계약으로 가정하지 않고 Helm deployer와 installer의 VPA CR lifecycle 권한을 namespace에
+명시한다.
+
+### Task 4: Airflow VPA lifecycle RBAC 선언
+
+**Files:**
+- Modify: `terraform/admin/airflow-k8s/main.tf:26-116`
+- Test: Terraform configuration structure and `terraform/admin/airflow-k8s` validate in a GKE-authenticated operator environment
+
+**Interfaces:**
+- Consumes: `var.airflow_k8s_namespace`, `var.installer_user_emails`, `local.airflow_deployer_service_account_email`
+- Produces: `airflow-vpa` Role and `airflow-vpa` RoleBinding for the Helm deployer GSA and installer Users
+
+- [ ] **Step 1: Write the failing structural assertion**
+
+Run:
+
+```bash
+rg -n 'autoscaling\.k8s\.io|verticalpodautoscalers|airflow-vpa' terraform/admin/airflow-k8s/main.tf
+```
+
+Expected: exit code 1 because no explicit VPA Role or RoleBinding exists.
+
+- [ ] **Step 2: Add the namespace-scoped Role and RoleBinding**
+
+Add the following resources after `kubernetes_role_v1.airflow_components`:
+
+```hcl
+resource "kubernetes_role_v1" "airflow_vpa" {
+  metadata {
+    name      = "airflow-vpa"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  rule {
+    api_groups = ["autoscaling.k8s.io"]
+    resources  = ["verticalpodautoscalers"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+}
+
+resource "kubernetes_role_binding_v1" "airflow_vpa" {
+  metadata {
+    name      = "airflow-vpa"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role_v1.airflow_vpa.metadata[0].name
+  }
+
+  dynamic "subject" {
+    for_each = toset(concat(
+      [local.airflow_deployer_service_account_email],
+      tolist(var.installer_user_emails),
+    ))
+
+    content {
+      api_group = "rbac.authorization.k8s.io"
+      kind      = "User"
+      name      = subject.value
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+```
+
+- [ ] **Step 3: Run the structural assertion and Terraform validation**
+
+Run:
+
+```bash
+rg -n 'autoscaling\.k8s\.io|verticalpodautoscalers|airflow-vpa' terraform/admin/airflow-k8s/main.tf
+terraform -chdir=terraform/admin/airflow-k8s fmt -check -recursive
+terraform -chdir=terraform/admin/airflow-k8s validate
+```
+
+Expected: the search shows the Role and binding, formatting exits 0, and authenticated validation reports a valid configuration. Do not run `plan` or `apply` without explicit user approval.
+
+- [ ] **Step 4: Commit the RBAC change**
+
+```bash
+git add terraform/admin/airflow-k8s/main.tf
+git commit -m "feat: Airflow VPA lifecycle 권한 추가"
+```
+
+### Task 5: Apply safety and readiness runbook remediation
+
+**Files:**
+- Modify: `docs/TERRAFORM_DEV.md:1069-1090`
+- Modify: `docs/TEAM_OPERATIONS_RUNBOOK.md:154-178`
+- Test: markdown command inspection and `bash -n` of the embedded polling snippet
+
+**Interfaces:**
+- Consumes: Task 4 namespace RBAC and `dev-apply`/`admin-apply` approval workflows
+- Produces: a safe, ordered procedure for addon update, CRD readiness, and RBAC verification
+
+- [ ] **Step 1: Write the failing command-structure assertion**
+
+Run:
+
+```bash
+rg -n 'for=create|airflow-vpa|auth can-i.*verticalpodautoscalers|bash -c' docs/TERRAFORM_DEV.md docs/TEAM_OPERATIONS_RUNBOOK.md
+```
+
+Expected: required readiness and RBAC terms are absent or the old direct `kubectl wait` command remains.
+
+- [ ] **Step 2: Document the exact safe procedure**
+
+Replace direct CRD condition waiting with this subshell in the runbook and plan:
+
+```bash
+bash -c '
+  kubectl wait --for=create --timeout=120s \
+    crd/verticalpodautoscalers.autoscaling.k8s.io
+  kubectl wait --for=condition=Established --timeout=120s \
+    crd/verticalpodautoscalers.autoscaling.k8s.io
+  deadline=$((SECONDS + 120))
+  while ! kubectl api-resources --request-timeout=5s \
+    --api-group=autoscaling.k8s.io \
+    | awk "\$1 == \"verticalpodautoscalers\" { found = 1 } END { exit !found }"
+  do
+    if (( SECONDS >= deadline )); then
+      printf "%s\\n" "VPA served API discovery timed out after 120 seconds." >&2
+      exit 1
+    fi
+    sleep 5
+  done
+'
+```
+
+Document that `dev-apply` runs only in a DAG-idle operating window and its GKE operation must complete before readiness checks. Document that `admin-apply` applies Task 4 first, then verify the actual Helm deployer identity with `kubectl auth can-i` for all lifecycle verbs before Airflow#159 is merged. State that a failed permission check blocks the Helm deployment and must not be worked around with cluster-wide RBAC.
+
+- [ ] **Step 3: Verify the documentation contract**
+
+Run:
+
+```bash
+rg -n 'for=create|condition=Established|airflow-vpa|auth can-i.*verticalpodautoscalers|DAG.*운영 창|GKE operation' docs/TERRAFORM_DEV.md docs/TEAM_OPERATIONS_RUNBOOK.md
+git diff --check
+```
+
+Expected: all required terms are present and no whitespace error is reported.
+
+- [ ] **Step 4: Commit the runbook remediation**
+
+```bash
+git add docs/TERRAFORM_DEV.md docs/TEAM_OPERATIONS_RUNBOOK.md docs/superpowers/plans/2026-07-27-gke-vpa-observation.md
+git commit -m "docs: VPA 운영 안전 절차 보완"
+```
+
+### Task 6: Approved live rollout evidence
+
+**Files:**
+- Modify: 없음
+- Test: GitHub `admin-apply` and `dev-apply` runs plus live Kubernetes readiness/RBAC checks
+
+**Interfaces:**
+- Consumes: merged Tasks 1, 4, and 5 plus explicit user approval
+- Produces: evidence that Airflow#159 can be safely merged and deployed
+
+- [ ] **Step 1: Apply VPA RBAC through the approved admin root workflow**
+
+Run after merge and explicit approval: dispatch `.github/workflows/admin-apply.yml`, select the `airflow-k8s` root, and wait for the required Environment reviewer approval.
+
+Expected: the applied Role and RoleBinding exist only in namespace `airflow`.
+
+- [ ] **Step 2: Apply the GKE addon during a DAG-idle operating window**
+
+Run after explicit approval: dispatch `.github/workflows/dev-apply.yml`, review the plan summary, approve the `dev-apply` Environment, and record the completed GKE operation.
+
+Expected: the plan has only the in-place `google_container_cluster.dev` addon change and the workflow apply succeeds.
+
+- [ ] **Step 3: Collect readiness and permission evidence**
+
+Run the Task 5 CRD/API subshell, then authenticate as the deployer and run:
+
+```bash
+kubectl auth can-i get verticalpodautoscalers.autoscaling.k8s.io -n airflow
+kubectl auth can-i list verticalpodautoscalers.autoscaling.k8s.io -n airflow
+kubectl auth can-i watch verticalpodautoscalers.autoscaling.k8s.io -n airflow
+kubectl auth can-i create verticalpodautoscalers.autoscaling.k8s.io -n airflow
+kubectl auth can-i update verticalpodautoscalers.autoscaling.k8s.io -n airflow
+kubectl auth can-i patch verticalpodautoscalers.autoscaling.k8s.io -n airflow
+kubectl auth can-i delete verticalpodautoscalers.autoscaling.k8s.io -n airflow
+```
+
+Expected: every command prints `yes`. Record the GKE operation and checks in #373 and Airflow#159 before merging Airflow#160.
