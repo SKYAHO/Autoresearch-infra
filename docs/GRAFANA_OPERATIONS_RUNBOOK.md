@@ -121,6 +121,12 @@ dashboard 이름은 chart 버전에 따라 조금 달라질 수 있다. 이름�
   requests 점유율 vs 실사용률, namespace/pod CPU·메모리),
   `AutoResearch / K8s 네트워크`(uid `ar-k8s-network` — namespace/pod 트래픽,
   에러·드랍, TCP 소켓·재전송·conntrack). 둘 다 `namespace` 변수로 필터.
+  `AutoResearch / Airflow`(uid `ar-airflow`, #358 — scheduler heartbeat·
+  executor 슬롯·DAG run duration/실패·schedule delay + 파드 리소스.
+  statsd-exporter(airflow#146) 수집, ServiceMonitor는 monitoring ns에서
+  namespaceSelector로 airflow ns를 선택).
+  `AutoResearch / Serving`(uid `ar-serving`, #358 — rerank 요청률·지연
+  p95/p50·model_ready·unseen category + throttling·재시작).
   `AutoResearch / MLflow`(uid `ar-mlflow`, #357 — oauth2-proxy 경유 요청률·
   상태코드·p95 지연 + 컨테이너 CPU/메모리. 서버 자체 /metrics가 아닌
   폴백 채택 사유는 MLFLOW_OPERATIONS_RUNBOOK 관측 절 참조).
