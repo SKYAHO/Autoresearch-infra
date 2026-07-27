@@ -59,6 +59,8 @@ resource "kubernetes_role_v1" "airflow_vpa" {
     resources  = ["verticalpodautoscalers"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
 }
 
 resource "kubernetes_role_binding_v1" "airflow_vpa" {
