@@ -85,7 +85,13 @@ Expected: exit code 1.
 
 - [ ] **Step 2: Document the approval flow**
 
-Add a short section stating that `airflow-k8s-apply.yml` plans only `terraform/admin/airflow-k8s`, requires `airflow-k8s-apply` Environment approval, uses the existing installer Secret, and is the required predecessor to VPA addon apply.
+Add a short section stating that, after #387 merges, the first explicitly approved
+`dev-apply` applies the exact `airflow-k8s-apply.yml@refs/heads/main` WIF allowlist
+and observation-only VPA addon. Then `airflow-k8s-apply.yml` plans only
+`terraform/admin/airflow-k8s`, requires `airflow-k8s-apply` Environment approval, and
+uses the existing installer Secret to apply VPA RBAC. CRD/API/RBAC evidence is required
+before Autoresearch-airflow deploys its VPA CR, and the addon does not mutate scheduler
+Pods while no VPA CR exists.
 
 - [ ] **Step 3: Verify and commit**
 

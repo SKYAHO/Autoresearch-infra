@@ -1081,19 +1081,20 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
 
 적용 순서는 다음과 같다.
 
-1. `admin-apply` 승인 workflow로 Task 4의 namespace-scoped `airflow-vpa` Role과
-   RoleBinding을 먼저 적용하고 완료를 확인한다. 이 단계는 GKE addon `dev-apply`보다
-   먼저 끝나야 한다. GKE addon 내부 RBAC 또는 `admin` ClusterRole aggregation은 이
-   권한을 제공한다고 가정하지 않는다.
-2. `admin-apply` 완료 후에만 DAG가 실행 중이지 않은 운영 창에서
-   `.github/workflows/dev-apply.yml`을 수동 실행해 dev root plan을 만들고,
-   `dev-apply` Environment reviewer 게이트에서 승인한다. 승인 전 상세 plan에서
-   `google_container_cluster.dev`의 in-place VPA 변경만 있는지, destroy/replace와 IAM,
-   node pool, network, Secret 변경이 없는지 확인한다.
-3. 승인된 `dev-apply` workflow만 같은 plan을 apply한다. GKE VPA addon 변경은 비동기
+1. #387 병합 뒤 DAG가 실행 중이지 않은 운영 창에서 `.github/workflows/dev-apply.yml`을
+   수동 실행해 dev root plan을 만들고 `dev-apply` Environment reviewer 게이트에서
+   승인한다. 이 첫 approved apply는 정확한
+   `airflow-k8s-apply.yml@refs/heads/main` WIF allowlist와
+   `google_container_cluster.dev`의 observation-only VPA addon을 함께 적용한다. 승인 전
+   상세 plan에서 이 두 변경 외 destroy/replace, node pool, network, Secret 변경이 없는지
+   확인한다. VPA CR이 없으면 addon은 scheduler Pod를 변경하지 않는다.
+2. 승인된 `dev-apply` workflow만 같은 plan을 apply한다. GKE VPA addon 변경은 비동기
    GKE operation이므로, workflow 성공만으로 다음 단계로 진행하지 않고 해당 operation의
-   완료를 확인한 뒤 readiness 검사를 시작한다.
-4. CRD가 아직 없으면 condition-only `kubectl wait`가 즉시 NotFound으로 실패하므로,
+   완료를 확인한 뒤 `.github/workflows/airflow-k8s-apply.yml`을 dispatch한다. 이 workflow의
+   `airflow-k8s-apply` Environment 승인 뒤에만 namespace-scoped `airflow-vpa` Role과
+   RoleBinding을 적용한다. GKE addon 내부 RBAC 또는 `admin` ClusterRole aggregation은 이
+   권한을 제공한다고 가정하지 않는다.
+3. CRD가 아직 없으면 condition-only `kubectl wait`가 즉시 NotFound으로 실패하므로,
    생성, Established, served API discovery를 아래 순서로 확인한다. 대화형 shell을
    종료하지 않도록 polling은 `bash -c` 서브셸에서 실행한다.
 
@@ -1118,7 +1119,7 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
    '
    ```
 
-5. 실제 Helm deployer WIF context의 생성과 검증은 로컬 runbook 책임이 아니다. 정본은
+4. 실제 Helm deployer WIF context의 생성과 검증은 로컬 runbook 책임이 아니다. 정본은
    Autoresearch-airflow#159의 `deploy-gke-dev.yml` preflight이며, 이 workflow가 GitHub
    Actions WIF deployer GSA 자격증명으로 인증한 context에서 VPA lifecycle 모든 동사를
    확인한다. 운영자 개인 kubeconfig로 WIF identity를 흉내 내거나 `--as` impersonation을
@@ -1136,6 +1137,8 @@ resource 변경은 recommendation, namespace quota, node allocatable resource를
    하나라도 권한이 없거나 명령 오류가 발생하면 `set -e`가 preflight를 즉시 실패시킨다.
    Helm 배포를 중단하고 Task 4 Role/RoleBinding을 수정하며, 이를 cluster-wide RBAC로
    우회하지 않는다.
+5. CRD 생성·Established·served VPA API와 Helm deployer/installer RBAC evidence를 모두
+   확인한 뒤에만 Autoresearch-airflow가 scheduler VPA CR을 배포한다.
 6. 로컬 `terraform.tfvars` plan/apply는 CI를 사용할 수 없는 경우의 break-glass로만
    사용하며, 같은 변경 제한과 별도 승인을 적용한다.
 

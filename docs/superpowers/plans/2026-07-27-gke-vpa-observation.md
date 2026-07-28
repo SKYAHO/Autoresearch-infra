@@ -341,7 +341,7 @@ git commit -m "feat: Airflow VPA lifecycle 권한 추가"
 - Test: markdown command inspection and `bash -n` of the embedded polling snippet
 
 **Interfaces:**
-- Consumes: Task 4 namespace RBAC and `dev-apply`/`admin-apply` approval workflows
+- Consumes: #387 WIF allowlist, observation-only addon, targeted RBAC, and approval workflows
 - Produces: a safe, ordered procedure for addon update, CRD readiness, and RBAC verification
 
 - [ ] **Step 1: Write the failing command-structure assertion**
@@ -378,7 +378,13 @@ bash -c '
 '
 ```
 
-Document that `dev-apply` runs only in a DAG-idle operating window and its GKE operation must complete before readiness checks. Document that `admin-apply` applies Task 4 first, then verify the actual Helm deployer identity with `kubectl auth can-i` for all lifecycle verbs before Airflow#159 is merged. State that a failed permission check blocks the Helm deployment and must not be worked around with cluster-wide RBAC.
+Document that, after #387 merges, the first explicitly approved `dev-apply` runs only in a
+DAG-idle operating window and applies the exact
+`airflow-k8s-apply.yml@refs/heads/main` WIF allowlist plus the observation-only addon. Its
+GKE operation must complete before dispatching the targeted RBAC workflow. Then verify the
+actual Helm deployer identity with `kubectl auth can-i` for all lifecycle verbs and collect
+CRD/API evidence before Airflow#159 deploys its VPA CR. State that a failed permission check
+blocks the Helm deployment and must not be worked around with cluster-wide RBAC.
 
 - [ ] **Step 3: Verify the documentation contract**
 
@@ -402,23 +408,27 @@ git commit -m "docs: VPA 운영 안전 절차 보완"
 
 **Files:**
 - Modify: 없음
-- Test: GitHub `admin-apply` and `dev-apply` runs plus live Kubernetes readiness/RBAC checks
+- Test: GitHub `dev-apply` and `airflow-k8s-apply` runs plus live Kubernetes readiness/RBAC checks
 
 **Interfaces:**
 - Consumes: merged Tasks 1, 4, and 5 plus explicit user approval
-- Produces: evidence that Airflow#159 can be safely merged and deployed
+- Produces: evidence that Airflow#159 can safely deploy its VPA CR
 
-- [ ] **Step 1: Apply VPA RBAC through the approved admin root workflow**
+- [ ] **Step 1: Apply the WIF allowlist and observation-only addon**
 
-Run after merge and explicit approval: dispatch `.github/workflows/admin-apply.yml`, select the `airflow-k8s` root, and wait for the required Environment reviewer approval.
+Run after #387 merge and explicit approval: dispatch `.github/workflows/dev-apply.yml`, review
+the plan summary, approve the `dev-apply` Environment, and record the completed GKE operation.
+
+Expected: the plan adds only the exact `airflow-k8s-apply.yml@refs/heads/main` WIF allowlist
+and the in-place `google_container_cluster.dev` VPA addon change. Without a VPA CR, this addon
+does not mutate scheduler Pods.
+
+- [ ] **Step 2: Apply VPA RBAC through the targeted workflow**
+
+After the GKE operation completes, dispatch `.github/workflows/airflow-k8s-apply.yml`, review
+its `terraform/admin/airflow-k8s` plan, and approve the `airflow-k8s-apply` Environment.
 
 Expected: the applied Role and RoleBinding exist only in namespace `airflow`.
-
-- [ ] **Step 2: Apply the GKE addon during a DAG-idle operating window**
-
-Run after explicit approval: dispatch `.github/workflows/dev-apply.yml`, review the plan summary, approve the `dev-apply` Environment, and record the completed GKE operation.
-
-Expected: the plan has only the in-place `google_container_cluster.dev` addon change and the workflow apply succeeds.
 
 - [ ] **Step 3: Collect readiness and permission evidence**
 
@@ -434,4 +444,5 @@ kubectl auth can-i patch verticalpodautoscalers.autoscaling.k8s.io -n airflow
 kubectl auth can-i delete verticalpodautoscalers.autoscaling.k8s.io -n airflow
 ```
 
-Expected: every command prints `yes`. Record the GKE operation and checks in #373 and Airflow#159 before merging Airflow#160.
+Expected: every command prints `yes`. Record the GKE operation and checks in #373 and
+Airflow#159 before deploying its VPA CR.

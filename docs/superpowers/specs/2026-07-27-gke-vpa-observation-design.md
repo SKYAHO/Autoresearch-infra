@@ -54,9 +54,10 @@ Helm deployer GSA와 installer 사용자는 Helm lifecycle에 필요한
 `get`, `list`, `watch`, `create`, `update`, `patch`, `delete`만 받는다. 기존
 `admin` ClusterRole의 aggregation 또는 addon 내부 Role 이름에 의존하지 않는다.
 
-VPA CR은 애드온 적용 후 Autoresearch-airflow#159에서 배포한다. 해당 CR은
+VPA CR은 애드온 적용과 RBAC evidence 확인 후 Autoresearch-airflow#159에서 배포한다. 해당 CR은
 `autoscaling.k8s.io/v1`, namespace `airflow`, target `apps/v1` StatefulSet
-`airflow-scheduler`, `updateMode: "Off"`를 사용한다.
+`airflow-scheduler`, `updateMode: "Off"`를 사용한다. VPA CR이 없으면 addon은 scheduler
+Pod를 변경하지 않는다.
 
 container policy와 min/max 경계는 초기 관측 단계에 두지 않는다. scheduler와
 git-sync 컨테이너의 recommendation을 모두 수집하고, 사람의 운영 검토에서
@@ -65,16 +66,16 @@ scheduler의 현재 resource 설정과 node·namespace 여유를 대조한다.
 ## 적용 순서
 
 1. infra 변경을 fmt, validate, 인증 환경의 Terraform plan으로 검증한다.
-2. VPA Role/RoleBinding은 별도 `admin-apply` 승인 경로로 적용한다.
-3. PR merge 후 사용자의 명시적 승인으로 GKE addon `dev-apply`를 DAG 스케줄이 없는
-   운영 창에서 수행하고, 완료된 GKE operation을 확인한다.
-4. CRD 생성과 `Established` condition을 순서대로 기다린 뒤 served VPA API를
+2. #387 병합 뒤 첫 명시적 승인 `dev-apply`가 정확한
+   `airflow-k8s-apply.yml@refs/heads/main` WIF allowlist와 observation-only GKE VPA
+   addon을 DAG 스케줄이 없는 운영 창에서 함께 적용하고, 완료된 GKE operation을 확인한다.
+3. `airflow-k8s-apply.yml`을 dispatch해 VPA Role/RoleBinding을 승인·적용한다.
+4. CRD 생성과 `Established` condition을 순서대로 기다린 뒤 served VPA API와 Helm
+   deployer/installer VPA lifecycle RBAC를 확인한다.
    확인한다. CRD가 아직 없으면 `kubectl wait --for=condition=Established`는 즉시
    실패하므로 생성 polling 또는 `--for=create`를 선행한다.
-5. Helm deployer와 installer가 VPA lifecycle 권한을 갖는지 `kubectl auth can-i`로
-   확인한다.
-6. Autoresearch-airflow#159 Helm 변경을 배포한다.
-7. 실행 데이터가 쌓인 뒤 `kubectl describe vpa airflow-scheduler -n airflow`로
+5. 이 evidence가 갖춰진 뒤 Autoresearch-airflow#159 Helm 변경으로 VPA CR을 배포한다.
+6. 실행 데이터가 쌓인 뒤 `kubectl describe vpa airflow-scheduler -n airflow`로
    recommendation을 확인한다.
 
 ## 비목표

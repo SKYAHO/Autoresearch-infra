@@ -25,16 +25,20 @@ Secret payload는 변경하지 않는다. 새 workflow ref의 최소 WIF princip
 
 ## 적용 순서
 
-1. #373 VPA RBAC 변경을 병합한다.
-2. 운영자가 `airflow-k8s-apply.yml`을 dispatch해 plan 요약을 검토한다.
-3. `airflow-k8s-apply` Environment reviewer가 승인한다.
-4. apply 성공 뒤 Airflow deploy workflow WIF preflight가 VPA lifecycle 권한을 확인한다.
-5. 이후에만 GKE VPA addon `dev-apply`를 진행한다.
+1. #387을 병합한 뒤, 명시적으로 승인된 첫 `dev-apply`가 정확한
+   `airflow-k8s-apply.yml@refs/heads/main` WIF allowlist와 observation-only GKE VPA
+   addon을 함께 적용한다. VPA CR이 없으면 addon은 scheduler Pod를 변경하지 않는다.
+2. GKE operation 완료를 확인한 뒤 운영자가 `airflow-k8s-apply.yml`을 dispatch해
+   `airflow-k8s` RBAC plan 요약을 검토하고, `airflow-k8s-apply` Environment reviewer가
+   승인한다.
+3. apply 성공 뒤 CRD 생성·Established·served VPA API와 Helm deployer/installer의 VPA
+   lifecycle RBAC evidence를 모두 확인한다.
+4. 이 evidence가 갖춰진 뒤에만 Autoresearch-airflow가 scheduler VPA CR을 배포한다.
 
 ## 비목표
 
 - 기존 `admin-apply.yml`의 다중 root 동작 변경
-- GKE VPA addon 또는 Airflow Helm manifest 적용
+- GKE VPA addon 또는 Airflow Helm manifest 정의 변경
 - local Terraform apply 경로 추가
 - cluster-wide RBAC 또는 GCP IAM 권한 확대
 
