@@ -64,11 +64,12 @@ resource "kubernetes_job_v1" "kibana_saved_objects_import" {
           name  = "import"
           image = "curlimages/curl:8.17.0"
 
-          # 자격 증명은 netrc 파일로 전달(argv 평문 노출 회피 — 리뷰 반영),
-          # TLS는 ECK 발급 CA로 검증(superuser 자격이라 -k 미사용 — 세션
-          # 쿠키뿐인 oauth2-proxy의 skip-verify 선례와 기준을 달리함).
-          # 전용 최소권한 Kibana user 발급은 dev 범위에서 보류(후속 여지) —
-          # 이 Job은 K8s Secret 접근 권한과 동일 신뢰 경계 안에서만 돈다.
+          # 자격 증명은 netrc 파일로 전달(argv 평문 노출 회피 — 리뷰 반영).
+          # #394에서 Kibana 자체 TLS 비활성(http) — cert secret이 사라지므로
+          # --cacert 경로를 제거했다(클러스터 내부 same-ns/VIP 구간 평문은
+          # dev 수용, NetworkPolicy로 통제). 전용 최소권한 Kibana user 발급은
+          # dev 범위에서 보류 — 이 Job은 K8s Secret 접근 권한과 동일 신뢰
+          # 경계 안에서만 돈다.
           command = [
             "/bin/sh", "-ec",
             <<-EOT
@@ -79,12 +80,12 @@ resource "kubernetes_job_v1" "kibana_saved_objects_import" {
               for i in $(seq 1 60); do
                 # -f 필수: 마이그레이션 중 /api/status는 503을 반환하는데
                 # -s만으로는 exit 0이라 조기 탈출한다.
-                curl -sf --cacert /certs/ca.crt --netrc-file /tmp/netrc \
-                  https://autoresearch-kb-http:5601/api/status > /dev/null && break
+                curl -sf --netrc-file /tmp/netrc \
+                  http://autoresearch-kb-http:5601/api/status > /dev/null && break
                 echo "waiting kibana ($i/60)"; sleep 10
               done
-              RESP=$(curl --fail-with-body -s --cacert /certs/ca.crt --netrc-file /tmp/netrc \
-                -X POST 'https://autoresearch-kb-http:5601/api/saved_objects/_import?overwrite=true' \
+              RESP=$(curl --fail-with-body -s --netrc-file /tmp/netrc \
+                -X POST 'http://autoresearch-kb-http:5601/api/saved_objects/_import?overwrite=true' \
                 -H 'kbn-xsrf: kibana-so-import' \
                 --form file=@/import/logs-overview.ndjson) || { echo "$RESP"; exit 1; }
               echo "$RESP"
@@ -110,11 +111,6 @@ resource "kubernetes_job_v1" "kibana_saved_objects_import" {
             read_only  = true
           }
 
-          volume_mount {
-            name       = "kb-certs"
-            mount_path = "/certs"
-            read_only  = true
-          }
 
           resources {
             requests = {
@@ -136,13 +132,6 @@ resource "kubernetes_job_v1" "kibana_saved_objects_import" {
           }
         }
 
-        volume {
-          name = "kb-certs"
-
-          secret {
-            secret_name = "autoresearch-kb-http-certs-public"
-          }
-        }
       }
     }
   }

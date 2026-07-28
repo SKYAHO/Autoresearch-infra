@@ -35,7 +35,7 @@ operator가 `elastic-ingress`에 노드→5601 ingress를 임시로 되살린 �
 ```bash
 # 임시 복원 후:
 kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
-# 브라우저: https://localhost:5601 → /login (self-signed 경고는 dev 특성상 허용)
+# 브라우저: http://localhost:5601 → /login (#394부터 Kibana 자체 TLS 비활성 — http)
 kubectl -n elastic get secret autoresearch-es-elastic-user \
   -o jsonpath='{.data.elastic}' | base64 -d; echo   # 비밀번호 회수(문서/PR/채팅 미기재)
 ```
