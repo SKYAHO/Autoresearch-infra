@@ -300,6 +300,10 @@ dashboard 이름은 chart 버전에 따라 조금 달라질 수 있다. 이름�
   텍스트 패널 + 노드풀별 노드 수/unschedulable 파드/requests 점유율 vs
   실사용률(분모 allocatable 정렬)/throttling/OOMKill. "지금 스케일이
   필요한가"는 이 대시보드로 판단한다).
+  - **동기화 의무(추가, #401)**: 액션로그 KPO의 memory requests를
+    바꾸면(airflow 저장소) Airflow 대시보드의 메모리 프로파일 패널
+    기준선(threshold, 현재 512Mi)을 같은 시점에 갱신한다. 파드명
+    regex는 task_id 기반이라 task 명 변경 시에도 패턴 갱신 필요.
   - **동기화 의무**: 노드풀 autoscaling(min/max)·머신타입을 변경하면(#331 등)
     `autoresearch-scale-decision.json`의 판정 기준 텍스트 패널과 노드 수 패널
     description의 max 수치를 같은 PR에서 갱신한다 — 이 값이 틀리면 "max 도달"
