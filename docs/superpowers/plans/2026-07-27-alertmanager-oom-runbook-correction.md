@@ -54,10 +54,10 @@ Expected: the runbook validation step and the two executable Pod manifests in th
 Replace runbook step 3 with:
 
 ```markdown
-3. 이전 `alertmanager-oom-test` Pod를 삭제하고 Kubernetes API로 부재를 확인한다. 삭제 또는 부재 확인이 실패하면 새 Pod를 만들지 않고 중단한다. 그 뒤 `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다. 이 Pod는 OOMKilled와 재시작을 반복하므로 OOM 검증에만 단독으로 사용한다.
+3. 이전 `alertmanager-oom-test` Pod를 삭제하고 Kubernetes API로 부재를 확인한다. 삭제 또는 부재 확인이 실패하면 새 Pod를 만들지 않고, 수동 삭제와 Kubernetes API 장애 조사를 수행한다. 그 뒤 `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다. 이 Pod는 OOMKilled와 재시작을 반복하므로 OOM 검증에만 단독으로 사용한다.
 ```
 
-Update steps 4 through 6 so the warning email 뒤 즉시 Pod를 삭제하고, `lastState` OOMKilled 확인 뒤 5분 안에 rule이 firing하지 않으면 삭제 후 조사하며, 이메일 전달 성공·실패와 관계없이 처음 `lastState` OOMKilled 확인 뒤 10분 안에는 Pod를 삭제한다고 명시한다. OOM Pod를 삭제한 뒤에만 CrashLooping test를 생성한다고 명시하고, 기본 `KubePodCrashLooping`의 `for: 15m` 전에 OOM test를 정리해 두 신호가 겹치지 않는다는 설명을 포함한다.
+Update steps 4 through 6 so the warning email 뒤 즉시 Pod를 삭제하고, `lastState` OOMKilled 확인 뒤 5분 안에 rule이 firing하지 않으면 삭제 후 조사하며, `lastState` 관측 뒤 8분에 watchdog cleanup을 시작해 최대 100초의 재시도 예산을 확보하고 API request 및 deletion wait를 각각 15초로 제한한 삭제를 세 번 시도한다고 명시한다. 세 시도가 모두 실패하면 오류를 기록하고 수동 삭제와 Kubernetes API 조사를 수행한다. OOM Pod를 삭제한 뒤에만 CrashLooping test를 생성한다고 명시하고, 기본 `KubePodCrashLooping`의 `for: 15m` 전에 OOM test를 정리해 두 신호가 겹치지 않는다는 설명을 포함한다.
 
 - [ ] **Step 3: Correct the historical plan’s prose and both executable manifests**
 
@@ -81,7 +81,7 @@ Replace the stale expected result with:
 Expected: container restart 뒤 `ContainerOOMKilled`가 pending을 거쳐 one-minute rule delay 후 firing하며 warning 이메일이 도착한다.
 ```
 
-In the executable `kubectl wait` command, replace `.status.containerStatuses[0].state.terminated.reason` with `.status.containerStatuses[0].lastState.terminated.reason` so the OOMKilled reason remains observable after the `restartPolicy: Always` container restarts. Prepend an idempotent `--ignore-not-found --wait=true` delete and absence assertion before applying the fixed-name Pod; both commands must fail closed with `exit 1` if cleanup fails, the absence API call fails, or the Pod remains. Start a 600-second background watchdog after the preflight passes and install an EXIT/HUP/INT/TERM trap that cleans the Pod. Normal completion must stop the watchdog, delete the Pod, and remove the trap. Replace the preceding lifecycle prose so it waits for `lastState` for up to five minutes, treats the Pod as an OOM/restart loop rather than a one-shot series, deletes it immediately after the warning email or on firing failure, deletes it no later than ten minutes after first `lastState` OOMKilled even if SMTP delivery is delayed, and starts the CrashLooping test only after deletion.
+In the executable `kubectl wait` command, replace `.status.containerStatuses[0].state.terminated.reason` with `.status.containerStatuses[0].lastState.terminated.reason` so the OOMKilled reason remains observable after the `restartPolicy: Always` container restarts. Prepend an idempotent `--ignore-not-found --wait=true` delete and absence assertion before applying the fixed-name Pod; both commands must fail closed with `exit 1` if cleanup fails, the absence API call fails, or the Pod remains, and report manual deletion plus Kubernetes API investigation. Install EXIT and HUP/INT/TERM traps before apply: HUP/INT/TERM cleanup must then exit nonzero so no later command creates a Pod without a watchdog, and EXIT cleanup failure must exit nonzero. Start a 480-second background watchdog only after the `lastState` wait succeeds; it must reserve up to 100 seconds for three `--timeout=15s --request-timeout=15s` deletion attempts with 5-second pauses. Do not stop the watchdog after normal cleanup because its later `--ignore-not-found` deletion applies only to the fixed OOM test Pod and avoids PID-reuse races. Normal completion must delete the Pod and remove the traps. Replace the preceding lifecycle prose so it waits for `lastState` for up to five minutes, treats the Pod as an OOM/restart loop rather than a one-shot series, deletes it immediately after the warning email or on firing failure, starts bounded cleanup eight minutes after the observed `lastState` OOMKilled, reports failed cleanup for manual deletion and Kubernetes API investigation, and starts the CrashLooping test only after deletion.
 
 Keep the explicit deletion and resolved-email contract unchanged.
 
@@ -101,14 +101,14 @@ grep -n "last_terminated_reason" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
 grep -n "lastState.terminated.reason" \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md \
   docs/superpowers/plans/2026-07-27-alertmanager-oom-runbook-correction.md
-grep -n -- "--ignore-not-found --wait=true\|ten minutes\|10분" \
+grep -n -- "--ignore-not-found --wait=true\|sleep 480\|--timeout=15s\|--request-timeout=15s\|100초\|ten-minute\|10분" \
   docs/GRAFANA_OPERATIONS_RUNBOOK.md \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
-grep -n "absence check failed\|oom_cleanup_pid\|trap .*cleanup_oom_test.*EXIT HUP INT TERM\|previous alertmanager-oom-test.*failed\|previous alertmanager-oom-test.*present\|exit 1" \
+grep -n "absence check failed\|on_oom_signal\|on_oom_exit\|sleep 480\|previous alertmanager-oom-test.*failed\|previous alertmanager-oom-test.*present\|exit 1" \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
 ```
 
-Expected: the negative checks exit zero; the remaining output shows the new restart policy, metric explanation, verified current-state wording, post-restart `lastState.terminated.reason` selector, fail-closed stale-Pod cleanup, 600-second watchdog, EXIT/HUP/INT/TERM cleanup trap, and absolute cleanup deadline in the changed documents.
+Expected: the negative checks exit zero; the remaining output shows the new restart policy, metric explanation, verified current-state wording, post-restart `lastState.terminated.reason` selector, fail-closed stale-Pod cleanup, post-`lastState` 480-second watchdog with a 100-second retry budget, bounded API and deletion retries, and signal handlers that stop the workflow after cleanup.
 
 ### Task 2: Alertmanager 운영 상태 정정
 

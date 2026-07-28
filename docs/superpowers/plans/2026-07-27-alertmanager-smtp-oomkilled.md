@@ -281,9 +281,9 @@ Add the following validation contract, not a production command with live values
 ```markdown
 1. ArgoCD manual sync 전에 diff에서 `alertmanager-smtp-config` 참조와 `ContainerOOMKilled` 규칙만 추가되는지 확인한다.
 2. sync 뒤 Alertmanager StatefulSet이 Ready인지와 Alertmanager log에 config parse error가 없는지 확인한다.
-3. `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다.
-4. dummy Pod를 삭제해 metric이 해소된 뒤 resolved 이메일을 수신한다.
-5. 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다.
+3. 이전 `alertmanager-oom-test` Pod를 삭제하고 Kubernetes API로 부재를 확인한다. 삭제 또는 부재 확인이 실패하면 새 Pod를 만들지 않고, 수동 삭제와 Kubernetes API 장애 조사를 수행한다. 그 뒤 `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다. 이 Pod는 OOMKilled와 재시작을 반복하므로 OOM 검증에만 단독으로 사용한다.
+4. warning 이메일을 수신하면 dummy Pod를 즉시 삭제해 metric이 해소된 뒤 resolved 이메일을 수신한다. `lastState`에 OOMKilled가 생긴 뒤 5분 안에 rule이 firing하지 않으면 Pod를 삭제하고 Prometheus rule 평가와 Alertmanager config를 조사한다. 실행 절차는 `lastState` OOMKilled를 관측한 뒤 8분에 watchdog cleanup을 시작해 최대 100초의 재시도 예산을 확보하고, API request 및 deletion wait를 각각 15초로 제한한 삭제를 세 번 시도한다. 세 시도가 모두 실패하면 오류를 기록하고 즉시 수동 삭제와 Kubernetes API 장애 조사를 수행한다.
+5. OOM 검증 Pod가 삭제된 뒤에만 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다. 기본 `KubePodCrashLooping` rule의 `for: 15m` 전에 OOM 검증 Pod를 정리하므로 두 검증 신호는 겹치지 않는다.
 6. 검증 Pod는 즉시 삭제한다.
 ```
 
@@ -372,16 +372,19 @@ Expected: StatefulSet rollout succeeds. Investigate any config parse or reload e
 - [ ] **Step 4: Create a disposable OOMKilled test Pod after approval**
 
 First remove any prior `alertmanager-oom-test` Pod and confirm that it is absent.
-Apply this exact Pod, wait up to five minutes until its
+Run the following commands in one interactive shell and keep that shell open until
+the cleanup commands below run. Apply this exact Pod, wait up to five minutes until its
 `lastState.terminated.reason` is `OOMKilled`, then wait for the
 `ContainerOOMKilled` warning email. The Pod repeats OOMKilled and restart while
 it exists, so delete it immediately after the warning email arrives. If the rule
 does not fire within five minutes after `lastState` records OOMKilled, delete the
-Pod and investigate Prometheus rule evaluation and Alertmanager config. Regardless
-of email delivery, delete the Pod no later than ten minutes after first observing
-`lastState.terminated.reason=OOMKilled`. Do not create the CrashLooping test Pod
-until this Pod is deleted; that prevents the OOM test Pod from reaching the default
-`KubePodCrashLooping` rule's `for: 15m` period.
+Pod and investigate Prometheus rule evaluation and Alertmanager config. A watchdog
+starts cleanup eight minutes after `lastState.terminated.reason=OOMKilled` and has
+three deletion attempts with 15-second API-request and deletion-wait limits. If all
+attempts fail, manually delete the Pod and investigate the Kubernetes API before
+creating the CrashLooping test Pod. Do not create that Pod until this Pod is deleted;
+that prevents the OOM test Pod from reaching the default `KubePodCrashLooping`
+rule's `for: 15m` period.
 
 ```yaml
 apiVersion: v1
@@ -408,32 +411,55 @@ Run:
 
 ```bash
 cleanup_oom_test() {
-  kubectl -n monitoring delete pod alertmanager-oom-test \
-    --ignore-not-found --wait=true --timeout=1m
+  attempt=1
+  while [ "$attempt" -le 3 ]; do
+    if kubectl -n monitoring delete pod alertmanager-oom-test \
+      --ignore-not-found --wait=true --timeout=15s --request-timeout=15s; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    if [ "$attempt" -le 3 ]; then
+      sleep 5
+    fi
+  done
+  return 1
+}
+
+on_oom_signal() {
+  cleanup_oom_test || printf '%s\n' 'OOM test signal cleanup failed; delete the Pod manually and investigate Kubernetes API access' >&2
+  trap - EXIT HUP INT TERM
+  exit 1
+}
+
+on_oom_exit() {
+  exit_status=$?
+  if ! cleanup_oom_test; then
+    printf '%s\n' 'OOM test exit cleanup failed; delete the Pod manually and investigate Kubernetes API access' >&2
+    trap - EXIT HUP INT TERM
+    exit 1
+  fi
+  trap - EXIT HUP INT TERM
+  exit "$exit_status"
 }
 
 if ! cleanup_oom_test; then
-  printf '%s\n' 'previous alertmanager-oom-test cleanup failed' >&2
+  printf '%s\n' 'previous alertmanager-oom-test cleanup failed; delete the Pod manually and investigate Kubernetes API access' >&2
   exit 1
 fi
 if ! remaining_oom_test="$(kubectl -n monitoring get pod alertmanager-oom-test \
   --ignore-not-found -o name)"; then
-  printf '%s\n' 'previous alertmanager-oom-test absence check failed' >&2
+  printf '%s\n' 'previous alertmanager-oom-test absence check failed; delete the Pod manually and investigate Kubernetes API access' >&2
   exit 1
 fi
 if [ -n "$remaining_oom_test" ]; then
-  printf '%s\n' 'previous alertmanager-oom-test is still present' >&2
+  printf '%s\n' 'previous alertmanager-oom-test is still present; delete the Pod manually and investigate Kubernetes API access' >&2
   exit 1
 fi
 
-(
-  sleep 600
-  cleanup_oom_test || printf '%s\n' 'OOM test watchdog cleanup failed' >&2
-) &
-oom_cleanup_pid=$!
-trap 'kill "$oom_cleanup_pid" 2>/dev/null || true; cleanup_oom_test || true' EXIT HUP INT TERM
+trap on_oom_signal HUP INT TERM
+trap on_oom_exit EXIT
 
-kubectl apply -f - <<'EOF'
+if ! kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
 metadata:
@@ -453,29 +479,42 @@ spec:
         requests:
           memory: 16Mi
 EOF
+then
+  printf '%s\n' 'OOM test Pod apply failed' >&2
+  exit 1
+fi
 
-kubectl -n monitoring wait \
+if ! kubectl -n monitoring wait \
   --for=jsonpath='{.status.containerStatuses[0].lastState.terminated.reason}'=OOMKilled \
-  pod/alertmanager-oom-test --timeout=5m
+  pod/alertmanager-oom-test --timeout=5m; then
+  printf '%s\n' 'OOM test never exposed lastState.terminated.reason=OOMKilled' >&2
+  exit 1
+fi
+
+(
+  sleep 480
+  cleanup_oom_test || printf '%s\n' 'OOM test watchdog cleanup failed; delete the Pod manually and investigate Kubernetes API access' >&2
+) &
 ```
 
 Expected: container restart 뒤 `ContainerOOMKilled`가 pending을 거쳐 one-minute rule delay 후 firing하며 warning 이메일이 도착한다.
 After the alert email arrives, run:
 
 ```bash
-kill "$oom_cleanup_pid" 2>/dev/null || true
-wait "$oom_cleanup_pid" 2>/dev/null || true
 if ! cleanup_oom_test; then
-  printf '%s\n' 'OOM test cleanup failed' >&2
+  printf '%s\n' 'OOM test cleanup failed; delete the Pod manually and investigate Kubernetes API access' >&2
   exit 1
 fi
 trap - EXIT HUP INT TERM
 ```
 
-Expected: the watchdog deletes the Pod after ten minutes even if the operator
-does not receive an email or leaves the shell. Normal completion stops the
-watchdog, deletes the Pod explicitly, and a resolved email follows Alertmanager
-grouping timing.
+Expected: after `lastState` OOMKilled is observed, the watchdog starts cleanup at
+eight minutes to reserve up to 100 seconds for three deletion attempts with bounded
+API-request and deletion-wait times, even if the operator does not
+receive an email. It remains harmless after normal cleanup because it only deletes
+the fixed OOM test Pod with `--ignore-not-found`. Signal handling stops the workflow
+after cleanup instead of applying the Pod without a watchdog. Normal completion
+deletes the Pod explicitly, and a resolved email follows Alertmanager grouping timing.
 
 - [ ] **Step 5: Verify existing CrashLooping routing and record non-sensitive evidence**
 
