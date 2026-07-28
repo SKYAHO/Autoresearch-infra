@@ -407,16 +407,31 @@ spec:
 Run:
 
 ```bash
-if ! kubectl -n monitoring delete pod alertmanager-oom-test \
-  --ignore-not-found --wait=true --timeout=1m; then
+cleanup_oom_test() {
+  kubectl -n monitoring delete pod alertmanager-oom-test \
+    --ignore-not-found --wait=true --timeout=1m
+}
+
+if ! cleanup_oom_test; then
   printf '%s\n' 'previous alertmanager-oom-test cleanup failed' >&2
   exit 1
 fi
-if [ -n "$(kubectl -n monitoring get pod alertmanager-oom-test \
-  --ignore-not-found -o name)" ]; then
+if ! remaining_oom_test="$(kubectl -n monitoring get pod alertmanager-oom-test \
+  --ignore-not-found -o name)"; then
+  printf '%s\n' 'previous alertmanager-oom-test absence check failed' >&2
+  exit 1
+fi
+if [ -n "$remaining_oom_test" ]; then
   printf '%s\n' 'previous alertmanager-oom-test is still present' >&2
   exit 1
 fi
+
+(
+  sleep 600
+  cleanup_oom_test || printf '%s\n' 'OOM test watchdog cleanup failed' >&2
+) &
+oom_cleanup_pid=$!
+trap 'kill "$oom_cleanup_pid" 2>/dev/null || true; cleanup_oom_test || true' EXIT HUP INT TERM
 
 kubectl apply -f - <<'EOF'
 apiVersion: v1
@@ -448,11 +463,19 @@ Expected: container restart 뒤 `ContainerOOMKilled`가 pending을 거쳐 one-mi
 After the alert email arrives, run:
 
 ```bash
-kubectl -n monitoring delete pod alertmanager-oom-test
+kill "$oom_cleanup_pid" 2>/dev/null || true
+wait "$oom_cleanup_pid" 2>/dev/null || true
+if ! cleanup_oom_test; then
+  printf '%s\n' 'OOM test cleanup failed' >&2
+  exit 1
+fi
+trap - EXIT HUP INT TERM
 ```
 
-Expected: pod deletion removes the metric series and a resolved email follows
-Alertmanager grouping timing.
+Expected: the watchdog deletes the Pod after ten minutes even if the operator
+does not receive an email or leaves the shell. Normal completion stops the
+watchdog, deletes the Pod explicitly, and a resolved email follows Alertmanager
+grouping timing.
 
 - [ ] **Step 5: Verify existing CrashLooping routing and record non-sensitive evidence**
 
