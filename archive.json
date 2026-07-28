@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-28T08:36:16Z",
+  "generated_at": "2026-07-28T08:41:42Z",
   "reports": [
+    {
+      "number": 400,
+      "title": "docs: Kibana TLS 비활성 결정 CHANGE_HISTORY 기록 (#394)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-28T08:41:29Z",
+      "summary_ko": [
+        "Kibana 브라우저 로그인 e2e 검증 중 밝혀진 TLS 세션 쿠키 문제와 해결 결정을 변경 이력 문서에 기록하였습니다.",
+        "Kibana 자체 TLS를 비활성화하고 NetworkPolicy 및 oauth2-proxy 기반 접근 통제 모델로 전환한 배경을 보존합니다.",
+        "향후 TLS 재활성화 시 프록시 설정 및 오브젝트 임포트 작업의 동반 수정 및 롤백 방침을 명시하였습니다."
+      ],
+      "report_url": "pr/400/"
+    },
     {
       "number": 391,
       "title": "docs: Alertmanager OOM 검증 절차 정정",
