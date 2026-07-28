@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-28T04:35:15Z",
+  "generated_at": "2026-07-28T04:46:33Z",
   "reports": [
+    {
+      "number": 393,
+      "title": "fix: serving 이미지 digest를 category_key 조인키 반영본으로 승격 (#358)",
+      "author": "bbungjun",
+      "merged_at": "2026-07-28T04:46:20Z",
+      "summary_ko": [
+        "서빙 배포 매니페스트의 이미지 digest를 Feast 스키마 변경사항이 반영된 최신 버전으로 교체합니다.",
+        "조인키 변경(category_id -> category_key) 미반영으로 발생하던 /rerank API의 503 에러를 해결합니다.",
+        "배포 매니페스트 수정 후 ArgoCD 수동 동기화를 거쳐 중단되었던 데이터 파이프라인의 복구를 유도합니다."
+      ],
+      "report_url": "pr/393/"
+    },
     {
       "number": 384,
       "title": "feat: GKE VPA 관측 애드온 활성화",
