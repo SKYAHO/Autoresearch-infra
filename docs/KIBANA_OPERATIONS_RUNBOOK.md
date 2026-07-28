@@ -36,6 +36,9 @@ operator가 `elastic-ingress`에 노드→5601 ingress를 임시로 되살린 �
 # 임시 복원 후:
 kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
 # 브라우저: http://localhost:5601 → /login (#394부터 Kibana 자체 TLS 비활성 — http)
+# 주의(#394): break-glass로 elastic-ingress에 노드→5601을 임시 복원하는 경우
+# 그 구간은 이제 평문이다 — kubectl port-forward 경로(API server TLS 터널)를
+# 우선하고, ingress 복원 방식은 짧게 쓰고 즉시 되돌린다.
 kubectl -n elastic get secret autoresearch-es-elastic-user \
   -o jsonpath='{.data.elastic}' | base64 -d; echo   # 비밀번호 회수(문서/PR/채팅 미기재)
 ```
