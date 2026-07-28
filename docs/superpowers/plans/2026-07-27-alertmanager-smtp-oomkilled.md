@@ -371,14 +371,17 @@ Expected: StatefulSet rollout succeeds. Investigate any config parse or reload e
 
 - [ ] **Step 4: Create a disposable OOMKilled test Pod after approval**
 
+First remove any prior `alertmanager-oom-test` Pod and confirm that it is absent.
 Apply this exact Pod, wait up to five minutes until its
 `lastState.terminated.reason` is `OOMKilled`, then wait for the
 `ContainerOOMKilled` warning email. The Pod repeats OOMKilled and restart while
 it exists, so delete it immediately after the warning email arrives. If the rule
 does not fire within five minutes after `lastState` records OOMKilled, delete the
-Pod and investigate Prometheus rule evaluation and Alertmanager config. Do not
-create the CrashLooping test Pod until this Pod is deleted; that prevents the OOM
-test Pod from reaching the default `KubePodCrashLooping` rule's `for: 15m` period.
+Pod and investigate Prometheus rule evaluation and Alertmanager config. Regardless
+of email delivery, delete the Pod no later than ten minutes after first observing
+`lastState.terminated.reason=OOMKilled`. Do not create the CrashLooping test Pod
+until this Pod is deleted; that prevents the OOM test Pod from reaching the default
+`KubePodCrashLooping` rule's `for: 15m` period.
 
 ```yaml
 apiVersion: v1
@@ -404,6 +407,11 @@ spec:
 Run:
 
 ```bash
+kubectl -n monitoring delete pod alertmanager-oom-test \
+  --ignore-not-found --wait=true --timeout=1m
+test -z "$(kubectl -n monitoring get pod alertmanager-oom-test \
+  --ignore-not-found -o name)"
+
 kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Pod
