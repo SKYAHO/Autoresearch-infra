@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-28T06:45:03Z",
+  "generated_at": "2026-07-28T07:06:19Z",
   "reports": [
+    {
+      "number": 391,
+      "title": "docs: Alertmanager OOM 검증 절차 정정",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-07-28T07:06:07Z",
+      "summary_ko": [
+        "Alertmanager의 ContainerOOMKilled 알림 검증을 위한 테스트 Pod 설정과 관측 명령을 정정하였습니다.",
+        "Prometheus 지표 특성상 컨테이너가 재시작되어야 종료 사유 지표가 생성되므로 restartPolicy를 Always로 변경하였습니다.",
+        "실제 검증을 마친 Alertmanager SMTP 이메일 수신 상태를 관측 전략 및 운영 문서에 최신화하였습니다."
+      ],
+      "report_url": "pr/391/"
+    },
     {
       "number": 399,
       "title": "docs: 에이전트 모델 선택·리뷰 위임 가이드 제거",
