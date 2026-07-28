@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-28T08:56:26Z",
+  "generated_at": "2026-07-28T09:00:25Z",
   "reports": [
+    {
+      "number": 402,
+      "title": "feat: 액션로그 KPO 메모리 프로파일 패널 (#401)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-28T09:00:09Z",
+      "summary_ko": [
+        "Airflow 대시보드에 액션로그 KubernetesPodOperator 파드의 메모리 사용량을 실시간 감시하는 패널을 추가하였습니다.",
+        "애플리케이션 파드의 객체 메모리 누적 현상(시간당 +25~30MiB) 여부를 판별할 수 있는 프로메테우스 시계열 쿼리를 적용하였습니다.",
+        "현재 파드 요청 자원 기준선인 512MiB를 점선 임계값으로 설정하고 누수 발생 판독 가이드를 대시보드 내에 포함했습니다."
+      ],
+      "report_url": "pr/402/"
+    },
     {
       "number": 400,
       "title": "docs: Kibana TLS 비활성 결정 CHANGE_HISTORY 기록 (#394)",
