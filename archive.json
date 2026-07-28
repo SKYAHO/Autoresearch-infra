@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-28T05:34:27Z",
+  "generated_at": "2026-07-28T05:40:44Z",
   "reports": [
+    {
+      "number": 395,
+      "title": "fix: Kibana 자체 TLS 비활성 — http 프록시 로그인 차단 해소 (#394)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-28T05:40:23Z",
+      "summary_ko": [
+        "Kibana 9.x 자체 TLS 서빙 시 보안 세션이 강제되어 HTTP 프록시 접속 환경에서 구글 로그인이 차단되던 현상을 해결하였습니다.",
+        "Kibana 자체 TLS를 비활성화하여 HTTP로 전환하고 인증 프록시(oauth2-proxy) 및 초기 설정 불러오기 작업의 통신 경로를 수정하였습니다.",
+        "Elasticsearch 및 Kibana 간 내부 통신 TLS는 유지하면서 클러스터 내부 구간 통신 및 관련 운영 문서를 정합화하였습니다."
+      ],
+      "report_url": "pr/395/"
+    },
     {
       "number": 393,
       "title": "fix: serving 이미지 digest를 category_key 조인키 반영본으로 승격 (#358)",
