@@ -53,3 +53,7 @@ gcloud-config/
 # #183 charts/ tgz는 vendor 안 함(ArgoCD가 build). 단 Chart.lock은 커밋한다
 # — ArgoCD의 `helm dependency build`가 lock을 요구하기 때문(없으면 sync 실패).
 deploy/*/charts/
+
+# 파일 동기화 도구(iCloud/Drive 등)가 만드는 중복 사본 — "<원본> 2.<확장자>" (#389)
+* [0-9].*
+* copy.*
