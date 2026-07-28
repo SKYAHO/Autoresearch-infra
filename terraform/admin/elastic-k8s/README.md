@@ -47,13 +47,13 @@ state로 관리한다. 아키텍처·정책은 #96 설계
 |---|---|---|
 | CR / 버전 | `autoresearch` / ES와 동일(`var.elasticsearch_version`) | `elasticsearchRef`로 operator가 ES 연결(계정/CA 자동) |
 | 리소스 | request 1Gi/200m, limit 1Gi | dev-default pool 고정(#98과 동일 이유) |
-| 노출 | ClusterIP + port-forward만 | LB/Ingress 없음. TLS는 ECK 기본(self-signed) |
+| 노출 | ClusterIP + port-forward만 | LB/Ingress 없음. **Kibana 자체 TLS 비활성(#394)** — 9.x가 TLS 서빙 시 secure 세션을 강제해 http 프록시 로그인이 차단되던 결함 해소. ES·Kibana↔ES TLS는 유지 |
 
 접속 (내부 전용):
 
 ```bash
 kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
-# 브라우저: https://localhost:5601 (self-signed 경고는 dev 내부 경로 특성상 허용)
+# 브라우저: http://localhost:5601 (#394부터 Kibana는 http — break-glass 직접 접속 시)
 ```
 
 로그인은 `elastic` 사용자. 비밀번호는 운영자가 Secret에서 회수하고
