@@ -19,7 +19,12 @@
   secret 소멸 회귀 방지). 되돌릴 때도 셋을 한 apply로.
 - **교훈**: 인증 경로는 실제 브라우저 e2e 전엔 완료가 아니다. 에러 페이지의
   소속 컴포넌트 식별(Oops=oauth2-proxy 템플릿)이 진단의 첫 갈림길.
-- **롤백**: TLS 재활성 + upstream https + --cacert 복원을 한 PR로.
+- **롤백**: 세 파일을 한 PR·한 apply로 되돌린다 — ① `kibana.tf`의
+  `http.tls.selfSignedCertificate.disabled` 블록 제거(TLS 재활성) ②
+  `oauth2_proxy.tf` upstream `https://` 복원 + `--ssl-upstream-insecure-skip-verify=true`
+  플래그 재추가 ③ `kibana_saved_objects.tf` `--cacert /certs/ca.crt` 복원 +
+  `kb-certs` volume/volume_mount(`autoresearch-kb-http-certs-public`) 재추가.
+  갈라지면 proxy 502 또는 Job CreateContainerConfigError.
 
 ## 2026-07-27: 관측 스택 구축 — Grafana 대시보드 6장 as-code + 구조화 로깅 파이프라인 (#352~#365)
 
