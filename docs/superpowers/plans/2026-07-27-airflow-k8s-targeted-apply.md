@@ -4,7 +4,7 @@
 
 **Goal:** `airflow-k8s` Terraform root만 plan·승인·apply하는 workflow를 추가한다.
 
-**Architecture:** 기존 `admin-apply.yml`의 OIDC/WIF, private GCS binary plan, summary masking, Environment approval을 단일 root에 그대로 적용한다. 기존 multi-root workflow는 변경하지 않는다.
+**Architecture:** `.github/workflows/airflow-k8s-apply.yml`이 OIDC/WIF, private GCS binary plan, summary masking, Environment approval을 단일 root에 적용한다. 기존 multi-root workflow는 변경하지 않는다.
 
 **Tech Stack:** GitHub Actions, Terraform 1.13.5, GCP OIDC/WIF, GCS
 
@@ -12,6 +12,9 @@
 
 - 대상 root는 정확히 `terraform/admin/airflow-k8s` 하나다.
 - apply는 `airflow-k8s-apply` Environment 승인 뒤에만 실행한다.
+- workflow dispatch 전에 required reviewers가 설정된 GitHub Environment
+  `airflow-k8s-apply`가 존재해야 한다. workflow YAML의 `environment:` 선언은
+  Environment 또는 protection을 생성할 수 없다.
 - `AIRFLOW_INSTALLER_USER_EMAILS`만 기존 Secret에서 주입한다.
 - 다른 admin root, 기존 admin apply SA 역할, Secret payload를 변경하지 않는다. 새
   workflow에는 기존 admin apply SA의 정확한 `workflow_ref` WIF member만 추가한다.
