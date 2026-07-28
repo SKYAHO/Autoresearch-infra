@@ -326,7 +326,7 @@ Kibana도 인터넷에 공개하지 않는다. Airflow/앱 로그 검색이 필�
 kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
 ```
 
-브라우저에서 `https://localhost:5601` (self-signed 경고 허용). 로그인
+브라우저에서 `http://localhost:5601` (#394부터 Kibana 자체 TLS 비활성 — http). 로그인
 계정은 운영자에게 요청한다. 검색 방법과 KQL 예시는
 [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) 참조.
 

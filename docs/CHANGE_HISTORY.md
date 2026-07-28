@@ -3,6 +3,29 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-28: Kibana 자체 TLS 비활성 — 로그인 경로 첫 e2e 종결 (#394, #329)
+
+- **배경**: 첫 실제 브라우저 e2e에서 로그인 3중 결함 동시 발견 — 허용 이메일
+  누락, client secret 무효(#329 미이행), 그리고 구조 결함: **Kibana 9.x는
+  자신이 TLS로 서빙되면 `secureCookies: false`를 무시하고 secure 세션을
+  강제**(`login_state.requiresSecureConnection=true` 실측)해 http 프록시
+  구간 로그인이 차단된다. #325의 "이중 게이트" 검증이 CLI 배선까지만 본
+  잠복 결함.
+- **결정**: Kibana 자체 TLS 비활성(`http.tls.selfSignedCertificate.disabled`)
+  — 접근 통제는 NetworkPolicy(5601 직접 ingress 미개방) + oauth2-proxy
+  Google 게이트가 담당, 평문 구간은 클러스터 내부 proxy→Kibana뿐(다른 내부
+  UI upstream과 동일 모델). ES·Kibana↔ES TLS 불변. proxy upstream http 전환과
+  **saved-objects 자동 import Job의 --cacert 제거를 한 PR로 동반**(cert
+  secret 소멸 회귀 방지). 되돌릴 때도 셋을 한 apply로.
+- **교훈**: 인증 경로는 실제 브라우저 e2e 전엔 완료가 아니다. 에러 페이지의
+  소속 컴포넌트 식별(Oops=oauth2-proxy 템플릿)이 진단의 첫 갈림길.
+- **롤백**: 세 파일을 한 PR·한 apply로 되돌린다 — ① `kibana.tf`의
+  `http.tls.selfSignedCertificate.disabled` 블록 제거(TLS 재활성) ②
+  `oauth2_proxy.tf` upstream `https://` 복원 + `--ssl-upstream-insecure-skip-verify=true`
+  플래그 재추가 ③ `kibana_saved_objects.tf` `--cacert /certs/ca.crt` 복원 +
+  `kb-certs` volume/volume_mount(`autoresearch-kb-http-certs-public`) 재추가.
+  갈라지면 proxy 502 또는 Job CreateContainerConfigError.
+
 ## 2026-07-27: 관측 스택 구축 — Grafana 대시보드 6장 as-code + 구조화 로깅 파이프라인 (#352~#365)
 
 - **배경**: 14회차 멘토 피드백(K8s 메트릭·서비스 사용량 대시보드, ELK 구조화
