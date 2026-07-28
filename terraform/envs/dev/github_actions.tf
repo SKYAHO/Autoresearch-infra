@@ -98,15 +98,21 @@ resource "google_project_iam_member" "airflow_deployer_cluster_viewer" {
 resource "google_service_account" "admin_apply" {
   account_id   = "${local.resource_prefix}-admin-apply"
   display_name = "Autoresearch dev admin root CI apply SA"
-  description  = "Impersonated by Autoresearch-infra admin-apply.yml via WIF to apply terraform/admin/*-k8s roots."
+  description  = "Impersonated by Autoresearch-infra admin apply workflows via WIF to apply terraform/admin/*-k8s roots."
 }
 
-# admin-apply.yml@main workflow_ref만 이 SA 가장 허용. 임의 브랜치/다른
-# workflow의 가장을 차단한다(application_pusher와 동일 패턴).
+# admin-apply.yml@main과 airflow-k8s-apply.yml@main workflow_ref만 이 SA 가장
+# 허용. 임의 브랜치/다른 workflow의 가장을 차단한다(application_pusher와 동일 패턴).
 resource "google_service_account_iam_member" "admin_apply_wi" {
   service_account_id = google_service_account.admin_apply.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.admin_apply_workflow_ref}"
+}
+
+resource "google_service_account_iam_member" "airflow_k8s_apply_wi" {
+  service_account_id = google_service_account.admin_apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/SKYAHO/Autoresearch-infra/.github/workflows/airflow-k8s-apply.yml@refs/heads/main"
 }
 
 # GKE 접속 + K8s cluster-admin(자동 매핑). CRD/ClusterRole 설치가 필요한

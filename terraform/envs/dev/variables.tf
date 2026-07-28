@@ -574,6 +574,11 @@ variable "admin_apply_workflow_ref" {
   description = "#307 admin root CI apply SA를 가장할 수 있는 정확한 admin-apply.yml workflow_ref. main의 이 workflow만 허용해 임의 브랜치/workflow의 가장을 막는다."
   type        = string
   default     = "SKYAHO/Autoresearch-infra/.github/workflows/admin-apply.yml@refs/heads/main"
+
+  validation {
+    condition     = var.admin_apply_workflow_ref == "SKYAHO/Autoresearch-infra/.github/workflows/admin-apply.yml@refs/heads/main"
+    error_message = "admin_apply_workflow_ref는 admin-apply.yml@refs/heads/main이어야 합니다."
+  }
 }
 
 variable "dev_apply_workflow_ref" {

@@ -42,6 +42,11 @@ jobs:
             exit 1
           fi
 
+      # 승인 거부/미승인 시 apply cleanup이 실행되지 않으므로, 이 전용 prefix의
+      # 이전 plan만 새 run 시작 시 정리한다.
+      - name: Cleanup stale plans
+        run: gcloud storage rm "gs://autoresearch-dev-tfstate/airflow-k8s-apply-plans/**" 2>/dev/null || true
+
       - name: Plan airflow-k8s root
         run: |
           d="terraform/admin/airflow-k8s"

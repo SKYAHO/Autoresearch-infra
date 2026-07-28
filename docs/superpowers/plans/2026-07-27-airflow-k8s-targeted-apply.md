@@ -13,7 +13,8 @@
 - 대상 root는 정확히 `terraform/admin/airflow-k8s` 하나다.
 - apply는 `airflow-k8s-apply` Environment 승인 뒤에만 실행한다.
 - `AIRFLOW_INSTALLER_USER_EMAILS`만 기존 Secret에서 주입한다.
-- 다른 admin root, GCP IAM, Secret payload를 변경하지 않는다.
+- 다른 admin root, 기존 admin apply SA 역할, Secret payload를 변경하지 않는다. 새
+  workflow에는 기존 admin apply SA의 정확한 `workflow_ref` WIF member만 추가한다.
 
 ---
 
@@ -50,7 +51,7 @@ concurrency:
   cancel-in-progress: false
 ```
 
-The plan job checks non-empty `AIRFLOW_INSTALLER_USER_EMAILS`, runs `terraform init` and `terraform plan -out=tfplan.bin` only in `terraform/admin/airflow-k8s`, uploads `tfplan.bin` to `gs://autoresearch-dev-tfstate/airflow-k8s-apply-plans/${{ github.run_id }}.tfplan`, and publishes only masked resource headers and Plan summary. The apply job uses `environment: airflow-k8s-apply`, downloads that exact plan, applies it, and cleans it up with `if: always()`.
+The plan job checks non-empty `AIRFLOW_INSTALLER_USER_EMAILS`, removes stale plans only from `gs://autoresearch-dev-tfstate/airflow-k8s-apply-plans/**`, runs `terraform init` and `terraform plan -out=tfplan.bin` only in `terraform/admin/airflow-k8s`, uploads `tfplan.bin` to `gs://autoresearch-dev-tfstate/airflow-k8s-apply-plans/${{ github.run_id }}.tfplan`, and publishes only masked resource headers and Plan summary. The apply job uses `environment: airflow-k8s-apply`, downloads that exact plan, applies it, and cleans it up with `if: always()`. The existing admin apply SA admits only `admin-apply.yml@refs/heads/main` and `airflow-k8s-apply.yml@refs/heads/main` through WIF principalSet members.
 
 - [ ] **Step 3: Verify the workflow contract**
 

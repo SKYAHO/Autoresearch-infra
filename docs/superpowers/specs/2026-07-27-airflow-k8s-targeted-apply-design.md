@@ -12,13 +12,16 @@ plan 요약과 Environment 승인 뒤에만 적용한다.
 
 새 `airflow-k8s-apply.yml`은 `workflow_dispatch`만 허용한다. 기존
 `admin-apply.yml`과 같은 OIDC/WIF, private GCS plan binary, GitHub Secret 변수
-주입 패턴을 쓰되 `terraform/admin/airflow-k8s` root만 plan/apply한다. apply job은
-`airflow-k8s-apply` Environment의 required reviewer 승인을 받고 plan job이 만든
-동일한 binary plan만 적용한다.
+주입 패턴을 쓰되 `terraform/admin/airflow-k8s` root만 plan/apply한다. 기존 admin
+apply SA의 WIF principalSet은 `admin-apply.yml@refs/heads/main` 및
+`airflow-k8s-apply.yml@refs/heads/main` 두 정확한 workflow ref만 허용하며 wildcard나
+repo 단위 ref는 허용하지 않는다. apply job은 `airflow-k8s-apply` Environment의
+required reviewer 승인을 받고 plan job이 만든 동일한 binary plan만 적용한다. 새 plan
+job은 시작 시 `airflow-k8s-apply-plans/**`만 정리해 미승인 run의 stale plan을 제거한다.
 
-기존 8-root `admin-apply.yml`, 다른 root의 state, GCP IAM, Secret payload는
-변경하지 않는다. `AIRFLOW_INSTALLER_USER_EMAILS` Secret만 기존과 동일하게
-주입한다.
+기존 8-root `admin-apply.yml`, 다른 root의 state, admin apply SA의 기존 역할,
+Secret payload는 변경하지 않는다. 새 workflow ref의 최소 WIF principalSet member와
+`AIRFLOW_INSTALLER_USER_EMAILS` Secret만 기존과 동일하게 사용한다.
 
 ## 적용 순서
 
