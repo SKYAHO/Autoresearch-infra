@@ -54,14 +54,14 @@ Expected: the runbook validation step and the two executable Pod manifests in th
 Replace runbook step 3 with:
 
 ```markdown
-3. `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다.
+3. `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다. 이 Pod는 OOMKilled와 재시작을 반복하므로 OOM 검증에만 단독으로 사용한다.
 ```
 
-Keep steps 4 through 6 unchanged so explicit Pod deletion still validates the resolved email and removes the test workload.
+Update steps 4 through 6 so the warning email 뒤 즉시 Pod를 삭제하고, `lastState` OOMKilled 확인 뒤 5분 안에 rule이 firing하지 않으면 삭제 후 조사하며, OOM Pod를 삭제한 뒤에만 CrashLooping test를 생성한다고 명시한다. 기본 `KubePodCrashLooping`의 `for: 15m` 전에 OOM test를 정리해 두 신호가 겹치지 않는다는 설명을 포함한다.
 
 - [ ] **Step 3: Correct the historical plan’s prose and both executable manifests**
 
-In the Task 2 validation contract, replace line 284 with the same `restartPolicy: Always` metric explanation from Step 2.
+In the Task 2 validation contract, replace line 284 with the same `restartPolicy: Always` metric explanation from Step 2. Replace the stale Alerting and Alertmanager current-state rows at lines 301 and 307 with the verified warning/resolved wording from Task 2, including the qualification that critical email is not separately verified.
 
 In both Pod specifications, replace only:
 
@@ -81,7 +81,7 @@ Replace the stale expected result with:
 Expected: container restart 뒤 `ContainerOOMKilled`가 pending을 거쳐 one-minute rule delay 후 firing하며 warning 이메일이 도착한다.
 ```
 
-In the executable `kubectl wait` command, replace `.status.containerStatuses[0].state.terminated.reason` with `.status.containerStatuses[0].lastState.terminated.reason` so the OOMKilled reason remains observable after the `restartPolicy: Always` container restarts.
+In the executable `kubectl wait` command, replace `.status.containerStatuses[0].state.terminated.reason` with `.status.containerStatuses[0].lastState.terminated.reason` so the OOMKilled reason remains observable after the `restartPolicy: Always` container restarts. Replace the preceding lifecycle prose so it waits for `lastState` for up to five minutes, treats the Pod as an OOM/restart loop rather than a one-shot series, deletes it immediately after the warning email or on firing failure, and starts the CrashLooping test only after deletion.
 
 Keep the explicit deletion and resolved-email contract unchanged.
 
@@ -92,6 +92,8 @@ Run:
 ```bash
 ! grep -n "restartPolicy: Never" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+! grep -n "wait until its terminated reason\|one-shot metric series\|아직 운영 중이 아님\|아직 운영하지 않음" \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
 grep -n "restartPolicy: Always" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
 grep -n "last_terminated_reason" docs/GRAFANA_OPERATIONS_RUNBOOK.md \
@@ -101,7 +103,7 @@ grep -n "lastState.terminated.reason" \
   docs/superpowers/plans/2026-07-27-alertmanager-oom-runbook-correction.md
 ```
 
-Expected: the negative check exits zero; the remaining output shows the new restart policy, metric explanation, and post-restart `lastState.terminated.reason` selector in the changed documents.
+Expected: the negative checks exit zero; the remaining output shows the new restart policy, metric explanation, verified current-state wording, and post-restart `lastState.terminated.reason` selector in the changed documents.
 
 ### Task 2: Alertmanager 운영 상태 정정
 

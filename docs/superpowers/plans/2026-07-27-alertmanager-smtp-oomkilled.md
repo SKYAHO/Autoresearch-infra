@@ -298,13 +298,13 @@ config 오류 또는 메일 전달 실패 시 ArgoCD sync를 중단하거나 val
 In `docs/OBSERVABILITY_STRATEGY.md`, replace the current Alerting row with this current-state statement.
 
 ```markdown
-| Alerting | 기본 rule 설치됨. Alertmanager SMTP 이메일 설정 values/docs는 커밋됐으나 ArgoCD manual sync 및 OOM/CrashLoop 이메일 실증 전으로, `warning`/`critical`·resolved 이메일은 아직 운영 중이 아님 |
+| Alerting | 기본 rule 설치됨. Alertmanager SMTP 이메일 설정을 ArgoCD manual sync했고, OOMKilled와 CrashLooping의 warning·resolved 이메일 전달을 실증했다. warning/critical receiver route는 구성됐지만 critical 이메일은 별도로 실증하지 않음 |
 ```
 
 Replace the Alertmanager design decision with this statement.
 
 ```markdown
-| Alertmanager | 설치됨. SMTP 이메일 설정은 ArgoCD manual sync와 OOM/CrashLoop 이메일 실증이 남아 있어 아직 운영하지 않음. 설정 payload는 ArgoCD 관리 대상이 아닌 `monitoring` namespace의 운영자 주입 Secret으로 관리 |
+| Alertmanager | 설치·운영 중. SMTP 이메일 설정은 ArgoCD manual sync 뒤 OOMKilled와 CrashLooping warning·resolved 이메일로 실증했다. warning/critical receiver route는 구성됐지만 critical 이메일은 별도로 실증하지 않음. 설정 payload는 ArgoCD 관리 대상이 아닌 `monitoring` namespace의 운영자 주입 Secret으로 관리 |
 ```
 
 Remove the completed “Alertmanager 알림 채널은 Slack, email, GitHub issue 중 무엇을 사용할지?” question from the future confirmation list. Keep Slack and other immediate channels as a future scope, not a prerequisite for email operation.
@@ -371,9 +371,14 @@ Expected: StatefulSet rollout succeeds. Investigate any config parse or reload e
 
 - [ ] **Step 4: Create a disposable OOMKilled test Pod after approval**
 
-Apply this exact Pod, wait until its terminated reason is `OOMKilled`, then wait
-for the alert email before removing it. Pod deletion is what removes this
-one-shot metric series and permits the resolved notification.
+Apply this exact Pod, wait up to five minutes until its
+`lastState.terminated.reason` is `OOMKilled`, then wait for the
+`ContainerOOMKilled` warning email. The Pod repeats OOMKilled and restart while
+it exists, so delete it immediately after the warning email arrives. If the rule
+does not fire within five minutes after `lastState` records OOMKilled, delete the
+Pod and investigate Prometheus rule evaluation and Alertmanager config. Do not
+create the CrashLooping test Pod until this Pod is deleted; that prevents the OOM
+test Pod from reaching the default `KubePodCrashLooping` rule's `for: 15m` period.
 
 ```yaml
 apiVersion: v1
