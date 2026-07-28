@@ -242,9 +242,9 @@ update 뒤에는 위와 같이 Secret metadata만 확인한다. payload를 출�
 
 1. ArgoCD manual sync 전에 diff에서 `alertmanager-smtp-config` 참조와 `ContainerOOMKilled` 규칙만 추가되는지 확인한다.
 2. sync 뒤 Alertmanager StatefulSet이 Ready인지와 Alertmanager log에 config parse error가 없는지 확인한다.
-3. 이전 `alertmanager-oom-test` Pod를 삭제하고 Kubernetes API로 부재를 확인한다. 삭제 또는 부재 확인이 실패하면 새 Pod를 만들지 않고, 수동 삭제와 Kubernetes API 장애 조사를 수행한다. 그 뒤 `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다. 이 Pod는 OOMKilled와 재시작을 반복하므로 OOM 검증에만 단독으로 사용한다.
+3. OOM 검증을 시작할 때 현재 Kubernetes context를 저장하고 이후 OOM·CrashLooping 검증의 모든 `kubectl` 호출에 그 context를 고정한다. 이전 `alertmanager-oom-test` Pod를 삭제하고 Kubernetes API로 부재를 확인한다. 삭제 또는 부재 확인이 실패하면 새 Pod를 만들지 않고, 수동 삭제와 Kubernetes API 장애 조사를 수행한다. 그 뒤 `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다. 이 Pod는 OOMKilled와 재시작을 반복하므로 OOM 검증에만 단독으로 사용한다.
 4. warning 이메일을 수신하면 dummy Pod를 즉시 삭제해 metric이 해소된 뒤 resolved 이메일을 수신한다. `lastState`에 OOMKilled가 생긴 뒤 5분 안에 rule이 firing하지 않으면 Pod를 삭제하고 Prometheus rule 평가와 Alertmanager config를 조사한다. 실행 절차는 `lastState` OOMKilled를 관측한 뒤 8분에 watchdog cleanup을 시작해 최대 100초의 재시도 예산을 확보하고, API request 및 deletion wait를 각각 15초로 제한한 삭제를 세 번 시도한다. 세 시도가 모두 실패하면 오류를 기록하고 즉시 수동 삭제와 Kubernetes API 장애 조사를 수행한다.
-5. OOM 검증 Pod가 삭제된 뒤에만 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다. 기본 `KubePodCrashLooping` rule의 `for: 15m` 전에 OOM 검증 Pod를 정리하므로 두 검증 신호는 겹치지 않는다.
+5. 같은 고정 context에서 OOM 검증 Pod의 부재를 API로 다시 확인한 뒤에만 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다. 부재 확인이 실패하거나 OOM Pod가 남아 있으면 CrashLooping Pod를 만들지 않고 수동 삭제와 Kubernetes API 장애 조사를 수행한다. 기본 `KubePodCrashLooping` rule의 `for: 15m` 전에 OOM 검증 Pod를 정리하므로 두 검증 신호는 겹치지 않는다.
 6. 검증 Pod는 즉시 삭제한다.
 
 config 오류 또는 메일 전달 실패 시 ArgoCD sync를 중단하거나 values를 기존 chart 생성 config로 되돌려 `null` receiver를 복원한다. Alertmanager가 `alertmanager-smtp-config`를 더 이상 참조하지 않는 것을 확인한 뒤에만 Secret을 삭제한다.
