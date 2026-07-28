@@ -81,7 +81,7 @@ Replace the stale expected result with:
 Expected: container restart 뒤 `ContainerOOMKilled`가 pending을 거쳐 one-minute rule delay 후 firing하며 warning 이메일이 도착한다.
 ```
 
-In the executable `kubectl wait` command, replace `.status.containerStatuses[0].state.terminated.reason` with `.status.containerStatuses[0].lastState.terminated.reason` so the OOMKilled reason remains observable after the `restartPolicy: Always` container restarts. Prepend an idempotent `--ignore-not-found --wait=true` delete and absence assertion before applying the fixed-name Pod. Replace the preceding lifecycle prose so it waits for `lastState` for up to five minutes, treats the Pod as an OOM/restart loop rather than a one-shot series, deletes it immediately after the warning email or on firing failure, deletes it no later than ten minutes after first `lastState` OOMKilled even if SMTP delivery is delayed, and starts the CrashLooping test only after deletion.
+In the executable `kubectl wait` command, replace `.status.containerStatuses[0].state.terminated.reason` with `.status.containerStatuses[0].lastState.terminated.reason` so the OOMKilled reason remains observable after the `restartPolicy: Always` container restarts. Prepend an idempotent `--ignore-not-found --wait=true` delete and absence assertion before applying the fixed-name Pod; both commands must fail closed with `exit 1` if cleanup fails or the Pod remains. Replace the preceding lifecycle prose so it waits for `lastState` for up to five minutes, treats the Pod as an OOM/restart loop rather than a one-shot series, deletes it immediately after the warning email or on firing failure, deletes it no later than ten minutes after first `lastState` OOMKilled even if SMTP delivery is delayed, and starts the CrashLooping test only after deletion.
 
 Keep the explicit deletion and resolved-email contract unchanged.
 
@@ -104,9 +104,11 @@ grep -n "lastState.terminated.reason" \
 grep -n -- "--ignore-not-found --wait=true\|ten minutes\|10분" \
   docs/GRAFANA_OPERATIONS_RUNBOOK.md \
   docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
+grep -n "previous alertmanager-oom-test.*failed\|previous alertmanager-oom-test.*present\|exit 1" \
+  docs/superpowers/plans/2026-07-27-alertmanager-smtp-oomkilled.md
 ```
 
-Expected: the negative checks exit zero; the remaining output shows the new restart policy, metric explanation, verified current-state wording, post-restart `lastState.terminated.reason` selector, stale-Pod cleanup, and absolute cleanup deadline in the changed documents.
+Expected: the negative checks exit zero; the remaining output shows the new restart policy, metric explanation, verified current-state wording, post-restart `lastState.terminated.reason` selector, fail-closed stale-Pod cleanup, and absolute cleanup deadline in the changed documents.
 
 ### Task 2: Alertmanager 운영 상태 정정
 

@@ -407,10 +407,16 @@ spec:
 Run:
 
 ```bash
-kubectl -n monitoring delete pod alertmanager-oom-test \
-  --ignore-not-found --wait=true --timeout=1m
-test -z "$(kubectl -n monitoring get pod alertmanager-oom-test \
-  --ignore-not-found -o name)"
+if ! kubectl -n monitoring delete pod alertmanager-oom-test \
+  --ignore-not-found --wait=true --timeout=1m; then
+  printf '%s\n' 'previous alertmanager-oom-test cleanup failed' >&2
+  exit 1
+fi
+if [ -n "$(kubectl -n monitoring get pod alertmanager-oom-test \
+  --ignore-not-found -o name)" ]; then
+  printf '%s\n' 'previous alertmanager-oom-test is still present' >&2
+  exit 1
+fi
 
 kubectl apply -f - <<'EOF'
 apiVersion: v1
