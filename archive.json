@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T05:08:25Z",
+  "generated_at": "2026-07-29T07:39:19Z",
   "reports": [
+    {
+      "number": 407,
+      "title": "fix: deploy 이미지·버킷 참조를 새 프로젝트로 교체 (#404)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-29T07:39:09Z",
+      "summary_ko": [
+        "GCP 프로젝트 이전 작업(#404 Phase 5)의 일환으로 배포 매니페스트 내 기존 GCP 프로젝트 ID 참조를 신규 프로젝트 ID로 변경하였습니다.",
+        "서빙 서비스(serving)의 컨테이너 이미지 경로, 프로젝트 ID 환경 변수, Feast 레지스트리 및 스테이징 GCS 버킷 주소를 업데이트하였습니다.",
+        "MLflow 서비스(mlflow)의 컨테이너 이미지 경로, 프로젝트 환경 변수, 아티팩트 저장용 GCS 버킷 주소를 신규 프로젝트로 전환하였습니다."
+      ],
+      "report_url": "pr/407/"
+    },
     {
       "number": 405,
       "title": "feat: 프로젝트 이전 Phase 0~1 — bootstrap 변수화·state backend 전환 (#404)",
