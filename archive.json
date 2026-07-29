@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T05:07:37Z",
+  "generated_at": "2026-07-29T05:08:25Z",
   "reports": [
+    {
+      "number": 405,
+      "title": "feat: 프로젝트 이전 Phase 0~1 — bootstrap 변수화·state backend 전환 (#404)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-29T05:07:21Z",
+      "summary_ko": [
+        "GCP 프로젝트 이전(#404)을 위해 모든 Terraform root의 원격 상태(state) 저장 버킷을 새 프로젝트 버킷으로 전환하였습니다.",
+        "부트스트랩 모듈의 상태 버킷 이름을 변수화하여 글로벌 유니크 제약을 유연하게 처리할 수 있도록 개선하였습니다.",
+        "GitHub Actions 워크플로, IAM 권한 바인딩 및 관련 운영 문서의 버킷 경로를 신규 버킷 기준으로 일괄 업데이트하였습니다."
+      ],
+      "report_url": "pr/405/"
+    },
     {
       "number": 402,
       "title": "feat: 액션로그 KPO 메모리 프로파일 패널 (#401)",
