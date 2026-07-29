@@ -19,7 +19,7 @@ terraform apply
 ```
 
 권한은 프로젝트 수준 `roles/container.viewer`로 부여합니다(#45: DNS 엔드포인트
-접속에 필요한 `container.clusters.connect` 포함). `ar-infra-501607`에 dev GKE
+접속에 필요한 `container.clusters.connect` 포함). `autoresearch-503903`에 dev GKE
 클러스터가 하나뿐인 동안에는 허용 가능한 범위입니다. 프로젝트에 클러스터가 더
 추가되면 IAM condition으로 binding 범위를 좁히거나 클러스터 접근을 전용
 프로젝트로 분리합니다.

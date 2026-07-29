@@ -2,7 +2,7 @@
 
 `terraform/envs/dev`는 AutoResearch dev GCP 인프라의 Terraform root module입니다.
 
-현재 dev 스택은 GCS 원격 backend를 사용하며, 2026-07-08 기준 GCP 프로젝트 `ar-infra-501607`에 apply 완료되었습니다.
+현재 dev 스택은 GCS 원격 backend를 사용하며, 2026-07-29 기준 GCP 프로젝트 `autoresearch-503903`에 apply 완료되었습니다(#404 프로젝트 이전으로 `ar-infra-501607`에서 재구축).
 
 ## 포함 범위
 
@@ -62,7 +62,7 @@ terraform -chdir=terraform/envs/dev apply
 | Network | `autoresearch-dev-vpc`, `autoresearch-dev-subnet`, `autoresearch-dev-router`, `autoresearch-dev-nat` |
 | Artifact Registry | `autoresearch-dev-docker` |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
-| GCS | `ar-infra-501607-autoresearch-dev-raw-data`, `ar-infra-501607-feast-registry`, `ar-infra-501607-feast-staging`, `ar-infra-501607-autoresearch-dev-airflow-dags`, `ar-infra-501607-autoresearch-dev-airflow-logs`, `ar-infra-501607-code-artifacts` (#238) |
+| GCS | `autoresearch-503903-autoresearch-dev-raw-data`, `autoresearch-503903-feast-registry`, `autoresearch-503903-feast-staging`, `autoresearch-503903-autoresearch-dev-airflow-dags`, `autoresearch-503903-autoresearch-dev-airflow-logs`, `autoresearch-503903-code-artifacts` (#238) |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` (data lake 2종 + Feast 피처 테이블 4종) |
 | BigQuery connection | `autoresearch-dev-vertex-ai` (`CLOUD_RESOURCE`, `asia-northeast3`, #280) |
 | Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key`, `autoresearch-dev-airflow-oauth-client-id`, `autoresearch-dev-airflow-oauth-client-secret` |
@@ -88,7 +88,7 @@ BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있
 
 | 대상 | Role | 범위 | 용도 |
 |---|---|---|---|
-| `ar-infra-501607-code-artifacts` bucket | `roles/storage.objectViewer` | 버킷 단위 (`code_artifacts.tf`) | Feast 이미지 entrypoint가 `code/latest.txt`, `code/<sha>.tar.gz` 다운로드 |
+| `autoresearch-503903-code-artifacts` bucket | `roles/storage.objectViewer` | 버킷 단위 (`code_artifacts.tf`) | Feast 이미지 entrypoint가 `code/latest.txt`, `code/<sha>.tar.gz` 다운로드 |
 | project (condition 제한) | `roles/redis.dbConnectionUser` | `projects/<project>/locations/asia-northeast3/clusters/autoresearch-dev-redis-cluster` 한정 (`redis.tf`) | Redis Cluster IAM 인증 토큰 발급 |
 | `autoresearch-dev-redis-server-ca` secret | `roles/secretmanager.secretAccessor` | secret 단위 (`secret_manager.tf`) | TLS(`SERVER_AUTHENTICATION`) 검증용 CA 조회 |
 

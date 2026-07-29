@@ -8,7 +8,7 @@
 
 | 항목 | 값 |
 |---|---|
-| GCP project | `ar-infra-501607` |
+| GCP project | `autoresearch-503903` |
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
@@ -29,7 +29,7 @@ flowchart TB
     apprepo["이미지 배포 Actions<br/>Autoresearch / Autoresearch-airflow"]
     oauth["Google OAuth<br/>redirect: localhost:8080"]
 
-    subgraph gcp["GCP project<br/>ar-infra-501607"]
+    subgraph gcp["GCP project<br/>autoresearch-503903"]
         iap["IAP TCP forwarding"]
         wif["GitHub OIDC / WIF"]
         state["GCS Terraform state"]
@@ -101,7 +101,7 @@ flowchart TB
 
 | 용어 | 뜻 | 이 인프라에서의 의미 |
 |---|---|---|
-| Project | GCP 리소스를 담는 최상위 논리 공간 | `ar-infra-501607` 하나에 dev 인프라를 구성 |
+| Project | GCP 리소스를 담는 최상위 논리 공간 | `autoresearch-503903` 하나에 dev 인프라를 구성 |
 | Region | GCP 리소스가 위치하는 지리적 권역 | `asia-northeast3` 서울 region |
 | Zone | Region 안의 더 작은 가용 영역 | `asia-northeast3-a`에 zonal GKE와 Bastion 배치 |
 | Terraform root | Terraform을 실행하는 기준 디렉터리 | `terraform/envs/dev`, `terraform/bootstrap`, `terraform/admin/*` |
@@ -156,7 +156,7 @@ flowchart TB
     gh["GitHub PR"]
     ci["GitHub Actions<br/>lint / terraform plan / Claude review"]
     wif["Workload Identity Federation<br/>terraform-ci"]
-    gcp["GCP project<br/>ar-infra-501607"]
+    gcp["GCP project<br/>autoresearch-503903"]
 
     vpc["VPC<br/>autoresearch-dev-vpc"]
     subnet["Subnet<br/>10.10.0.0/20"]
@@ -405,10 +405,10 @@ flowchart LR
 
 | 설정 | 값 | 설명 |
 |---|---|---|
-| Raw data bucket | `ar-infra-501607-autoresearch-dev-raw-data` | YouTube, action log, virtual user, persona 원본을 prefix로 나누어 저장한다. |
+| Raw data bucket | `autoresearch-503903-autoresearch-dev-raw-data` | YouTube, action log, virtual user, persona 원본을 prefix로 나누어 저장한다. |
 | Raw bucket versioning | enabled | 원본 데이터 실수 삭제/덮어쓰기 대응을 위해 versioning을 켰다. |
-| Feast registry bucket | `ar-infra-501607-feast-registry` | Feast registry.db 같은 feature store metadata를 저장한다. |
-| Feast staging bucket | `ar-infra-501607-feast-staging` | materialization/load 중 생기는 임시 파일을 저장한다. |
+| Feast registry bucket | `autoresearch-503903-feast-registry` | Feast registry.db 같은 feature store metadata를 저장한다. |
+| Feast staging bucket | `autoresearch-503903-feast-staging` | materialization/load 중 생기는 임시 파일을 저장한다. |
 | BigQuery analytics | `autoresearch_dev_analytics` | 분석/집계 결과를 저장하는 dataset이다. |
 | BigQuery Feast | `feast_offline_store` | Feast offline feature table 저장소다. |
 | Cloud SQL instance | `autoresearch-dev-pg` | PostgreSQL 15 dev instance다. private IP only로 구성했다. |
@@ -627,8 +627,8 @@ HPA는 어느 워크로드에도 없다(파드 수 고정, 노드만 오토스�
 | Persona raw snapshot | GCS raw data bucket `data/raw/personas/` | 페르소나 원본 스냅샷 |
 | Analytics table | BigQuery `autoresearch_dev_analytics` | 분석/집계용 |
 | Feast offline store | BigQuery `feast_offline_store` | feature table 저장 |
-| Feast registry | GCS `ar-infra-501607-feast-registry` | registry.db 등 메타데이터 |
-| Feast staging | GCS `ar-infra-501607-feast-staging` | 임시 staging 파일 |
+| Feast registry | GCS `autoresearch-503903-feast-registry` | registry.db 등 메타데이터 |
+| Feast staging | GCS `autoresearch-503903-feast-staging` | 임시 staging 파일 |
 | Airflow DAG/log | GCS Airflow DAG/log buckets | DAG 버전관리와 task log 영속화 |
 | 앱 운영 DB | Cloud SQL `autoresearch` DB | private IP only |
 | Airflow metadata DB | Cloud SQL `airflow` DB | Airflow 내부 상태 |

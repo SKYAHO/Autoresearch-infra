@@ -51,6 +51,12 @@ UI 앞단 OAuth2-proxy는 Google OAuth client 자격·cookie 비밀·허용 이�
 `http://localhost:4180/oauth2/callback` 등록. client id는 공개값, client secret은
 비공개.
 
+> **아래 client id는 옛 프로젝트(`ar-infra-501607`, 프로젝트 번호
+> `185508640491`) 소속이며 프로젝트 이전(#404) 후에도 그대로 재사용 중이다.**
+> OAuth client는 프로젝트 종속이라 Terraform으로 옮길 수 없다. #404 Phase 6에서
+> 옛 프로젝트를 shutdown하기 전에 `autoresearch-503903`에서 재발급하고 이 값과
+> Secret을 함께 교체해야 한다. 교체 전까지는 아래 값이 현행이므로 그대로 둔다.
+
 ```bash
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
@@ -59,7 +65,7 @@ d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 read -rs -p 'client-secret: ' CS; echo
 printf '%s' "$CS" > "$d/client-secret"; unset CS
 
-# client id(공개값)
+# client id(공개값) — 재발급 전까지 옛 프로젝트 client. 위 주의 참조
 printf '%s' '185508640491-p0rosojfsj118hqn8pc2flhsv3fcqaag.apps.googleusercontent.com' > "$d/client-id"
 
 # cookie 비밀(랜덤 32바이트, oauth2-proxy 권장 생성)
