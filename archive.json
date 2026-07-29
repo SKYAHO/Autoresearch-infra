@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T09:10:28Z",
+  "generated_at": "2026-07-29T10:52:14Z",
   "reports": [
+    {
+      "number": 410,
+      "title": "feat: Alertmanager Slack 알림과 노이즈 제어",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-07-29T10:51:56Z",
+      "summary_ko": [
+        "기존 Gmail 기반 Alertmanager 알림을 Slack 웹훅 연동으로 전환하고 수신 대상을 핵심 네임스페이스 및 클러스터 장애로 제한하였습니다.",
+        "경보 등급별 반복 주기 분리, resolved 메시지 자동 발송, 동일 경보의 critical 발동 시 warning 억제(inhibit) 규칙을 적용하였습니다.",
+        "OOM 종료 경보를 최근 5분 내 재시작 연동 사건형 규칙으로 개선하고, 비노출 Secret 생성 및 롤백 운영 절차를 구축하였습니다."
+      ],
+      "report_url": "pr/410/"
+    },
     {
       "number": 409,
       "title": "feat: 피처 스토어 dev 환경 좌표 프로비저닝 (#408)",
