@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T12:48:52Z",
+  "generated_at": "2026-07-29T12:49:34Z",
   "reports": [
+    {
+      "number": 414,
+      "title": "fix: bootstrap state 버킷명을 default 없는 필수 변수로 전환",
+      "author": "hyochangsung",
+      "merged_at": "2026-07-29T12:48:33Z",
+      "summary_ko": [
+        "부트스트랩용 상태 저장 버킷 이름 변수의 기본값을 제거하여 필수 입력 항목으로 전환했습니다.",
+        "프로젝트 전환 시 이전 프로젝트의 상태 저장 버킷 이름이 오용되거나 불필요한 버킷이 생성되는 위험을 차단했습니다.",
+        "관련 부트스트랩 가이드 문서의 설정 예시와 옛 프로젝트 버킷명 표기를 최신 정보로 갱신했습니다."
+      ],
+      "report_url": "pr/414/"
+    },
     {
       "number": 410,
       "title": "feat: Alertmanager Slack 알림과 노이즈 제어",
