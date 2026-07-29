@@ -220,7 +220,7 @@ flowchart TB
 | Secret(학습) | Vault single-node + KMS auto-unseal(#132/#134/#136) — `vault` ns | 학습·검증용. 실 서비스 secret은 Secret Manager 유지 |
 | KMS | `autoresearch-dev-vault`/`vault-unseal` key (#132) | Vault auto-unseal. key 삭제 금지(데이터 복호화 불능) |
 | DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | Google API 고정 VIP 유도 — vault egress 443 축소 기반 |
-| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) + **dev root 승인 게이트 CI apply**(#341, `dev-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 8개·dev root 모두 Environment 승인 후 CI apply, 로컬 apply는 break-glass |
+| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) + **dev root 승인 게이트 CI apply**(#341, `dev-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 7개(#412로 `vault-k8s` 제외)·dev root 모두 Environment 승인 후 CI apply, 로컬 apply는 break-glass |
 
 ## 인프라별 상세 구조
 
