@@ -118,23 +118,27 @@ kube-prometheus-stack:
               expr: |
                 (
                   increase(
-                    kube_pod_container_status_restarts_total{
-                      namespace=~"airflow|autoresearch|mlflow|monitoring"
-                    }[5m]
+                    kube_pod_container_status_restarts_total[5m]
                   ) > 0
                 )
                 and on (namespace, pod, container)
                 (
                   kube_pod_container_status_last_terminated_reason{
-                    namespace=~"airflow|autoresearch|mlflow|monitoring",
                     reason="OOMKilled"
                   } == 1
                 )
               for: 1m
+              # 10분 안팎으로 반복되는 OOM을 하나의 firing lifecycle로 묶어
+              # Alertmanager repeat_interval이 실제로 노이즈를 억제하게 한다.
+              keep_firing_for: 15m
               labels:
                 severity: warning
               annotations:
                 summary: Container had a recent OOM restart
+                description: >-
+                  {{ $labels.namespace }}/{{ $labels.pod }}의 컨테이너
+                  {{ $labels.container }}가 최근 5분 내 OOMKilled로
+                  재시작했습니다.
 
   prometheusOperator:
     internalPort: 10250

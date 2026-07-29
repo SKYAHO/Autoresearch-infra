@@ -97,15 +97,19 @@ Alertmanager는 Slack App의 channel-bound Incoming Webhook으로
 
 - root receiver는 `null`, group key는 `alertname`, `namespace`,
   `group_wait: 30s`, `group_interval: 1m`
-- workload namespace allowlist는 정확히
-  `airflow|autoresearch|mlflow|monitoring`
+- workload namespace allowlist는 활성 운영 namespace인
+  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`
 - cluster 장애 allowlist는 원본 rule의 severity와 관계없이 critical receiver로
   승격하며
   `KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown`
 - warning은 멘션 없이 12시간마다 반복, critical은 firing일 때만
   `<!here>`를 넣고 4시간마다 반복
 - warning/critical 모두 `send_resolved: true`; resolved에는 멘션 없음
-- 같은 `alertname`, `namespace`의 critical이 firing 중이면 warning을 inhibit
+- `ContainerOOMKilled`는 rule 단계에서 namespace를 제한하지 않아 Prometheus
+  UI에는 모든 발생을 남기고, Slack 전달 범위는 route 한 곳에서만 결정한다.
+  `keep_firing_for: 15m`이 10분 안팎의 반복 OOM을 연속 firing으로 유지하므로
+  warning의 `repeat_interval: 12h`가 재전송을 억제한다. 마지막 OOM 뒤에는
+  5분 조회 window와 keep-firing 구간이 지난 후 resolved 한 건을 보낸다.
 
 ### Slack 입력과 전체 config 생성
 
@@ -183,12 +187,12 @@ route:
     - receiver: slack-critical
       matchers:
         - severity="critical"
-        - namespace=~"airflow|autoresearch|mlflow|monitoring"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
       repeat_interval: 4h
     - receiver: slack-warning
       matchers:
         - severity="warning"
-        - namespace=~"airflow|autoresearch|mlflow|monitoring"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
       repeat_interval: 12h
 receivers:
   - name: "null"
@@ -198,7 +202,7 @@ receivers:
         send_resolved: true
         color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}warning{{{{ end }}}}'
         title: '[{{{{ .Status }}}}] {{{{ printf "%.150s" (reReplaceAll "[<>&@]" "" .CommonLabels.alertname) }}}}'
-        text: >-
+        text: |-
           {{{{ $first := index .Alerts 0 }}}}
           *Summary:* {{{{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}}}
           *Description:* {{{{ printf "%.1000s" (reReplaceAll "[<>&@]" "" $first.Annotations.description) }}}}
@@ -226,7 +230,7 @@ receivers:
         send_resolved: true
         color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}danger{{{{ end }}}}'
         title: '[{{{{ .Status }}}}] {{{{ printf "%.150s" (reReplaceAll "[<>&@]" "" .CommonLabels.alertname) }}}}'
-        text: >-
+        text: |-
           {{{{ if eq .Status "firing" }}}}<!here> {{{{ end }}}}
           {{{{ $first := index .Alerts 0 }}}}
           *Summary:* {{{{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}}}
@@ -249,12 +253,6 @@ receivers:
           - title: Started at
             value: '{{{{ (index .Alerts 0).StartsAt }}}}'
             short: false
-inhibit_rules:
-  - source_matchers:
-      - severity="critical"
-    target_matchers:
-      - severity="warning"
-    equal: [alertname, namespace]
 """
 (root / "alertmanager.yaml").write_text(config, encoding="utf-8")
 (root / "alertmanager.yaml").chmod(0o600)
@@ -371,20 +369,25 @@ PY
 ArgoCD manual sync 전에 현재 context와 alert rule 이름을 read-only로 고정한다.
 sync 뒤 Alertmanager Ready와 config reload 성공, Slack API 오류 부재를
 확인한다. warning test는 무멘션 firing/resolved, critical test는 firing
-`<!here>` 한 번과 무멘션 resolved, 같은 `alertname`/`namespace`의 warning
-억제를 검증한다.
+`<!here>` 한 번과 무멘션 resolved를 검증한다. 설치된 rule에는 같은
+`alertname`·`namespace`에서 warning과 critical이 동시에 firing하는 실제 쌍이
+없으므로 효과 없는 inhibit rule은 두지 않는다.
 
 `ContainerOOMKilled`는 `restartPolicy: Always`인 제한된 검증 Pod에서 첫 OOM
-restart의 firing, 5분 window가 지난 뒤 resolved, 새 OOM의 재-firing을
-확인한다. watchdog과 제한 시간 삭제를 사용하고 검증 직후 API로 Pod 부재를
-확인한다. 실제 test alert, OOM Pod, Secret 주입과 ArgoCD sync는 별도 운영
-승인 전에는 실행하지 않는다.
+restart의 firing, 10분 안팎의 반복 OOM이 새 메시지 없이 같은 firing으로
+유지되는지, 마지막 OOM 뒤 5분 window와 `keep_firing_for: 15m`이 지난 다음
+resolved 되는지 확인한다. watchdog과 제한 시간 삭제를 사용하고 검증 직후
+API로 Pod 부재를 확인한다. 실제 test alert, OOM Pod, Secret 주입과 ArgoCD
+sync는 별도 운영 승인 전에는 실행하지 않는다.
 
-Slack config load 또는 전달이 실패하면 같은 승인 창에서
+Slack config load 또는 전달이 실패하면 같은 승인 창에서 기존
+`alertmanager-smtp-config`의 검증된 `alertmanager.yaml`을 현재 참조 중인
+`alertmanager-slack-config` Secret에 create-or-replace하여 config reload만으로
+즉시 SMTP 단일 전달을 복구한다. 그 뒤 별도 rollback PR에서
 `deploy/monitoring/values.yaml`의 `configSecret`을
-`alertmanager-smtp-config`로 되돌려 sync한다. Slack live smoke와 운영 관찰
-구간이 끝날 때까지 기존 SMTP Secret을 삭제하지 않는다. dual delivery는
-금지하며, SMTP Secret 삭제는 별도 승인을 받는다.
+`alertmanager-smtp-config`로 되돌리고 ArgoCD manual sync를 수행한다. Slack
+live smoke와 운영 관찰 구간이 끝날 때까지 기존 SMTP Secret을 삭제하지 않는다.
+dual delivery는 금지하며, SMTP Secret 삭제는 별도 승인을 받는다.
 
 ## Alertmanager SMTP rollback (legacy, #372)
 

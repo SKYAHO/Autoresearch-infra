@@ -11,12 +11,14 @@
   `#alerts-infra`에 전달한다. 단방향 운영 알림만 필요해 메시지 수정·thread·
   interactive action용 Bot Token은 도입하지 않는다.
 - **노이즈 제어**: workload namespace는
-  `airflow|autoresearch|mlflow|monitoring`만 허용한다. `alertname+namespace`로
-  group하고 warning은 무멘션 12시간, critical은 firing `@here`·4시간 반복,
-  resolved는 무멘션으로 보낸다. 같은 key의 critical은 warning을 inhibit한다.
+  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`만
+  허용한다. `alertname+namespace`로 group하고 warning은 무멘션 12시간,
+  critical은 firing `@here`·4시간 반복, resolved는 무멘션으로 보낸다. 현재
+  rule에는 같은 key의 warning/critical pair가 없어 inhibit는 두지 않는다.
 - **OOM 의미**: 최근 5분 `restarts_total` 증가와 마지막 종료 이유
-  `OOMKilled`를 결합한 사건형 rule로 바꿨다. restart가 멈추면 resolved되고 새
-  OOM restart가 생기면 재-firing한다.
+  `OOMKilled`를 결합한 cluster-wide 사건형 rule로 바꿨다.
+  `keep_firing_for: 15m`으로 짧은 간격 재발을 한 사건으로 유지하며 Slack
+  전달 범위는 route에서 제한한다.
 - **보안·롤백**: webhook과 전체 Alertmanager config는 운영자 주입
   `alertmanager-slack-config`에만 두고 Git·Terraform state·명령행에 넣지
   않는다. live smoke 전에는 SMTP Secret을 rollback 자산으로 유지하고 dual

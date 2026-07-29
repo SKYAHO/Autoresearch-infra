@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Alertmanager의 Gmail 알림을 `#alerts-infra` Incoming Webhook으로 전환하고 namespace 범위, 그룹화, severity 억제, 반복 주기, OOM 사건 의미를 정정한다.
+**Goal:** Alertmanager의 Gmail 알림을 `#alerts-infra` Incoming Webhook으로 전환하고 namespace 범위, 그룹화, 반복 주기, OOM 사건 의미를 정정한다.
 
 **Architecture:** kube-prometheus-stack은 운영자 주입 `alertmanager-slack-config`의 전체 `alertmanager.yaml`을 읽는다. Git은 Secret 이름과 사건형 PrometheusRule, payload를 출력하지 않는 생성·검증 runbook만 관리한다. root null route 아래 workload namespace allowlist와 cluster critical allowlist를 분리하고 warning/critical receiver가 같은 channel-bound webhook을 사용한다.
 
@@ -11,12 +11,12 @@
 ## Global Constraints
 
 - 논리 채널은 `#alerts-infra` 하나이고 Slack App의 channel-bound Incoming Webhook을 사용한다.
-- workload namespace allowlist는 정확히 `airflow|autoresearch|mlflow|monitoring`이다.
+- workload namespace allowlist는 정확히 `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`이다.
 - root receiver는 `null`이며 info와 관리 namespace는 Slack으로 보내지 않는다.
 - group key는 정확히 `alertname`, `namespace`; `group_wait=30s`, `group_interval=1m`이다.
 - warning은 멘션 없이 `repeat_interval=12h`, critical은 firing일 때만 `<!here>`와 `repeat_interval=4h`다.
 - warning/critical receiver 모두 `send_resolved: true`이고 resolved에는 mention이 없다.
-- 같은 `alertname`, `namespace`의 critical은 warning을 억제한다.
+- 현재 rule에 실제 warning/critical pair가 없으므로 효과 없는 inhibit rule은 두지 않는다.
 - webhook URL, 실제 channel ID, Secret payload는 Git, Terraform state, command line, 로그, PR 본문에 남기지 않는다.
 - Terraform, IAM, GCP resource, public endpoint, monitoring NetworkPolicy는 변경하지 않는다.
 - Slack App/Webhook/Secret/ArgoCD sync/test alert/OOM Pod는 별도 운영 승인 전에는 실행하지 않는다.
@@ -90,21 +90,20 @@ configSecret: alertmanager-slack-config
 expr: |
   (
     increase(
-      kube_pod_container_status_restarts_total{
-        namespace=~"airflow|autoresearch|mlflow|monitoring"
-      }[5m]
+      kube_pod_container_status_restarts_total[5m]
     ) > 0
   )
   and on (namespace, pod, container)
   (
     kube_pod_container_status_last_terminated_reason{
-      namespace=~"airflow|autoresearch|mlflow|monitoring",
       reason="OOMKilled"
     } == 1
   )
 ```
 
-annotation summary는 “최근 OOM restart가 발생함”이라는 사건 의미로 수정한다.
+`keep_firing_for: 15m`을 추가하고 annotation summary와 description은 최근 OOM
+restart가 발생한 namespace, Pod, container를 식별하도록 수정한다. rule은
+cluster-wide로 관측하고 Slack 전달 범위는 Alertmanager route에서 제한한다.
 
 - [ ] **Step 5: chart를 렌더링해 정확한 변경을 검증한다**
 
@@ -140,7 +139,7 @@ git commit -m "feat: Alertmanager Slack 설정 참조 추가"
 **Interfaces:**
 - Consumes: mode 0600 `slack-webhook-url`과 `slack-channel` 입력 파일.
 - Produces: `monitoring/alertmanager-slack-config` with exactly one `alertmanager.yaml` key.
-- Produces: root null, three child routes, two Slack receivers, one inhibit rule.
+- Produces: root null, three child routes, two Slack receivers.
 
 - [ ] **Step 1: 기존 SMTP section의 교체 범위를 확인한다**
 
@@ -188,12 +187,12 @@ route:
     - receiver: slack-critical
       matchers:
         - severity="critical"
-        - namespace=~"airflow|autoresearch|mlflow|monitoring"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
       repeat_interval: 4h
     - receiver: slack-warning
       matchers:
         - severity="warning"
-        - namespace=~"airflow|autoresearch|mlflow|monitoring"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
       repeat_interval: 12h
 ```
 
@@ -205,7 +204,7 @@ Pod/container 각 200자와 전체 alert 건수를 직접 렌더링한다. 외�
 다음 정적 mention 조건을 앞에 포함한다.
 
 ```yaml
-text: >-
+text: |-
   {{ if eq .Status "firing" }}<!here> {{ end }}
   {{ $first := index .Alerts 0 }}
   *Summary:* {{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}
@@ -214,20 +213,16 @@ text: >-
 두 receiver 모두 `link_names` 자동 파싱을 사용하지 않으며 warning에는 mention
 token을 넣지 않는다.
 
-- [ ] **Step 4: inhibit rule과 attachment field를 문서화한다**
+- [ ] **Step 4: attachment field와 줄바꿈 계약을 문서화한다**
 
-```yaml
-inhibit_rules:
-  - source_matchers: ['severity="critical"']
-    target_matchers: ['severity="warning"']
-    equal: [alertname, namespace]
-```
-
+현재 설치된 rule에는 같은 `alertname`, `namespace`로 warning과 critical을
+동시에 생성하는 실제 pair가 없으므로 inhibit rule은 추가하지 않는다.
 attachment는 resolved=good, critical=danger, warning=warning 색상과 Status,
 Severity, Namespace, Alert count, Started at을 표시한다. label/annotation은
 외부 입력으로 취급해 `<`, `>`, `&`, `@`를 제거하고 webhook 값은 template에
-넣지 않는다. 안전한 내부 URL을 generator가 검증하지 않으므로 `title_link`는
-기본적으로 생성하지 않는다.
+넣지 않는다. 본문은 literal block을 사용해 Slack에서 줄바꿈을 보존한다.
+안전한 내부 URL을 generator가 검증하지 않으므로 `title_link`는 기본적으로
+생성하지 않는다.
 
 - [ ] **Step 5: no-output config 검증과 create-or-replace 절차를 작성한다**
 
@@ -258,7 +253,7 @@ Run:
 ```bash
 rg -n "alertmanager-slack-config|slack-warning|slack-critical|repeat_interval: (12h|4h)" \
   docs/GRAFANA_OPERATIONS_RUNBOOK.md
-rg -n "severity=.critical|severity=.warning|equal:.*alertname.*namespace" \
+rg -n "severity=.critical|severity=.warning|text: \\|-" \
   docs/GRAFANA_OPERATIONS_RUNBOOK.md
 ! rg -n "https://hooks\\.slack\\.com/services/[A-Z0-9]" \
   docs/GRAFANA_OPERATIONS_RUNBOOK.md
@@ -298,7 +293,8 @@ Expected: Alerting 현재 상태와 Alertmanager 결정 행이 표시된다.
 - [ ] **Step 2: 전략 문서를 Slack 전환 상태로 갱신한다**
 
 Alerting 행과 Alertmanager 행에 `#alerts-infra`, Incoming Webhook,
-namespace allowlist, warning/critical 반복, resolved, inhibit를 기록한다.
+namespace allowlist, warning/critical 반복, resolved, OOM keep-firing 정책을
+기록한다.
 실제 live smoke 전에는 “구성 예정/로컬 검증”으로, smoke 후에는 검증한
 severity와 lifecycle만 “운영 중”으로 바꾼다.
 
@@ -308,7 +304,8 @@ severity와 lifecycle만 “운영 중”으로 바꾼다.
 
 - 메일 노이즈 원인
 - channel-bound webhook 선택과 Bot Token 미도입 이유
-- `alertname+namespace` grouping과 critical→warning inhibit
+- `alertname+namespace` grouping과 실제 pair가 없어 inhibit를 두지 않은 이유
+- OOM의 15분 keep-firing으로 짧은 간격 재발을 한 사건으로 유지하는 정책
 - 사건형 OOM 식의 restart window 의미
 - SMTP rollback과 Secret 비노출
 - 비용/IAM/Terraform 영향 없음
@@ -318,7 +315,7 @@ severity와 lifecycle만 “운영 중”으로 바꾼다.
 Run:
 
 ```bash
-rg -n "#alerts-infra|12시간|4시간|inhibit|OOM" \
+rg -n "#alerts-infra|12시간|4시간|keep.firing|OOM" \
   docs/OBSERVABILITY_STRATEGY.md docs/CHANGE_HISTORY.md
 ! rg -n "https://hooks\\.slack\\.com/services/[A-Z0-9]|xox[baprs]-" \
   docs/OBSERVABILITY_STRATEGY.md docs/CHANGE_HISTORY.md

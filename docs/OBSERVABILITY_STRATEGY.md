@@ -42,7 +42,7 @@ dashboard를 다루는 별도 계층으로 둔다.
 | Prometheus 저장소 | PVC 사용. 초기 30Gi 기준, 사용량 확인 후 조정 |
 | 고가용성 | dev에서는 단일 replica. 운영 전환 전 HA 재검토 |
 | remote write | 초기 미사용. 장기 보관 요구가 생기면 별도 검토 |
-| Alertmanager | 설치·운영 중. `#alerts-infra` channel-bound Incoming Webhook 설정은 로컬 Helm 검증 완료, live smoke 대기. `alertname+namespace` grouping, critical→warning inhibit, warning 12시간/critical 4시간 반복과 resolved 전송을 사용한다. payload는 ArgoCD 비관리 운영자 주입 Secret으로 관리 |
+| Alertmanager | 설치·운영 중. `#alerts-infra` channel-bound Incoming Webhook 설정은 로컬 Helm 검증 완료, live smoke 대기. `alertname+namespace` grouping, warning 12시간/critical 4시간 반복과 resolved 전송을 사용한다. 현재 rule에는 같은 key의 warning/critical pair가 없어 inhibit는 두지 않는다. payload는 ArgoCD 비관리 운영자 주입 Secret으로 관리 |
 | Cloud Monitoring 관계 | GCP managed metric baseline 유지, Kubernetes/app 상세 dashboard는 Grafana 사용 |
 
 `kube-prometheus-stack`은 Prometheus Operator, Prometheus, Alertmanager,
@@ -50,9 +50,10 @@ Grafana, kube-state-metrics, node-exporter, 기본 Kubernetes dashboard/rule을
 한 번에 구성할 수 있어 첫 운영 모니터링 기반으로 적합하다.
 
 `ContainerOOMKilled`는 현재 상태가 OOMKilled인 동안 반복되는 상태형 신호가
-아니라, allowlist namespace에서 최근 5분간 container restart counter가
-증가했고 마지막 종료 이유가 OOMKilled인 사건형 신호다. 새 restart가 멈추면
-window 밖에서 resolved되고, 이후 새 OOM restart가 발생하면 다시 firing한다.
+아니라, cluster-wide로 최근 5분간 container restart counter가 증가했고 마지막
+종료 이유가 OOMKilled인 사건형 신호다. Slack 전달 범위는 Alertmanager route가
+제한한다. `keep_firing_for: 15m`이 짧은 간격의 반복 OOM을 한 사건으로
+유지하고, 이후 새 OOM restart가 발생하면 다시 firing한다.
 
 ## 모니터링 대상
 
