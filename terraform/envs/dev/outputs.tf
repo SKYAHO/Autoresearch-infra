@@ -239,6 +239,24 @@ output "feast_offline_store_dataset_id" {
   value       = google_bigquery_dataset.feast_offline_store.dataset_id
 }
 
+# #408 피처 스토어 dev 환경 좌표 3종.
+# SKYAHO/Autoresearch의 GitHub Environment `dev`에 등록할 변수 값이다. prod
+# Environment는 기존 repo-level vars 값을 그대로 옮기므로 output이 없다.
+output "feast_dev_offline_store_dataset_id" {
+  description = "피처 스토어 dev 환경 BigQuery offline store dataset id(#408). Autoresearch GitHub Environment dev의 vars.BQ_DATASET 값."
+  value       = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+}
+
+output "feast_dev_registry_path" {
+  description = "피처 스토어 dev 환경 registry 객체 경로(#408). Autoresearch GitHub Environment dev의 vars.GCS_REGISTRY_PATH 값."
+  value       = local.feast_dev_registry_path
+}
+
+output "feast_dev_staging_location" {
+  description = "피처 스토어 dev 환경 staging prefix(#408). Autoresearch GitHub Environment dev의 vars.GCS_STAGING_LOCATION 값."
+  value       = local.feast_dev_staging_location
+}
+
 # #285 raw 적재 job(Airflow lake_to_bigquery, 앱 load_raw_to_bigquery)이 참조할 dataset
 output "data_lake_raw_dataset_id" {
   description = "GCS 원천 적재(raw) 전용 BigQuery dataset id."
