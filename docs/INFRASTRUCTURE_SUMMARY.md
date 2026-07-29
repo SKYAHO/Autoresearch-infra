@@ -106,7 +106,7 @@ flowchart TB
 | Zone | Region 안의 더 작은 가용 영역 | `asia-northeast3-a`에 zonal GKE와 Bastion 배치 |
 | Terraform root | Terraform을 실행하는 기준 디렉터리 | `terraform/envs/dev`, `terraform/bootstrap`, `terraform/admin/*` |
 | State | Terraform이 "내가 관리 중"이라고 기억하는 리소스 목록 | GCS backend bucket에 저장 |
-| Backend | Terraform state 저장 위치 설정 | `autoresearch-dev-tfstate` GCS bucket 사용 |
+| Backend | Terraform state 저장 위치 설정 | `autoresearch-503903-dev-tfstate` GCS bucket 사용 |
 | CIDR | IP 주소 범위를 표현하는 표기법 | `10.10.0.0/20`처럼 subnet 대역을 표현 |
 | VPC | 클라우드 안의 사설 네트워크 | dev 리소스가 서로 통신하는 네트워크 경계 |
 | Subnet | VPC 안에서 IP 대역을 나눈 구간 | `10.10.0.0/20` dev subnet |
@@ -233,7 +233,7 @@ flowchart LR
     oidc["GitHub OIDC token"]
     wif["GCP WIF provider"]
     cisa["terraform-ci service account"]
-    state["GCS backend<br/>autoresearch-dev-tfstate/dev"]
+    state["GCS backend<br/>autoresearch-503903-dev-tfstate/dev"]
     plan["Terraform plan<br/>terraform/envs/dev"]
 
     dev --> actions --> oidc --> wif --> cisa

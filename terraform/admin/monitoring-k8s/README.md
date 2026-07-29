@@ -25,7 +25,7 @@ plan이 GKE API server에 직접 접근하지 않아도 되도록, Kubernetes �
 | Monitoring access RBAC | `monitoring-port-forward` Role | allowlist 팀원의 namespace port-forward 권한 |
 | helm_release 제거 | `removed { destroy = false }` (`main.tf`) | #183. state에서만 제거, release는 ArgoCD가 인수 |
 | chart/values | **이 root 아님** — ArgoCD Application `monitoring`, infra repo `deploy/monitoring/` | #183 이관 |
-| Terraform state | GCS `autoresearch-dev-tfstate`, prefix `admin/monitoring-k8s/` | dev root와 분리 |
+| Terraform state | GCS `autoresearch-503903-dev-tfstate`, prefix `admin/monitoring-k8s/` | dev root와 분리 |
 
 ## 사용법
 
@@ -50,7 +50,7 @@ terraform apply
 - dev GKE cluster 조회 권한
 - `monitoring` namespace, CRD, ClusterRole, ClusterRoleBinding, DaemonSet,
   StatefulSet 등을 만들 수 있는 Kubernetes 권한
-- GCS bucket `autoresearch-dev-tfstate`의
+- GCS bucket `autoresearch-503903-dev-tfstate`의
   `admin/monitoring-k8s/` state 객체를 조회하고 갱신할 권한
 
 일반 PR CI가 아니라 위 조건을 충족한 운영자 환경에서만 plan/apply합니다.

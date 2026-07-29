@@ -49,7 +49,7 @@ terraform -chdir=terraform/envs/dev apply
 
 dev root module은 GCS backend를 사용합니다.
 
-- bucket: `autoresearch-dev-tfstate`
+- bucket: `autoresearch-503903-dev-tfstate`
 - prefix: `dev/`
 
 backend bucket과 GitHub Actions plan용 WIF/CI SA는 `terraform/bootstrap`에서 1회성으로 관리합니다. 자세한 내용은 [../docs/TERRAFORM_BOOTSTRAP.md](../docs/TERRAFORM_BOOTSTRAP.md)를 참고합니다.

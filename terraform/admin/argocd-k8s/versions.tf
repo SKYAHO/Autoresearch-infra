@@ -19,7 +19,7 @@ terraform {
   }
 
   backend "gcs" {
-    bucket = "autoresearch-dev-tfstate"
+    bucket = "autoresearch-503903-dev-tfstate"
     prefix = "admin/argocd-k8s/"
   }
 }

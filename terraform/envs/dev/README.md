@@ -9,7 +9,7 @@
 - Google provider 설정
 - dev 환경 공통 변수
 - 리소스 naming/label 공통값
-- GCS backend(`autoresearch-dev-tfstate`, prefix `dev/`)
+- GCS backend(`autoresearch-503903-dev-tfstate`, prefix `dev/`)
 - dev VPC/subnet, Cloud Router/NAT, IAP SSH firewall
 - Artifact Registry Docker repository
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장

@@ -30,7 +30,7 @@ concurrency:
 env:
   TF_IN_AUTOMATION: "true"
   ROOT_DIR: terraform/envs/dev
-  PLAN_PREFIX: gs://autoresearch-dev-tfstate/dev-apply-plans
+  PLAN_PREFIX: gs://autoresearch-503903-dev-tfstate/dev-apply-plans
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
   TF_VAR_dev_subnet_cidr: ${{ vars.DEV_SUBNET_CIDR }}
   TF_VAR_labels: ${{ vars.TF_LABELS_JSON || '{}' }}
