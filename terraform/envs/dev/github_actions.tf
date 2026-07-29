@@ -119,7 +119,7 @@ resource "google_project_iam_member" "admin_apply_container_admin" {
 
 # Terraform state 읽기/쓰기(apply는 state를 갱신하므로 objectAdmin).
 resource "google_storage_bucket_iam_member" "admin_apply_state" {
-  bucket = "autoresearch-dev-tfstate"
+  bucket = "autoresearch-503903-dev-tfstate"
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.admin_apply.email}"
 }

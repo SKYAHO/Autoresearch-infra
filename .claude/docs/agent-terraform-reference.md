@@ -84,7 +84,7 @@ terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
   않습니다 (`.gitignore`에 포함).
 - 비밀번호 등 민감값은 `random_password` + Secret Manager 패턴을
   사용하고, output으로 노출하지 않습니다 (필요 시 `sensitive = true`).
-- dev root는 GCS remote backend(`autoresearch-dev-tfstate`, prefix `dev/`)를
+- dev root는 GCS remote backend(`autoresearch-503903-dev-tfstate`, prefix `dev/`)를
   사용합니다. admin root는 목적별 prefix를 사용합니다.
 - Terraform state를 다루는 작업(mv, rm, import)은 사용자 확인 후 진행합니다.
 

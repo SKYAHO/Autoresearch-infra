@@ -1,6 +1,6 @@
 locals {
   name_prefix       = "autoresearch"
-  state_bucket_name = "${local.name_prefix}-dev-tfstate"
+  state_bucket_name = var.state_bucket_name
   wif_pool_id       = "${local.name_prefix}-github"
   wif_provider_id   = "github"
   ci_sa_id          = "terraform-ci"
