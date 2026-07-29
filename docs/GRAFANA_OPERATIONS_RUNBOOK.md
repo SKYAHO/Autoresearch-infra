@@ -266,9 +266,10 @@ Kubernetes API를 변경하기 전에 `amtool`로 전체 config를 검증한다.
 
 ```bash
 docker run --rm \
+  --entrypoint amtool \
   --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
   quay.io/prometheus/alertmanager:v0.33.1 \
-  amtool check-config /work/alertmanager.yaml
+  check-config /work/alertmanager.yaml
 
 kubectl create secret generic alertmanager-slack-config \
   --namespace monitoring \
@@ -443,9 +444,10 @@ PY
 
 ```bash
 docker run --rm \
+  --entrypoint amtool \
   --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
   quay.io/prometheus/alertmanager:v0.33.1 \
-  amtool check-config /work/alertmanager.yaml
+  check-config /work/alertmanager.yaml
 ```
 
 `amtool` 호출은 성공해야 하며, 그 입력 또는 출력을 티켓, 터미널 녹화, 로그에
