@@ -26,7 +26,7 @@ firing할 수 있어 사건 알림 의미와 맞지 않는다.
 | critical | firing일 때만 `@here`, 4시간 반복 |
 | resolved | 멘션 없이 즉시 전송 |
 | workload 범위 | `airflow`, `autoresearch`, `mlflow`, `monitoring` namespace |
-| cluster 범위 | 운영 중단을 뜻하는 명시적 critical alertname allowlist |
+| cluster 범위 | 운영 중단 alertname allowlist를 원본 severity와 무관하게 critical receiver로 승격 |
 | 그룹화 | `alertname`, `namespace` |
 | 억제 | 같은 `alertname`, `namespace`의 critical이 firing하면 warning 억제 |
 | OOM | 최근 restart 증가와 마지막 OOM 종료 이유를 결합한 사건형 규칙 |
@@ -55,10 +55,12 @@ root receiver는 계속 `null`로 둔다. 다음 allowlist에 들어온 alert만
 추가할 때는 운영 소유자와 대응 방법이 있는지 먼저 확인하고 allowlist를
 명시적으로 갱신한다.
 
-### Cluster-scoped critical
+### Cluster-scoped availability
 
 namespace label이 없는 node/control-plane 장애를 strict namespace filter로
-버리지 않도록 별도 critical route를 둔다. 의도한 범주는 node unavailable과
+버리지 않도록 별도 critical receiver route를 둔다. 기본 chart에서 node
+unavailable rule은 `severity=warning`이므로 이 allowlist는 원본 severity와
+무관하게 Slack의 critical receiver로 승격한다. 의도한 범주는 node unavailable과
 Kubernetes control-plane target down이며, 구현 시 설치된 chart의 렌더링된
 rule에서 실제 alertname을 대조해 다음 allowlist만 사용한다.
 
@@ -79,7 +81,7 @@ KubeletDown
 
 route 순서는 더 구체적인 critical부터 warning 순으로 둔다.
 
-1. cluster-scoped critical alertname allowlist → `slack-critical`
+1. cluster-scoped availability alertname allowlist → `slack-critical`
 2. namespace allowlist + `severity=critical` → `slack-critical`
 3. namespace allowlist + `severity=warning` → `slack-warning`
 4. 나머지 → root `null`
@@ -141,7 +143,8 @@ Alertmanager native Slack attachment를 사용한다. `slack_config.channel`이
 
 `slack-critical`의 text는 `.Status == "firing"`일 때만 `<!here>`를 한 번
 포함한다. resolved attachment에는 mention을 넣지 않는다. label/annotation은
-외부 입력으로 취급해 webhook URL, credential, 원본 Secret payload를 template나
+외부 입력으로 취급해 `<`, `>`, `&`, `@`를 제거하고 `link_names` 자동 파싱을
+사용하지 않는다. webhook URL, credential, 원본 Secret payload는 template나
 로그에 넣지 않는다.
 
 Incoming Webhook은 실제 channel ID에 고정한다. 논리 채널명
@@ -226,7 +229,8 @@ Terraform과 Airflow DAG는 변경하지 않는다.
 ## 전환과 검증
 
 1. 현재 firing alert와 namespace/severity label 분포를 read-only로 확인한다.
-2. chart를 template해 cluster critical allowlist의 실제 alertname을 대조한다.
+2. chart를 template해 cluster availability allowlist의 실제 alertname과
+   severity를 대조한다.
 3. `alertmanager-slack-config`를 로컬 생성하고 `amtool check-config`를 통과시킨다.
 4. Helm lint/template과 Secret 값 미노출 검사를 수행한다.
 5. 운영자 승인 뒤 Secret 주입과 ArgoCD manual sync를 수행한다.

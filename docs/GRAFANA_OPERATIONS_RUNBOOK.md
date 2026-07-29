@@ -99,7 +99,8 @@ Alertmanager는 Slack App의 channel-bound Incoming Webhook으로
   `group_wait: 30s`, `group_interval: 1m`
 - workload namespace allowlist는 정확히
   `airflow|autoresearch|mlflow|monitoring`
-- cluster critical allowlist는
+- cluster 장애 allowlist는 원본 rule의 severity와 관계없이 critical receiver로
+  승격하며
   `KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown`
 - warning은 멘션 없이 12시간마다 반복, critical은 firing일 때만
   `<!here>`를 넣고 4시간마다 반복
@@ -177,7 +178,6 @@ route:
   routes:
     - receiver: slack-critical
       matchers:
-        - severity="critical"
         - alertname=~"KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown"
       repeat_interval: 4h
     - receiver: slack-critical
@@ -197,9 +197,13 @@ receivers:
       - channel: {scalar(values["slack-channel"])}
         send_resolved: true
         color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}warning{{{{ end }}}}'
-        title: '{{{{ template "slack.default.title" . }}}}'
-        title_link: '{{{{ template "slack.default.titlelink" . }}}}'
-        text: '{{{{ template "slack.default.text" . }}}}'
+        title: '[{{{{ .Status }}}}] {{{{ printf "%.150s" (reReplaceAll "[<>&@]" "" .CommonLabels.alertname) }}}}'
+        text: >-
+          {{{{ $first := index .Alerts 0 }}}}
+          *Summary:* {{{{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}}}
+          *Description:* {{{{ printf "%.1000s" (reReplaceAll "[<>&@]" "" $first.Annotations.description) }}}}
+          *Target:* pod={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.pod) }}}} container={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.container) }}}}
+          {{{{ if gt (len .Alerts) 1 }}}}외 {{{{ len .Alerts }}}}건이 같은 그룹에 있습니다.{{{{ end }}}}
         fields:
           - title: Status
             value: '{{{{ .Status }}}}'
@@ -220,11 +224,15 @@ receivers:
     slack_configs:
       - channel: {scalar(values["slack-channel"])}
         send_resolved: true
-        link_names: true
         color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}danger{{{{ end }}}}'
-        title: '{{{{ template "slack.default.title" . }}}}'
-        title_link: '{{{{ template "slack.default.titlelink" . }}}}'
-        text: '{{{{ if eq .Status "firing" }}}}<!here> {{{{ end }}}}{{{{ template "slack.default.text" . }}}}'
+        title: '[{{{{ .Status }}}}] {{{{ printf "%.150s" (reReplaceAll "[<>&@]" "" .CommonLabels.alertname) }}}}'
+        text: >-
+          {{{{ if eq .Status "firing" }}}}<!here> {{{{ end }}}}
+          {{{{ $first := index .Alerts 0 }}}}
+          *Summary:* {{{{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}}}
+          *Description:* {{{{ printf "%.1000s" (reReplaceAll "[<>&@]" "" $first.Annotations.description) }}}}
+          *Target:* pod={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.pod) }}}} container={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.container) }}}}
+          {{{{ if gt (len .Alerts) 1 }}}}외 {{{{ len .Alerts }}}}건이 같은 그룹에 있습니다.{{{{ end }}}}
         fields:
           - title: Status
             value: '{{{{ .Status }}}}'
@@ -254,11 +262,13 @@ print("Alertmanager Slack config generated without displaying payloads.")
 PY
 ```
 
-`title_link`는 Alertmanager의 `slack.default.titlelink`만 사용한다. 배포 전
-Alertmanager external URL이 userinfo 없는 HTTP(S)인지 read-only 설정으로
-확인하고, 그렇지 않으면 generator의 두 `title_link` 행을 제거한 뒤 다시
-검증한다. label/annotation은 Alertmanager 기본 template의 escape 경계를
-그대로 사용하며 webhook을 template field에 넣지 않는다.
+내부 Alertmanager URL의 scheme·userinfo를 generator가 신뢰성 있게 검증할 수
+없으므로 `title_link`는 기본적으로 생성하지 않는다. 본문은 첫 alert의
+summary 500자, description 1,000자, Pod/container 각 200자로 제한하고
+`<`, `>`, `&`, `@`를 제거하고 `link_names` 자동 파싱을 사용하지 않아
+annotation이나 label이 Slack mention/link 제어문자를 주입하지 못하게 한다.
+critical firing의 `<!here>`만 정적 template에서 명시적으로 추가한다. 나머지
+alert는 전체 그룹 건수로 요약하며 webhook을 template field에 넣지 않는다.
 
 ### Config 검증과 Secret create-or-replace
 
@@ -270,6 +280,28 @@ docker run --rm \
   --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
   quay.io/prometheus/alertmanager:v0.33.1 \
   check-config /work/alertmanager.yaml
+
+# chart 실제 severity를 사용한 route 회귀 검증
+docker run --rm --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  config routes test --config.file=/work/alertmanager.yaml \
+  alertname=KubeNodeNotReady severity=warning
+# 출력은 정확히 slack-critical
+
+docker run --rm --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  config routes test --config.file=/work/alertmanager.yaml \
+  alertname=ContainerOOMKilled severity=warning namespace=airflow
+# 출력은 정확히 slack-warning
+
+docker run --rm --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  config routes test --config.file=/work/alertmanager.yaml \
+  alertname=Unowned severity=warning namespace=kube-system
+# 출력은 정확히 null
 
 kubectl create secret generic alertmanager-slack-config \
   --namespace monitoring \

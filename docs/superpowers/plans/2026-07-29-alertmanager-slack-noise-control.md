@@ -183,7 +183,6 @@ route:
   routes:
     - receiver: slack-critical
       matchers:
-        - severity="critical"
         - alertname=~"KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown"
       repeat_interval: 4h
     - receiver: slack-critical
@@ -200,14 +199,20 @@ route:
 
 receiver는 `null`, `slack-warning`, `slack-critical` 세 개다. 두 slack config는
 같은 `global.slack_api_url`, operator 입력 channel, `send_resolved: true`를
-사용한다. critical text만 다음 조건을 포함한다.
+사용한다. 두 receiver는 첫 alert의 summary 500자, description 1,000자,
+Pod/container 각 200자와 전체 alert 건수를 직접 렌더링한다. 외부 문자열은
+`reReplaceAll "[<>&@]" ""`로 Slack 제어문자를 제거한다. critical text만
+다음 정적 mention 조건을 앞에 포함한다.
 
 ```yaml
-text: '{{ if eq .Status "firing" }}<!here> {{ end }}{{ template "slack.default.text" . }}'
-link_names: true
+text: >-
+  {{ if eq .Status "firing" }}<!here> {{ end }}
+  {{ $first := index .Alerts 0 }}
+  *Summary:* {{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}
 ```
 
-warning에는 mention token과 `link_names: true`를 넣지 않는다.
+두 receiver 모두 `link_names` 자동 파싱을 사용하지 않으며 warning에는 mention
+token을 넣지 않는다.
 
 - [ ] **Step 4: inhibit rule과 attachment field를 문서화한다**
 
@@ -220,9 +225,9 @@ inhibit_rules:
 
 attachment는 resolved=good, critical=danger, warning=warning 색상과 Status,
 Severity, Namespace, Alert count, Started at을 표시한다. label/annotation은
-template이 제공하는 escape 경계를 유지하고 webhook 값은 template에 넣지 않는다.
-`title_link`는 Alertmanager의 안전한 external URL template을 사용하되 URL에
-userinfo가 있거나 HTTP(S)가 아니면 generator에서 해당 필드를 생략한다.
+외부 입력으로 취급해 `<`, `>`, `&`, `@`를 제거하고 webhook 값은 template에
+넣지 않는다. 안전한 내부 URL을 generator가 검증하지 않으므로 `title_link`는
+기본적으로 생성하지 않는다.
 
 - [ ] **Step 5: no-output config 검증과 create-or-replace 절차를 작성한다**
 
