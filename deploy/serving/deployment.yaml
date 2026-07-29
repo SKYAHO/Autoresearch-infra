@@ -26,13 +26,13 @@ spec:
       serviceAccountName: autoresearch-app
       containers:
         - name: serving
-          image: asia-northeast3-docker.pkg.dev/ar-infra-501607/autoresearch-dev-docker/autoresearch-serving@sha256:f323791e94e1f24b4f2c3d08bf663d5163d6dbc94cbc3c6dc8873c782ca3d7b3
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-serving@sha256:f323791e94e1f24b4f2c3d08bf663d5163d6dbc94cbc3c6dc8873c782ca3d7b3
           ports:
             - name: http
               containerPort: 8000
           env:
             - name: GCP_PROJECT_ID
-              value: "ar-infra-501607"
+              value: "autoresearch-503903"
             # CA 본문이 아니라 secret id만. 실제 통제는 Secret Manager IAM이 한다.
             - name: REDIS_CA_SECRET_ID
               value: "autoresearch-dev-redis-server-ca"
@@ -47,11 +47,11 @@ spec:
             - name: RERANK_FEATURE_REPO_PATH
               value: "feature_repo"
             - name: GCS_REGISTRY_PATH
-              value: "gs://ar-infra-501607-feast-registry/registry.db"
+              value: "gs://autoresearch-503903-feast-registry/registry.db"
             # online 조회에는 쓰이지 않지만 feature_store.yaml이 ${VAR} 치환으로
             # 파싱하므로 없으면 Feast 초기화가 실패한다.
             - name: GCS_STAGING_LOCATION
-              value: "gs://ar-infra-501607-feast-staging/"
+              value: "gs://autoresearch-503903-feast-staging/"
             - name: BQ_DATASET
               value: "feast_offline_store"
             # discovery endpoint(private IP)는 operator 주입 Secret에서만.
