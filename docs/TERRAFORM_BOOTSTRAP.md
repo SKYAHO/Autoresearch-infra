@@ -28,6 +28,18 @@ allowed_github_repositories = [
   "SKYAHO/Autoresearch-airflow",
   "SKYAHO/Autoresearch",
 ]
+
+# state 버킷 이름은 전역 유니크. 기본값은 기존 버킷(autoresearch-dev-tfstate)이며,
+# 다른 프로젝트에 부트스트랩할 때(#404 이전 등)는 반드시 새 이름을 지정한다.
+# state_bucket_name = "autoresearch-503903-dev-tfstate"
+```
+
+다른 프로젝트를 대상으로 부트스트랩할 때는 기존 local state를 덮어쓰지 않도록
+workspace를 분리한다(기존 state를 그대로 쓰면 기존 프로젝트의 bootstrap
+리소스를 교체/파괴하려는 plan이 나온다):
+
+```bash
+terraform -chdir=terraform/bootstrap workspace new <새-프로젝트-id>
 ```
 
 `allowed_github_repositories`의 변수 default도 위 세 저장소와 일치한다. 운영

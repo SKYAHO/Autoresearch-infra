@@ -24,3 +24,9 @@ variable "region" {
   type        = string
   default     = "asia-northeast3"
 }
+
+variable "state_bucket_name" {
+  description = "Terraform state GCS bucket name. Bucket names are globally unique, so a new project migration (#404) must override this default."
+  type        = string
+  default     = "autoresearch-dev-tfstate"
+}
