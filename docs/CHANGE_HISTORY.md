@@ -3,6 +3,29 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-29: Alertmanager Slack 전환과 노이즈 제어 (#406)
+
+- **배경**: Kubernetes warning/resolved 이메일이 팀 inbox를 계속 채우고,
+  상태형 OOM 규칙은 과거 OOM 종료 이유가 남아 있는 동안 같은 사실을 반복했다.
+- **결정**: Slack App 하나의 channel-bound Incoming Webhook으로
+  `#alerts-infra`에 전달한다. 단방향 운영 알림만 필요해 메시지 수정·thread·
+  interactive action용 Bot Token은 도입하지 않는다.
+- **노이즈 제어**: workload namespace는
+  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`만
+  허용한다. `alertname+namespace`로 group하고 warning은 무멘션 12시간,
+  critical은 firing `@here`·4시간 반복, resolved는 무멘션으로 보낸다. 현재
+  rule에는 같은 key의 warning/critical pair가 없어 inhibit는 두지 않는다.
+- **OOM 의미**: 최근 5분 `restarts_total` 증가와 마지막 종료 이유
+  `OOMKilled`를 결합한 cluster-wide 사건형 rule로 바꿨다.
+  `keep_firing_for: 15m`으로 짧은 간격 재발을 한 사건으로 유지하며 Slack
+  전달 범위는 route에서 제한한다.
+- **보안·롤백**: webhook과 전체 Alertmanager config는 운영자 주입
+  `alertmanager-slack-config`에만 두고 Git·Terraform state·명령행에 넣지
+  않는다. live smoke 전에는 SMTP Secret을 rollback 자산으로 유지하고 dual
+  delivery는 금지한다.
+- **영향**: Terraform, IAM, GCP 리소스, public endpoint와 NetworkPolicy 변경이
+  없어 추가 클라우드 비용이나 권한 확대가 없다.
+
 ## 2026-07-28: Kibana 자체 TLS 비활성 — 로그인 경로 첫 e2e 종결 (#394, #329)
 
 - **배경**: 첫 실제 브라우저 e2e에서 로그인 3중 결함 동시 발견 — 허용 이메일
