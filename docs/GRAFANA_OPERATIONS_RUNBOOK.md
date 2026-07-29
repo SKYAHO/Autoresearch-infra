@@ -85,10 +85,279 @@ admin으로 로그인 → Administration → Users → New user:
 - 권한은 기본 Viewer(대시보드 편집 담당만 Editor).
 - 팀원 목록은 이 문서에 기록하지 않는다(이메일 비노출 원칙)
 
-## Alertmanager SMTP 알림 (#372)
+## Alertmanager Slack 알림 (#406)
 
-- Airflow scheduler의 DAG/task 실패 이메일과 Alertmanager의 Kubernetes workload 장애 이메일은 서로 대체하지 않는다.
-- Alertmanager는 `monitoring/alertmanager-smtp-config`의 `alertmanager.yaml`만 읽고, ArgoCD는 이 Secret을 관리하거나 prune하지 않는다.
+Alertmanager는 Slack App의 channel-bound Incoming Webhook으로
+`#alerts-infra`에 전달한다. Git에는
+`monitoring/alertmanager-slack-config` Secret 이름만 두며, 전체
+`alertmanager.yaml`, webhook URL과 실제 channel 값은 운영자 주입 Secret에만
+둔다.
+
+라우팅 계약은 다음과 같다.
+
+- root receiver는 `null`, group key는 `alertname`, `namespace`,
+  `group_wait: 30s`, `group_interval: 1m`
+- workload namespace allowlist는 정확히
+  `airflow|autoresearch|mlflow|monitoring`
+- cluster critical allowlist는
+  `KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown`
+- warning은 멘션 없이 12시간마다 반복, critical은 firing일 때만
+  `<!here>`를 넣고 4시간마다 반복
+- warning/critical 모두 `send_resolved: true`; resolved에는 멘션 없음
+- 같은 `alertname`, `namespace`의 critical이 firing 중이면 warning을 inhibit
+
+### Slack 입력과 전체 config 생성
+
+저장소 밖의 mode 0700 임시 디렉터리에 mode 0600 입력 파일
+`slack-webhook-url`, `slack-channel`을 만든다. 값을 command line에 직접
+입력하지 말고 숨김 prompt 또는 승인된 secret manager export로 파일에
+기록한다. 아래 generator는 정확한 두 key, 빈 값, trailing CR/LF, 파일 mode,
+webhook의 scheme/host/path만 검사하며 값을 출력하지 않는다.
+
+```bash
+umask 077
+set -e
+ALERTMANAGER_SECRET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alertmanager-slack-config.XXXXXX")"
+trap 'rm -f -- "$ALERTMANAGER_SECRET_DIR/slack-webhook-url" "$ALERTMANAGER_SECRET_DIR/slack-channel" "$ALERTMANAGER_SECRET_DIR/alertmanager.yaml" "$ALERTMANAGER_SECRET_DIR/candidate-secret.json" "$ALERTMANAGER_SECRET_DIR/existing-secret.json" "$ALERTMANAGER_SECRET_DIR/final-secret.json" "$ALERTMANAGER_SECRET_DIR/verified-secret.json"; rmdir -- "$ALERTMANAGER_SECRET_DIR"' EXIT
+
+for key in slack-webhook-url slack-channel; do
+  install -m 600 /dev/null "$ALERTMANAGER_SECRET_DIR/$key"
+  IFS= read -r -s -p "$key: " value
+  printf '\n'
+  printf '%s' "$value" >"$ALERTMANAGER_SECRET_DIR/$key"
+  unset value
+done
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+from pathlib import Path
+import sys
+from urllib.parse import urlsplit
+
+root = Path(sys.argv[1])
+required = {"slack-webhook-url", "slack-channel"}
+actual = {
+    path.name
+    for path in root.iterdir()
+    if path.is_file()
+}
+if actual != required:
+    raise SystemExit("Slack input key mismatch")
+
+values = {}
+for name in sorted(required):
+    path = root / name
+    value = path.read_bytes()
+    if not value or b"\n" in value or b"\r" in value:
+        raise SystemExit(f"Invalid Slack input file: {name}")
+    if path.stat().st_mode & 0o077:
+        raise SystemExit(f"Slack input file is not mode 0600: {name}")
+    values[name] = value.decode("utf-8")
+
+webhook = urlsplit(values["slack-webhook-url"])
+if (
+    webhook.scheme != "https"
+    or webhook.hostname != "hooks.slack.com"
+    or not webhook.path.startswith("/services/")
+    or webhook.username is not None
+    or webhook.password is not None
+):
+    raise SystemExit("Slack webhook URL shape is invalid")
+
+def scalar(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+config = f"""global:
+  resolve_timeout: 5m
+  slack_api_url: {scalar(values["slack-webhook-url"])}
+route:
+  receiver: "null"
+  group_by: [alertname, namespace]
+  group_wait: 30s
+  group_interval: 1m
+  routes:
+    - receiver: slack-critical
+      matchers:
+        - severity="critical"
+        - alertname=~"KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown"
+      repeat_interval: 4h
+    - receiver: slack-critical
+      matchers:
+        - severity="critical"
+        - namespace=~"airflow|autoresearch|mlflow|monitoring"
+      repeat_interval: 4h
+    - receiver: slack-warning
+      matchers:
+        - severity="warning"
+        - namespace=~"airflow|autoresearch|mlflow|monitoring"
+      repeat_interval: 12h
+receivers:
+  - name: "null"
+  - name: slack-warning
+    slack_configs:
+      - channel: {scalar(values["slack-channel"])}
+        send_resolved: true
+        color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}warning{{{{ end }}}}'
+        title: '{{{{ template "slack.default.title" . }}}}'
+        title_link: '{{{{ template "slack.default.titlelink" . }}}}'
+        text: '{{{{ template "slack.default.text" . }}}}'
+        fields:
+          - title: Status
+            value: '{{{{ .Status }}}}'
+            short: true
+          - title: Severity
+            value: '{{{{ .CommonLabels.severity }}}}'
+            short: true
+          - title: Namespace
+            value: '{{{{ .CommonLabels.namespace }}}}'
+            short: true
+          - title: Alert count
+            value: '{{{{ len .Alerts }}}}'
+            short: true
+          - title: Started at
+            value: '{{{{ (index .Alerts 0).StartsAt }}}}'
+            short: false
+  - name: slack-critical
+    slack_configs:
+      - channel: {scalar(values["slack-channel"])}
+        send_resolved: true
+        link_names: true
+        color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}danger{{{{ end }}}}'
+        title: '{{{{ template "slack.default.title" . }}}}'
+        title_link: '{{{{ template "slack.default.titlelink" . }}}}'
+        text: '{{{{ if eq .Status "firing" }}}}<!here> {{{{ end }}}}{{{{ template "slack.default.text" . }}}}'
+        fields:
+          - title: Status
+            value: '{{{{ .Status }}}}'
+            short: true
+          - title: Severity
+            value: '{{{{ .CommonLabels.severity }}}}'
+            short: true
+          - title: Namespace
+            value: '{{{{ .CommonLabels.namespace }}}}'
+            short: true
+          - title: Alert count
+            value: '{{{{ len .Alerts }}}}'
+            short: true
+          - title: Started at
+            value: '{{{{ (index .Alerts 0).StartsAt }}}}'
+            short: false
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: [alertname, namespace]
+"""
+(root / "alertmanager.yaml").write_text(config, encoding="utf-8")
+(root / "alertmanager.yaml").chmod(0o600)
+print("Alertmanager Slack config generated without displaying payloads.")
+PY
+```
+
+`title_link`는 Alertmanager의 `slack.default.titlelink`만 사용한다. 배포 전
+Alertmanager external URL이 userinfo 없는 HTTP(S)인지 read-only 설정으로
+확인하고, 그렇지 않으면 generator의 두 `title_link` 행을 제거한 뒤 다시
+검증한다. label/annotation은 Alertmanager 기본 template의 escape 경계를
+그대로 사용하며 webhook을 template field에 넣지 않는다.
+
+### Config 검증과 Secret create-or-replace
+
+Kubernetes API를 변경하기 전에 `amtool`로 전체 config를 검증한다.
+
+```bash
+docker run --rm \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  amtool check-config /work/alertmanager.yaml
+
+kubectl create secret generic alertmanager-slack-config \
+  --namespace monitoring \
+  --from-file=alertmanager.yaml="$ALERTMANAGER_SECRET_DIR/alertmanager.yaml" \
+  --dry-run=client -o json \
+  >"$ALERTMANAGER_SECRET_DIR/candidate-secret.json"
+
+kubectl -n monitoring get secret alertmanager-slack-config \
+  --ignore-not-found -o json \
+  >"$ALERTMANAGER_SECRET_DIR/existing-secret.json"
+```
+
+dry-run JSON도 Secret payload이므로 mode 0600 파일에만 저장하고 stdout에
+출력하지 않는다. 기존 Secret이 있으면 `resourceVersion`을 보존해 in-place
+replace한다.
+
+```bash
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+root = Path(sys.argv[1])
+candidate = json.loads((root / "candidate-secret.json").read_text())
+if set(candidate.get("data", {})) != {"alertmanager.yaml"}:
+    raise SystemExit("Generated Secret must contain exactly alertmanager.yaml")
+existing_path = root / "existing-secret.json"
+if existing_path.stat().st_size:
+    existing = json.loads(existing_path.read_text())
+    resource_version = existing.get("metadata", {}).get("resourceVersion")
+    if not resource_version:
+        raise SystemExit("Existing Secret has no resourceVersion")
+    candidate["metadata"]["resourceVersion"] = resource_version
+(root / "final-secret.json").write_text(json.dumps(candidate))
+(root / "final-secret.json").chmod(0o600)
+PY
+
+if [ -s "$ALERTMANAGER_SECRET_DIR/existing-secret.json" ]; then
+  kubectl replace -f "$ALERTMANAGER_SECRET_DIR/final-secret.json"
+else
+  kubectl create -f "$ALERTMANAGER_SECRET_DIR/final-secret.json"
+fi
+
+kubectl -n monitoring get secret alertmanager-slack-config -o json \
+  >"$ALERTMANAGER_SECRET_DIR/verified-secret.json"
+python - "$ALERTMANAGER_SECRET_DIR/verified-secret.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+secret = json.loads(Path(sys.argv[1]).read_text())
+metadata = secret["metadata"]
+print({
+    "name": metadata["name"],
+    "namespace": metadata["namespace"],
+    "type": secret["type"],
+    "resourceVersion": metadata["resourceVersion"],
+    "key_count": len(secret.get("data", {})),
+})
+if set(secret.get("data", {})) != {"alertmanager.yaml"}:
+    raise SystemExit("Applied Secret key mismatch")
+PY
+```
+
+### Cluster smoke와 rollback
+
+ArgoCD manual sync 전에 현재 context와 alert rule 이름을 read-only로 고정한다.
+sync 뒤 Alertmanager Ready와 config reload 성공, Slack API 오류 부재를
+확인한다. warning test는 무멘션 firing/resolved, critical test는 firing
+`<!here>` 한 번과 무멘션 resolved, 같은 `alertname`/`namespace`의 warning
+억제를 검증한다.
+
+`ContainerOOMKilled`는 `restartPolicy: Always`인 제한된 검증 Pod에서 첫 OOM
+restart의 firing, 5분 window가 지난 뒤 resolved, 새 OOM의 재-firing을
+확인한다. watchdog과 제한 시간 삭제를 사용하고 검증 직후 API로 Pod 부재를
+확인한다. 실제 test alert, OOM Pod, Secret 주입과 ArgoCD sync는 별도 운영
+승인 전에는 실행하지 않는다.
+
+Slack config load 또는 전달이 실패하면 같은 승인 창에서
+`deploy/monitoring/values.yaml`의 `configSecret`을
+`alertmanager-smtp-config`로 되돌려 sync한다. Slack live smoke와 운영 관찰
+구간이 끝날 때까지 기존 SMTP Secret을 삭제하지 않는다. dual delivery는
+금지하며, SMTP Secret 삭제는 별도 승인을 받는다.
+
+## Alertmanager SMTP rollback (legacy, #372)
+
+- 이 절은 Slack live smoke 전 rollback용 기존 설정 생성 기록이다.
+- Alertmanager가 Slack Secret을 참조하는 동안 SMTP receiver를 동시에 활성화하지 않는다.
+- `monitoring/alertmanager-smtp-config`는 rollback 승인 창까지 유지하며 ArgoCD는 이 Secret을 관리하거나 prune하지 않는다.
 - `airflow/airflow-email-alerts`를 namespace를 넘어 직접 참조할 수 없으므로 두 Secret은 같은 SMTP 값을 별도로 보관한다.
 - SMTP 회전 시 두 Secret을 같은 비공개 입력으로 함께 교체한다.
 
