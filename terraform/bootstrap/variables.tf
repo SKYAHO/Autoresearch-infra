@@ -26,7 +26,6 @@ variable "region" {
 }
 
 variable "state_bucket_name" {
-  description = "Terraform state GCS bucket name. Bucket names are globally unique, so a new project migration (#404) must override this default."
+  description = "Terraform state GCS bucket name. Bucket names are globally unique, so no default can be safe across projects — always pass the value for the project being bootstrapped (#413). Must match the backend bucket in every root's versions.tf."
   type        = string
-  default     = "autoresearch-dev-tfstate"
 }
