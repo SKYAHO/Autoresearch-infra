@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T15:37:56Z",
+  "generated_at": "2026-07-29T15:38:43Z",
   "reports": [
+    {
+      "number": 418,
+      "title": "docs: 피처 스토어 Environment 등록 절차 정정",
+      "author": "hyochangsung",
+      "merged_at": "2026-07-29T15:37:37Z",
+      "summary_ko": [
+        "피처 스토어 환경 변수(prod/dev Environment) 등록 절차와 좌표 동기화 주의사항을 문서에 명시했습니다.",
+        "dev 환경의 main 브랜치 전용 배포 정책 및 환경 변수 주입 구조를 구체적으로 정립했습니다.",
+        "첫 dev apply 실행 시 레지스트리 미존재로 인한 검증 건너뜀 현상과 이에 대한 수동 확인 명령을 추가했습니다."
+      ],
+      "report_url": "pr/418/"
+    },
     {
       "number": 416,
       "title": "feat: admin-apply ROOTS에서 vault-k8s 제외 (#412 A단계)",
