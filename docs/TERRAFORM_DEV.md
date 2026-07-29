@@ -454,7 +454,7 @@ terraform -chdir=terraform/envs/dev output feast_dev_staging_location
 ```
 
 `SKYAHO/Autoresearch` → Settings → Environments 에서 `prod` / `dev` 두 개를 만들고
-아래 변수를 **환경 스코프로** 등록한다.
+아래 변수를 **환경 스코프로** 등록한다(#417에서 등록 완료).
 
 | 변수 | prod Environment | dev Environment |
 | --- | --- | --- |
@@ -462,10 +462,34 @@ terraform -chdir=terraform/envs/dev output feast_dev_staging_location
 | `BQ_DATASET` | 기존 repo-level vars 값 그대로 | `feast_dev_offline_store_dataset_id` output |
 | `GCS_STAGING_LOCATION` | 기존 repo-level vars 값 그대로 | `feast_dev_staging_location` output |
 
+`dev` Environment에는 deployment branch policy를 `main` 전용으로 건다. dev apply도
+WIF 가장 조건상 `main` dispatch로만 가능하므로(아래 운영 제약), 정책을 좌표와 같은
+곳에 명시해 다른 브랜치 실행이 SA 가장 거절 대신 더 이른 단계에서 실패하게 한다.
+
 등록이 끝나면 앱 저장소가 `feast-apply.yml`의 job에
 `environment: ${{ inputs.environment || 'prod' }}` 한 줄을 추가해 배선을 완성하고,
 좌표 미배선 상태를 막던 dev dispatch 가드를 제거한다. repo-level vars는 다른
-워크플로우가 함께 쓰므로 **삭제하지 않는다**(Environment 값이 우선한다).
+워크플로우가 함께 쓰므로 **삭제하지 않는다**.
+
+Environment 등록은 `prod`/`dev` 선택 가능 여부와 무관하다. 실행 시 고를 수 있는 값은
+`feast-apply.yml`의 `workflow_dispatch.inputs.environment`(`type: choice`)가 정하고,
+Environment는 그 선택에 따라 **어떤 변수 값이 주입될지만** 결정한다.
+
+##### 좌표 변경 시 동기화 의무
+
+변수 해석 순서는 `environment > repository`이고, 값이 어긋나도 GitHub은 경고 없이
+Environment 값을 쓴다. prod 좌표가 repo-level vars와 `prod` Environment 두 곳에
+존재하므로, **버킷·dataset·프로젝트가 바뀌면 두 곳을 함께 갱신한다.**
+
+- [ ] repo-level vars (`Settings` → `Secrets and variables` → `Actions` → `Variables`)
+- [ ] `prod` Environment vars
+- [ ] `dev` Environment vars (dev 좌표가 함께 바뀐 경우)
+
+한쪽만 고치면 Environment 값이 이겨 **prod apply가 옛 좌표로 조용히 동작한다.**
+#404 프로젝트 이전에서 repo vars의 `GCP_PROJECT_ID`·`GCS_REGISTRY_PATH`·
+`GCS_STAGING_LOCATION`이 `autoresearch-503903`으로 갱신됐던 것이 이 경로에
+해당한다. 앱 워크플로우의 필수 변수 검사는 값이 **비어 있는 경우만** 잡고, 값이
+그럴듯하게 틀린 경우는 잡지 못한다.
 
 #### 운영 제약과 한계
 
@@ -477,6 +501,12 @@ terraform -chdir=terraform/envs/dev output feast_dev_staging_location
   실험 단계의 후속 과제다.
 - **dev 테이블은 비어 있는 채로 생성된다.** PIT 조회가 의미를 가지려면
   `autoresearch.jobs.feature_store_build`를 dev 좌표로 한 번 돌려 적재해야 한다.
+- **dev 첫 apply에서는 침묵 실패 가드가 동작하지 않는다.** 앱 워크플로우의
+  `Guard against silent apply failure (registry generation)`는 apply 전후 registry
+  객체의 generation을 비교하는데, `BEFORE_GENERATION`이 비면 비교를 건너뛴다. dev
+  registry(`.../dev/registry.db`)는 첫 apply 전까지 존재하지 않으므로 이 조건에
+  해당한다. 첫 dev 실행 뒤에는 객체가 실제로 생겼는지 직접 확인한다:
+  `gcloud storage objects describe gs://<project>-feast-registry/dev/registry.db`.
 - **임베딩 중간 산출물은 아직 공유된다.** `user_topic_embedding`·`category_embedding`은
   analytics dataset에 있고 적재가 `WRITE_TRUNCATE`라, dev 실험이 이 둘을 재생성하면
   prod 쪽 산출물도 덮인다. 현 단계의 알려진 한계로 두고, 필요해지면 별도 이슈에서
