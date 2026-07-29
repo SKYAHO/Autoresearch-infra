@@ -417,6 +417,73 @@ terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors �
 | Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
 | 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, Feast GCS bucket `storage.objectAdmin` |
 
+### 피처 스토어 prod/dev 환경 좌표 (#408)
+
+오토리서치 에이전트의 자율 실험(`SKYAHO/Autoresearch#399`)이 프로덕션 피처를
+오염시키지 않도록 피처 스토어를 두 환경으로 나눈다. dev는 **오프라인 전용**이다 —
+`feast apply`로 정의를 등록하고 BigQuery PIT로 학습셋을 조립·평가할 뿐, 온라인
+서빙(Redis)과 materialize는 prod만의 책임이다. 따라서 **dev용 Redis 리소스는 없다.**
+
+| 좌표 | prod | dev | 이 저장소의 신규 리소스 |
+| --- | --- | --- | --- |
+| Registry | `gs://<project>-feast-registry/registry.db` | `gs://<project>-feast-registry/dev/registry.db` | 없음 — 같은 버킷, bucket-level `objectAdmin`이 prefix까지 덮는다 |
+| Staging | `gs://<project>-feast-staging/` | `gs://<project>-feast-staging/dev/` | 없음 — 위와 동일 |
+| Offline | `feast_offline_store` | `feast_offline_store_dev` | dataset 1 + 테이블 5 + dataset IAM 2 |
+| Online | Memorystore Redis Cluster | **미사용** | 없음 |
+
+**prod 좌표는 옮기지 않는다.** prod를 `prod/` prefix로 이전하면 registry
+마이그레이션이 되어 회귀 위험만 늘고 얻는 것이 없다. dev만 새 prefix를 쓴다.
+
+dev dataset에 테이블 5종을 함께 만드는 이유는 `dataset`만으로는 dev apply가
+실패하기 때문이다. FeatureView가 BigQuerySource를
+`{project}.{BQ_DATASET}.{table}`로 참조하고 `feast apply`가 그 존재를 검증한다.
+컬럼 계약은 `local.feast_feature_table_contracts` 한 곳에 두고 prod 테이블과 dev
+`for_each`가 함께 참조해, 두 환경의 스키마가 어긋나 승격 근거가 사라지는 것을 막는다.
+dev 테이블은 실험 데이터라 `deletion_protection = false`이고 dataset에도
+`prevent_destroy`를 걸지 않는다(prod는 둘 다 유지).
+
+#### GitHub Environments 등록 (수동)
+
+이 저장소 Terraform에는 GitHub provider가 없으므로 `SKYAHO/Autoresearch`의
+Environment는 **수동으로 등록**한다. 좌표 값은 `terraform output`으로 얻는다.
+
+```bash
+terraform -chdir=terraform/envs/dev output feast_dev_offline_store_dataset_id
+terraform -chdir=terraform/envs/dev output feast_dev_registry_path
+terraform -chdir=terraform/envs/dev output feast_dev_staging_location
+```
+
+`SKYAHO/Autoresearch` → Settings → Environments 에서 `prod` / `dev` 두 개를 만들고
+아래 변수를 **환경 스코프로** 등록한다.
+
+| 변수 | prod Environment | dev Environment |
+| --- | --- | --- |
+| `GCS_REGISTRY_PATH` | 기존 repo-level vars 값 그대로 | `feast_dev_registry_path` output |
+| `BQ_DATASET` | 기존 repo-level vars 값 그대로 | `feast_dev_offline_store_dataset_id` output |
+| `GCS_STAGING_LOCATION` | 기존 repo-level vars 값 그대로 | `feast_dev_staging_location` output |
+
+등록이 끝나면 앱 저장소가 `feast-apply.yml`의 job에
+`environment: ${{ inputs.environment || 'prod' }}` 한 줄을 추가해 배선을 완성하고,
+좌표 미배선 상태를 막던 dev dispatch 가드를 제거한다. repo-level vars는 다른
+워크플로우가 함께 쓰므로 **삭제하지 않는다**(Environment 값이 우선한다).
+
+#### 운영 제약과 한계
+
+- **dev apply는 `main` 브랜치 dispatch로만 가능하다.** `var.feast_apply_workflow_ref`가
+  가장 조건을 `.../feast-apply.yml@refs/heads/main`으로 고정하므로, 다른 브랜치에서
+  실행하면 `feast-apply` SA 가장이 거절된다. dev는 브랜치가 아니라 **쓰는 위치**이며,
+  dev apply도 main에 머지된 정의를 dev 좌표에 쓰는 동작이다. 에이전트가 미머지 정의를
+  dev에 등록하려면 WIF 조건 확장이나 GHA를 거치지 않는 apply 경로가 필요하다 — 자율
+  실험 단계의 후속 과제다.
+- **dev 테이블은 비어 있는 채로 생성된다.** PIT 조회가 의미를 가지려면
+  `autoresearch.jobs.feature_store_build`를 dev 좌표로 한 번 돌려 적재해야 한다.
+- **임베딩 중간 산출물은 아직 공유된다.** `user_topic_embedding`·`category_embedding`은
+  analytics dataset에 있고 적재가 `WRITE_TRUNCATE`라, dev 실험이 이 둘을 재생성하면
+  prod 쪽 산출물도 덮인다. 현 단계의 알려진 한계로 두고, 필요해지면 별도 이슈에서
+  환경별로 가른다.
+- **raw 데이터 레이크는 의도적으로 공유한다.** `data_lake_*`는 읽기 전용 원천이라
+  prod/dev가 같은 것을 읽고, 쓰기 대상만 갈린다.
+
 ### Feast 피처 테이블 스키마 소유권 (#280)
 
 `data_lake_*` 테이블과 달리, 아래 Feast offline store 테이블은 **스키마를 Terraform이

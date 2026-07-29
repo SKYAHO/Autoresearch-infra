@@ -236,6 +236,15 @@ resource "google_bigquery_dataset_iam_member" "feast_apply_offline_store_metadat
   member     = "serviceAccount:${google_service_account.feast_apply.email}"
 }
 
+# #408 dev 환경 apply도 같은 SA로 실행된다. environment=dev dispatch는 BQ_DATASET을
+# dev dataset으로 주입받으므로, source validation이 그 dataset에서도 성립해야 한다.
+# prod와 동일하게 metadataViewer로 최소화한다.
+resource "google_bigquery_dataset_iam_member" "feast_apply_offline_store_dev_metadata_viewer" {
+  dataset_id = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:${google_service_account.feast_apply.email}"
+}
+
 # #346 feast apply 실행 주체를 GHA 러너에서 VPC 안 GKE Job으로 옮긴다.
 # GHA는 Job을 생성·판정만 하고, 실제 `feast apply`는 전용 namespace의 KSA가
 # Workload Identity로 이 GSA를 가장해 실행한다. 같은 GSA를 GHA(가장)와
