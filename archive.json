@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-29T09:03:01Z",
+  "generated_at": "2026-07-29T09:03:53Z",
   "reports": [
+    {
+      "number": 409,
+      "title": "feat: 피처 스토어 dev 환경 좌표 프로비저닝 (#408)",
+      "author": "hyochangsung",
+      "merged_at": "2026-07-29T09:02:47Z",
+      "summary_ko": [
+        "오토리서치 에이전트 자율 실험을 위해 피처 스토어 dev 환경 좌표(BigQuery 데이터셋 및 테이블 5종)를 신설하였습니다.",
+        "prod/dev 공통 컬럼 계약을 단일화하여 양 환경 간 피처 스키마 불일치를 방지하고 prod diff를 차단하였습니다.",
+        "dev 환경용 Registry 및 Staging은 기존 버킷의 dev/ 경로를 공유하도록 지정하고 관련 output 및 가이드를 작성하였습니다."
+      ],
+      "report_url": "pr/409/"
+    },
     {
       "number": 407,
       "title": "fix: deploy 이미지·버킷 참조를 새 프로젝트로 교체 (#404)",
