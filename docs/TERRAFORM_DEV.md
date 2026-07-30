@@ -461,12 +461,12 @@ terraform -chdir=terraform/bootstrap output -raw feast_dev_wif_provider_name
 terraform -chdir=terraform/bootstrap output -raw feast_prod_wif_provider_name
 terraform -chdir=terraform/envs/dev output -raw github_actions_feast_apply_dev_service_account_email
 terraform -chdir=terraform/envs/dev output -raw github_actions_feast_apply_prod_service_account_email
-terraform -chdir=terraform/envs/dev output feast_dev_offline_store_dataset_id
-terraform -chdir=terraform/envs/dev output feast_dev_registry_path
-terraform -chdir=terraform/envs/dev output feast_dev_staging_location
-terraform -chdir=terraform/envs/dev output feast_prod_offline_store_dataset_id
-terraform -chdir=terraform/envs/dev output feast_prod_registry_path
-terraform -chdir=terraform/envs/dev output feast_prod_staging_location
+terraform -chdir=terraform/envs/dev output -raw feast_dev_offline_store_dataset_id
+terraform -chdir=terraform/envs/dev output -raw feast_dev_registry_path
+terraform -chdir=terraform/envs/dev output -raw feast_dev_staging_location
+terraform -chdir=terraform/envs/dev output -raw feast_prod_offline_store_dataset_id
+terraform -chdir=terraform/envs/dev output -raw feast_prod_registry_path
+terraform -chdir=terraform/envs/dev output -raw feast_prod_staging_location
 terraform -chdir=terraform/admin/autoresearch-k8s output -json feast_apply_environments
 ```
 

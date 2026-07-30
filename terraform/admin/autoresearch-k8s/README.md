@@ -276,8 +276,11 @@ kubectl -n feast-apply-prod get networkpolicy feast-apply-prod-egress -o yaml
 나올 수 있으므로, 최종 확인 때에는 각 namespace의 RoleBinding subject와 roleRef도
 함께 대조합니다.
 
-롤백은 앱 저장소 GitHub Environment의 provider/GSA/namespace/KSA 값을 이전의
-호환 가능한 튜플로 먼저 되돌린 뒤, 별도 승인된 Terraform plan을 검토하여 진행합니다.
+롤백은 Feast apply 실행을 중지한 뒤 #424 이전 Terraform 구성을 복원하여 기존 공유
+provider/GSA/namespace를 먼저 되살리는 절차입니다. bootstrap → dev root → admin root
+순으로 plan을 검토하고 별도 승인된 apply로 반영한 뒤, 기존 공유 GSA와 namespace가
+복구된 것을 확인한 경우에만 앱 저장소 GitHub Environment의 provider/GSA/namespace/KSA
+값을 이전 호환 튜플로 복원합니다.
 
 ## 장애 복구와 롤백
 
