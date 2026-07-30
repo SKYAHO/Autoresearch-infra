@@ -3,6 +3,27 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-30: apply workflow 공용 구현 통합 (#448)
+
+- **배경**: `admin-apply.yml`(#307/#312)과 `dev-apply.yml`(#341)이 plan→승인→
+  apply 파이프라인을 각각 복사해 갖고 있어(요약 게시·이메일 마스킹·plan
+  바이너리 GCS 전달·orphan plan 정리) 한쪽만 고쳐지는 드리프트 위험이 있었다.
+- **결정**: 구현을 `terraform-apply.yml`(`workflow_call`) 한 곳으로 모으고 두
+  진입점은 얇은 호출부로 남긴다. **파일 하나로 완전 통합하지 않은 이유가
+  핵심이다** — apply SA 2종의 WIF 가장 조건이 `admin-apply.yml@main` /
+  `dev-apply.yml@main` workflow_ref로 고정돼 있고, GitHub OIDC의 `workflow_ref`
+  claim은 최상위 호출 워크플로우를 가리키므로(재사용 워크플로우는
+  `job_workflow_ref`) 진입점을 유지하면 IAM 변경 없이 SA 분리·경로 고정(#341
+  설계 의도)이 그대로 보존된다. 단일 파일 + target 드롭다운 안은 두 SA를 한
+  파일이 가장할 수 있게 만들고 Terraform 변수·IAM 2단계 이전을 요구해 기각했다.
+- **범위**: Terraform/IAM 변경 0건. target 차이는 호출부 입력(`roots`,
+  `plan_prefix`, `environment`, plan/apply SA, `guard_admin_allowlist`)으로만
+  표현한다. dev의 plan 객체 경로가 admin과 같은 `<root>/<run_id>.tfplan`
+  레이아웃으로 통일됐다(회수 절차는 TROUBLESHOOTING_LOG 갱신).
+- **검증**: `actionlint` 통과. 실동작은 머지 후 dev-apply·admin-apply를 각각
+  dispatch해 plan job 성공(= WIF 가장 유지 확인)까지 확인하고 승인 없이 run을
+  취소하는 왕복 검증으로 확인한다.
+
 ## 2026-07-29~30: GCP 프로젝트 이전 — dev 전체 재구축 (#404)
 
 - **배경**: dev 인프라 전체를 새 조직의 새 프로젝트 `autoresearch-503903`으로
