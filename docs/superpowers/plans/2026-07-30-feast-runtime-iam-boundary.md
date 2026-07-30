@@ -13,7 +13,7 @@
 - Keep one GCP project and the existing `terraform/envs/dev` root/state; do not run `terraform apply`, state migration, destroy, or resource import.
 - Preserve existing prod Feast registry/staging bucket names and objects; create only dev-specific buckets.
 - Use resource-level IAM wherever supported; dev Feast apply must receive no Redis connection or Redis CA secret access.
-- Keep existing generic GitHub WIF provider unchanged; scope new providers to `SKYAHO/Autoresearch` and an exact GitHub Environment. Each Feast apply GSA binding must require both its `attribute.environment` and the exact main-branch `feast-apply.yml` `attribute.workflow_ref`.
+- Keep existing generic GitHub WIF provider unchanged. Scope each new provider to `SKYAHO/Autoresearch`, its exact GitHub Environment, and the exact main-branch `feast-apply.yml` workflow. Each Feast apply GSA binding must allow only its matching `attribute.environment` principalSet; IAM members are ORed, so workflow and environment must not be expressed as separate bindings.
 - Do not commit tfvars, Terraform state, service-account credentials, GitHub secrets, or real project identifiers.
 - Document required app-repository and GitHub Environment configuration without changing the `SKYAHO/Autoresearch` repository in this issue.
 
@@ -43,7 +43,7 @@ Expected: no matches, proving environment-specific Feast providers are absent.
 
 - [ ] **Step 2: Add provider variables and resources**
 
-Add a `feast_apply_github_repository` variable defaulting to `SKYAHO/Autoresearch`. Add `github-feast-dev` and `github-feast-prod` providers to the existing pool. Map `google.subject`, `attribute.repository`, `attribute.environment`, and `attribute.workflow_ref`; restrict the dev/prod provider condition to the application repository and its exact environment.
+Add `feast_apply_github_repository` and `feast_apply_workflow_ref` variables, defaulting to the application repository and `feast-apply.yml@refs/heads/main`. Add `github-feast-dev` and `github-feast-prod` providers to the existing pool. Map `google.subject`, `attribute.repository`, `attribute.environment`, and `attribute.workflow_ref`; restrict each provider condition to the application repository, its exact environment, and the exact workflow ref.
 
 - [ ] **Step 3: Export and document provider names**
 
@@ -90,7 +90,7 @@ Keep existing registry/staging resource addresses and names as prod. Add dev reg
 
 - [ ] **Step 3: Replace the shared Feast apply GSA**
 
-Replace `feast_apply` with dev/prod service accounts. For each GSA, create two Workload Identity User bindings: an environment-specific `attribute.environment` principalSet and an exact `attribute.workflow_ref` principalSet for `feast-apply.yml@refs/heads/main`. Do not bind only by workflow ref: the existing generic provider maps that attribute. Grant each SA only its matching registry/staging bucket permissions and dataset `metadataViewer` binding.
+Replace `feast_apply` with dev/prod service accounts. For each GSA, create only its environment-specific `attribute.environment` Workload Identity User principalSet binding. Do not add a separate workflow-ref IAM member: IAM members are ORed. The exact workflow constraint is already enforced by the matching provider condition, and the existing generic provider cannot match because it does not map `attribute.environment`. Grant each SA only its matching registry/staging bucket permissions and dataset `metadataViewer` binding.
 
 - [ ] **Step 4: Restrict Redis, CA secret, code artifact, and GKE metadata access**
 
