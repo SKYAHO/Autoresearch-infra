@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T00:46:23Z",
+  "generated_at": "2026-07-30T01:14:31Z",
   "reports": [
+    {
+      "number": 419,
+      "title": "docs: 운영 문서 프로젝트 참조 일괄 갱신 (#404)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T01:14:14Z",
+      "summary_ko": [
+        "GCP 프로젝트 이전(#404) 완료에 따라 라이브 운영 문서 8종에 남아 있던 구 프로젝트 ID를 신규 프로젝트 ID로 일괄 갱신하였습니다.",
+        "Terraform 구성에 MLflow OAuth client ID 저장을 위한 Secret Manager 리소스를 추가하고 이전 설정 백업 파일을 생성하였습니다.",
+        "운영자가 실제 환경 접속 및 명령어 실행 시 구 프로젝트 참조로 인해 발생할 수 있는 혼선을 방지하도록 문서를 정합화하였습니다."
+      ],
+      "report_url": "pr/419/"
+    },
     {
       "number": 418,
       "title": "docs: 피처 스토어 Environment 등록 절차 정정",
