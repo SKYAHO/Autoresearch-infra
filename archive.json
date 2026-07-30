@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T03:06:42Z",
+  "generated_at": "2026-07-30T03:27:30Z",
   "reports": [
+    {
+      "number": 428,
+      "title": "fix: airflow 배치 KSA를 airflow-k8s root로 IaC 편입 (#427)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T03:27:15Z",
+      "summary_ko": [
+        "Airflow 배치 작업용 서비스 계정(KSA)을 테라폼 코드(airflow-k8s 루트)로 정식 편입했습니다.",
+        "수동 kubectl 명령에 의존하던 환경 재구축 시의 계정 누락 위험을 근본적으로 차단했습니다.",
+        "기존 응급 생성 리소스를 테라폼 상태로 입양(import)하여 기존 배치 실행 영향 없이 안전하게 반영했습니다."
+      ],
+      "report_url": "pr/428/"
+    },
     {
       "number": 426,
       "title": "fix: MLflow oauth2-proxy ILB를 새 프로젝트 예약 IP로 교체 (#425)",
