@@ -45,17 +45,25 @@ registry 객체 이관은 필요 없다.
 
 ### 환경별 Feast apply ID 및 Kubernetes 경계
 
-`autoresearch-dev-feast-apply-dev`와
-`autoresearch-dev-feast-apply-prod` GSA를 생성한다. 이번 범위에서는 각
+`autoresearch-dev-feast-dev`와
+`autoresearch-dev-feast-prod` GSA를 생성한다. 이번 범위에서는 각
 환경의 GHA runner와 해당 GKE Job Pod가 같은 환경 GSA를 공유한다. 이 SA는
 다른 환경의 권한을 갖지 않으므로 dev→prod 권한 전이는 발생하지 않는다.
+
+GSA 이름에서 `apply`를 생략한 것은 GCP `account_id`가 6~30자로 제한되기
+때문이다. `resource_prefix`가 `autoresearch-dev`(16자)라 접미사 예산은 선행
+`-`를 포함해 14자이고, `-feast-apply-dev`(16자)는 이 한도를 넘어 plan이
+실패한다. 따라서 namespace는 `feast-apply-<env>`를 유지하되 GSA만
+`-feast-<env>`로 줄이고, 용도는 GSA display_name/description에 남긴다. 이
+제한은 provider가 plan 단계에서 검증하므로 `terraform validate`로는 걸러지지
+않는다.
 
 각 환경은 별도의 namespace와 KSA를 사용한다.
 
 | 환경 | namespace / KSA | GSA | 접근 권한 |
 | --- | --- | --- | --- |
-| dev | `feast-apply-dev` / `feast-apply` | `…-feast-apply-dev` | dev registry/staging, dev dataset metadata, code artifact 읽기 |
-| prod | `feast-apply-prod` / `feast-apply` | `…-feast-apply-prod` | prod registry/staging, prod dataset metadata, code artifact 읽기, Redis, Redis CA secret |
+| dev | `feast-apply-dev` / `feast-apply` | `…-feast-dev` | dev registry/staging, dev dataset metadata, code artifact 읽기 |
+| prod | `feast-apply-prod` / `feast-apply` | `…-feast-prod` | prod registry/staging, prod dataset metadata, code artifact 읽기, Redis, Redis CA secret |
 
 namespace별 RoleBinding은 해당 환경 GSA만 Job을 create/get/list/watch/delete
 할 수 있게 한다. dev NetworkPolicy에는 Redis PSC 포트를 추가하지 않고,

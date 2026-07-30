@@ -212,8 +212,8 @@ GitHub Environment → WIF provider → GSA → namespace → KSA는 하나의 �
 
 | GitHub Environment | WIF provider | GSA 기본값 | namespace / KSA |
 |---|---|---|---|
-| `dev` | `github-feast-dev` | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` | `feast-apply-dev` / `feast-apply` |
-| `prod` | `github-feast-prod` | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` | `feast-apply-prod` / `feast-apply` |
+| `dev` | `github-feast-dev` | `autoresearch-dev-feast-dev@<project>.iam.gserviceaccount.com` | `feast-apply-dev` / `feast-apply` |
+| `prod` | `github-feast-prod` | `autoresearch-dev-feast-prod@<project>.iam.gserviceaccount.com` | `feast-apply-prod` / `feast-apply` |
 
 `terraform/envs/dev`의 `feast_apply_kubernetes_identities`와 이 root의
 `feast_apply_identities`는 위 namespace/KSA를 동일하게 유지해야 합니다. admin root
@@ -273,9 +273,9 @@ for namespace in feast-apply-dev feast-apply-prod; do
 done
 
 kubectl auth can-i create jobs -n feast-apply-dev \
-  --as=autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com  # yes
+  --as=autoresearch-dev-feast-dev@<project>.iam.gserviceaccount.com  # yes
 kubectl auth can-i create jobs -n feast-apply-prod \
-  --as=autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com  # no
+  --as=autoresearch-dev-feast-dev@<project>.iam.gserviceaccount.com  # no
 kubectl -n feast-apply-dev get networkpolicy feast-apply-dev-egress -o yaml
 kubectl -n feast-apply-prod get networkpolicy feast-apply-prod-egress -o yaml
 ```
