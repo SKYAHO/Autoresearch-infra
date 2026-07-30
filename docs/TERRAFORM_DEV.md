@@ -880,8 +880,9 @@ localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내
 | Control plane | GKE 관리형 | CPU/RAM 직접 지정 불가. Google이 control plane을 관리 |
 | 노드풀 | `dev-default`, e2-standard-4, pd-standard 30GB | autoscaling min=1/max=2. GKE system/GMP pod 여유를 위해 live resize 값을 Terraform에 반영 |
 | Airflow 노드풀 | `airflow-dev`, e2-standard-2, pd-standard 30GB | autoscaling min=1/max=1. Airflow Helm component 전용 |
-| batch Spot 노드풀 | `batch-spot`, e2-standard-2, pd-standard 30GB | autoscaling min=0/max=2. taint `workload=batch-spot`. 재시도 내성 있는 KPO용(#173) |
+| batch Spot 노드풀 | `batch-spot`, e2-standard-2, pd-standard 30GB | autoscaling min=0/max=8(#330에서 2→8, min=0이라 유휴 비용 불변). taint `workload=batch-spot`. 재시도 내성 있는 KPO용(#173) |
 | batch 비-Spot 노드풀 | `batch-od`, e2-standard-2, pd-standard 30GB | autoscaling min=0/max=2. taint `workload=batch-od`. 재시도 내성 없는 장시간 KPO용(#297) |
+| CTR 재학습 노드풀 | `ctr-model-retrain`, n2-highmem-4, pd-standard 30GB | autoscaling min=0/max=2(#316 도입, #330에서 1→2). taint `dedicated=ctr-model-retrain`. 비-Spot(evict 방지). 옛 프로젝트에선 라이브 선적용이었으나 새 프로젝트(#404 이전 후)에는 풀이 없어 main apply가 신규 생성한다(import 불필요) |
 | 노드 SA | `autoresearch-dev-gke-nodes@autoresearch-503903.iam.gserviceaccount.com` | AR reader + logging/metric writer |
 | app SA(WI) | `autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com` | app KSA 전용. Cloud SQL client + DB password secret accessor |
 | app WI principal | `autoresearch-503903.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
