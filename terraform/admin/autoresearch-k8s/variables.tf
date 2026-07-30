@@ -72,7 +72,8 @@ variable "feast_apply_identities" {
     condition = (
       var.feast_apply_identities == null ||
       (
-        setequals(toset(keys(var.feast_apply_identities)), toset(["dev", "prod"])) &&
+        length(var.feast_apply_identities) == 2 &&
+        alltrue([for environment in keys(var.feast_apply_identities) : contains(["dev", "prod"], environment)]) &&
         alltrue([
           for identity in values(var.feast_apply_identities) :
           can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.namespace)) &&

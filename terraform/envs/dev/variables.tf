@@ -634,7 +634,8 @@ variable "feast_apply_kubernetes_identities" {
 
   validation {
     condition = (
-      setequals(toset(keys(var.feast_apply_kubernetes_identities)), toset(["dev", "prod"])) &&
+      length(var.feast_apply_kubernetes_identities) == 2 &&
+      alltrue([for environment in keys(var.feast_apply_kubernetes_identities) : contains(["dev", "prod"], environment)]) &&
       alltrue([
         for identity in values(var.feast_apply_kubernetes_identities) :
         can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.namespace)) &&

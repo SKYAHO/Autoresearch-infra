@@ -130,10 +130,11 @@ locals {
   es_snapshot_sa_name            = "${local.resource_prefix}-es-snapshot"
   es_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.elastic_k8s_namespace}/${var.es_k8s_service_account}]"
 
-  # #424 Task 3가 생성할 namespace/KSA를 미리 고정한다. 환경별 principal을
-  # 한 map으로 관리해 dev GSA가 prod KSA를 가장하는 결합을 막는다.
+  # #424 검증된 환경 map에서 WI subject를 파생한다. Task 2의 환경별 GSA IAM
+  # binding이 이 map을 직접 소비하므로 namespace/KSA 계약이 변경되면 같은
+  # 환경의 subject만 함께 바뀐다.
   feast_apply_workload_identity_principals = {
-    dev  = "${var.project_id}.svc.id.goog[feast-apply-dev/feast-apply]"
-    prod = "${var.project_id}.svc.id.goog[feast-apply-prod/feast-apply]"
+    for environment, identity in var.feast_apply_kubernetes_identities :
+    environment => "${var.project_id}.svc.id.goog[${identity.namespace}/${identity.service_account}]"
   }
 }
