@@ -5,6 +5,8 @@ Kubernetes 측 경계를 관리합니다.
 
 - `airflow` namespace
 - Workload Identity annotation이 붙은 Airflow Kubernetes service account
+- KPO 배치 파드용 `autoresearch-batch` KSA(WI annotation 포함, #427 — dev root의
+  airflow_batch GSA·WI binding과 이름이 일치해야 한다)
 - Airflow 구성요소용 namespace 범위 Role/RoleBinding
 - 선택적인 설치 담당자용 namespace 범위 admin RoleBinding
 - GitHub Actions deployer GSA용 namespace 범위 admin RoleBinding
@@ -220,3 +222,11 @@ terraform import kubernetes_namespace_v1.airflow airflow
 
 import 이후 admin root에서 나머지 service account, RBAC, quota, limit range,
 network policy 리소스를 적용했습니다. 최종 plan은 변경 없음으로 종료되었습니다.
+
+2026-07-30(#427): 프로젝트 이전 재구축에서 누락됐던 `autoresearch-batch` KSA를
+응급 kubectl 생성 후 같은 방식으로 입양했습니다 — 이미 존재하는 오브젝트는
+삭제하지 않고 import한다는 원칙 그대로입니다.
+
+```bash
+terraform import kubernetes_service_account_v1.airflow_batch airflow/autoresearch-batch
+```
