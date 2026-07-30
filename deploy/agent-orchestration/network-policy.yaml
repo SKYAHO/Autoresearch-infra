@@ -86,7 +86,9 @@ spec:
           port: 988
     - to:
         - ipBlock:
-            cidr: 0.0.0.0/0
+            # Secret Manager는 dev private Google APIs DNS zone을 통해 이 고정
+            # VIP로 해석된다. API는 Codex/OpenAI 직접 호출이 필요 없다.
+            cidr: 199.36.153.8/30
       ports:
         - protocol: TCP
           port: 443

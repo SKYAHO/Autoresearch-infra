@@ -42,9 +42,9 @@ spec:
             - name: ORCH_DB_HOST
               value: REPLACE_WITH_CLOUD_SQL_PRIVATE_IP
             - name: ORCH_DB_NAME
-              value: agent_orchestration
+              value: REPLACE_WITH_DB_NAME
             - name: ORCH_DB_USER
-              value: agent_orchestration_app
+              value: REPLACE_WITH_DB_USER
             - name: ORCH_RUNTIME_DIR
               value: /runtime
           volumeMounts:

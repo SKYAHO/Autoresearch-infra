@@ -46,6 +46,8 @@ ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장 검증·롤백 절�
 | `REPLACE_WITH_DB_PASSWORD_SECRET_ID` | dev output `agent_orchestration_deployment_contract.db_password_secret_id` |
 | `REPLACE_WITH_CODEX_AUTH_BOOTSTRAP_SECRET_ID` | dev output `agent_orchestration_deployment_contract.codex_auth_bootstrap_secret_id` |
 | `REPLACE_WITH_CLOUD_SQL_PRIVATE_IP` | dev output `cloud_sql_private_ip_address` |
+| `REPLACE_WITH_DB_NAME` | dev output `agent_orchestration_deployment_contract.database_name` |
+| `REPLACE_WITH_DB_USER` | dev output `agent_orchestration_deployment_contract.database_user` |
 
 `agent_orchestration_deployment_contract` output은 비밀번호와 OAuth payload를
 출력하지 않습니다. output 값을 조회할 때도 CI log, PR 본문, 티켓에 복사하지
@@ -179,7 +181,9 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
   허용하는 default-deny입니다. 이후 in-cluster 호출자를 추가하면 해당 caller
   label/port만 허용하는 ingress rule을 같은 변경에서 추가합니다.
 - API egress는 Runner TCP 8080, Cloud SQL TCP 5432, DNS, Workload Identity metadata,
-  HTTPS뿐이고 Runner egress에는 Cloud SQL TCP 5432가 없습니다.
+  private Google APIs VIP(`199.36.153.8/30`) TCP 443뿐이고 Runner egress에는 Cloud SQL
+  TCP 5432가 없습니다. API는 Codex/OpenAI 직접 호출을 하지 않으므로 전체 인터넷
+  HTTPS egress를 열지 않습니다.
 
 sync 뒤에는 다음 상태를 확인합니다.
 
