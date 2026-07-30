@@ -292,11 +292,20 @@ Admission에 의해 거부되어야 합니다. `--dry-run=server`를 유지해 �
 않습니다.
 
 ```bash
-kubectl -n feast-apply-dev create job feast-apply-hostnetwork-negative \
-  --image=busybox:1.36 \
-  --dry-run=server \
-  --overrides='{"apiVersion":"batch/v1","spec":{"template":{"spec":{"hostNetwork":true}}}}' \
-  -- sh -c 'true'
+kubectl -n feast-apply-dev create --dry-run=server -f - <<'EOF'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: feast-apply-hostnetwork-negative
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      restartPolicy: Never
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+EOF
 ```
 
 롤백은 Feast apply 실행을 중지한 뒤 #424 이전 Terraform 구성을 복원하여 기존 공유
