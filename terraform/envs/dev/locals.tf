@@ -76,17 +76,19 @@ locals {
   bigquery_dataset_id                   = replace("${local.resource_prefix}_analytics", "-", "_")
   feast_dataset_id                      = "feast_offline_store"
   # #285 raw layer 전용 dataset. feast_offline_store는 Feast 피처 테이블 전용으로 남긴다.
-  data_lake_raw_dataset_id = "data_lake_raw"
-  feast_registry_bucket    = "${var.project_id}-feast-registry"
-  feast_staging_bucket     = "${var.project_id}-feast-staging"
+  data_lake_raw_dataset_id  = "data_lake_raw"
+  feast_registry_bucket     = "${var.project_id}-feast-registry"
+  feast_staging_bucket      = "${var.project_id}-feast-staging"
+  feast_dev_registry_bucket = "${var.project_id}-feast-registry-dev"
+  feast_dev_staging_bucket  = "${var.project_id}-feast-staging-dev"
 
-  # #408 피처 스토어 dev 환경 좌표(SKYAHO/Autoresearch#399).
-  # prod는 dataset과 각 버킷의 루트를 현행 그대로 쓰고, dev만 새 dataset과 각
-  # 버킷의 dev/ prefix를 쓴다. prod를 prod/ prefix로 옮기면 registry 마이그레이션이
-  # 되어 회귀 위험만 늘고 얻는 것이 없다.
-  feast_dev_dataset_id       = "feast_offline_store_dev"
-  feast_dev_registry_path    = "gs://${local.feast_registry_bucket}/dev/registry.db"
-  feast_dev_staging_location = "gs://${local.feast_staging_bucket}/dev/"
+  # #424 Feast apply의 prod 경로는 기존 버킷 루트를 그대로 보존한다. dev는
+  # 별도 버킷 루트를 사용해 bucket-level IAM에서 환경 경계를 강제한다.
+  feast_dev_dataset_id        = "feast_offline_store_dev"
+  feast_prod_registry_path    = "gs://${local.feast_registry_bucket}/registry.db"
+  feast_prod_staging_location = "gs://${local.feast_staging_bucket}/"
+  feast_dev_registry_path     = "gs://${local.feast_dev_registry_bucket}/registry.db"
+  feast_dev_staging_location  = "gs://${local.feast_dev_staging_bucket}/"
   # #238 코드 아카이브 배포 버킷·업로더 SA. 버킷명은 이슈 예시(project_id 포함, 전역 유일).
   code_artifacts_bucket = "${var.project_id}-code-artifacts"
   code_uploader_sa_name = "${local.resource_prefix}-code-uploader"
@@ -128,6 +130,10 @@ locals {
   es_snapshot_sa_name            = "${local.resource_prefix}-es-snapshot"
   es_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.elastic_k8s_namespace}/${var.es_k8s_service_account}]"
 
-  # #346 feast apply Job Pod가 feast_apply GSA를 가장할 principal.
-  feast_apply_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.feast_apply_k8s_namespace}/${var.feast_apply_k8s_service_account}]"
+  # #424 Task 3가 생성할 namespace/KSA를 미리 고정한다. 환경별 principal을
+  # 한 map으로 관리해 dev GSA가 prod KSA를 가장하는 결합을 막는다.
+  feast_apply_workload_identity_principals = {
+    dev  = "${var.project_id}.svc.id.goog[feast-apply-dev/feast-apply]"
+    prod = "${var.project_id}.svc.id.goog[feast-apply-prod/feast-apply]"
+  }
 }
