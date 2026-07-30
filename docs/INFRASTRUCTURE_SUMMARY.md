@@ -37,7 +37,7 @@ flowchart TB
         subgraph vpc["VPC<br/>autoresearch-dev-vpc"]
             bastion["Bastion<br/>no external IP"]
             dns["Private DNS<br/>dev.autoresearch.internal"]
-            ilb["Airflow internal LB<br/>10.10.0.12"]
+            ilb["Airflow internal LB<br/>10.10.0.3"]
             nat["Cloud NAT"]
 
             subgraph gke["GKE<br/>autoresearch-dev-gke"]

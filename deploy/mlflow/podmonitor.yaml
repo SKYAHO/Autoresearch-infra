@@ -2,7 +2,7 @@
 # 등록한다. `release: kube-prometheus-stack` 라벨은 필수다 — Prometheus의
 # podMonitorSelector가 이 라벨을 매칭하며, 없으면 에러 없이 조용히 무시된다
 # (#206/#302와 동일 함정). ServiceMonitor 대신 PodMonitor를 쓰는 이유:
-# metrics 포트를 ILB Service(10.10.0.22)에 넓히지 않고 파드에서 직접 수집한다.
+# metrics 포트를 ILB Service(10.10.0.2)에 넓히지 않고 파드에서 직접 수집한다.
 #
 # MLflow 서버 자체(`--expose-prometheus`)가 아닌 이유(#357 폴백 채택):
 # 이미지에 prometheus_flask_exporter 부재를 실측 확인 — 추가하려면 앱 저장소
