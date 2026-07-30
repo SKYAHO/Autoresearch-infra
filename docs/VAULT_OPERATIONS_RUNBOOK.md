@@ -1,5 +1,11 @@
 # Vault 운영 Runbook (dev)
 
+> ⚠️ **폐기(#412, 2026-07-29 드랍 확정)**: Vault는 dev에서 더 진행하지 않는다.
+> 새 클러스터(#404 이전 후)에는 helm release·`vault` namespace가 존재하지 않고
+> admin-apply ROOTS에서도 제외됐다(#416). 아래 내용은 실행 불가한 **이력 보존용**이며,
+> 실 서비스 secret은 GCP Secret Manager가 담당한다. vault-k8s root 코드·state
+> 삭제는 #412 B~C 단계에서 이 문서 정리와 함께 진행한다.
+
 dev GKE의 Vault(`vault` namespace, #132/#134) 운영 절차. 설치 구성은
 `terraform/admin/vault-k8s/README.md`, 설계는
 `docs/superpowers/specs/2026-07-12-vault-dev-design.md` 참조.

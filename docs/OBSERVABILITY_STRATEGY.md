@@ -22,7 +22,7 @@ Cloud Monitoring은 GCP managed resource의 기본 관측 수단으로 유지한
 | Monitoring 설치 기반 | `monitoring` namespace(#78), chart는 ArgoCD Application `deploy/monitoring`이 관리(#183) |
 | Kubernetes 지표 전용 스택 | `kube-prometheus-stack` 설치·운영 중(#79~#81) |
 | Grafana UI | 설치·운영 중(Google OAuth 로그인 #155, port-forward 접속) |
-| Alerting | `#alerts-infra` Incoming Webhook 전환을 로컬 검증했고 live smoke 대기 중. workload allowlist는 `airflow`, `autoresearch`, `mlflow`, `monitoring`; warning은 무멘션 12시간, critical은 firing `@here`·4시간 반복, 둘 다 resolved 전송. node/control-plane availability allowlist는 chart 원본 severity와 무관하게 critical receiver로 승격 |
+| Alerting | `#alerts-infra` Incoming Webhook 전환을 로컬 검증했고 live smoke 대기 중. workload allowlist는 `airflow`, `argo-rollouts`, `argocd`, `autoresearch`, `elastic`, `mlflow`, `monitoring`(정본: GRAFANA 런북 generator — vault는 #412 드랍으로 제외); warning은 무멘션 12시간, critical은 firing `@here`·4시간 반복, 둘 다 resolved 전송. node/control-plane availability allowlist는 chart 원본 severity와 무관하게 critical receiver로 승격 |
 | 외부 공개 endpoint | 없음(port-forward 전용) |
 
 현재 Cloud Logging/Monitoring은 GKE와 GCP 리소스의 기본 로그/지표를 제공한다.

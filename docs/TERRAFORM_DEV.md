@@ -7,7 +7,7 @@
 - GCP 프로젝트: `autoresearch-503903`
 - dev root module: `terraform/envs/dev`
 - Terraform backend: GCS `autoresearch-503903-dev-tfstate`, prefix `dev/`
-- 최신 apply·검증: 2026-07-23. dev root와 K8s admin root 8개 모두 최종 plan `No changes`.
+- 최신 apply·검증: 2026-07-29~30 — #404 프로젝트 이전 재구축(autoresearch-503903, dev root 전체 + admin root 7종, vault 드랍 #412/#416). 직전 기준선은 2026-07-23. dev root와 K8s admin root 7개(autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s 순, vault-k8s는 #416에서 제외) 모두 최종 plan `No changes`.
   이후 스택(MLflow #91~95, ELK #96~103, Redis #129, Feast 피처 테이블·Vertex #281, Cloud
   SQL tier #273, batch-od 노드풀 #297, Inference Server #302, admin root 승인 게이트 CI
   apply #307/#312 등) apply 이력은 `docs/CHANGE_HISTORY.md`를 기준으로 한다.
@@ -29,7 +29,7 @@ terraform/
 │   ├── mlflow-k8s/       # #94 MLflow namespace/KSA(WI)/NetworkPolicy (separate state)
 │   ├── argo-rollouts-k8s/ # #88 Argo Rollouts controller (separate state)
 │   ├── elastic-k8s/      # #97~103 ECK/ES/Kibana/Filebeat/ILM/snapshot + Kibana Google 로그인(#294/#319) (separate state)
-│   └── vault-k8s/        # #134 Vault namespace + Helm release + KMS auto-unseal (separate state)
+│   └── vault-k8s/        # #134 Vault (separate state) — #412 드랍, B~C에서 root째 삭제 예정
 ├── bootstrap/            # #6 1회성: GCS state bucket + WIF + CI SA (local state)
 │   ├── main.tf
 │   ├── outputs.tf
@@ -47,7 +47,9 @@ terraform/
 │       ├── code_artifacts.tf # #238 코드 아카이브 GCS 버킷 + 업로더 SA/WIF + 파드 read IAM
 │       ├── cloud_run.tf      # #27 Cloud Run proxy state/code 정합성
 │       ├── dns.tf            # #48 Airflow·#244 MLflow ILB 예약 내부 IP + private DNS zone
+│       ├── elastic.tf        # #102 ES GCS snapshot bucket/GSA
 │       ├── gke.tf            # #5 dev GKE cluster + 노드풀 + SA/WI
+│       ├── gke_ctr_retrain.tf # #316 CTR 재학습 노드풀(n2-highmem-4, min0/max2)
 │       ├── github_actions.tf # #121/#157 배포 리포 GitHub Actions WIF → GAR push SA/IAM
 │       ├── airflow.tf        # #32 Airflow GCP SA/WI + DB/GCS/IAM
 │       ├── locals.tf
@@ -76,7 +78,7 @@ terraform/
 | Subnet CIDR | `10.10.0.0/20` | `var.dev_subnet_cidr`, dev 확장 여유분 |
 | Region | `asia-northeast3` | `var.region` |
 | Private Google Access | `true` | `var.enable_private_google_access`, Google API 사설 접근 |
-| Route(PGA) | `restricted.googleapis.com`(`199.36.153.8/30`) → default-internet-gateway | `enable_private_google_access=true`일 때 생성. 외부 IP 없는 VM 의 Google API 도달 |
+| Route(PGA) | `private.googleapis.com`(`199.36.153.8/30` — 코드 리소스명 `pga_restricted`는 명명 오기, 실제 대역은 private VIP) → default-internet-gateway | `enable_private_google_access=true`일 때 생성. 외부 IP 없는 VM 의 Google API 도달 |
 | Firewall(ingress) | IAP(35.235.240.0/20) → TCP 22, `target_tags=["ssh-iap"]` | IAP 경유 SSH. **SSH 필요 VM은 `ssh-iap` 태그 부착 필수**. 접근은 `roles/iap.tunnelAccessor`로 gating |
 
 Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet_self_link`)를 참조해 같은 VPC에 배치한다.
@@ -110,7 +112,7 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 | Availability | `ZONAL` | dev 단일 zone, 비용 절감 |
 | 접속 | **private IP only** (`ipv4_enabled=false`) | VPC 내부에서만 접근. `google_service_networking_connection` peering |
 | Private services 대역 | `192.168.0.0/20` | 현재 dev apply 값. VPC subnet(`10.10.0.0/20`)과 미중복 |
-| Private IP | `192.168.0.3` | `output.cloud_sql_private_ip_address` |
+| Private IP | `terraform output cloud_sql_private_ip_address`로 확인(#404 재구축 실측도 `192.168.0.3`) | apply 산출값 — 리터럴 고정 금지 |
 | DB / User | `autoresearch` / `app` | `var.db_name`, `var.db_app_user` |
 | 비밀번호 | random 24자 → SQL user 주입, #5 Secret Manager 저장 | `random_password.db_app_password`, `output.db_app_password_secret_id` |
 | Backup | 켜짐, point-in-time recovery on | `start_time 17:00` UTC |
@@ -904,7 +906,7 @@ localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내
 | 항목 | 값 | 비고 |
 |---|---|---|
 | Cluster | `autoresearch-dev-gke` | Standard, zonal `asia-northeast3-a` |
-| Endpoint | `34.64.97.177` (IP) + **DNS 엔드포인트(#45)** | DNS 경로는 IAM 검증(IP 등록 불필요), IP 경로는 authorized networks 예비 |
+| Endpoint | ``gcloud container clusters describe autoresearch-dev-gke --zone asia-northeast3-a --format='value(endpoint)'`로 확인` (IP) + **DNS 엔드포인트(#45)** | DNS 경로는 IAM 검증(IP 등록 불필요), IP 경로는 authorized networks 예비 |
 | `master_authorized_networks` | `[]` (비어 있음) | #279에서 개인 동적 IP 제거. 기본 경로는 DNS(IAM)라 등록 불필요. IP 예비 경로가 필요하면 고정 IP를 등록 |
 | 모드 | private nodes, public endpoint | 노드 공인 IP 없음. 마스터 접근: DNS(IAM) 기본 + IP allowlist 예비(현재 비어 있음) |
 | Master CIDR | `172.16.0.0/28` | 현재 dev apply 값. dev subnet/private services와 미중복 |
@@ -914,7 +916,7 @@ localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내
 | Airflow 노드풀 | `airflow-dev`, e2-standard-2, pd-standard 30GB | autoscaling min=1/max=1. Airflow Helm component 전용 |
 | batch Spot 노드풀 | `batch-spot`, n2-standard-2, pd-standard 30GB(#422 — E2 quota 회피로 N2 전환) | autoscaling min=0/max=8(#330에서 2→8, min=0이라 유휴 비용 불변). taint `workload=batch-spot`. 재시도 내성 있는 KPO용(#173) |
 | batch 비-Spot 노드풀 | `batch-od`, e2-standard-2, pd-standard 30GB | autoscaling min=0/max=2. taint `workload=batch-od`. 재시도 내성 없는 장시간 KPO용(#297) |
-| CTR 재학습 노드풀 | `ctr-model-retrain`, n2-highmem-4, pd-standard 30GB | autoscaling min=0/max=2(#316 도입, #330에서 1→2). taint `dedicated=ctr-model-retrain`. 비-Spot(evict 방지). 옛 프로젝트에선 라이브 선적용이었으나 새 프로젝트(#404 이전 후)에는 풀이 없어 main apply가 신규 생성한다(import 불필요) |
+| CTR 재학습 노드풀 | `ctr-model-retrain`, n2-highmem-4, pd-standard 30GB | autoscaling min=0/max=2(#316 도입, #330에서 1→2). taint `dedicated=ctr-model-retrain`. 비-Spot(evict 방지). 옛 프로젝트에선 라이브 선적용이었고, 새 프로젝트에선 #404 재구축의 main apply로 신규 생성됨(#331 편입— import 이력 무효) |
 | 노드 SA | `autoresearch-dev-gke-nodes@autoresearch-503903.iam.gserviceaccount.com` | AR reader + logging/metric writer |
 | app SA(WI) | `autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com` | app KSA 전용. Cloud SQL client + DB password secret accessor |
 | app WI principal | `autoresearch-503903.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
@@ -998,10 +1000,11 @@ BigQuery의 project/dataset IAM member가 해당 계정에 대해서만 제거�
 Cloud SQL private IP / 내부 서비스 접근 경로)은
 [docs/TEAM_OPERATIONS_RUNBOOK.md](TEAM_OPERATIONS_RUNBOOK.md)를 참조한다.
 
-### Workload Identity(app 배포 시)
-> Terraform은 GCP SA + IAM 매핑만 생성. 아래 KSA는 app 매니페스트로 **배포 시 직접 생성해야 함**(미생성 시 WI 동작 안 함).
-
-app KSA에 annotation 부여 → app GCP SA(`autoresearch-dev-app`) 가장:
+### Workload Identity(app)
+> dev root는 GCP SA + WI IAM 매핑을, **KSA와 annotation은
+> `terraform/admin/autoresearch-k8s` root가 IaC로 관리한다**(#129 — 수동
+> 매니페스트 생성 절차는 폐기, #427의 batch KSA와 같은 원칙). 아래는 결과
+> 형태 참고용이다:
 ```yaml
 apiVersion: v1
 kind: ServiceAccount
@@ -1123,10 +1126,11 @@ helm status airflow -n airflow
 kubectl get pods -n airflow -o wide
 ```
 
-Airflow core pods(`airflow-postgresql`, `airflow-scheduler`,
-`airflow-webserver`)는 `cloud.google.com/gke-nodepool=airflow-dev` 노드에
-배치되어야 한다. Airflow metadata DB로 배포되는 PostgreSQL은 데이터
-레이크가 아니라 Airflow 내부 metadata 저장소다.
+Airflow core pods(`airflow-scheduler`, `airflow-webserver`, statsd)는
+`cloud.google.com/gke-nodepool=airflow-dev` 노드에 배치되어야 한다.
+metadata DB는 in-cluster PostgreSQL이 아니라 **Cloud SQL의 `airflow`
+database**다(`postgresql.enabled=false`, 연결은 operator 주입 Secret
+`airflow-metadata-db`).
 
 ### Airflow action log DAG smoke
 
@@ -1147,6 +1151,9 @@ gcloud storage ls gs://autoresearch-503903-autoresearch-dev-raw-data/data_lake/a
 `youtube_gcs_action_log_pipeline`을 `partition_date=2026-07-07`,
 `overwrite=false`로 1회 trigger해 `ensure_action_log_partition` 성공과
 GCS output 생성을 확인한다.
+
+(아래는 2026-07-08 당시 기록으로, 실행은 옛 프로젝트에서 이뤄졌다 — 경로
+표기는 #419 일괄 치환으로 현행 명명이 됐다.)
 
 2026-07-08 초기 smoke에서는 KPO `serviceAccountName`/`imagePullPolicy`
 필드에 Jinja literal이 남아 pod 생성 전 403이 발생했다. Autoresearch-airflow
@@ -1602,7 +1609,11 @@ HashiCorp Vault dev 도입 1단계(설계:
 `docs/superpowers/specs/2026-07-12-vault-dev-design.md`). Vault 설치는
 `terraform/admin/vault-k8s`(2단계 #134, 완료)에서 별도 state로 관리하고, dev
 root는 GCP 측 기반(`vault.tf`)만 담당한다. 다만 실 secret 이관은 하지 않기로
-결정했고(Secret Manager로 충분), vault-k8s는 샌드박스로 남긴다.
+결정했고(Secret Manager로 충분), **#412에서 Vault 드랍이 확정됐다** — 새
+클러스터(#404)에 Vault는 배포돼 있지 않으며(helm release·`vault` namespace
+삭제, admin-apply ROOTS 제외 #416), 아래 표의 KMS/GSA 코드(`vault.tf`)와
+vault-k8s root는 #412 B~C 단계에서 삭제 예정이다. 이 절은 그때까지의 이력
+참고용이다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
@@ -1660,8 +1671,8 @@ terraform -chdir=terraform/envs/dev output -json required_services \
 ```
 
 > Private Google Access(`enable_private_google_access`, 기본 `true`) 사용 시,
-> `restricted.googleapis.com`(`199.36.153.8/30`)로 가는 default-internet-gateway 라우트를
-> 모듈이 자동 생성한다. `private.googleapis.com` 범위가 필요한 서비스가 생기면 라우트를 추가한다.
+> `private.googleapis.com`(`199.36.153.8/30`)로 가는 default-internet-gateway 라우트를
+> 모듈이 자동 생성한다(리소스명 `pga_restricted`는 명명 오기 — restricted VIP는 `199.36.153.4/30`으로 별개).
 
 ## 검증 명령
 
@@ -1684,7 +1695,7 @@ PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자�
 - **제한**: WIF `attribute_condition` 은 허용 리포 목록(`allowed_github_repositories` — 현재 infra + Autoresearch-airflow + Autoresearch, #121/#157) 기반이지만, CI SA(`terraform-ci`) 가장 바인딩은 infra 저장소만 허용한다. workflow job guard로 fork PR이 아닌 내부 브랜치 PR에서만 plan을 실행한다.
 - **apply 자동화는 범위 밖**(별도 이슈). 본 워크플로는 plan 만 게시한다.
 - **drift 감지(#153)**: `.github/workflows/terraform-drift.yml`이 매일 09:23 KST에 dev root `plan -detailed-exitcode`를 실행하고, drift/오류 시 `[DRIFT]` 이슈를 생성(중복 시 코멘트)한다. 공개 이슈에는 리소스 주소·요약만 올리고 plan 원문은 게시하지 않는다(#211). CI SA viewer 권한만 사용 — apply 권한 없음. admin root는 master 접근 불가로 대상 외이며 운영자 로컬 plan으로 확인한다.
-- **admin root gated 일괄 apply(#307/#312/#314)**: `.github/workflows/admin-apply.yml`이 `workflow_dispatch`로 **K8s admin root 8개**를 일괄 apply한다(순서: autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→vault-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s). plan job이 전 root를 순차 plan(요약 STEP_SUMMARY, plan은 private GCS, fail-fast) → `admin-apply` Environment reviewer 승인 → apply job이 순차 apply한다. 전용 apply SA(`autoresearch-dev-admin-apply`, WIF `admin-apply.yml@main` 제한, `roles/container.admin`+`compute.viewer`+state objectAdmin)를 쓴다. 민감 tfvars(허용 이메일)는 로컬 파일이 아니라 GitHub Secrets 단일 원천에서 와 팀원 간 tfvars 불일치 사고(#305)를 전 root에서 막는다. 삭제-위험 allowlist는 폴백 없이 주입해 Secret 미설정 시 halt(guard 스텝 포함). OAuth client secret 등 K8s Secret payload는 여전히 operator 주입(CI 밖). 로컬 apply는 break-glass. **`gke-team-access`(사람 프로젝트/BigQuery/AR IAM)는 CI에서 제외(#314)** — apply SA에 과도한 IAM(projectIamAdmin+bigquery.admin+artifactregistry.admin)이 필요해 로컬 break-glass로만 관리한다.
+- **admin root gated 일괄 apply(#307/#312/#314)**: `.github/workflows/admin-apply.yml`이 `workflow_dispatch`로 **K8s admin root 7개(autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s 순, vault-k8s는 #416에서 제외)**를 일괄 apply한다(순서: autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→vault-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s). plan job이 전 root를 순차 plan(요약 STEP_SUMMARY, plan은 private GCS, fail-fast) → `admin-apply` Environment reviewer 승인 → apply job이 순차 apply한다. 전용 apply SA(`autoresearch-dev-admin-apply`, WIF `admin-apply.yml@main` 제한, `roles/container.admin`+`compute.viewer`+state objectAdmin)를 쓴다. 민감 tfvars(허용 이메일)는 로컬 파일이 아니라 GitHub Secrets 단일 원천에서 와 팀원 간 tfvars 불일치 사고(#305)를 전 root에서 막는다. 삭제-위험 allowlist는 폴백 없이 주입해 Secret 미설정 시 halt(guard 스텝 포함). OAuth client secret 등 K8s Secret payload는 여전히 operator 주입(CI 밖). 로컬 apply는 break-glass. **`gke-team-access`(사람 프로젝트/BigQuery/AR IAM)는 CI에서 제외(#314)** — apply SA에 과도한 IAM(projectIamAdmin+bigquery.admin+artifactregistry.admin)이 필요해 로컬 break-glass로만 관리한다.
 
 - **dev root gated apply(#341)**: `.github/workflows/dev-apply.yml`이 `workflow_dispatch`로 `terraform/envs/dev`를 plan(요약 STEP_SUMMARY, plan은 private GCS `dev-apply-plans/`) → `dev-apply` Environment reviewer 승인 → apply한다. 전용 SA `autoresearch-dev-dev-apply`(WIF `dev-apply.yml@main` 제한, dev root 리소스 전수 기준 **role 19종 열거** — projectIamAdmin 포함 최강 자격증명이라 전용 SA/workflow_ref/승인 게이트 3중 통제, 설계는 `docs/superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md`). 변수는 terraform-plan.yml과 동일 GitHub Vars 단일 원천. **로컬 tfvars apply는 break-glass로만** 사용한다. 승인 주의: 요약의 in-place가 접근 변경(MAN·IAM)을 숨길 수 있으니(#306 교훈) 해당 리소스가 보이면 상세 diff 확인 후 승인. `terraform import`가 필요한 변경은 CI가 수행하지 못하므로 로컬 break-glass로 선행한다.
 

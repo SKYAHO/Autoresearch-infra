@@ -7,7 +7,7 @@
 ## 전제
 
 - GCP 인증 완료(`gcloud auth application-default login`)
-- `container`/`compute`/`iam`/`cloudresourcemanager` 등 API 활성화(이슈 #5 에서 활성화 완료)
+- `container`/`compute`/`iam`/`cloudresourcemanager` 등 API 활성화(대상 프로젝트에서 필요 — 새 프로젝트는 #404에서 완료, 옛 프로젝트는 #5)
 - 활성 `autoresearch-503903` 프로젝트 접근 권한
 
 ## 1. bootstrap apply
@@ -17,7 +17,7 @@ terraform -chdir=terraform/bootstrap init
 terraform -chdir=terraform/bootstrap apply
 ```
 
-변수는 `terraform/bootstrap/terraform.tfvars`(비커밋, local 전용)에 기록해 두고 사용한다. 배포 저장소를 포함한 필수 운영 값:
+변수는 프로젝트별 `terraform/bootstrap/<project-id>.tfvars`(비커밋)에 기록하고 `apply -var-file=<project-id>.tfvars`로 지정한다(`terraform.tfvars`는 모든 workspace에 자동 로드되어 workspace 분리 운용과 충돌). 배포 저장소를 포함한 필수 운영 값:
 
 ```hcl
 project_id = "autoresearch-503903"

@@ -16,7 +16,7 @@
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
-| Kubernetes admin roots | `terraform/admin/gke-team-access`, `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/vault-k8s`, `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` |
+| Kubernetes admin roots | `terraform/admin/gke-team-access`, `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/vault-k8s`(#412 드랍 — B~C에서 정리 예정), `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` |
 | 일반 애플리케이션 저장소 | `SKYAHO/Autoresearch` |
 | Airflow 저장소 | `SKYAHO/Autoresearch-airflow` |
 
@@ -41,7 +41,7 @@ flowchart TB
         subgraph vpc["VPC<br/>autoresearch-dev-vpc"]
             bastion["Bastion<br/>no external IP"]
             dns["Private DNS<br/>dev.autoresearch.internal"]
-            ilb["Airflow internal LB<br/>10.10.0.3"]
+            ilb["Airflow internal LB<br/>output: airflow_ilb_ip"]
             nat["Cloud NAT"]
 
             subgraph gke["GKE<br/>autoresearch-dev-gke"]
@@ -132,7 +132,7 @@ flowchart TB
 | Ingress | 밖에서 안으로 들어오는 트래픽 | Airflow UI 8080 접근 허용 범위 |
 | Egress | 안에서 밖으로 나가는 트래픽 | GKE node/Pod의 외부 API 호출 경로 |
 | IAM | GCP 권한 관리 체계 | 사람/서비스 계정별 최소 권한 부여 |
-| Secret Manager | 민감값 저장 서비스 | API key, OAuth secret, DB password 저장소 |
+| Secret Manager | 민감값 저장 서비스 | API key, OAuth secret, DB password 저장소, Redis server CA, MLflow OAuth client id/secret(#420) |
 | Payload | secret의 실제 값 본문 | Terraform 밖에서 주입하고 문서/PR에 쓰지 않음 |
 | Service account key | service account 장기 인증 키 파일 | 유출 위험 때문에 발급하지 않는 것이 원칙 |
 | GCS | Google Cloud Storage | 원본 데이터, DAG/log, Feast registry/staging 저장 |
@@ -211,18 +211,18 @@ flowchart TB
 | Artifact Registry | `autoresearch-dev-docker` | 애플리케이션/Airflow 컨테이너 이미지 저장 |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, `airflow`, `mlflow`(#93) | 앱 DB·Airflow metadata DB·MLflow backend DB |
 | Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, single-zone primary shard 2개, private PSC + IAM auth/TLS (#129, apply·검증 완료) |
-| GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev`, `batch-spot`(#173), `batch-od`(#297) | 앱 워크로드와 Airflow 실행 기반. batch-spot은 재시도 내성 있는 KPO, batch-od는 재시도 내성 없는 장시간 KPO용 |
+| GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev`, `batch-spot`(#173), `batch-od`(#297), `ctr-model-retrain`(#316) | 앱 워크로드와 Airflow 실행 기반. batch-spot은 재시도 내성 있는 KPO, batch-od는 재시도 내성 없는 장시간 KPO용 |
 | Cloud Run | `autoresearch-dev-proxy` | 내부 전용 proxy 서비스, invoker IAM 기반 |
 | GCS | raw data, prod/dev Feast registry·staging, Airflow DAG/log bucket | 원본 데이터, 환경별 feature store 메타데이터, DAG/log 저장 |
 | BigQuery | `autoresearch_dev_analytics`(임베딩 중간 테이블 2종 IaC #296 포함), `feast_offline_store`, `feast_offline_store_dev`, `data_lake_raw`(#286) | 분석·환경별 Feast offline store·raw 계층 |
 | Vertex AI | BigQuery↔Vertex `CLOUD_RESOURCE` connection(#281) | BigQuery ML `ML.GENERATE_EMBEDDING` 다국어 임베딩 호출 |
 | MLflow | `mlflow` ns — tracking server(#94), 전용 Cloud SQL DB/user + Secret(#93), artifact GCS bucket + 전용 GSA(#92), OAuth2-proxy + 내부 ILB(#232/#244) | 실험 추적 UI. 내부 ILB + Google OAuth |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata, MLflow DB secret | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), Vault SA(#132), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), Vault SA(#132, #412 정리 예정), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155). 커스텀 대시보드 6장 as-code(#355~#358: K8s 리소스·네트워크·스케일 판단·MLflow·Airflow·Serving), 수집: serving ServiceMonitor(#302)·mlflow oauth2-proxy PodMonitor(#357)·airflow statsd ServiceMonitor+ingress 9102(#358) | 운영 관측 dashboard. 접근은 port-forward. 대시보드는 `deploy/monitoring/dashboards/*.json`이 정본 |
 | GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85, `autoresearch` destination #303). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`serving`(Inference Server #303) | ArgoCD Application으로 관리(manual sync). UI는 Google 로그인 + 이메일 RBAC |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, oauth2-proxy Google 로그인 + basic 인증 — anonymous 폐기 #325), Filebeat allowlist 수집(#100, ndjson 구조화 파싱 #359, 자기 로그 관측 #365), ILM(#101)/snapshot(#102)/runbook(#103), saved object 자동 import Job(#365) — `elastic` ns | airflow/autoresearch 로그 검색·분석 + Logs Overview 대시보드. Airflow task 로그 정본은 GCS 원격 로깅(airflow#147) — ELK는 stdout만 |
-| Secret(학습) | Vault single-node + KMS auto-unseal(#132/#134/#136) — `vault` ns | 학습·검증용. 실 서비스 secret은 Secret Manager 유지 |
+| Secret(학습) | ~~Vault~~ 드랍(#412) — helm release·namespace 삭제됨, dev root KMS/GSA 코드·state 정리는 #412 B~C 예정. 실 서비스 secret은 Secret Manager |
 | KMS | `autoresearch-dev-vault`/`vault-unseal` key (#132) | Vault auto-unseal. key 삭제 금지(데이터 복호화 불능) |
 | DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | Google API 고정 VIP 유도 — vault egress 443 축소 기반 |
 | CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) + **dev root 승인 게이트 CI apply**(#341, `dev-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 7개(#412로 `vault-k8s` 제외)·dev root 모두 Environment 승인 후 CI apply, 로컬 apply는 break-glass |
@@ -253,7 +253,7 @@ flowchart LR
 - PR이 열리면 GitHub Actions가 실제 GCP 자격 증명을 service account key 없이
   OIDC/WIF로 얻고, dev root에 대해 plan을 실행한다.
 - dev root apply는 자동화하지 않았다 — 운영자가 로컬에서 명시적으로 `terraform apply`를
-  실행한다. K8s admin root 8개는 `admin-apply.yml` 승인 게이트 CI apply로 이관됐다
+  실행한다. K8s admin root 7개(#412로 vault-k8s 제외)는 `admin-apply.yml` 승인 게이트 CI apply로 이관됐다
   (#307/#312, 민감 tfvars는 GitHub Secrets 단일 원천, Environment 승인 필요). 로컬
   apply는 break-glass. gke-team-access(사람 IAM)는 로컬 유지(#314).
 
@@ -565,9 +565,9 @@ Auto-Provisioning)가 꺼져 있어 클러스터 수준 `resourceLimits`도 없�
 | --- | --- | --- | --- |
 | `dev-default` | e2-standard-4 (4/16GB) | min1 / max2 | 앱·플랫폼 상주 워크로드 |
 | `airflow-dev` | e2-standard-2 (2/8GB) | min1 / max2 | Airflow 제어영역 고정 |
-| `batch-spot` | n2-standard-2 (2/8GB) Spot | min0 / max8 (#331 상향, #422 N2 전환 — E2 quota 회피) | 재시도 내성 KPO |
+| `batch-spot` | n2-standard-2 (2/8GB) Spot | min0 / max8 (#330/#331 상향, #422 N2 전환 — E2 quota 회피) | 재시도 내성 KPO |
 | `batch-od` | e2-standard-2 (2/8GB) | min0 / max2 | 재시도 내성 없는 KPO(#297) |
-| `ctr-model-retrain` | n2-highmem-4 (4/32GB) | min0 / max1(#331로 2 예정) | 재학습(#316). 라이브 선적용, main 편입은 #331 |
+| `ctr-model-retrain` | n2-highmem-4 (4/32GB) | min0 / max2 (#316 도입, #330/#331 상향) | 재학습(#316). #331로 main 편입 완료(#404 재구축에서 신규 생성) |
 
 min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된다. max는 상한일 뿐
 비용이 아니다 — 상세는 CHANGE_HISTORY·#330.
@@ -610,7 +610,6 @@ min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된
 | oauth2-proxy(공통) | 10m/32Mi → 100m/128Mi | 각 admin root |
 | Prometheus | 100m/1Gi → 2Gi | `terraform/admin/monitoring-k8s` |
 | Grafana | 50m/384Mi → 768Mi | 〃 |
-| Vault | 250m/256Mi → 512Mi | `terraform/admin/vault-k8s` |
 | filebeat(DaemonSet) | 100m/150Mi → 300Mi | `terraform/admin/elastic-k8s` |
 | **ArgoCD 전 컴포넌트** | **미지정(BestEffort)** — 메모리 압박 시 최우선 eviction 대상. 하드닝 백로그 | `terraform/admin/argocd-k8s` |
 

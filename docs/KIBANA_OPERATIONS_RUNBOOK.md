@@ -47,8 +47,8 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 
 ## data view·저장 검색·대시보드 (#359)
 
-data view(`filebeat-*` + `@timestamp`), 저장 검색 4종(Airflow 에러 / DAG
-task 로그 / 앱 에러 / uvicorn 5xx), 대시보드 **Logs Overview**(로그량·
+data view(`filebeat-*` + `@timestamp`), 저장 검색 5종(Airflow 에러 / DAG
+task 로그 / 앱 에러 / uvicorn 5xx / Filebeat 색인 거부 #365), 대시보드 **Logs Overview**(로그량·
 log.level 분포·에러 logger Top 10·최근 에러)가 저장돼 있다. Discover가
 비어 보이면 좌측 메뉴 → Dashboards → `Logs Overview` 또는 Discover에서
 저장 검색을 연다.
@@ -63,6 +63,7 @@ elastic-k8s README 복구 절 참조). **#365부터 자동 import** —
 삭제·훼손된 경우에는** apply가 No changes로 지나간다 — 복원 강제:
 
 ```bash
+# break-glass 로컬 apply 경로 — 표준 admin-apply CI는 저장 plan 적용이라 -replace 미지원
 terraform -chdir=terraform/admin/elastic-k8s apply \
   -replace=kubernetes_job_v1.kibana_saved_objects_import
 ```

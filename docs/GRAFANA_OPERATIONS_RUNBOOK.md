@@ -42,7 +42,7 @@ Git/문서가 아닌 Grafana DB(계정)에만 존재한다.
    Create OAuth client ID):
    - Application type: Web application
    - Authorized redirect URI: `http://localhost:3000/login/google`
-   - 기존 OAuth consent screen(Airflow #54와 공용)을 사용한다
+   - 프로젝트 공용 OAuth consent screen을 사용한다(최초 #54에서 생성 — 프로젝트 이전 후에는 새 프로젝트의 consent screen)
 2. **Secret 주입** (client secret은 어디에도 기록하지 않는다):
 
 시크릿을 명령행 인수(셸 히스토리·프로세스 목록에 노출)에 두지 않도록,
@@ -98,7 +98,7 @@ Alertmanager는 Slack App의 channel-bound Incoming Webhook으로
 - root receiver는 `null`, group key는 `alertname`, `namespace`,
   `group_wait: 30s`, `group_interval: 1m`
 - workload namespace allowlist는 활성 운영 namespace인
-  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`
+  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring`
 - cluster 장애 allowlist는 원본 rule의 severity와 관계없이 critical receiver로
   승격하며
   `KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown`
@@ -187,12 +187,12 @@ route:
     - receiver: slack-critical
       matchers:
         - severity="critical"
-        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring"
       repeat_interval: 4h
     - receiver: slack-warning
       matchers:
         - severity="warning"
-        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring"
       repeat_interval: 12h
 receivers:
   - name: "null"
