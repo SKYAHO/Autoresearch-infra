@@ -88,10 +88,18 @@ Saved Objects → Import)는 폴백.
 | 특정 DAG task (KPO) | `kubernetes.labels.dag_id: "<dag>" and kubernetes.labels.task_id: "<task>"` — 파드 라벨 기반이라 Airflow 설정과 무관하게 동작(#147 실측). LocalExecutor 인프로세스 태스크 로그는 GCS/웹서버 UI에서 본다 | K8s 라벨 값 제약(63자 초과·특수문자 시 KPO가 잘라내거나 치환)으로 정확 일치가 빗나가면 접두 와일드카드 `kubernetes.labels.dag_id: <앞부분>*` 또는 `kubernetes.pod.name: <task명 기반 접두>*` |
 | 앱 에러 로그 | `kubernetes.namespace: "autoresearch" and log.level: ERROR` | `message: "ERROR"` |
 | uvicorn 5xx | `log.logger: "uvicorn.access" and message: *500*` — **오탐 포함**(클라이언트 포트 `50xxx` 등도 매칭). 정확한 5xx 판정용 아님, #352 이후 `http.response.status_code >= 500` 필드로 교체 예정 | — |
-| JSON 파싱 실패율 점검 | `error.type: json` — Beat 단 디코딩 실패만 계측. 앱 전환 완료 후 0에 수렴해야 정상 | — |
+| 구조화 전환 잔여 확인 | `kubernetes.namespace: ("airflow" or "autoresearch") and message:* and not log.level:*` — 최근 시간 범위에서 namespace·container별 집계. 계약상 `log.level`이 없는 평문 또는 불완전한 구조화 로그 후보 | — |
 | 특정 컨테이너 | `kubernetes.container.name: "webserver"` | — |
 
-`error.type: json`이 못 보는 손실 경로 — **ES 색인 거부**(매핑 충돌 400,
+Filebeat은 #403부터 비JSON 라인에 `error.type: json`·`error.message`를
+추가하지 않는다. 따라서 위 잔여 질의가 0건이라는 사실만으로 구조화 전환
+완료를 판정하면 안 된다. 먼저 같은 시간 범위에서
+`kubernetes.namespace: ("airflow" or "autoresearch")`로 최신 문서가 실제
+유입되는지 확인한 뒤, 활성 컨테이너별 잔여 질의를 비교한다. 기준 질의도
+0건이면 전환 완료가 아니라 수집 중단 가능성이므로 아래 Beat health와 파드
+로그를 확인한다.
+
+위 잔여 질의도 못 보는 손실 경로 — **ES 색인 거부**(매핑 충돌 400,
 예: 예약 object 키를 스칼라로 찍은 경우)는 문서 자체가 안 남아 무음이다.
 #365부터 Filebeat이 자기 로그(filebeat 컨테이너 한정)를 수집하므로
 **저장 검색 `Filebeat 색인 거부 (Cannot index event)`로 상시 관측한다**
