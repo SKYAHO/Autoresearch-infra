@@ -25,6 +25,14 @@ ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장 검증·롤백 절�
    `autoresearch`, sync 정책은 `CreateNamespace=false`인 manual sync입니다. 기본값
    `agent_orchestration_deployment_enabled=false`에서는 Application이 존재하지 않는
    ref를 바라보므로 sync할 수 없습니다.
+4. NetworkPolicy의 정적 CIDR이 현재 dev Terraform 값과 일치해야 합니다. manifest에
+   값을 임의로 바꾸지 말고, `terraform/envs/dev`의 `dev_subnet_cidr`(현재
+   `10.10.0.0/20`), `gke_services_cidr`(현재 `172.16.128.0/24`)와
+   `private_services_cidr`(현재 `192.168.0.0/20`)를 reviewed Terraform plan 또는
+   승인된 변수 값으로 대조합니다. 첫 값은 node-originated kubelet probe·API
+   port-forward ingress, 둘째 값은 Runner Service VIP·DNS egress, 셋째 값은 Cloud SQL
+   private IP egress에 사용됩니다. CIDR 변경은 Terraform과 NetworkPolicy를 같은 배포
+   변경에서 함께 갱신한 뒤 sync합니다.
 
 `deploy/agent-orchestration/*.yaml`의 `REPLACE_WITH_*` 문자열이 하나라도 남아
 있으면 의도적으로 배포하지 않습니다. release digest와 Terraform output을 확인한
@@ -165,7 +173,11 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
   없습니다.
 - Runner에는 `agent-orchestration-runner` KSA와 1Gi `ReadWriteOnce` PVC만 있으며,
   DB URL·DB password·Cloud SQL secret reference가 없습니다.
-- Runner ingress source는 API pod label 하나와 TCP 8080뿐입니다.
+- Runner ingress는 API pod label과 node subnet의 kubelet probe만 TCP 8080으로
+  허용합니다. Runner Service는 port-forward하거나 외부 노출하지 않습니다.
+- API ingress는 node subnet의 kubelet probe·초기 `kubectl port-forward`만 TCP 8000으로
+  허용하는 default-deny입니다. 이후 in-cluster 호출자를 추가하면 해당 caller
+  label/port만 허용하는 ingress rule을 같은 변경에서 추가합니다.
 - API egress는 Runner TCP 8080, Cloud SQL TCP 5432, DNS, Workload Identity metadata,
   HTTPS뿐이고 Runner egress에는 Cloud SQL TCP 5432가 없습니다.
 

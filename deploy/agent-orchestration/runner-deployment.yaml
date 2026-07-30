@@ -26,6 +26,11 @@ metadata:
     app.kubernetes.io/component: runner
 spec:
   replicas: 1
+  # 단일 ReadWriteOnce PVC를 다음 Pod에 attach하기 전에 이전 Pod에서 분리해야 한다.
+  # RollingUpdate는 두 Pod가 잠시 공존해 Multi-Attach로 rollout이 멈출 수 있으므로
+  # 의도적으로 Recreate를 사용한다.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: agent-orchestration-runner
@@ -101,11 +106,13 @@ spec:
             - name: scratch
               mountPath: /tmp
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /healthcheck
               port: http
             periodSeconds: 10
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /healthcheck
               port: http
             periodSeconds: 20
             failureThreshold: 3

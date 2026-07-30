@@ -1,6 +1,9 @@
 # The broad autoresearch-egress Terraform policy deliberately excludes pods
 # labelled app.kubernetes.io/part-of=agent-orchestration. These policies are
 # therefore the complete ingress/egress boundary for API and Runner pods.
+# API ingress is default-deny except for node-originated kubelet probes and
+# initial kubectl port-forward. A future in-cluster caller must add a narrowly
+# scoped ingress rule in the same change.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -12,10 +15,21 @@ spec:
       app.kubernetes.io/component: api
       app.kubernetes.io/part-of: agent-orchestration
   policyTypes:
+    - Ingress
     - Egress
+  ingress:
+    # This CIDR must match dev Terraform var.dev_subnet_cidr. Kubelet probes
+    # and kubectl port-forward originate from a node IP, not the caller Pod.
+    - from:
+        - ipBlock:
+            cidr: 10.10.0.0/20
+      ports:
+        - protocol: TCP
+          port: 8000
   egress:
     # Calico가 Service 트래픽을 DNAT 이전 ClusterIP로 평가하는 경로에서는
-    # podSelector만으로 Runner Service VIP를 매칭할 수 없다. Service CIDR의
+    # podSelector만으로 Runner Service VIP를 매칭할 수 없다. 이 CIDR은 dev
+    # Terraform var.gke_services_cidr와 반드시 일치해야 한다. Service CIDR의
     # TCP 8080을 함께 허용하되 다른 Service port는 열지 않는다.
     - to:
         - ipBlock:
@@ -33,12 +47,14 @@ spec:
           port: 8080
     - to:
         - ipBlock:
+            # dev Terraform var.private_services_cidr와 반드시 일치한다.
             cidr: 192.168.0.0/20
       ports:
         - protocol: TCP
           port: 5432
     - to:
         - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
             cidr: 172.16.128.0/24
       ports:
         - protocol: UDP
@@ -97,9 +113,19 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+    # This CIDR must match dev Terraform var.dev_subnet_cidr. The Runner has
+    # no user port-forward path, but kubelet HTTP probes still originate from
+    # the node subnet.
+    - from:
+        - ipBlock:
+            cidr: 10.10.0.0/20
+      ports:
+        - protocol: TCP
+          port: 8080
   egress:
     - to:
         - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
             cidr: 172.16.128.0/24
       ports:
         - protocol: UDP
