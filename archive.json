@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T06:14:11Z",
+  "generated_at": "2026-07-30T06:26:10Z",
   "reports": [
+    {
+      "number": 443,
+      "title": "docs: 프로젝트 이전/재구축 실행 런북 신설 (#437)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T06:25:56Z",
+      "summary_ko": [
+        "GCP 프로젝트 이전 및 클러스터 재구축 작업을 위한 실행 런북 문서(MIGRATION_RUNBOOK.md)를 신설했습니다.",
+        "이전 프로젝트 이전 경험(#404) 실측을 바탕으로 부트스트랩부터 검증까지 Phase 0~6 단계별 실행 절차를 정리했습니다.",
+        "Secret 전수 순회 명령 기반 추출, Cloud SQL 데이터 이전 순서 등 이전 중 발생했던 장애 요인의 재발 방지책을 명시했습니다."
+      ],
+      "report_url": "pr/443/"
+    },
     {
       "number": 442,
       "title": "feat: admin-apply ROOTS 순서 교정·신선 클러스터 선행 단계 명문화 (#436)",
