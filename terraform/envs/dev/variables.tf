@@ -638,7 +638,11 @@ variable "feast_apply_kubernetes_identities" {
       alltrue([for environment in keys(var.feast_apply_kubernetes_identities) : contains(["dev", "prod"], environment)]) &&
       alltrue([
         for identity in values(var.feast_apply_kubernetes_identities) :
+        length(identity.namespace) >= 1 &&
+        length(identity.namespace) <= 63 &&
         can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.namespace)) &&
+        length(identity.service_account) >= 1 &&
+        length(identity.service_account) <= 63 &&
         can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.service_account))
       ])
     )
