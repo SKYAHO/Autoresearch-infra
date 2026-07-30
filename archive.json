@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T04:51:23Z",
+  "generated_at": "2026-07-30T05:13:01Z",
   "reports": [
+    {
+      "number": 429,
+      "title": "docs: 이전 마무리 정합 — batch-spot 현행화·CHANGE_HISTORY 기록 (#404)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T05:12:47Z",
+      "summary_ko": [
+        "GCP 프로젝트 이전 작업(#404)에 따른 전체 인프라 재구축 히스토리와 주요 결정 사항을 변경 이력 문서에 기록했습니다.",
+        "실제 적용된 배치용 스팟 노드풀 사양(n2-standard-2 및 최대 8개)을 인프라 요약 문서에 반영했습니다.",
+        "문서와 실제 GCP 인프라 환경 간의 정보 정합성을 완성하여 팀원들의 운영 혼선을 예방하도록 개선했습니다."
+      ],
+      "report_url": "pr/429/"
+    },
     {
       "number": 430,
       "title": "fix: Filebeat 평문 로그 JSON 오류 마커 제거",
