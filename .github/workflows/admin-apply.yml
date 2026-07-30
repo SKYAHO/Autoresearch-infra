@@ -22,12 +22,14 @@ concurrency:
 
 env:
   TF_IN_AUTOMATION: "true"
-  # apply 순서: 의존성 고려 — **ns 소유 root가 소비 root보다 먼저**(#436:
-  # autoresearch-k8s가 airflow ns 리소스를 참조하므로 airflow-k8s 선행. 기존
-  # 클러스터에선 무해했지만 신선 클러스터 재구축(#404)에서 "namespaces airflow
-  # not found"로 전멸했던 실측), argocd는 다른 namespace를 참조하므로 마지막.
+  # apply 순서: 의존성 고려(namespace 소유 root 먼저, argocd는 다른 namespace를
+  # 참조하므로 마지막). #404 신선 클러스터의 "namespaces airflow not found"는
+  # root 간 순서 문제가 아니라 airflow-k8s **내부**의 ns 의존 간선 누락
+  # (airflow_components Role — #436에서 depends_on 보강)이었다. cross-root
+  # 참조는 실측상 없어 현행 순서를 유지한다.
   #
-  # 신선 클러스터 재구축 시 선행 단계(#436, 상세는 docs/MIGRATION_RUNBOOK.md):
+  # 신선 클러스터 재구축 시 선행 단계(#436 — docs/CHANGE_HISTORY.md 2026-07-29
+  # 항목 요약, 실행형 상세는 docs/MIGRATION_RUNBOOK.md(#443에서 추가)):
   # 1) CRD 의존 root(elastic-k8s·argocd-k8s)는 operator helm만 로컬 -target
   #    선적용(CRD 없이는 CR plan 자체가 불가) 2) oauth-proxy류가 참조하는
   #    operator 주입 Secret을 선주입(없으면 rollout 대기 10분 타임아웃).
@@ -38,7 +40,7 @@ env:
   # break-glass로 유지한다. vault-k8s도 제외한다(#412): 2026-07-15 드랍 결정된
   # 샌드박스인데 목록에 남아 있어 #404 이전 후 옛 프로젝트 좌표로 apply를
   # 시도했다. root 자체는 후속 PR에서 제거한다.
-  ROOTS: "airflow-k8s autoresearch-k8s monitoring-k8s elastic-k8s mlflow-k8s argo-rollouts-k8s argocd-k8s"
+  ROOTS: "autoresearch-k8s airflow-k8s monitoring-k8s elastic-k8s mlflow-k8s argo-rollouts-k8s argocd-k8s"
   PLAN_PREFIX: gs://autoresearch-503903-dev-tfstate/admin-apply-plans
   # allowlist: 삭제 시 접근이 상실되는 값은 '|| []' 폴백을 두지 않는다. Secret
   # 미설정/빈 값이면 빈 문자열이 되어 terraform이 halt한다(#305류 차단). optional
