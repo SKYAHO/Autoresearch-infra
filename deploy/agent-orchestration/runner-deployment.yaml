@@ -90,6 +90,8 @@ spec:
               value: gpt-5.3-codex-spark
             - name: CODEX_TIMEOUT_SEC
               value: "110"
+            - name: ORCH_API_RUNNER_TIMEOUT_SEC
+              value: "120"
             - name: RUNNER_MAX_CONCURRENCY
               value: "1"
             - name: ORCH_RUNNER_TOKEN
