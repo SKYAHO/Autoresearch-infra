@@ -67,15 +67,21 @@ gcloud secrets versions add autoresearch-dev-mlflow-oauth-client-secret \
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 
-# client id/secret: Secret Manager 정본에서 내려받기(끝 개행 제거)
+# client id/secret: Secret Manager 정본에서 내려받기(끝 개행 제거).
+# 주의: 파이프의 exit code는 tr 것이라 version이 없어도 조용히 빈 파일이 된다 —
+# test -s 가드로 빈 값 주입을 차단한다(terraform은 컨테이너만 만들고 payload는
+# 운영자가 versions add로 넣는 구조).
 for k in client-id client-secret; do
   gcloud secrets versions access latest \
     --secret "autoresearch-dev-mlflow-oauth-$k" --project "$PROJECT_ID" \
     | tr -d '\n' > "$d/$k"
+  test -s "$d/$k" || { echo "ERROR: $k 정본이 비어 있음 — 'gcloud secrets versions add'로 payload 먼저 등록"; exit 1; }
 done
 
-# cookie 비밀(랜덤 32바이트, oauth2-proxy 권장 생성) — 기존 Secret이 있으면 재생성하지 말고 보존
-python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+# cookie 비밀: 기존 K8s Secret에 있으면 보존(전원 재로그인 방지), 최초 생성 때만 랜덤 생성
+kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' 2>/dev/null \
+  | base64 -d > "$d/cookie-secret" || true
+test -s "$d/cookie-secret" || python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
 
 # 허용 이메일(한 줄에 하나) — 목록 밖 Google 계정은 거부된다
 cat > "$d/authenticated-emails" <<'EMAILS'
@@ -96,19 +102,24 @@ kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
 
 갱신 시 주의:
 
-- **cookie-secret은 재생성하지 않는다.** 기존 값을
-  `kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' | base64 -d > "$d/cookie-secret"`로
-  보존한다. 길이가 32바이트가 아니면 oauth2-proxy가 기동에 실패하고, 새로 만들면 전원 재로그인이 필요하다.
-- **client id도 함께 바꾼다.** client 재발급은 id/secret이 한 쌍으로 바뀌므로 secret만
-  교체하면 `invalid_client`로 로그인이 막힌다.
-- 반영 확인은 값 노출 없이 해시로 대조한다.
+- **cookie-secret 보존은 위 블록이 자동 처리한다**(기존 K8s Secret 값 재사용, 최초에만
+  생성). 길이가 32바이트가 아니면 oauth2-proxy가 기동에 실패하고, 새로 만들면 전원
+  재로그인이 필요하다.
+- **client 재발급 시 id/secret 정본을 둘 다 갱신한다.** 재발급은 한 쌍으로 바뀌므로
+  secret만 교체하면 `invalid_client`로 로그인이 막힌다 — 이번 정본화(#420)의 계기가
+  된 실사고 경로다.
+- 반영 확인은 값 노출 없이 **id·secret 두 키 모두** 해시로 대조한다(어긋나기 쉬운 쪽은
+  오히려 id였다).
 
   ```bash
-  kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.client-secret}' \
-    | base64 -d | shasum -a 256 | cut -c1-8
-  gcloud secrets versions access latest \
-    --secret autoresearch-dev-mlflow-oauth-client-secret --project "$PROJECT_ID" \
-    | tr -d '\n' | shasum -a 256 | cut -c1-8
+  for k in client-id client-secret; do
+    a=$(kubectl -n mlflow get secret mlflow-oauth -o jsonpath="{.data.$k}" \
+      | base64 -d | shasum -a 256 | cut -c1-8)
+    b=$(gcloud secrets versions access latest \
+      --secret "autoresearch-dev-mlflow-oauth-$k" --project "$PROJECT_ID" \
+      | tr -d '\n' | shasum -a 256 | cut -c1-8)
+    [ "$a" = "$b" ] && echo "$k OK($a)" || echo "$k 불일치: k8s=$a sm=$b"
+  done
   ```
 
 ## Model Training 담당자 port-forward 권한 (#236)
