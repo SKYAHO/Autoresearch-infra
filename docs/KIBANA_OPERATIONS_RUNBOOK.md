@@ -80,7 +80,7 @@ Saved Objects → Import)는 폴백.
 (#100 — 그 외 시스템·플랫폼 로그는 Cloud Logging에서 본다). Filebeat이 JSON 한 줄 로그를
 최상위 필드로 전개하므로(#359 ndjson parser), 구조화 로깅(#352/#147)
 전환 후에는 필드 기반 KQL을 쓴다. 전환 전 로그는 `message` 전문 매칭으로
-폴백한다(비JSON 라인은 `error.type: json` 마커와 함께 원문 보존).
+폴백한다(비JSON 라인은 파싱 오류 필드 없이 원문을 보존한다 — #403).
 
 | 목적 | KQL 예시 (구조화 후) | 전환 전 폴백 |
 |---|---|---|

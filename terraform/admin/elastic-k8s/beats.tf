@@ -182,10 +182,11 @@ resource "kubernetes_manifest" "filebeat" {
                         parsers = [
                           { container = {} },
                           # #359 구조화(JSON 한 줄) 로그를 최상위 필드로 전개.
-                          # add_error_key: 비JSON 라인은 message 원문이 그대로
-                          # 남고 error.type=json 마커만 붙는다 — JSON/평문
-                          # 혼재기에 안전해 앱 전환(#352/#147) 전 선행 배포
-                          # 가능. overwrite_keys: 앱이 찍은 @timestamp 등이
+                          # 비JSON 라인은 message 원문을 그대로 보존하고 파싱
+                          # 오류 필드는 만들지 않는다(#403). 파서 오류를 실제
+                          # 애플리케이션 오류로 오인하지 않게 하면서 JSON/평문
+                          # 혼재기에 선행 배포할 수 있다. overwrite_keys: 앱이
+                          # 찍은 @timestamp 등이
                           # Filebeat 기본값을 이긴다.
                           # 루트 전개 계약(리뷰 반영): 앱은 ECS 필드
                           # (log.level, error.stack_trace 등 dotted key)만
@@ -197,7 +198,7 @@ resource "kubernetes_manifest" "filebeat" {
                           {
                             ndjson = {
                               target         = ""
-                              add_error_key  = true
+                              add_error_key  = false
                               overwrite_keys = true
                               # dotted key("log.level")를 계층으로 전개해
                               # 매핑과 문서 구조를 일치시킨다(ecs-logging
