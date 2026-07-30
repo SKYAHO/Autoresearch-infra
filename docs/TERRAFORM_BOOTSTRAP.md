@@ -8,7 +8,7 @@
 
 - GCP 인증 완료(`gcloud auth application-default login`)
 - `container`/`compute`/`iam`/`cloudresourcemanager` 등 API 활성화(이슈 #5 에서 활성화 완료)
-- 활성 `ar-infra-501607` 프로젝트 접근 권한
+- 활성 `autoresearch-503903` 프로젝트 접근 권한
 
 ## 1. bootstrap apply
 
@@ -78,12 +78,12 @@ GitHub → Settings → Secrets and variables → Actions → **Variables** 에 
 
 | variable | 값 |
 |---|---|
-| `GCP_PROJECT_ID` | `ar-infra-501607` |
+| `GCP_PROJECT_ID` | `autoresearch-503903` |
 | `WIF_POOL_ID` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github` |
 | `WIF_PROVIDER_ID` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github/providers/github` |
-| `CI_SA_EMAIL` | `terraform-ci@ar-infra-501607.iam.gserviceaccount.com` |
+| `CI_SA_EMAIL` | `terraform-ci@autoresearch-503903.iam.gserviceaccount.com` |
 
-`<N>` 은 프로젝트 번호. `gcloud projects describe ar-infra-501607 --format='value(projectNumber)'` 로 확인.
+`<N>` 은 프로젝트 번호. `gcloud projects describe autoresearch-503903 --format='value(projectNumber)'` 로 확인.
 
 ## 4. dev 루트 backend 마이그레이션
 

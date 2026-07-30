@@ -162,8 +162,8 @@ Terraform state, values 파일에 저장하지 않는다. 로컬 `admin` 계정�
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
 # client id/secret을 Secret Manager에 저장해 두고 회수(예시 secret 이름)
-CID="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-id --project ar-infra-501607)"
-CSECRET="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-secret --project ar-infra-501607)"
+CID="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-id --project autoresearch-503903)"
+CSECRET="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-secret --project autoresearch-503903)"
 printf 'clientId=%s\nclientSecret=%s\n' "$CID" "$CSECRET" > "$env_file"; unset CID CSECRET
 kubectl create secret generic argocd-google-oidc -n argocd --from-env-file="$env_file" \
   --dry-run=client -o yaml | kubectl apply -f -

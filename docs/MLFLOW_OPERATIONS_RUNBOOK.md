@@ -15,7 +15,7 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 | 앱 배포 | ArgoCD Application `mlflow`(source `deploy/mlflow`, manual sync) |
 | 이미지 | GAR `autoresearch-mlflow`(앱 `deploy/mlflow/Dockerfile`을 인프라 Cloud Build로 빌드) |
 | backend | Cloud SQL `autoresearch-dev-pg`, DB `mlflow`, user `mlflow`(private IP) |
-| artifact | GCS `ar-infra-501607-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
+| artifact | GCS `autoresearch-503903-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
 | Service | `mlflow.mlflow:5000`(ClusterIP, **내부 전용**) |
 | UI 인증(#232) | 앞단 **OAuth2-proxy**(`mlflow-oauth-proxy:4180`), Google 로그인 + 허용 이메일 목록. Secret `mlflow-oauth` |
 | 시크릿 | DB 비번=Secret Manager `autoresearch-dev-mlflow-db-password`, pod 주입=K8s Secret `mlflow-db` |
@@ -35,7 +35,7 @@ UI/API는 ClusterIP라 외부 노출이 없다. 접근은 **OAuth2-proxy(4180)�
 
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
+  --zone asia-northeast3-a --project autoresearch-503903 --tunnel-through-iap \
   -- -N -L 4180:mlflow.dev.autoresearch.internal:4180
 # 터널 창은 두고, 브라우저: http://localhost:4180 → sign-in → Google 로그인
 ```
@@ -50,8 +50,12 @@ kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
 ```
 
 - redirect URI는 `http://localhost:4180/oauth2/callback`(OAuth client에 등록됨).
-- 허용 이메일·client secret 주입은 `terraform/admin/mlflow-k8s/README.md`의
-  `mlflow-oauth` Secret 절차. 목록 변경 후 `kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow`.
+- OAuth client 자격의 **정본은 Secret Manager**(`autoresearch-dev-mlflow-oauth-client-id`,
+  `...-client-secret`)이고 K8s Secret `mlflow-oauth`는 그 사본이다. 주입·갱신 절차는
+  `terraform/admin/mlflow-k8s/README.md`의 `mlflow-oauth` Secret 절차를 따르고,
+  변경 후 `kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow`.
+- client를 재발급하면 id/secret이 한 쌍으로 바뀐다. Secret Manager에 새 version을 올린
+  뒤 K8s Secret까지 전파해야 하며, secret만 바꾸면 `invalid_client`로 로그인이 막힌다.
 - MLflow 클라이언트(SDK)로 직접 쓸 때는 인증 우회가 필요하므로 GKE 내부 워크로드는
   `http://mlflow.mlflow:5000`(proxy 미경유, 내부 전용)을 tracking URI로 쓴다.
 - port-forward가 timeout이면 kubeconfig가 IP 엔드포인트를 쓰는 것이다. #279로
@@ -88,7 +92,7 @@ pod는 DB host(private IP)·비번을 K8s Secret `mlflow-db`에서 받는다. �
 ```bash
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
-PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project ar-infra-501607)"
+PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project autoresearch-503903)"
 HOST="$(terraform -chdir=terraform/envs/dev output -raw cloud_sql_private_ip_address)"
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_HOST=%s\n' "$PW" "$HOST" > "$env_file"; unset PW
 kubectl create secret generic mlflow-db -n mlflow --from-env-file="$env_file" \
