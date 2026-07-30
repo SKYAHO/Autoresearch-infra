@@ -7,10 +7,10 @@
 
 | 항목 | 값 |
 |---|---|
-| GCP project | `ar-infra-501607` |
+| GCP project | `autoresearch-503903` |
 | Region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | GKE cluster | `autoresearch-dev-gke` |
-| Expected context | `gke_ar-infra-501607_asia-northeast3-a_autoresearch-dev-gke` |
+| Expected context | `gke_autoresearch-503903_asia-northeast3-a_autoresearch-dev-gke` |
 | App namespace | `autoresearch` (#129, apply·검증 완료) |
 | Airflow namespace | `airflow` |
 | Monitoring namespace | `monitoring` |
@@ -103,11 +103,11 @@ ClusterRole/ClusterRoleBinding 생성, node 수정, 다른 namespace 작업은 �
 
 ```bash
 gcloud auth login
-gcloud config set project ar-infra-501607
+gcloud config set project autoresearch-503903
 
 gcloud container clusters get-credentials autoresearch-dev-gke \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --dns-endpoint
 ```
 
@@ -121,7 +121,7 @@ kubectl get namespaces
 다른 context가 선택되어 있으면 전환한다.
 
 ```bash
-kubectl config use-context gke_ar-infra-501607_asia-northeast3-a_autoresearch-dev-gke
+kubectl config use-context gke_autoresearch-503903_asia-northeast3-a_autoresearch-dev-gke
 ```
 
 ## Airflow 설치 권한 확인
@@ -229,7 +229,7 @@ Bastion은 외부 IP가 없고 IAP 터널로만 접속한다. SSH 단독 접속�
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap
 ```
 
@@ -240,7 +240,7 @@ Airflow UI는 인터넷에 공개하지 않는다. 기본 접속 경로는 Basti
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap \
   -- -N -L 8080:airflow.dev.autoresearch.internal:8080
 ```
@@ -263,7 +263,7 @@ MLflow UI도 인터넷에 공개하지 않는다(#244). 앞단 OAuth2-proxy가 G
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap \
   -- -N -L 4180:mlflow.dev.autoresearch.internal:4180
 ```
@@ -394,7 +394,7 @@ alias만 재지정한 경우에도 재시작이 없으면 이전 모델이 계�
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap \
   -- -N -D 1080
 ```
@@ -432,14 +432,14 @@ Airflow 기본 component와 batch pod는 서로 다른 GCP service account를 �
 
 | Kubernetes service account | GCP service account | 목적 |
 |---|---|---|
-| `autoresearch/autoresearch-app` | `autoresearch-dev-app@ar-infra-501607.iam.gserviceaccount.com` | 앱 DB secret과 Redis CA 조회, cluster 한정 IAM 연결 token 발급 (#129, apply·검증 완료) |
-| `airflow/airflow` | `autoresearch-dev-airflow@ar-infra-501607.iam.gserviceaccount.com` | Airflow metadata DB, DAG/log bucket, OAuth secret |
-| `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery, Cloud Run proxy invoker |
+| `autoresearch/autoresearch-app` | `autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com` | 앱 DB secret과 Redis CA 조회, cluster 한정 IAM 연결 token 발급 (#129, apply·검증 완료) |
+| `airflow/airflow` | `autoresearch-dev-airflow@autoresearch-503903.iam.gserviceaccount.com` | Airflow metadata DB, DAG/log bucket, OAuth secret |
+| `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery, Cloud Run proxy invoker |
 
 `autoresearch-batch` annotation은 아래 값이어야 한다.
 
 ```text
-iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com
+iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com
 ```
 
 확인 명령:
