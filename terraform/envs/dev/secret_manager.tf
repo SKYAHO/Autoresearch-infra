@@ -85,3 +85,26 @@ resource "google_secret_manager_secret_iam_member" "mlflow_db_password" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.mlflow.email}"
 }
+
+# #439 Grafana·Kibana UI OAuth client 자격 정본. mlflow(#420)·argocd와 대칭 —
+# 재발급은 id/secret이 한 쌍으로 바뀌므로 둘 다 SM에 정본을 둬야 runbook
+# 하드코딩/클러스터 값 갈림("재발급 ≠ 반영", #404 실측)이 재발하지 않는다.
+# 값(version)은 operator가 넣고, 주입도 운영자 자격으로 읽는다(accessor 없음).
+resource "google_secret_manager_secret" "ui_oauth_clients" {
+  for_each = toset([
+    "grafana-oauth-client-id",
+    "grafana-oauth-client-secret",
+    "kibana-oauth-client-id",
+    "kibana-oauth-client-secret",
+  ])
+  secret_id = "${local.resource_prefix}-${each.key}"
+
+  replication {
+    auto {}
+  }
+
+  # payload는 destroy 시 복구 불가 — airflow #54·mlflow #420과 같은 보호.
+  lifecycle {
+    prevent_destroy = true
+  }
+}

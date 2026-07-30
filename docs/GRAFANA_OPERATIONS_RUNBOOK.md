@@ -53,18 +53,28 @@ umask 077                                   # 이후 생성 파일은 0600
 env_file="$(mktemp)"
 trap 'rm -f "$env_file"' EXIT               # 오류 포함 종료 시 폐기
 
-# read -s: 화면·셸 히스토리에 값이 남지 않는다. 값은 변수로만 다룬다.
-read -rs -p 'GOOGLE_CLIENT_ID: '     GCID;  echo
-read -rs -p 'GOOGLE_CLIENT_SECRET: ' GCSEC; echo
+# #439: 정본은 Secret Manager — 발급 직후 id/secret 한 쌍을 먼저 등록한다
+# (mlflow #420 패턴. 재발급 시 secret만 바꾸면 invalid_client — 쌍으로).
+#   gcloud secrets versions add autoresearch-dev-grafana-oauth-client-id --data-file=-
+#   gcloud secrets versions add autoresearch-dev-grafana-oauth-client-secret --data-file=-
+# 주입은 SM에서 내려받는다(빈 정본 가드 포함 — 값은 화면·히스토리 비노출).
+for k in client-id client-secret; do
+  gcloud secrets versions access latest \
+    --secret "autoresearch-dev-grafana-oauth-$k" --project "$PROJECT_ID" \
+    | tr -d '\n' > "/tmp/g-$k"
+  test -s "/tmp/g-$k" || { echo "ERROR: $k 정본 비어 있음 — versions add 먼저"; exit 1; }
+done
 printf 'GF_AUTH_GOOGLE_CLIENT_ID=%s\nGF_AUTH_GOOGLE_CLIENT_SECRET=%s\n' \
-  "$GCID" "$GCSEC" > "$env_file"
-unset GCID GCSEC
+  "$(cat /tmp/g-client-id)" "$(cat /tmp/g-client-secret)" > "$env_file"
+rm -f /tmp/g-client-id /tmp/g-client-secret
 
 kubectl -n monitoring create secret generic grafana-google-oauth \
   --from-env-file="$env_file"
 
 rm -f "$env_file"; trap - EXIT              # 즉시 삭제
 ```
+
+반영 검증(값 비노출): `scripts/verify-oauth-clients.sh <k8s-context> <project-id>` — 5종 프리픽스·SM 해시 일괄 대조(#439).
 
 3. monitoring-k8s root apply (values의 `envFromSecret`가 이 Secret을
    전제로 하므로 **주입 없이는 Grafana pod가 기동하지 못한다** —
