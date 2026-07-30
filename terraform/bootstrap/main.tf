@@ -82,6 +82,47 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   }
 }
 
+# Feast apply는 앱 저장소와 GitHub Environment 별 provider로 분리한다.
+# workflow_ref의 정확한 main 브랜치 경계는 각 Feast apply SA의 IAM binding에서
+# 적용한다(#424).
+resource "google_iam_workload_identity_pool_provider" "github_feast_dev" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-feast-dev"
+  project                            = var.project_id
+
+  attribute_mapping = {
+    "google.subject"         = "assertion.sub"
+    "attribute.repository"   = "assertion.repository"
+    "attribute.environment"  = "assertion.environment"
+    "attribute.workflow_ref" = "assertion.workflow_ref"
+  }
+
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'dev'"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_iam_workload_identity_pool_provider" "github_feast_prod" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-feast-prod"
+  project                            = var.project_id
+
+  attribute_mapping = {
+    "google.subject"         = "assertion.sub"
+    "attribute.repository"   = "assertion.repository"
+    "attribute.environment"  = "assertion.environment"
+    "attribute.workflow_ref" = "assertion.workflow_ref"
+  }
+
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'prod'"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
 # CI 용 service account (GitHub Actions 가 WIF 경유로 가장)
 resource "google_service_account" "terraform_ci" {
   account_id   = local.ci_sa_id

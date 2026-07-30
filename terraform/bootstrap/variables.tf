@@ -19,6 +19,12 @@ variable "allowed_github_repositories" {
   ]
 }
 
+variable "feast_apply_github_repository" {
+  description = "GitHub repository allowed to obtain Feast apply WIF tokens (owner/name). Each provider also requires its matching GitHub Environment."
+  type        = string
+  default     = "SKYAHO/Autoresearch"
+}
+
 variable "region" {
   description = "Location for the Terraform state GCS bucket."
   type        = string
