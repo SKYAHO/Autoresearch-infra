@@ -11,14 +11,21 @@ app_k8s_service_account = "autoresearch-app"
 # autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
 app_gcp_service_account_email = ""
 
-# #346 feast apply GKE Job 전용 namespace/KSA.
-# terraform/envs/dev의 feast_apply_k8s_namespace/service_account와 같은 값이어야 한다.
-feast_apply_k8s_namespace       = "feast-apply"
-feast_apply_k8s_service_account = "feast-apply"
-
-# Optional. Empty value derives:
-# autoresearch-dev-feast-apply@<project_id>.iam.gserviceaccount.com
-feast_apply_gcp_service_account_email = ""
+# #424 GitHub Environment → WIF provider → GSA → namespace → KSA 튜플은 불변이다.
+# 아래 namespace/KSA는 terraform/envs/dev의 feast_apply_kubernetes_identities,
+# GSA는 해당 GitHub Environment의 FEAST_APPLY_SA와 반드시 함께 바꾼다.
+feast_apply_identities = {
+  dev = {
+    namespace                 = "feast-apply-dev"
+    service_account           = "feast-apply"
+    gcp_service_account_email = "autoresearch-dev-feast-apply-dev@your-gcp-project-id.iam.gserviceaccount.com"
+  }
+  prod = {
+    namespace                 = "feast-apply-prod"
+    service_account           = "feast-apply"
+    gcp_service_account_email = "autoresearch-dev-feast-apply-prod@your-gcp-project-id.iam.gserviceaccount.com"
+  }
+}
 
 # terraform/envs/dev private_services_cidr, redis_psc_subnet_cidr, gke_services_cidr values.
 private_services_cidr = "192.168.0.0/20"

@@ -15,8 +15,8 @@
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장
 - Feast Online Store single-zone 2-shard Memorystore for Redis Cluster(PSC, IAM auth/TLS), CA Secret Manager 저장 (#129, apply·검증 완료)
 - dev 원본 데이터 GCS bucket(YouTube/user/action-log/persona raw)
-- Feast registry/staging GCS bucket
-- dev BigQuery analytics dataset 및 Feast offline store dataset
+- 환경별 Feast registry/staging GCS bucket
+- dev BigQuery analytics dataset 및 Feast prod/dev offline store dataset
 - Feast 피처 테이블 4종(스키마를 Terraform이 소유, `deletion_protection`) (#280)
 - BigQuery ↔ Vertex AI `CLOUD_RESOURCE` connection과 `roles/aiplatform.user` IAM (#280)
 - GKE Standard private-node cluster, node pool, node/app service account, Workload Identity binding
@@ -33,7 +33,8 @@
 - Airflow Google OAuth client 자격증명용 Secret Manager secret metadata (#54/#55)
 - Vault dev auto-unseal 1단계 GCP 기반(`vault.tf`): Cloud KMS unseal key ring/key, Vault GSA + Workload Identity, unseal 전용 custom role (#132)
 - Elasticsearch GCS snapshot 기반(`elastic.tf`): snapshot bucket, snapshot GSA + Workload Identity, bucket IAM (#102)
-- GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer (#121/#157/#187), feast apply SA(#332)
+- GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer
+  (#121/#157/#187), 환경별 Feast apply SA(#424)
 - 코드 아카이브 배포 GCS 버킷 + 업로더 SA/WIF + 파드 read IAM(`code_artifacts.tf`, #238)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
@@ -55,15 +56,19 @@ terraform -chdir=terraform/envs/dev apply
 
 `terraform.tfvars`에는 실제 GCP project id가 들어갈 수 있으므로 커밋하지 않습니다.
 
-## 현재 생성된 주요 리소스
+## Terraform이 관리하는 주요 리소스
+
+아래 표는 현재 Terraform 구성의 관리 대상을 요약합니다. #424의 환경별 Feast
+apply 경계는 코드에 구성되었지만 이 변경에서 실제 GCP/Kubernetes apply나
+`SKYAHO/Autoresearch` GitHub Environment 설정·검증을 수행하지 않았습니다.
 
 | 영역 | 리소스 |
 |---|---|
 | Network | `autoresearch-dev-vpc`, `autoresearch-dev-subnet`, `autoresearch-dev-router`, `autoresearch-dev-nat` |
 | Artifact Registry | `autoresearch-dev-docker` |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
-| GCS | `autoresearch-503903-autoresearch-dev-raw-data`, `autoresearch-503903-feast-registry`, `autoresearch-503903-feast-staging`, `autoresearch-503903-autoresearch-dev-airflow-dags`, `autoresearch-503903-autoresearch-dev-airflow-logs`, `autoresearch-503903-code-artifacts` (#238) |
-| BigQuery | `autoresearch_dev_analytics`, `feast_offline_store` (data lake 2종 + Feast 피처 테이블 4종) |
+| GCS | raw data, prod Feast registry/staging, dev Feast registry/staging(`-dev`), Airflow DAG/log, `code-artifacts` bucket |
+| BigQuery | `autoresearch_dev_analytics`, `feast_offline_store`, `feast_offline_store_dev` |
 | BigQuery connection | `autoresearch-dev-vertex-ai` (`CLOUD_RESOURCE`, `asia-northeast3`, #280) |
 | Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key`, `autoresearch-dev-airflow-oauth-client-id`, `autoresearch-dev-airflow-oauth-client-secret` |
 | GKE | `autoresearch-dev-gke`, node pools `dev-default`, `airflow-dev`, 컨트롤 플레인 DNS 엔드포인트(#45/#46) |
@@ -72,7 +77,7 @@ terraform -chdir=terraform/envs/dev apply
 | IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
 | KMS/Vault | key ring `vault`, crypto key `vault_unseal`, Vault GSA + unseal custom role (#132) |
 | Elastic snapshot | ES snapshot GCS bucket, snapshot GSA + Workload Identity (#102) |
-| CI pusher | GAR pusher SA, app image pusher SA, Airflow deployer SA, 코드 아카이브 업로더 SA, feast apply SA (WIF, #121/#157/#187/#238/#332) |
+| CI pusher | GAR pusher SA, app image pusher SA, Airflow deployer SA, 코드 아카이브 업로더 SA, dev/prod Feast apply SA(WIF, #121/#157/#187/#238/#424) |
 
 Issue #129의 `autoresearch-dev-redis-cluster`, 전용 PSC subnet/policy와
 `terraform/admin/autoresearch-k8s`는 apply 완료됐고, #203/#204에서 Feast ↔ Redis
@@ -94,34 +99,39 @@ BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있
 
 기존 app GSA(`gke_app`)의 Redis/CA/코드 아카이브 권한은 변경하지 않았습니다.
 
-## feast apply GKE Job 권한 (#346)
+## Feast apply 환경별 런타임 경계 (#424)
 
-`feast apply`를 GitHub Actions 러너 대신 VPC 안 GKE Job으로 실행하도록 옮기면서,
-기존 `feast_apply` GSA(#332)에 다음을 추가했습니다. 상세 배경과 namespace 분리
-근거는 `docs/TERRAFORM_DEV.md`의 "feast apply를 GKE Job으로 실행 (#346)" 절을
-참조합니다.
+단일 `autoresearch-dev-feast-apply` GSA와 단일 `feast-apply` namespace 계약은
+현재 구성에서 제거되었습니다. GitHub Environment부터 WIF provider, GSA,
+데이터 좌표, namespace, KSA까지 다음 튜플을 함께 사용해야 합니다.
 
-| 대상 | Role | 범위 | 용도 |
-|---|---|---|---|
-| project (condition 제한) | `roles/redis.dbConnectionUser` | dev Online Store cluster 한정 (`redis.tf`) | 고아 키 정리(`full_scan_for_deletion`)용 Redis IAM 인증 |
-| `autoresearch-dev-redis-server-ca` secret | `roles/secretmanager.secretAccessor` | secret 단위 (`secret_manager.tf`) | Redis TLS 검증용 CA 조회 |
-| `feast_apply` GSA | `roles/iam.workloadIdentityUser` | member `<project>.svc.id.goog[feast-apply/feast-apply]` (`github_actions.tf`) | Job Pod의 KSA → GSA 가장 |
-| project | `roles/container.clusterViewer` | 프로젝트 (`github_actions.tf`) | GHA의 DNS endpoint 접속·cluster metadata 조회. Job 생성 권한은 K8s RBAC이 통제 |
+| 환경 | WIF provider | GSA | registry / staging / BQ | namespace / KSA | Redis / CA |
+|---|---|---|---|---|---|
+| `dev` | `github-feast-dev` | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` | `gs://<project>-feast-registry-dev/registry.db` / `gs://<project>-feast-staging-dev/` / `feast_offline_store_dev` | `feast-apply-dev` / `feast-apply` | 권한 없음 |
+| `prod` | `github-feast-prod` | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` | `gs://<project>-feast-registry/registry.db` / `gs://<project>-feast-staging/` / `feast_offline_store` | `feast-apply-prod` / `feast-apply` | Redis 연결과 CA 조회 허용 |
 
-namespace(`feast-apply`)·KSA·RBAC·NetworkPolicy는
-`terraform/admin/autoresearch-k8s`가 만듭니다. 두 root의
-`feast_apply_k8s_namespace` / `feast_apply_k8s_service_account` 값은 같아야 합니다.
+두 GSA는 각 환경 GCS 버킷과 BigQuery dataset에만 Feast apply 권한을 가지며,
+prod GSA에만 Redis `dbConnectionUser`와 Redis CA secret `secretAccessor`가
+부여됩니다. 두 GSA의 공용 `code-artifacts` bucket `objectViewer`는 선택한
+2-SA 모델에서 이미지 부트스트랩 코드를 읽기 위한 의도된 공유 권한입니다.
+이 bucket은 Feast 환경 데이터 저장소 경계가 아닙니다.
 
-Kubernetes 쪽에서는 `terraform/admin/airflow-k8s`의 `airflow-egress`
-NetworkPolicy에 Redis PSC subnet(`10.10.16.0/29`) egress를 추가했습니다. Redis
-Cluster client는 discovery 후 data node에 직접 연결하므로 두 포트 범위가 모두
-필요합니다.
+환경 전용 WIF provider의 조건은
+`SKYAHO/Autoresearch` repository, 정확한 `dev` 또는 `prod` Environment,
+`feast-apply.yml@refs/heads/main` workflow ref를 AND로 함께 검사합니다. GSA의
+Workload Identity User binding은 일치하는 `attribute.environment`
+principalSet 하나만 사용합니다. IAM member 여러 개는 OR로 평가되므로 workflow
+ref를 별도 member로 추가하면 안 됩니다. 기존 범용 `github` provider는
+`attribute.environment`를 mapping하지 않아 이 GSA를 가장할 수 없습니다.
 
-- TCP `6379` — Redis Cluster discovery endpoint
-- TCP `11000-13047` — Redis Cluster data node
+namespace·KSA·RBAC·NetworkPolicy는 `terraform/admin/autoresearch-k8s`가 환경별로
+관리합니다. dev GSA는 `feast-apply-dev` namespace에만, prod GSA는
+`feast-apply-prod` namespace에만 RoleBinding됩니다. Redis PSC discovery/data-node
+egress는 prod NetworkPolicy에만 있습니다.
 
-롤백은 위 IAM member 3개와 egress 블록 1개만 제거하면 되며, 리소스 재생성이나
-비용 변화는 없습니다.
+실제 GitHub Environment 변수, 적용 순서, 적용 후 검증과 롤백 계약은
+`docs/TERRAFORM_DEV.md`의 "Feast apply 환경별 런타임 경계 (#424)" 절을
+따릅니다.
 
 ## 기본 리전
 

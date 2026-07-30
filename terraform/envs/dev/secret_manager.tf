@@ -58,10 +58,10 @@ resource "google_secret_manager_secret_iam_member" "airflow_batch_redis_server_c
 # #346 GKE Job으로 실행되는 feast apply도 online store 삭제 스캔 시 Redis에
 # TLS(SERVER_AUTHENTICATION)로 접속하므로 같은 CA가 필요하다. gke_app/airflow_batch와
 # 동일하게 이 secret 하나에만 accessor를 부여한다.
-resource "google_secret_manager_secret_iam_member" "feast_apply_redis_server_ca" {
+resource "google_secret_manager_secret_iam_member" "feast_apply_prod_redis_server_ca" {
   secret_id = google_secret_manager_secret.redis_server_ca.id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.feast_apply.email}"
+  member    = "serviceAccount:${google_service_account.feast_apply_prod.email}"
 }
 
 # #93 MLflow DB 비밀번호를 Secret Manager에 저장. random_password는 cloud_sql.tf.

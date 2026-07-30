@@ -103,6 +103,45 @@ resource "google_storage_bucket_iam_member" "feast_registry_gke_app_bucket_reade
   member = "serviceAccount:${google_service_account.gke_app.email}"
 }
 
+# #424 dev Feast registry는 prod 버킷과 분리한다. objectAdmin은 prefix 단위
+# 경계를 제공하지 않으므로 별도 버킷이 필요하다.
+resource "google_storage_bucket" "feast_registry_dev" {
+  name                        = local.feast_dev_registry_bucket
+  location                    = var.feast_bucket_location
+  storage_class               = var.feast_bucket_storage_class
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  versioning {
+    enabled = true
+  }
+
+  soft_delete_policy {
+    retention_duration_seconds = 0
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      with_state                 = "ARCHIVED"
+      days_since_noncurrent_time = var.feast_registry_noncurrent_version_retention_days
+    }
+  }
+
+  labels = {
+    data_class = "metadata"
+    purpose    = "feast-registry"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 # Feast materialization/load job의 임시 staging 파일을 저장한다.
 resource "google_storage_bucket" "feast_staging" {
   name                        = local.feast_staging_bucket
@@ -143,4 +182,34 @@ resource "google_storage_bucket_iam_member" "feast_staging_gke_app_bucket_reader
   bucket = google_storage_bucket.feast_staging.name
   role   = "roles/storage.legacyBucketReader"
   member = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
+# #424 dev Feast staging은 prod 버킷과 분리한다. registry와 동일하게
+# bucket-level IAM의 권한 범위를 환경별 버킷으로 한정한다.
+resource "google_storage_bucket" "feast_staging_dev" {
+  name                        = local.feast_dev_staging_bucket
+  location                    = var.feast_bucket_location
+  storage_class               = var.feast_bucket_storage_class
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  soft_delete_policy {
+    retention_duration_seconds = 0
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      age = var.feast_staging_object_retention_days
+    }
+  }
+
+  labels = {
+    data_class = "staging"
+    purpose    = "feast-staging"
+  }
 }
