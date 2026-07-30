@@ -3,6 +3,31 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-29~30: GCP 프로젝트 이전 — dev 전체 재구축 (#404)
+
+- **배경**: dev 인프라 전체를 새 조직의 새 프로젝트 `autoresearch-503903`으로
+  이전하기로 결정했다. GCP는 프로젝트 간 리소스 이동을 지원하지 않으므로 전량
+  IaC 강점을 살려 Terraform 재적용 + 데이터 복사로 재구축했다(조직만 이전하는
+  `projects move` 대안은 새 프로젝트 사용 확정으로 배제).
+- **결정·순서**: bootstrap workspace 분리로 새 state 버킷
+  (`autoresearch-503903-dev-tfstate`)·WIF·CI SA 선구축 → 전 root backend 일괄
+  전환(#405) → dev root 204리소스 → admin 8 root + gke-team-access. CI apply
+  SA는 dev root가 만들므로 첫 apply만 로컬 break-glass. repo variables는 머지
+  직후, airflow repo env 변수는 머지 전(자동배포 트리거) 교체 — "환경 먼저"
+  원칙의 양방향 사례.
+- **데이터**: GCS 8버킷 서버사이드 rsync, BQ 7테이블 cp, Cloud SQL 3개 DB
+  export/import(모델 레지스트리·Airflow 이력 보존), 이미지 7종 digest 보존 복사.
+- **재구축에서 드러난 함정**(상세는 #404 진행 기록): CRD 의존 root의 operator
+  선적용, 신선 클러스터 한정 ns 참조 순서, operator Secret 선주입 없인
+  rollout 대기 실패, 수동 kubectl 오브젝트(batch KSA)의 누락(#427→#428 IaC
+  편입), OAuth client의 프로젝트 종속(5종 재발급·전환).
+- **quota 구조**: 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot이 E2를 소모 —
+  증설 대신 batch-spot을 n2로 전환해 수요를 N2 quota(200)로 이전(#422).
+- **롤백·정리**: 옛 프로젝트는 결제 분리로 정지(재연결 시 복구 가능). OAuth
+  전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·데이터 경로 기준) 확인.
+  코드 잔재는 드랍된 vault 샌드박스의 helm-values 1건뿐이며 #412 B~C(root째
+  삭제)가 정리한다. 삭제 예약은 그 이후.
+
 ## 2026-07-29: Alertmanager Slack 전환과 노이즈 제어 (#406)
 
 - **배경**: Kubernetes warning/resolved 이메일이 팀 inbox를 계속 채우고,
