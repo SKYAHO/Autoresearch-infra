@@ -118,6 +118,14 @@ resource "google_service_account_iam_member" "admin_apply_wi" {
   member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.admin_apply_workflow_ref}"
 }
 
+# #451 1단계: 통합 진입점 apply.yml 바인딩 추가. 옛 바인딩과 공존하는 이 구간이
+# 있어야 workflow 교체(2단계)를 CI로 수행할 수 있다. 3단계에서 옛 것을 제거한다.
+resource "google_service_account_iam_member" "admin_apply_wi_unified" {
+  service_account_id = google_service_account.admin_apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.apply_workflow_ref}"
+}
+
 # GKE 접속 + K8s cluster-admin(자동 매핑). CRD/ClusterRole 설치가 필요한
 # admin root apply의 불가피한 요건.
 resource "google_project_iam_member" "admin_apply_container_admin" {
@@ -160,6 +168,16 @@ resource "google_service_account_iam_member" "dev_apply_wi" {
   service_account_id = google_service_account.dev_apply.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.dev_apply_workflow_ref}"
+}
+
+# #451 1단계: 통합 진입점 apply.yml 바인딩 추가(위 admin_apply_wi_unified와 동일
+# 취지). 이 SA는 프로젝트 최강 자격이므로, 진입점 단일화 후 통제는 (1) 전용 SA
+# 유지, (2) apply.yml@main ref 제한, (3) Environment(apply) 승인 게이트로 남는다
+# — 파일 단위 분리가 사라지는 것을 #451에서 명시적으로 수용한 결과다.
+resource "google_service_account_iam_member" "dev_apply_wi_unified" {
+  service_account_id = google_service_account.dev_apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.apply_workflow_ref}"
 }
 
 # dev root가 관리하는 리소스 타입 전수 스캔 기준 role 열거(#341 spec 표).
