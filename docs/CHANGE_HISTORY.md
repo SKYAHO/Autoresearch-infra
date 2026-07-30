@@ -28,6 +28,24 @@
   코드 잔재는 드랍된 vault 샌드박스의 helm-values 1건뿐이며 #412 B~C(root째
   삭제)가 정리한다. 삭제 예약은 그 이후.
 
+## 2026-07-30: Feast dev/prod 런타임 IAM 경계 구성 (#424) — 미적용
+
+- 단일 Feast apply GSA와 namespace 대신 dev/prod별 GSA, registry/staging
+  bucket, BigQuery dataset IAM, Kubernetes namespace/KSA/RBAC/NetworkPolicy를
+  구성했다. prod만 Redis 연결·CA 조회와 Redis PSC egress를 가지며, 기존 prod
+  registry 객체 주소는 유지한다.
+- `github-feast-dev`와 `github-feast-prod` WIF provider는
+  `SKYAHO/Autoresearch` repository, 같은 이름의 GitHub Environment, 정확한 main
+  `feast-apply.yml` workflow ref를 함께 검증한다. #332/#346의 단일
+  `autoresearch-dev-feast-apply`·`feast-apply` 설명은 당시 이력이며 현재
+  Terraform 계약은 아니다.
+- 이번 단계는 런타임 GCS/IAM/WIF/Kubernetes 환경 격리 구성까지다. 단일
+  `terraform/envs/dev` root/state는 유지하며, GHA runner와 GKE runtime을
+  분리한 네 개 SA 모델은 후속 하드닝으로 미룬다.
+- 실제 Terraform apply, `SKYAHO/Autoresearch` workflow 또는 GitHub Environment
+  설정 변경, live 인증·접근 검증은 수행하지 않았다. cutover와 rollback 순서는
+  `TERRAFORM_DEV.md`의 #424 절을 따른다.
+
 ## 2026-07-29: Alertmanager Slack 전환과 노이즈 제어 (#406)
 
 - **배경**: Kubernetes warning/resolved 이메일이 팀 inbox를 계속 채우고,

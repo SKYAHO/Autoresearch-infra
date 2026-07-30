@@ -11,6 +11,9 @@
   이후 스택(MLflow #91~95, ELK #96~103, Redis #129, Feast 피처 테이블·Vertex #281, Cloud
   SQL tier #273, batch-od 노드풀 #297, Inference Server #302, admin root 승인 게이트 CI
   apply #307/#312 등) apply 이력은 `docs/CHANGE_HISTORY.md`를 기준으로 한다.
+- #424의 Feast dev/prod 런타임 경계는 Terraform 구성만 완료된 상태입니다. 이
+  변경에서는 GCP/Kubernetes apply, `SKYAHO/Autoresearch` workflow 수정, GitHub
+  Environment 설정 또는 live 검증을 수행하지 않았습니다.
 
 ## 구조
 
@@ -407,15 +410,18 @@ terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors �
 
 ### Feast 저장소
 
-| 항목 | 값 | 비고 |
+| 항목 | prod | dev |
 |---|---|---|
-| Offline store dataset | `feast_offline_store` | Feast feature table 저장 |
-| Registry bucket | `autoresearch-503903-feast-registry` | `gs://autoresearch-503903-feast-registry`, registry.db 등 메타데이터 |
-| Staging bucket | `autoresearch-503903-feast-staging` | `gs://autoresearch-503903-feast-staging`, materialization/load 임시 파일 |
-| Bucket naming | `${project_id}-feast-registry`, `${project_id}-feast-staging` | 사용자가 지정한 project id 기반 이름 |
-| Registry 보호 | versioning enabled, noncurrent 30일 보존 | registry 갱신 이력 보호와 비용 제어 |
-| Staging 정리 | 7일 후 object 삭제 | 임시 파일 비용 누적 방지 |
-| 접근 주체 | GKE app SA | BigQuery dataset `dataEditor`, Feast GCS bucket `storage.objectAdmin` |
+| Offline store dataset | `feast_offline_store` | `feast_offline_store_dev` |
+| Registry | `gs://<project>-feast-registry/registry.db` | `gs://<project>-feast-registry-dev/registry.db` |
+| Staging | `gs://<project>-feast-staging/` | `gs://<project>-feast-staging-dev/` |
+| Online store | Memorystore Redis Cluster | 없음 |
+| Feast apply GSA | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` |
+
+registry 버킷은 versioning과 noncurrent version 30일 보존을 사용하고, staging
+버킷 객체는 7일 후 삭제합니다. prod 버킷과 registry 객체는 기존 주소를 그대로
+유지합니다. dev는 bucket-level IAM이 prefix 경계를 제공하지 않는 문제를 피하기
+위해 별도 `-dev` 버킷을 사용합니다.
 
 ### 피처 스토어 prod/dev 환경 좌표 (#408)
 
@@ -424,15 +430,15 @@ terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors �
 `feast apply`로 정의를 등록하고 BigQuery PIT로 학습셋을 조립·평가할 뿐, 온라인
 서빙(Redis)과 materialize는 prod만의 책임이다. 따라서 **dev용 Redis 리소스는 없다.**
 
-| 좌표 | prod | dev | 이 저장소의 신규 리소스 |
+| 좌표 | prod | dev | 환경 경계 |
 | --- | --- | --- | --- |
-| Registry | `gs://<project>-feast-registry/registry.db` | `gs://<project>-feast-registry/dev/registry.db` | 없음 — 같은 버킷, bucket-level `objectAdmin`이 prefix까지 덮는다 |
-| Staging | `gs://<project>-feast-staging/` | `gs://<project>-feast-staging/dev/` | 없음 — 위와 동일 |
-| Offline | `feast_offline_store` | `feast_offline_store_dev` | dataset 1 + 테이블 5 + dataset IAM 2 |
-| Online | Memorystore Redis Cluster | **미사용** | 없음 |
+| Registry | `gs://<project>-feast-registry/registry.db` | `gs://<project>-feast-registry-dev/registry.db` | 환경별 bucket |
+| Staging | `gs://<project>-feast-staging/` | `gs://<project>-feast-staging-dev/` | 환경별 bucket |
+| Offline | `feast_offline_store` | `feast_offline_store_dev` | 환경별 dataset |
+| Online | Memorystore Redis Cluster | **미사용** | prod GSA만 Redis/CA 허용 |
 
 **prod 좌표는 옮기지 않는다.** prod를 `prod/` prefix로 이전하면 registry
-마이그레이션이 되어 회귀 위험만 늘고 얻는 것이 없다. dev만 새 prefix를 쓴다.
+마이그레이션이 되어 회귀 위험만 늘고 얻는 것이 없다. dev만 별도 버킷을 쓴다.
 
 dev dataset에 테이블 5종을 함께 만드는 이유는 `dataset`만으로는 dev apply가
 실패하기 때문이다. FeatureView가 BigQuerySource를
@@ -442,38 +448,65 @@ dev dataset에 테이블 5종을 함께 만드는 이유는 `dataset`만으로�
 dev 테이블은 실험 데이터라 `deletion_protection = false`이고 dataset에도
 `prevent_destroy`를 걸지 않는다(prod는 둘 다 유지).
 
-#### GitHub Environments 등록 (수동)
+#### 애플리케이션 GitHub Environment 계약 (#424)
 
 이 저장소 Terraform에는 GitHub provider가 없으므로 `SKYAHO/Autoresearch`의
-Environment는 **수동으로 등록**한다. 좌표 값은 `terraform output`으로 얻는다.
+workflow와 GitHub Environment 설정은 이 변경에서 수정하지 않았습니다. 실제
+cutover 때 운영자가 `dev`와 `prod` Environment에 다음 값을 **환경 스코프**로
+등록하고 활성화해야 합니다. 값은 수기로 조합하지 않고 각 Terraform root의
+output에서 가져옵니다.
 
 ```bash
+terraform -chdir=terraform/bootstrap output -raw feast_dev_wif_provider_name
+terraform -chdir=terraform/bootstrap output -raw feast_prod_wif_provider_name
+terraform -chdir=terraform/envs/dev output -raw github_actions_feast_apply_dev_service_account_email
+terraform -chdir=terraform/envs/dev output -raw github_actions_feast_apply_prod_service_account_email
 terraform -chdir=terraform/envs/dev output feast_dev_offline_store_dataset_id
 terraform -chdir=terraform/envs/dev output feast_dev_registry_path
 terraform -chdir=terraform/envs/dev output feast_dev_staging_location
+terraform -chdir=terraform/envs/dev output feast_prod_offline_store_dataset_id
+terraform -chdir=terraform/envs/dev output feast_prod_registry_path
+terraform -chdir=terraform/envs/dev output feast_prod_staging_location
+terraform -chdir=terraform/admin/autoresearch-k8s output -json feast_apply_environments
 ```
 
-`SKYAHO/Autoresearch` → Settings → Environments 에서 `prod` / `dev` 두 개를 만들고
-아래 변수를 **환경 스코프로** 등록한다(#417에서 등록 완료).
+| 계약 항목 | `dev` Environment | `prod` Environment | Terraform output |
+| --- | --- | --- | --- |
+| `WIF_PROVIDER_ID` 전체 이름 | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github/providers/github-feast-dev` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github/providers/github-feast-prod` | bootstrap `feast_dev_wif_provider_name` / `feast_prod_wif_provider_name` |
+| `FEAST_APPLY_SA` | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` | dev root `github_actions_feast_apply_dev_service_account_email` / `github_actions_feast_apply_prod_service_account_email` |
+| `GCS_REGISTRY_PATH` | `gs://<project>-feast-registry-dev/registry.db` | `gs://<project>-feast-registry/registry.db` | dev root `feast_dev_registry_path` / `feast_prod_registry_path` |
+| `GCS_STAGING_LOCATION` | `gs://<project>-feast-staging-dev/` | `gs://<project>-feast-staging/` | dev root `feast_dev_staging_location` / `feast_prod_staging_location` |
+| `BQ_DATASET` | `feast_offline_store_dev` | `feast_offline_store` | dev root `feast_dev_offline_store_dataset_id` / `feast_prod_offline_store_dataset_id` |
+| Job namespace | `feast-apply-dev` | `feast-apply-prod` | admin root `feast_apply_environments.dev.namespace` / `.prod.namespace` |
+| Job KSA(`serviceAccountName`) | `feast-apply` | `feast-apply` | admin root `feast_apply_environments.dev.service_account` / `.prod.service_account` |
 
-| 변수 | prod Environment | dev Environment |
-| --- | --- | --- |
-| `GCS_REGISTRY_PATH` | 기존 repo-level vars 값 그대로 | `feast_dev_registry_path` output |
-| `BQ_DATASET` | 기존 repo-level vars 값 그대로 | `feast_dev_offline_store_dataset_id` output |
-| `GCS_STAGING_LOCATION` | 기존 repo-level vars 값 그대로 | `feast_dev_staging_location` output |
-
-`dev` Environment에는 deployment branch policy를 `main` 전용으로 건다. dev apply도
-WIF 가장 조건상 `main` dispatch로만 가능하므로(아래 운영 제약), 정책을 좌표와 같은
-곳에 명시해 다른 브랜치 실행이 SA 가장 거절 대신 더 이른 단계에서 실패하게 한다.
-
-등록이 끝나면 앱 저장소가 `feast-apply.yml`의 job에
-`environment: ${{ inputs.environment || 'prod' }}` 한 줄을 추가해 배선을 완성하고,
-좌표 미배선 상태를 막던 dev dispatch 가드를 제거한다. repo-level vars는 다른
-워크플로우가 함께 쓰므로 **삭제하지 않는다**.
+`feast-apply.yml`의 Job은 선택한 Environment를 `environment:`에 반드시 선언하고,
+그 Environment의 provider/GSA/데이터 좌표/namespace/KSA를 한 튜플로 사용해야
+합니다. prod Environment의 required reviewers와 `main` branch 제한은 계속
+유지합니다. 보호 규칙을 완화하거나 repo-level 값으로 fallback하면 이 계약을
+우회하므로 허용하지 않습니다.
 
 Environment 등록은 `prod`/`dev` 선택 가능 여부와 무관하다. 실행 시 고를 수 있는 값은
 `feast-apply.yml`의 `workflow_dispatch.inputs.environment`(`type: choice`)가 정하고,
 Environment는 그 선택에 따라 **어떤 변수 값이 주입될지만** 결정한다.
+
+##### WIF 신뢰 조건
+
+`github-feast-dev`와 `github-feast-prod` provider는 각각 OIDC token의 repository,
+environment, workflow ref가 다음 조건을 모두 만족할 때만 token exchange를
+허용합니다.
+
+- repository: `SKYAHO/Autoresearch`
+- environment: provider와 같은 `dev` 또는 `prod`
+- workflow ref:
+  `SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main`
+
+각 GSA의 `roles/iam.workloadIdentityUser` binding에는 같은 환경의
+`attribute.environment` principalSet 하나만 둡니다. IAM binding의 여러 member는
+AND가 아니라 OR로 평가되므로 environment와 workflow ref를 별도 member로 나누면
+안 됩니다. workflow ref는 provider 조건에서 함께 강제됩니다. 기존 범용
+`github` provider는 `attribute.environment`를 mapping하지 않으므로 환경 전용
+principalSet을 만족할 수 없고 두 Feast apply GSA를 가장할 수 없습니다.
 
 ##### 좌표 변경 시 동기화 의무
 
@@ -493,20 +526,18 @@ Environment 값을 쓴다. prod 좌표가 repo-level vars와 `prod` Environment 
 
 #### 운영 제약과 한계
 
-- **dev apply는 `main` 브랜치 dispatch로만 가능하다.** `var.feast_apply_workflow_ref`가
-  가장 조건을 `.../feast-apply.yml@refs/heads/main`으로 고정하므로, 다른 브랜치에서
-  실행하면 `feast-apply` SA 가장이 거절된다. dev는 브랜치가 아니라 **쓰는 위치**이며,
-  dev apply도 main에 머지된 정의를 dev 좌표에 쓰는 동작이다. 에이전트가 미머지 정의를
-  dev에 등록하려면 WIF 조건 확장이나 GHA를 거치지 않는 apply 경로가 필요하다 — 자율
-  실험 단계의 후속 과제다.
+- **dev/prod apply는 `main`의 정확한 `feast-apply.yml`로만 가능하다.** dev는
+  브랜치가 아니라 쓰는 위치이며, dev apply도 main에 머지된 정의를 dev 좌표에
+  쓰는 동작이다.
 - **dev 테이블은 비어 있는 채로 생성된다.** PIT 조회가 의미를 가지려면
   `autoresearch.jobs.feature_store_build`를 dev 좌표로 한 번 돌려 적재해야 한다.
 - **dev 첫 apply에서는 침묵 실패 가드가 동작하지 않는다.** 앱 워크플로우의
   `Guard against silent apply failure (registry generation)`는 apply 전후 registry
   객체의 generation을 비교하는데, `BEFORE_GENERATION`이 비면 비교를 건너뛴다. dev
-  registry(`.../dev/registry.db`)는 첫 apply 전까지 존재하지 않으므로 이 조건에
+  registry(`gs://<project>-feast-registry-dev/registry.db`)는 첫 apply 전까지
+  존재하지 않으므로 이 조건에
   해당한다. 첫 dev 실행 뒤에는 객체가 실제로 생겼는지 직접 확인한다:
-  `gcloud storage objects describe gs://<project>-feast-registry/dev/registry.db`.
+  `gcloud storage objects describe gs://<project>-feast-registry-dev/registry.db`.
 - **임베딩 중간 산출물은 아직 공유된다.** `user_topic_embedding`·`category_embedding`은
   analytics dataset에 있고 적재가 `WRITE_TRUNCATE`라, dev 실험이 이 둘을 재생성하면
   prod 쪽 산출물도 덮인다. 현 단계의 알려진 한계로 두고, 필요해지면 별도 이슈에서
@@ -1477,79 +1508,93 @@ Autoresearch가 main 머지/`workflow_dispatch` 시 코드 tar.gz를 GCS에 올�
 이미 WIF 허용 목록에 있어 bootstrap 변경은 불필요하다. 비용 영향 미미(수 MB
 아카이브, 머지마다 1객체). 롤백은 `code_artifacts.tf` 리소스 제거 후 apply.
 
-## feast apply registry 갱신 (#332)
+## Feast apply 환경별 런타임 경계 (#424)
 
-Autoresearch가 main 머지/`workflow_dispatch` 시 `feast apply`로 GCS registry
-(`registry.db`)를 갱신하는 경로다(`github_actions.tf`). 워크플로우는
-`feast-apply.yml`(`SKYAHO/Autoresearch#321`).
+#332의 단일 GSA와 #346의 단일 namespace는 당시 결정의 기록이며, 현재
+Terraform 계약은 dev/prod 두 환경 튜플입니다. GHA는 VPC 밖에서 환경별 Job
+생성과 결과 판정만 하고, `feast apply` 실행 주체는 VPC 안 GKE Job입니다.
 
-| 항목 | 값 | 비고 |
+| 권한/경계 | dev | prod |
 |---|---|---|
-| SA | `autoresearch-dev-feast-apply` | GitHub Actions가 WIF로 가장. output `github_actions_feast_apply_service_account_email` |
-| WI 가장 허용 | `workflow_ref` = `…/feast-apply.yml@refs/heads/main`만 | push(main)·dispatch(main) 모두 이 ref. 임의 브랜치·워크플로우 차단(#175/#221 관례) |
-| registry 권한 | `feast_registry` 버킷 한정 `roles/storage.objectAdmin` + `roles/storage.legacyBucketReader` | registry blob 전체 덮어쓰기 + Feast GCS client `bucket.reload()`의 `storage.buckets.get`(#204 선례) |
-| offline store 권한 | `feast_offline_store` dataset 한정 `roles/bigquery.metadataViewer` | source validation의 `tables.get`만 필요. dataViewer/jobUser 불필요 |
+| GSA | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` |
+| GCS | dev registry/staging bucket의 `objectAdmin` + bucket metadata read | 기존 prod registry/staging bucket의 같은 권한 |
+| BigQuery | `feast_offline_store_dev`의 `metadataViewer` | `feast_offline_store`의 `metadataViewer` |
+| Redis / CA | 권한 없음 | cluster 한정 `dbConnectionUser` + CA secret 한정 `secretAccessor` |
+| Kubernetes | `feast-apply-dev` namespace의 Job RBAC | `feast-apply-prod` namespace의 Job RBAC |
+| NetworkPolicy | DNS, metadata, HTTPS | 공통 egress + Redis PSC TCP 6379, 11000-13047 |
 
-앱 리포 GitHub secret 등록(앱팀 수행): `FEAST_APPLY_SA` = SA email(위 output).
-**이 secret이 비어 있으면 `auth@v2`가 SA 가장 없이 Direct WIF로 폴백**하고,
-federated principal은 버킷 IAM이 없어 `feast apply`가 `storage.buckets.get`
-403으로 실패한다(#334/#335). `SKYAHO/Autoresearch`는 이미 WIF 허용 목록이라
-bootstrap 변경은 불필요하다. 롤백은 `github_actions.tf`의 `feast_apply` 리소스
-제거 후 apply.
+두 GSA에는 GKE cluster metadata 조회용 `roles/container.clusterViewer`와 공용
+`code-artifacts` bucket의 `roles/storage.objectViewer`가 있습니다. 후자는
+`Dockerfile.feast` ENTRYPOINT가 `code/<sha>.tar.gz`를 받아 `/app`에 푸는
+부트스트랩 의존성 때문에 필요합니다. 선택한 2-SA 모델에서 의도적으로 공유하는
+read-only 배포 자산이며, registry/staging/BQ/Redis 같은 환경 데이터 저장소
+경계라고 해석해서는 안 됩니다.
 
-### feast apply를 GKE Job으로 실행 (#346)
+각 namespace의 RoleBinding subject와 KSA annotation은 같은 환경 GSA만 가리킵니다.
+앱 namespace를 재사용하면 Job 생성자가 더 강한 `autoresearch-app` KSA를 지정할
+수 있으므로 별도 namespace를 사용합니다. GHA runner와 Job runtime을 서로 다른
+네 개 SA로 추가 분리하는 하드닝은 이번 범위가 아닙니다.
 
-`feature_store.yaml`의 `full_scan_for_deletion: false`는 GitHub Actions 러너가
-private Redis(PSC)에 닿을 수 없어 켠 완화책이고, 대체 수단인
-`key_ttl_seconds`(7일)는 고아를 절반만 지운다. Redis 키가 `join_keys + 엔티티 값
-+ project`라 같은 엔티티를 쓰는 FeatureView들이 키를 공유하는데, TTL은 키 단위라
-매일 materialize가 EXPIRE를 리셋해 삭제된 FV의 HASH 필드가 영구히 남는다.
+### 조정된 적용 순서
 
-그래서 **실행 주체만 VPC 안 GKE Job으로 옮긴다.** GHA는 VPC 밖에 그대로 두고 Job
-생성과 결과 판정만 한다. 컨트롤 플레인이 DNS 엔드포인트로 공개돼 있고
-IAM(`container.clusters.connect`)으로 검증되므로(`gke.tf`
-`enable_private_endpoint = false` + `allow_external_traffic = true`) VPC 밖에서도
-Job 생성이 가능하고, VPC 안이어야 하는 것은 Redis 데이터 경로뿐이다.
+이 변경은 단일 SA/namespace를 제자리에서 나누는 coordinated cutover입니다.
+실제 적용은 별도 승인과 plan 검토 뒤 다음 순서로 수행합니다.
 
-| 항목 | 값 | 비고 |
-|---|---|---|
-| namespace | `feast-apply` (`feast_apply_k8s_namespace`) | 앱 namespace 재사용 안 함(아래) |
-| KSA | `feast-apply` (`feast_apply_k8s_service_account`) | Job spec의 `serviceAccountName` |
-| GSA | `autoresearch-dev-feast-apply@…` | #332 SA 재사용. GHA(가장)와 Pod(WI)가 공유 |
-| WI 바인딩 | `roles/iam.workloadIdentityUser`, member `<project>.svc.id.goog[feast-apply/feast-apply]` | `google_container_cluster.dev`에 `depends_on` |
-| Redis 접속 | `roles/redis.dbConnectionUser` + condition으로 dev Online Store cluster 한정 | 삭제 스캔은 SCAN+DEL/HDEL이라 write 필요. 같은 role로 materialize write를 하는 `airflow_batch` 선례 |
-| Redis TLS CA | `redis_server_ca` secret 한정 `roles/secretmanager.secretAccessor` | 프로젝트 수준 Secret Manager 권한은 없음 |
-| GKE 접속 | `roles/container.clusterViewer` | DNS endpoint 접속·cluster metadata 조회만. 실제 변경은 K8s RBAC이 통제(`airflow_deployer`와 동일 패턴) |
-| 코드 아카이브 | `code_artifacts` 버킷 한정 `roles/storage.objectViewer` (#370) | `gke_app`·`airflow_batch`와 동일 패턴. read만, write는 업로더 SA 전용 |
+1. 모든 자동·수동 Feast apply 실행을 중지합니다.
+2. `terraform/bootstrap`을 적용해 `github-feast-dev`와
+   `github-feast-prod` provider를 먼저 준비합니다.
+3. `terraform/envs/dev`를 적용해 dev 전용 버킷, dev/prod GSA와 환경별 IAM을
+   준비하고 기존 공유 GSA를 제거합니다. plan에서 새 환경별 grant와 기존 공유
+   grant/SA revoke를 함께 확인합니다. prod registry 객체는 기존
+   `gs://<project>-feast-registry/registry.db`에 그대로 두며 이관하지 않습니다.
+   Terraform은 독립 리소스의 생성·삭제 순서를 보장하지 않으므로 새 grant가
+   생기기 전에 기존 grant가 회수되지 않는다고 가정하지 않습니다. root apply가
+   모두 끝날 때까지 실행 중지 상태를 유지합니다.
+4. `terraform/admin/autoresearch-k8s`를 적용해 환경별 namespace, KSA, RBAC,
+   NetworkPolicy를 준비하고 기존 공유 namespace를 제거합니다.
+5. 위 root들의 output을 사용해 애플리케이션 `dev`/`prod` GitHub Environment
+   값을 일치하는 튜플로 구성·활성화합니다. prod required reviewers와 branch
+   restriction은 유지합니다.
+6. dev 검증을 먼저 완료한 뒤 prod를 검증하고 Feast apply 실행을 재개합니다.
 
-**코드 아카이브 read가 필요한 이유(#370)**: `Dockerfile.feast`는 코드를
-이미지에 넣지 않고 ENTRYPOINT 부트스트랩이 `code/<sha>.tar.gz`를 받아 `/app`에
-푼다. 이 권한이 없으면 Job이 `feast apply`를 시작하기도 전에 부트스트랩에서
-exit 2로 죽는다. 같은 GSA로 GitHub Actions가 Job 생성 전에 아카이브 업로드
-완료를 폴링하므로(코드 아카이브 워크플로우와 병렬 실행) grant 하나가 파드와
-러너 두 경로를 모두 연다.
+이 저장소 변경은 위 apply, `SKYAHO/Autoresearch` workflow 변경, GitHub
+Environment 설정을 대신 수행하지 않습니다.
 
-namespace·KSA·RBAC 오브젝트는 `terraform/admin/autoresearch-k8s`가 만든다(해당
-root README 참조). 두 root의 `feast_apply_k8s_namespace` /
-`feast_apply_k8s_service_account` 값은 반드시 같아야 한다 — 어긋나면 WI 바인딩
-member가 실제 KSA와 달라져 Pod가 토큰 발급에 실패한다.
+### 적용 후 검증
 
-**앱 namespace(`autoresearch`)를 재사용하지 않은 이유**: 그 namespace에
-`batch/jobs: create`를 주면 Job의 `serviceAccountName`을 `autoresearch-app`으로
-지정해 `gke_app` GSA(DB 비밀번호 secret·Cloud SQL·BQ dataEditor)로 임의 컨테이너를
-실행할 수 있다. `jobs: create` 보유 주체는 Pod spec으로 namespace 내 임의 K8s
-Secret도 마운트할 수 있어, RBAC에서 `secrets`를 빼는 것만으로는 막히지 않는다.
+각 검사는 실제 Environment와 `feast-apply.yml`을 통해 발급된 자격증명으로
+수행합니다. 운영자 개인 자격증명이나 범용 provider로 성공한 결과는 이 경계의
+증거가 아닙니다.
 
-**A(dev root)와 B(admin root) 사이에는 순서 제약이 없다.** WI 바인딩 member와
-RoleBinding subject가 모두 문자열이라 상호 참조가 없다. 다만 둘 다 앱 저장소의
-`feast-apply.yml` 머지 전에 완료돼야 한다 — 순서가 뒤집히면 존재하지 않는 KSA로
-Job을 만들려다 main에서 실패한다.
+- dev token은 `github-feast-dev` → dev GSA, prod token은
+  `github-feast-prod` → prod GSA로 인증되어야 합니다. dev token의 prod GSA
+  가장과 prod token의 dev GSA 가장은 모두 실패해야 합니다.
+- 각 경로는 자기 registry/staging bucket과 BigQuery dataset metadata에
+  접근해야 하고 반대 환경 대상에는 실패해야 합니다.
+- dev Job의 Redis IAM 인증과 Redis CA secret 조회는 실패해야 합니다. prod
+  Job은 같은 두 검사를 성공하고 Redis topology에 연결할 수 있어야 합니다.
+- `kubectl get rolebinding -n feast-apply-dev -o yaml`과
+  `kubectl get rolebinding -n feast-apply-prod -o yaml`에서 각 환경 GSA만
+  subject로 있는지 확인합니다.
+- `kubectl get networkpolicy -n feast-apply-dev -o yaml`에는 Redis PSC
+  CIDR/6379/11000-13047이 없어야 하고, prod 출력에만 있어야 합니다.
+- 두 GSA의 `code-artifacts` object read 성공은 의도된 결과입니다. write나
+  환경 간 registry/staging/BQ 접근 성공으로 확대 해석하지 않습니다.
 
-롤백: `redis.tf`/`secret_manager.tf`/`github_actions.tf`/`code_artifacts.tf`의
-`feast_apply_*`·`code_artifacts_feast_apply_viewer` 신규 리소스를 제거하고
-apply하면 GSA는 #332 시점 권한으로 되돌아간다. 그 경우 Job은
-Redis 인증에 실패하므로 앱 저장소를 `full_scan_for_deletion: false` + GHA 러너
-실행으로 함께 되돌려야 한다.
+### 롤백
+
+1. Feast apply 실행을 다시 중지하고 새 dev registry를 포함해 보존할 데이터를
+   백업합니다.
+2. #424 이전 Terraform 구성을 복원한 뒤 bootstrap → dev root → admin root의
+   plan에서 기존 공유 provider/GSA/namespace 계약 복구와 환경별 리소스 제거를
+   검토하고, 별도 승인으로 적용합니다.
+3. 기존 공유 GSA와 namespace가 실제로 복구된 것을 확인한 **다음에만**
+   애플리케이션 GitHub Environment 값을 이전 공유 좌표로 복원합니다.
+4. 이전 경로를 검증한 뒤 Feast apply 실행을 재개합니다.
+
+이 순서를 뒤집어 Environment 값을 먼저 되돌리면 아직 제거된 기존 GSA 또는
+namespace를 참조해 인증이나 Job 생성에 실패합니다. 환경별 리소스 삭제는 데이터
+백업과 destroy 항목의 별도 승인을 전제로 하며, state를 직접 조작하지 않습니다.
 
 ## Vault auto-unseal 기반 (#132)
 

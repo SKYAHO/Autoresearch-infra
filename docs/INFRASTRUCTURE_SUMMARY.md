@@ -4,6 +4,10 @@
 세부 변수, apply 절차, 운영 명령은 `TERRAFORM_DEV.md`와
 `TEAM_OPERATIONS_RUNBOOK.md`를 우선한다.
 
+> #424의 Feast dev/prod 런타임 경계는 Terraform 구성만 완료된 상태입니다.
+> 실제 GCP/Kubernetes apply, 애플리케이션 workflow·GitHub Environment 변경,
+> live 검증은 아직 수행하지 않았습니다.
+
 ## 기본 정보
 
 | 항목 | 값 |
@@ -92,6 +96,7 @@ flowchart TB
 | kubectl | `gcloud container clusters get-credentials ... --dns-endpoint` | `roles/container.viewer` + GKE auth plugin |
 | PR plan | GitHub Actions → OIDC/WIF → CI service account → GCS state/dev plan | service account key 없음 |
 | 이미지 push | Autoresearch 또는 Autoresearch-airflow Actions → OIDC/WIF → 저장소별 pusher SA → 기존 GAR | provider 허용 목록 + SA principalSet 2단 경계, repository 단위 writer |
+| Feast apply(#424) | Autoresearch Actions → 환경 전용 WIF/GSA → 환경별 GKE Job | repository + Environment + main `feast-apply.yml` 조건, 환경별 GCS/BQ/RBAC; prod만 Redis/CA |
 | Cloud Run proxy | Airflow batch pod → Workload Identity → batch GSA → Cloud Run ID token → proxy | `roles/run.invoker`는 필요조건. ID token, `YOUTUBE_PROXY_URL`, `X-Goog-Api-Key`, VPC 내부 경로가 함께 필요 |
 
 ## 이 문서에서 쓰는 기본 용어
@@ -195,7 +200,7 @@ flowchart TB
     gcp --> run
 ```
 
-## 생성된 주요 리소스
+## Terraform 구성의 주요 관리 대상
 
 | 영역 | 주요 리소스 | 목적 |
 |---|---|---|
@@ -208,12 +213,12 @@ flowchart TB
 | Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, single-zone primary shard 2개, private PSC + IAM auth/TLS (#129, apply·검증 완료) |
 | GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev`, `batch-spot`(#173), `batch-od`(#297) | 앱 워크로드와 Airflow 실행 기반. batch-spot은 재시도 내성 있는 KPO, batch-od는 재시도 내성 없는 장시간 KPO용 |
 | Cloud Run | `autoresearch-dev-proxy` | 내부 전용 proxy 서비스, invoker IAM 기반 |
-| GCS | raw data bucket, Feast registry/staging bucket, Airflow DAG/log bucket | 원본 데이터, feature store 메타데이터, DAG/log 저장 |
-| BigQuery | `autoresearch_dev_analytics`(임베딩 중간 테이블 2종 IaC #296 포함), `feast_offline_store`(피처 테이블 4종 IaC #281), `data_lake_raw`(#286) | 분석·Feast offline store·raw 계층 |
+| GCS | raw data, prod/dev Feast registry·staging, Airflow DAG/log bucket | 원본 데이터, 환경별 feature store 메타데이터, DAG/log 저장 |
+| BigQuery | `autoresearch_dev_analytics`(임베딩 중간 테이블 2종 IaC #296 포함), `feast_offline_store`, `feast_offline_store_dev`, `data_lake_raw`(#286) | 분석·환경별 Feast offline store·raw 계층 |
 | Vertex AI | BigQuery↔Vertex `CLOUD_RESOURCE` connection(#281) | BigQuery ML `ML.GENERATE_EMBEDDING` 다국어 임베딩 호출 |
 | MLflow | `mlflow` ns — tracking server(#94), 전용 Cloud SQL DB/user + Secret(#93), artifact GCS bucket + 전용 GSA(#92), OAuth2-proxy + 내부 ILB(#232/#244) | 실험 추적 UI. 내부 ILB + Google OAuth |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata, MLflow DB secret | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), Vault SA(#132), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드별 최소 권한과 Workload Identity |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), Vault SA(#132), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155). 커스텀 대시보드 6장 as-code(#355~#358: K8s 리소스·네트워크·스케일 판단·MLflow·Airflow·Serving), 수집: serving ServiceMonitor(#302)·mlflow oauth2-proxy PodMonitor(#357)·airflow statsd ServiceMonitor+ingress 9102(#358) | 운영 관측 dashboard. 접근은 port-forward. 대시보드는 `deploy/monitoring/dashboards/*.json`이 정본 |
 | GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85, `autoresearch` destination #303). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`serving`(Inference Server #303) | ArgoCD Application으로 관리(manual sync). UI는 Google 로그인 + 이메일 RBAC |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, oauth2-proxy Google 로그인 + basic 인증 — anonymous 폐기 #325), Filebeat allowlist 수집(#100, ndjson 구조화 파싱 #359, 자기 로그 관측 #365), ILM(#101)/snapshot(#102)/runbook(#103), saved object 자동 import Job(#365) — `elastic` ns | airflow/autoresearch 로그 검색·분석 + Logs Overview 대시보드. Airflow task 로그 정본은 GCS 원격 로깅(airflow#147) — ELK는 stdout만 |
@@ -259,7 +264,7 @@ flowchart LR
 | `terraform/bootstrap` | 별도 root | state bucket, WIF, CI SA처럼 dev root를 실행하기 전에 필요한 기반을 만든다. |
 | `terraform/envs/dev` | dev root | 실제 dev GCP 리소스 대부분을 관리한다. |
 | `terraform/admin/gke-team-access` | 별도 state | 팀원 Google 계정 IAM을 관리한다. 사람 이메일이 일반 PR plan에 노출되지 않게 분리했다. |
-| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress NetworkPolicy를 관리한다(#129, apply·검증 완료). |
+| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress, 환경별 Feast apply namespace/KSA/RBAC/NetworkPolicy(#424)를 관리한다. #424 항목은 아직 미적용이다. |
 | `terraform/admin/airflow-k8s` | 별도 state | Kubernetes namespace/RBAC/NetworkPolicy를 관리한다. GKE API 접근이 필요해 dev root와 분리했다. |
 | `terraform/admin/monitoring-k8s` | 별도 state | monitoring namespace와 port-forward RBAC(플랫폼 경계)를 관리한다. chart는 #183에서 ArgoCD Application `monitoring`으로 이관(helm_release 제거). |
 | `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application(`monitoring` #183, `argo-rollouts` #186)을 관리한다. |
@@ -362,6 +367,8 @@ flowchart TB
 | App KSA/GSA | `autoresearch-app` -> `autoresearch-dev-app` | 일반 앱 pod가 DB password, Redis CA, cluster 한정 IAM 연결 token, Cloud SQL, GCS/BigQuery 권한을 얻는 경로다(#129, apply·검증 완료). |
 | Airflow KSA/GSA | `airflow` -> `autoresearch-dev-airflow` | webserver/scheduler 등 Airflow component의 GCP 접근 경로다. |
 | Batch KSA/GSA | `autoresearch-batch` -> `autoresearch-dev-airflow-batch` | KPO batch pod 전용 권한이다. Airflow component 권한과 분리했다. |
+| Feast apply dev KSA/GSA | `feast-apply-dev/feast-apply` -> `autoresearch-dev-feast-apply-dev` | dev GCS/BQ와 dev namespace만 사용하며 Redis/CA 권한과 Redis PSC egress가 없다(#424, 미적용). |
+| Feast apply prod KSA/GSA | `feast-apply-prod/feast-apply` -> `autoresearch-dev-feast-apply-prod` | prod GCS/BQ와 prod namespace를 사용하며 Redis/CA 및 Redis PSC egress는 이 경로에만 있다(#424, 미적용). |
 
 ### 4. 데이터 저장 계층
 
@@ -372,9 +379,9 @@ flowchart LR
     batch["Airflow batch pods"]
     raw["GCS raw data bucket"]
     bqanalytics["BigQuery<br/>autoresearch_dev_analytics"]
-    feastbq["BigQuery<br/>feast_offline_store"]
-    registry["GCS<br/>feast-registry"]
-    staging["GCS<br/>feast-staging"]
+    feastbq["BigQuery<br/>Feast prod / dev"]
+    registry["GCS<br/>Feast registry prod / dev"]
+    staging["GCS<br/>Feast staging prod / dev"]
     sql["Cloud SQL<br/>autoresearch / airflow"]
     redis["Redis Cluster<br/>2 primary shards"]
 
@@ -392,9 +399,10 @@ flowchart LR
 - GCS raw data bucket은 원본 데이터를 오래 남기는 landing zone이다. YouTube raw,
   action log raw, virtual user, persona snapshot이 prefix로 나뉜다.
 - BigQuery `autoresearch_dev_analytics`는 분석/집계용 dataset이다.
-- BigQuery `feast_offline_store`는 Feast feature table 저장소다.
-- Feast registry bucket은 registry metadata를 저장하고, staging bucket은 임시
-  materialization/load 파일을 저장한다.
+- BigQuery `feast_offline_store`와 `feast_offline_store_dev`는 각각 prod/dev
+  Feast feature table 저장소다.
+- prod와 dev Feast registry/staging은 별도 bucket이다. prod는 기존 주소를
+  유지하고 dev는 `-dev` bucket을 사용한다.
 - Cloud SQL은 private IP only다. `autoresearch` DB는 앱 운영 데이터, `airflow` DB는
   Airflow component의 metadata DB로 사용한다. batch pod는 Cloud SQL 권한이 아니라
   raw data, Feast, BigQuery, API key secret 권한만 갖는다.
@@ -407,10 +415,10 @@ flowchart LR
 |---|---|---|
 | Raw data bucket | `autoresearch-503903-autoresearch-dev-raw-data` | YouTube, action log, virtual user, persona 원본을 prefix로 나누어 저장한다. |
 | Raw bucket versioning | enabled | 원본 데이터 실수 삭제/덮어쓰기 대응을 위해 versioning을 켰다. |
-| Feast registry bucket | `autoresearch-503903-feast-registry` | Feast registry.db 같은 feature store metadata를 저장한다. |
-| Feast staging bucket | `autoresearch-503903-feast-staging` | materialization/load 중 생기는 임시 파일을 저장한다. |
+| Feast prod registry/staging | `gs://<project>-feast-registry/registry.db`, `gs://<project>-feast-staging/` | 기존 prod 객체·주소를 유지한다. |
+| Feast dev registry/staging | `gs://<project>-feast-registry-dev/registry.db`, `gs://<project>-feast-staging-dev/` | bucket-level IAM에서 prod와 분리한다(#424, 미적용). |
 | BigQuery analytics | `autoresearch_dev_analytics` | 분석/집계 결과를 저장하는 dataset이다. |
-| BigQuery Feast | `feast_offline_store` | Feast offline feature table 저장소다. |
+| BigQuery Feast | prod `feast_offline_store`, dev `feast_offline_store_dev` | 환경별 Feast offline feature table 저장소다. |
 | Cloud SQL instance | `autoresearch-dev-pg` | PostgreSQL 15 dev instance다. private IP only로 구성했다. |
 | Cloud SQL DB | `autoresearch`, `airflow` | 앱 운영 DB와 Airflow metadata DB를 같은 instance 안의 별도 database로 둔다. |
 | Redis Cluster | `autoresearch-dev-redis-cluster` | `asia-northeast3-a` single-zone의 shared-core nano primary shard 2개, replica 0개인 dev Online Store다. |
@@ -627,9 +635,10 @@ HPA는 어느 워크로드에도 없다(파드 수 고정, 노드만 오토스�
 | Virtual user raw | GCS raw data bucket `asset/virtual_user/` | 가상 유저 원본, BigQuery `data_lake_raw.asset_virtual_user_vu_1000` — 앱 적재 스크립트가 자동 생성·소유(IaC 미관리, #339) |
 | Persona raw snapshot | GCS raw data bucket `data/raw/personas/` | 페르소나 원본 스냅샷 |
 | Analytics table | BigQuery `autoresearch_dev_analytics` | 분석/집계용 |
-| Feast offline store | BigQuery `feast_offline_store` | feature table 저장 |
-| Feast registry | GCS `autoresearch-503903-feast-registry` | registry.db 등 메타데이터 |
-| Feast staging | GCS `autoresearch-503903-feast-staging` | 임시 staging 파일 |
+| Feast prod offline store | BigQuery `feast_offline_store` | prod feature table 저장 |
+| Feast dev offline store | BigQuery `feast_offline_store_dev` | dev feature table 저장 |
+| Feast prod registry/staging | GCS `<project>-feast-registry`, `<project>-feast-staging` | 기존 prod registry.db와 staging 주소 유지 |
+| Feast dev registry/staging | GCS `<project>-feast-registry-dev`, `<project>-feast-staging-dev` | 환경별 bucket IAM 경계(#424, 미적용) |
 | Airflow DAG/log | GCS Airflow DAG/log buckets | DAG 버전관리와 task log 영속화 |
 | 앱 운영 DB | Cloud SQL `autoresearch` DB | private IP only |
 | Airflow metadata DB | Cloud SQL `airflow` DB | Airflow 내부 상태 |
@@ -656,6 +665,13 @@ HPA는 어느 워크로드에도 없다(파드 수 고정, 노드만 오토스�
 - Secret payload, Terraform state, 로컬 `terraform.tfvars` 실값은 커밋하지 않는다.
 - GKE는 Calico NetworkPolicy enforcement를 켜고(#116), `airflow`/`argocd`
   namespace에 deny-by-default NetworkPolicy 경계를 둔다.
+- Feast apply 환경 전용 WIF provider는 repository, GitHub Environment,
+  정확한 main `feast-apply.yml` workflow ref를 AND로 검사한다. GSA IAM member는
+  같은 `attribute.environment` 하나만 사용하며, 기존 범용 provider에는 이
+  attribute mapping이 없어 두 GSA를 가장할 수 없다(#424, 미적용).
+- Feast dev/prod는 registry/staging/BQ와 namespace/RBAC을 분리하고 prod에만
+  Redis/CA와 Redis PSC egress를 허용한다. 두 GSA의 공용 `code-artifacts`
+  `objectViewer`는 의도된 배포 자산 공유이며 환경 데이터 저장소 경계가 아니다.
 
 ## 월 비용 추정
 
