@@ -124,11 +124,11 @@ role을 임의로 비우거나 `cloudsqlsuperuser`를 무계획 revoke하면 현
 [Google Cloud 공식 사용자·역할 문서](https://cloud.google.com/sql/docs/postgres/create-manage-users)를
 기준으로 합니다.
 
-## OAuth bootstrap 시크릿 초기 등록
+## OAuth bootstrap 시크릿 초기 등록·회전·장애 복구
 
 Runner PVC는 Codex가 갱신한 인증 상태를 유지합니다. bootstrap 시크릿은 PVC에
 `auth.json`이 없는 최초 기동 때만 읽습니다. 기존 PVC의 갱신된 `auth.json`은
-덮어쓰지 않습니다.
+덮어쓰지 않으며, 따라서 일반적인 재시작은 Codex refresh 상태를 보존합니다.
 
 Runner의 bootstrap init container는 `bootstrap_secrets.py`를 포함하는 API 이미지를
 재사용하고 `python -m agent_orchestration.bootstrap_secrets runner-codex-auth` CLI 역할만
@@ -136,27 +136,36 @@ Runner의 bootstrap init container는 `bootstrap_secrets.py`를 포함하는 API
 Runner PVC만 mount합니다. API Deployment는 OAuth bootstrap 시크릿과 Runner PVC를
 mount하지 않으므로, 이미지 재사용이 API runtime의 OAuth 접근 권한을 뜻하지는 않습니다.
 
-신뢰된 운영자 로컬 환경에서 별도 `CODEX_HOME`으로 로그인합니다. 실제 `auth.json`,
-access token, `codex login` 출력은 터미널 공유·Git·PR·티켓에 붙이지 않습니다.
+신뢰된 운영자는 승인된 비밀 관리 절차로 새 Secret Manager version을 생성합니다.
+실제 `auth.json`, access token, `codex login` 출력과 임시 파일 경로는 터미널 공유,
+Git, PR, 티켓에 기록하지 않습니다. PVC를 삭제하는 방식은 갱신된 인증 상태를
+잃으므로 OAuth 장애 복구의 기본 절차가 아닙니다.
 
-```bash
-work_dir="$(mktemp -d)"
-chmod 700 "$work_dir"
-export CODEX_HOME="$work_dir/codex"
-mkdir -m 700 "$CODEX_HOME"
+새 계정으로 교체하거나 Runner OAuth 장애를 복구할 때만 다음 **일회성** 절차를
+사용합니다.
 
-codex login
+1. 새 Secret Manager version을 생성합니다. payload·token·임시 경로는 출력하거나
+   기록하지 않습니다.
+2. 새 **manifest commit 하나에만** Runner init container의
+   `runner-codex-auth` command 배열 뒤에 `--replace-existing`을 추가합니다. 이 명시 opt-in은
+   기존 regular `auth.json`을 새 Secret Manager 값으로 0600 원자 교체하게 합니다.
+3. 그 manifest commit의 정확한 소문자 40자리 SHA를
+   `agent_orchestration_target_revision`에 설정하고,
+   `agent_orchestration_deployment_enabled=true` 상태의 reviewed Terraform plan을
+   확인한 뒤 Terraform apply로 ArgoCD Application의 `targetRevision`을 갱신합니다.
+   **manifest commit만 만들거나 ArgoCD sync만 실행해서는 안 됩니다.** Application은
+   고정 SHA를 추적하므로 target revision이 새 SHA가 아니면 새 init 인자를 읽지
+   않습니다.
+4. ArgoCD에서 해당 revision의 diff를 확인한 뒤 manual sync합니다. Runner rollout이
+   Ready이고 Runner readiness probe의 `/healthcheck`가 성공하는지 확인한 다음, API
+   `/healthcheck`도 확인합니다.
+5. 즉시 다음 manifest commit에서 `--replace-existing`을 제거합니다. 그 다음 commit의
+   정확한 40자리 SHA로 `agent_orchestration_target_revision`을 다시 갱신하고, reviewed
+   Terraform plan/apply와 ArgoCD manual sync를 같은 순서로 수행합니다.
 
-# secret id는 Terraform output에서 확인한다. 값은 출력하지 않는다.
-gcloud secrets versions add "$CODEX_AUTH_BOOTSTRAP_SECRET_ID" \
-  --data-file="$CODEX_HOME/auth.json"
-```
-
-명령이 성공하면 민감 파일이 든 임시 디렉터리를 운영자 환경에서 제거하고
-`CODEX_HOME`을 unset합니다. Runner가 OAuth 오류를 보이면 먼저 Deployment를
-`replicas: 0`으로 축소한 뒤, 새 version을 추가하고 Ready 확인 후 1로 복구합니다.
-PVC를 삭제하는 방식은 갱신된 인증 상태를 잃으므로 OAuth 장애 복구의 기본 절차가
-아닙니다.
+`--replace-existing`을 남긴 상태로 Runner를 재시작하면 이후 Codex refresh 상태도
+bootstrap Secret Manager 값으로 덮어쓸 수 있습니다. 따라서 이 flag는 일반 배포나
+재시작에 남겨 두지 않습니다. `api-database` 역할에는 이 flag를 사용하지 않습니다.
 
 ## API·Runner 요청 토큰 등록
 
@@ -242,9 +251,22 @@ LIMIT 1;
 
 ## 롤백과 보안 확인
 
-이미지 장애는 이전에 검증된 API와 Runner digest를 함께 되돌리는 배포 커밋을 만든
-뒤 ArgoCD에서 diff 확인 후 manual sync합니다. OAuth 장애와 이미지 장애를 같은
-롤백으로 처리하지 않습니다.
+이미지 promotion은 검증된 API와 Runner immutable digest를 manifest commit에 함께
+반영하는 것으로 시작합니다. 그러나 manifest commit만 만들고 ArgoCD sync하는 것은
+충분하지 않습니다. Application은 고정된
+`agent_orchestration_target_revision`만 읽으므로, 다음 순서를 지킵니다.
+
+1. 배포할 digest를 포함한 manifest commit을 만들고 정확한 소문자 40자리 SHA를
+   확인합니다.
+2. 그 SHA로 `agent_orchestration_target_revision`을 갱신한 Terraform 변경의 reviewed
+   plan을 확인하고 apply합니다.
+3. ArgoCD에서 갱신된 Application target revision과 diff를 확인한 뒤 manual sync하고,
+   Runner Ready 및 API `/healthcheck`를 확인합니다.
+
+이미지 rollback도 같은 순서입니다. 이전에 검증된 두 digest를 포함한 새 rollback
+manifest commit을 만들고, 그 commit의 정확한 40자리 SHA로 Terraform Application을
+reviewed plan/apply로 갱신한 뒤에만 ArgoCD manual sync합니다. OAuth 장애와 이미지
+장애를 같은 롤백으로 처리하지 않습니다.
 
 마지막으로 다음을 확인합니다.
 
