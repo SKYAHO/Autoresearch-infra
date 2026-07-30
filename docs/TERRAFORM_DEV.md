@@ -990,22 +990,26 @@ Terraform은 GCP-side 리소스(node pool, IAM, Workload Identity binding)를
 관리한다. Terraform CI plan이 GKE master authorized networks에 막히지
 않도록 Kubernetes provider는 이 루트 모듈에 추가하지 않는다.
 
-사전 리소스:
+사전 리소스: airflow namespace와 `airflow/autoresearch-batch` KSA(WI annotation
+포함)는 **`terraform/admin/airflow-k8s` root가 관리한다**(#427 — 과거에는 아래
+kubectl 수동 절차였는데, 코드 밖 오브젝트라 프로젝트 이전(#404) 재구축에서
+누락되어 야간 배치 전체가 "serviceaccount not found"로 실패했다. admin root
+apply로 대체하고 수동 절차는 폐기).
 
 ```bash
-kubectl create namespace airflow --dry-run=client -o yaml | kubectl apply -f -
-kubectl create serviceaccount autoresearch-batch -n airflow --dry-run=client -o yaml | kubectl apply -f -
-kubectl annotate serviceaccount autoresearch-batch -n airflow \
-  iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com \
-  --overwrite
+# 상태 확인만 필요할 때
+kubectl get serviceaccount autoresearch-batch -n airflow \
+  -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}'
 ```
 
 `#62`부터 `airflow/autoresearch-batch` KSA는 app GSA가 아니라 batch 전용
-GSA(`autoresearch-dev-airflow-batch`)를 가장한다. 따라서 dev root apply 전에
-실제 클러스터의 `autoresearch-batch` KSA annotation이 위 값으로 바뀌어 있어야
-한다. annotation이 여전히 app GSA를 가리키는 상태에서 기존 app GSA
-Workload Identity binding과 Airflow API key accessor가 제거되면 batch pod는
-토큰 교환 또는 secret 접근 단계에서 403으로 실패할 수 있다.
+GSA(`autoresearch-dev-airflow-batch`)를 가장하며, annotation은 airflow-k8s
+root가 관리한다(#427). dev root(GSA·WI binding)와 airflow-k8s root(KSA·
+annotation) 사이에 apply 순서 제약은 없다 — 어느 순서든 plan/apply는 성공하고,
+**둘 다 적용되기 전까지는 배치 런타임의 토큰 교환만 403으로 실패**한다(파드
+admission은 통과하므로 #427의 "serviceaccount not found"와는 증상이 다르다).
+재구축 시 admin-apply(workflow_dispatch)가 누락되지 않도록, 재구축 체크리스트는
+dev root apply 후 admin-apply 전 root 실행을 필수 단계로 포함해야 한다.
 
 batch GSA에는 Cloud SQL client와 Airflow DAG/log bucket objectAdmin을 부여하지
 않는다. Airflow metadata DB 접근과 remote log 업로드는 Airflow component

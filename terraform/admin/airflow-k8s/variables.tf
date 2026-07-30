@@ -141,3 +141,25 @@ variable "ui_ingress_source_cidr" {
     error_message = "ui_ingress_source_cidr must be a valid CIDR in a.b.c.d/n form."
   }
 }
+
+variable "airflow_batch_k8s_service_account" {
+  description = "KPO 배치 파드용 KSA 이름(#427). terraform/envs/dev의 airflow_batch_k8s_service_account와 같은 값이어야 한다 — dev root가 이 이름으로 WI principal을 조립해 GSA 가장을 허용하므로, 불일치 시 어느 plan에서도 잡히지 않고 KPO 파드 런타임의 GCP 호출(토큰 교환)만 403으로 실패한다(#427의 admission 403과 구분됨)."
+  type        = string
+  default     = "autoresearch-batch"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.airflow_batch_k8s_service_account))
+    error_message = "airflow_batch_k8s_service_account must be a valid lowercase RFC 1123 name."
+  }
+}
+
+variable "airflow_batch_gcp_service_account_email" {
+  description = "배치 KSA에 연결할 GSA email. 비우면 resource_prefix/project_id로 파생하며, terraform/envs/dev가 만드는 airflow_batch GSA와 일치해야 한다. 불일치 시 plan은 통과하고 KPO 파드 런타임에서 토큰 교환이 403으로 실패한다."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.airflow_batch_gcp_service_account_email == "" || can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", var.airflow_batch_gcp_service_account_email))
+    error_message = "airflow_batch_gcp_service_account_email must be empty or a GSA email in <id>@<project>.iam.gserviceaccount.com form."
+  }
+}
