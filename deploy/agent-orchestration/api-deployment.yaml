@@ -71,7 +71,10 @@ spec:
             - name: CODEX_RUNNER_URL
               value: http://agent-orchestration-runner.autoresearch.svc.cluster.local:8080
             - name: CODEX_RUNNER_TIMEOUT_SEC
-              value: "120"
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-orchestration-runner-timeout
+                  key: CODEX_RUNNER_TIMEOUT_SEC
             - name: ORCH_RUNNER_TOKEN
               valueFrom:
                 secretKeyRef:

@@ -199,9 +199,12 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
   private Google APIs VIP(`199.36.153.8/30`) TCP 443뿐이고 Runner egress에는 Cloud SQL
   TCP 5432가 없습니다. API는 Codex/OpenAI 직접 호출을 하지 않으므로 전체 인터넷
   HTTPS egress를 열지 않습니다.
-- Runner의 `CODEX_TIMEOUT_SEC`은 110초이고, Runner의
-  `ORCH_API_RUNNER_TIMEOUT_SEC`과 API의 `CODEX_RUNNER_TIMEOUT_SEC`은 모두 120초입니다.
-  Runner는 기동 시 `CODEX_TIMEOUT_SEC + 5 < ORCH_API_RUNNER_TIMEOUT_SEC`를 검증합니다.
+- Runner의 `CODEX_TIMEOUT_SEC`은 110초이고, API와 Runner는
+  `agent-orchestration-runner-timeout` ConfigMap의 같은 `CODEX_RUNNER_TIMEOUT_SEC` key를
+  `valueFrom.configMapKeyRef`로 주입받아 모두 120초를 사용합니다. Runner는 기동 시
+  `CODEX_TIMEOUT_SEC + 5 < CODEX_RUNNER_TIMEOUT_SEC`를 검증하며, 공통 key가 없으면
+  startup을 fail-close합니다. `python3 scripts/check-agent-orchestration-timeout-contract.py`로
+  ConfigMap 값과 양 deployment의 참조를 sync 전에 검사합니다.
   Runner의 동시 실행 한도를 초과하면 대기열에 넣지 않고 즉시 503을 반환하며 API도
   해당 상태를 503으로 보존합니다.
 

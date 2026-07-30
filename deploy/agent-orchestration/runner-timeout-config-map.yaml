@@ -1,0 +1,10 @@
+# API와 OAuth Runner가 같은 ConfigMap key를 읽어 HTTP timeout drift를 막는다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-orchestration-runner-timeout
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/part-of: agent-orchestration
+data:
+  CODEX_RUNNER_TIMEOUT_SEC: "120"
