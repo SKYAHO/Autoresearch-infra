@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T06:56:52Z",
+  "generated_at": "2026-07-30T07:37:47Z",
   "reports": [
+    {
+      "number": 449,
+      "title": "refactor: apply workflow 공용 구현을 재사용 워크플로우로 통합 (#448)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T07:37:29Z",
+      "summary_ko": [
+        "관리자 및 개발 환경의 테라폼 배포 파이프라인 중복 코드를 재사용 워크플로우로 통합하였습니다.",
+        "GCP IAM 가장 조건(WIF workflow_ref)을 유지하기 위해 기존 워크플로우 진입점 구조는 그대로 보존하였습니다.",
+        "파이프라인 로직 불일치 위험을 해소하고 관련 설명 및 변경 이력을 운영 문서에 반영하였습니다."
+      ],
+      "report_url": "pr/449/"
+    },
     {
       "number": 447,
       "title": "docs: deploy 좌표 변수화 검토 spec — 보류(환경 분리 트리거) 권고 (#441)",
