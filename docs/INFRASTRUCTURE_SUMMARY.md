@@ -367,8 +367,8 @@ flowchart TB
 | App KSA/GSA | `autoresearch-app` -> `autoresearch-dev-app` | 일반 앱 pod가 DB password, Redis CA, cluster 한정 IAM 연결 token, Cloud SQL, GCS/BigQuery 권한을 얻는 경로다(#129, apply·검증 완료). |
 | Airflow KSA/GSA | `airflow` -> `autoresearch-dev-airflow` | webserver/scheduler 등 Airflow component의 GCP 접근 경로다. |
 | Batch KSA/GSA | `autoresearch-batch` -> `autoresearch-dev-airflow-batch` | KPO batch pod 전용 권한이다. Airflow component 권한과 분리했다. |
-| Feast apply dev KSA/GSA | `feast-apply-dev/feast-apply` -> `autoresearch-dev-feast-apply-dev` | dev GCS/BQ와 dev namespace만 사용하며 Redis/CA 권한과 Redis PSC egress가 없다(#424, 미적용). |
-| Feast apply prod KSA/GSA | `feast-apply-prod/feast-apply` -> `autoresearch-dev-feast-apply-prod` | prod GCS/BQ와 prod namespace를 사용하며 Redis/CA 및 Redis PSC egress는 이 경로에만 있다(#424, 미적용). |
+| Feast apply dev KSA/GSA | `feast-apply-dev/feast-apply` -> `autoresearch-dev-feast-dev` | dev GCS/BQ와 dev namespace만 사용하며 Redis/CA 권한과 Redis PSC egress가 없다(#424, 미적용). |
+| Feast apply prod KSA/GSA | `feast-apply-prod/feast-apply` -> `autoresearch-dev-feast-prod` | prod GCS/BQ와 prod namespace를 사용하며 Redis/CA 및 Redis PSC egress는 이 경로에만 있다(#424, 미적용). |
 
 ### 4. 데이터 저장 계층
 

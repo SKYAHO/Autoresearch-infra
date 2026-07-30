@@ -107,8 +107,8 @@ BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있
 
 | 환경 | WIF provider | GSA | registry / staging / BQ | namespace / KSA | Redis / CA |
 |---|---|---|---|---|---|
-| `dev` | `github-feast-dev` | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` | `gs://<project>-feast-registry-dev/registry.db` / `gs://<project>-feast-staging-dev/` / `feast_offline_store_dev` | `feast-apply-dev` / `feast-apply` | 권한 없음 |
-| `prod` | `github-feast-prod` | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` | `gs://<project>-feast-registry/registry.db` / `gs://<project>-feast-staging/` / `feast_offline_store` | `feast-apply-prod` / `feast-apply` | Redis 연결과 CA 조회 허용 |
+| `dev` | `github-feast-dev` | `autoresearch-dev-feast-dev@<project>.iam.gserviceaccount.com` | `gs://<project>-feast-registry-dev/registry.db` / `gs://<project>-feast-staging-dev/` / `feast_offline_store_dev` | `feast-apply-dev` / `feast-apply` | 권한 없음 |
+| `prod` | `github-feast-prod` | `autoresearch-dev-feast-prod@<project>.iam.gserviceaccount.com` | `gs://<project>-feast-registry/registry.db` / `gs://<project>-feast-staging/` / `feast_offline_store` | `feast-apply-prod` / `feast-apply` | Redis 연결과 CA 조회 허용 |
 
 두 GSA는 각 환경 GCS 버킷과 BigQuery dataset에만 Feast apply 권한을 가지며,
 prod GSA에만 Redis `dbConnectionUser`와 Redis CA secret `secretAccessor`가
