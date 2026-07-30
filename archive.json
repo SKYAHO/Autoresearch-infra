@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T04:42:55Z",
+  "generated_at": "2026-07-30T04:51:23Z",
   "reports": [
+    {
+      "number": 430,
+      "title": "fix: Filebeat 평문 로그 JSON 오류 마커 제거",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T04:51:12Z",
+      "summary_ko": [
+        "Filebeat ndjson 파서의 add_error_key 옵션을 false로 변경하였습니다.",
+        "비JSON 평문 로그 수집 시 불필요하게 추가되던 error.type=json 오류 마커를 제거하였습니다.",
+        "Kibana 운영 런북 문서의 평문 로그 폴백 관련 설명을 최신 동작에 맞게 업데이트하였습니다."
+      ],
+      "report_url": "pr/430/"
+    },
     {
       "number": 428,
       "title": "fix: airflow 배치 KSA를 airflow-k8s root로 IaC 편입 (#427)",
