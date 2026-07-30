@@ -23,6 +23,10 @@ resource "google_service_networking_connection" "private_sql" {
 resource "random_password" "db_app_password" {
   length  = 24
   special = true
+  # #438: URI-unsafe 문자 배제 — airflow metadata conn 등이 비번을 URI에 삽입.
+  # 이 문자셋 변경은 다음 apply에서 비밀번호를 재생성(rotate)하므로,
+  # apply 직후 소비 Secret 재주입·재기동이 한 절차다(MIGRATION_RUNBOOK 참조).
+  override_special = "-_.~"
 }
 
 resource "google_sql_database_instance" "dev" {
@@ -76,6 +80,9 @@ resource "google_sql_user" "app" {
 resource "random_password" "mlflow_db_password" {
   length  = 24
   special = true
+  # #438: mlflow가 backend-store URI에 비번을 원문 삽입 — URL-인코딩 우회(#404)
+  # 없이 안전하도록 URI-unsafe 문자를 배제한다. 변경은 rotate를 유발(위 주석 참조).
+  override_special = "-_.~"
 }
 
 resource "google_sql_database" "mlflow" {
