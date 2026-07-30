@@ -50,8 +50,12 @@ kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
 ```
 
 - redirect URI는 `http://localhost:4180/oauth2/callback`(OAuth client에 등록됨).
-- 허용 이메일·client secret 주입은 `terraform/admin/mlflow-k8s/README.md`의
-  `mlflow-oauth` Secret 절차. 목록 변경 후 `kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow`.
+- OAuth client 자격의 **정본은 Secret Manager**(`autoresearch-dev-mlflow-oauth-client-id`,
+  `...-client-secret`)이고 K8s Secret `mlflow-oauth`는 그 사본이다. 주입·갱신 절차는
+  `terraform/admin/mlflow-k8s/README.md`의 `mlflow-oauth` Secret 절차를 따르고,
+  변경 후 `kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow`.
+- client를 재발급하면 id/secret이 한 쌍으로 바뀐다. Secret Manager에 새 version을 올린
+  뒤 K8s Secret까지 전파해야 하며, secret만 바꾸면 `invalid_client`로 로그인이 막힌다.
 - MLflow 클라이언트(SDK)로 직접 쓸 때는 인증 우회가 필요하므로 GKE 내부 워크로드는
   `http://mlflow.mlflow:5000`(proxy 미경유, 내부 전용)을 tracking URI로 쓴다.
 - port-forward가 timeout이면 kubeconfig가 IP 엔드포인트를 쓰는 것이다. #279로
