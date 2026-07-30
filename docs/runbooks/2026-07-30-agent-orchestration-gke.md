@@ -150,9 +150,13 @@ Git, PR, 티켓에 기록하지 않습니다. PVC를 삭제하는 방식은 갱�
    `runner-codex-auth` command 배열 뒤에 `--replace-existing`을 추가합니다. 이 명시 opt-in은
    기존 regular `auth.json`을 새 Secret Manager 값으로 0600 원자 교체하게 합니다.
 3. 그 manifest commit의 정확한 소문자 40자리 SHA를
-   `agent_orchestration_target_revision`에 설정하고,
-   `agent_orchestration_deployment_enabled=true` 상태의 reviewed Terraform plan을
-   확인한 뒤 Terraform apply로 ArgoCD Application의 `targetRevision`을 갱신합니다.
+   non-secret GitHub Actions Variable `AGENT_ORCHESTRATION_TARGET_REVISION`에 설정하고,
+   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 재사용 Terraform
+   plan/apply workflow는 이 두 Variables를 각각
+   `TF_VAR_agent_orchestration_target_revision`과
+   `TF_VAR_agent_orchestration_deployment_enabled`로 같은 값으로 주입합니다. 그 뒤
+   reviewed Terraform plan을 확인한 뒤 Terraform apply로 ArgoCD Application의
+   `targetRevision`을 갱신합니다.
    **manifest commit만 만들거나 ArgoCD sync만 실행해서는 안 됩니다.** Application은
    고정 SHA를 추적하므로 target revision이 새 SHA가 아니면 새 init 인자를 읽지
    않습니다.
@@ -160,8 +164,9 @@ Git, PR, 티켓에 기록하지 않습니다. PVC를 삭제하는 방식은 갱�
    Ready이고 Runner readiness probe의 `/healthcheck`가 성공하는지 확인한 다음, API
    `/healthcheck`도 확인합니다.
 5. 즉시 다음 manifest commit에서 `--replace-existing`을 제거합니다. 그 다음 commit의
-   정확한 40자리 SHA로 `agent_orchestration_target_revision`을 다시 갱신하고, reviewed
-   Terraform plan/apply와 ArgoCD manual sync를 같은 순서로 수행합니다.
+   정확한 40자리 SHA로 `AGENT_ORCHESTRATION_TARGET_REVISION`을 다시 갱신하고,
+   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 설정합니다. reviewed Terraform
+   plan/apply와 ArgoCD manual sync를 같은 순서로 수행합니다.
 
 `--replace-existing`을 남긴 상태로 Runner를 재시작하면 이후 Codex refresh 상태도
 bootstrap Secret Manager 값으로 덮어쓸 수 있습니다. 따라서 이 flag는 일반 배포나
@@ -258,15 +263,21 @@ LIMIT 1;
 
 1. 배포할 digest를 포함한 manifest commit을 만들고 정확한 소문자 40자리 SHA를
    확인합니다.
-2. 그 SHA로 `agent_orchestration_target_revision`을 갱신한 Terraform 변경의 reviewed
+2. 그 SHA로 non-secret GitHub Actions Variable
+   `AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하고,
+   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 이 Variables가
+   `TF_VAR_agent_orchestration_target_revision` 및
+   `TF_VAR_agent_orchestration_deployment_enabled`로 주입된 Terraform 변경의 reviewed
    plan을 확인하고 apply합니다.
 3. ArgoCD에서 갱신된 Application target revision과 diff를 확인한 뒤 manual sync하고,
    Runner Ready 및 API `/healthcheck`를 확인합니다.
 
 이미지 rollback도 같은 순서입니다. 이전에 검증된 두 digest를 포함한 새 rollback
-manifest commit을 만들고, 그 commit의 정확한 40자리 SHA로 Terraform Application을
-reviewed plan/apply로 갱신한 뒤에만 ArgoCD manual sync합니다. OAuth 장애와 이미지
-장애를 같은 롤백으로 처리하지 않습니다.
+manifest commit을 만들고, 그 commit의 정확한 40자리 SHA로
+`AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하며
+`AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 두 Variables가 주입된
+Terraform Application을 reviewed plan/apply로 갱신한 뒤에만 ArgoCD manual sync합니다.
+OAuth 장애와 이미지 장애를 같은 롤백으로 처리하지 않습니다.
 
 마지막으로 다음을 확인합니다.
 

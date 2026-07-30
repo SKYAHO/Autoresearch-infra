@@ -108,6 +108,12 @@ env:
   TF_VAR_installer_user_emails: ${{ secrets.AIRFLOW_INSTALLER_USER_EMAILS }}
   TF_VAR_monitoring_port_forward_user_emails: ${{ secrets.MONITORING_PORT_FORWARD_USER_EMAILS }}
   TF_VAR_mlflow_viewer_user_emails: ${{ secrets.MLFLOW_VIEWER_USER_EMAILS }}
+  # argocd-k8s root 전용 non-secret GitHub Variables. reusable workflow의 plan/apply
+  # job이 같은 env를 상속해 고정 revision plan/apply drift를 막는다. 현재 이 변수명은
+  # 다른 admin/dev root에 선언되지 않아 TF_VAR 합집합 계약에 안전하며, 나머지 root는
+  # 선언하지 않은 TF_VAR를 무시한다.
+  TF_VAR_agent_orchestration_target_revision: ${{ vars.AGENT_ORCHESTRATION_TARGET_REVISION || '' }}
+  TF_VAR_agent_orchestration_deployment_enabled: ${{ vars.AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED || 'false' }}
 
 jobs:
   plan:
