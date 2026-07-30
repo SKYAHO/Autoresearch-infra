@@ -1,0 +1,297 @@
+{
+  "title": "AutoResearch / Airflow",
+  "uid": "ar-airflow",
+  "tags": [
+    "autoresearch",
+    "as-code"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "scheduler heartbeat (생존 신호)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "rate(airflow_scheduler_heartbeat[5m])",
+          "legendFormat": "heartbeat/s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "0으로 떨어져 유지되면 scheduler 다운. LocalExecutor 단일 scheduler라 즉시 대응 대상."
+    },
+    {
+      "type": "timeseries",
+      "title": "executor 슬롯·큐",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "airflow_executor_open_slots",
+          "legendFormat": "open",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "airflow_executor_running_tasks",
+          "legendFormat": "running",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "airflow_executor_queued_tasks",
+          "legendFormat": "queued",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "queued가 지속 양수 + open 0이면 parallelism 병목."
+    },
+    {
+      "type": "timeseries",
+      "title": "DAG run 평균 duration",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(airflow_dagrun_duration_sum[1h])) / sum(increase(airflow_dagrun_duration_count[1h]))",
+          "legendFormat": "성공 run 평균(1h)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "statsd 매핑상 성공 run의 duration timer. 라벨 유무는 exporter 매핑에 따르므로 합계 기준."
+    },
+    {
+      "type": "timeseries",
+      "title": "DAG run 실패·operator 실패",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(airflow_dagrun_failed_count[1h]))",
+          "legendFormat": "dagrun 실패(1h)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(increase(airflow_operator_failures[1h]))",
+          "legendFormat": "operator 실패(1h)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "0이 정상. No data는 해당 이벤트 미발생(카운터 지연 생성)일 수 있다."
+    },
+    {
+      "type": "timeseries",
+      "title": "dagrun schedule delay",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(airflow_dagrun_schedule_delay_sum[1h])) / sum(increase(airflow_dagrun_schedule_delay_count[1h]))",
+          "legendFormat": "평균 지연(1h)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "예정 시각 대비 실제 스케줄 지연. 증가 추세면 scheduler CPU 압박 신호 — 스케일 판단 대시보드와 대조."
+    },
+    {
+      "type": "timeseries",
+      "title": "airflow 파드 CPU/메모리",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"airflow\", container!=\"\"}[5m]))",
+          "legendFormat": "{{pod}} cpu",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"airflow\", container!=\"\"}) / 1024 / 1024 / 1024",
+          "legendFormat": "{{pod}} mem(GiB)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "cpu(코어)와 mem(GiB)을 같은 축에 겹침 — 추세 대조용."
+    },
+    {
+      "type": "timeseries",
+      "title": "액션로그 KPO 메모리 프로파일 (app#393 감시)",
+      "description": "판독: 선형 단조 증가 = 객체 누적(app#393 실측 — 시간당 +25~30Mi), plateau = 정상. 점선 512Mi = 현재 KPO requests — 지속 초과 시 requests 재지정 대상.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 536870912
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "max by (pod) (container_memory_working_set_bytes{namespace=\"airflow\", pod=~\"(ensure-action-log|generate-action-log|validate-action-log|shard).*\", container!=\"\"})",
+          "legendFormat": "{{pod}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ]
+    }
+  ]
+}

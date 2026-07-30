@@ -58,3 +58,14 @@ resource "google_storage_bucket_iam_member" "code_artifacts_airflow_batch_viewer
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
+
+# #346/#370 feast apply Job. Dockerfile.feast는 코드를 이미지에 넣지 않고
+# ENTRYPOINT 부트스트랩이 code/<sha>.tar.gz를 받아 /app에 푼다. 같은 GSA로
+# GitHub Actions가 Job 생성 전에 아카이브 업로드 완료를 폴링하므로(코드 아카이브
+# 워크플로우와 병렬 실행), 이 grant 하나가 파드와 러너 두 경로를 모두 연다.
+# 위 두 리소스와 동일하게 read만 부여하고 write는 업로더 SA에만 남긴다.
+resource "google_storage_bucket_iam_member" "code_artifacts_feast_apply_viewer" {
+  bucket = google_storage_bucket.code_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.feast_apply.email}"
+}

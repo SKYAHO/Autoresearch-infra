@@ -26,9 +26,11 @@ env:
   # 참조하므로 마지막). gke-team-access는 제외한다(#314): 프로젝트 IAM 외에
   # BigQuery dataset·Artifact Registry repo IAM까지 관리해 apply SA에 bigquery.admin
   # + artifactregistry.admin까지 필요한 과도한 escalation이라, 사람 IAM은 로컬
-  # break-glass로 유지한다.
-  ROOTS: "autoresearch-k8s airflow-k8s monitoring-k8s elastic-k8s vault-k8s mlflow-k8s argo-rollouts-k8s argocd-k8s"
-  PLAN_PREFIX: gs://autoresearch-dev-tfstate/admin-apply-plans
+  # break-glass로 유지한다. vault-k8s도 제외한다(#412): 2026-07-15 드랍 결정된
+  # 샌드박스인데 목록에 남아 있어 #404 이전 후 옛 프로젝트 좌표로 apply를
+  # 시도했다. root 자체는 후속 PR에서 제거한다.
+  ROOTS: "autoresearch-k8s airflow-k8s monitoring-k8s elastic-k8s mlflow-k8s argo-rollouts-k8s argocd-k8s"
+  PLAN_PREFIX: gs://autoresearch-503903-dev-tfstate/admin-apply-plans
   # allowlist: 삭제 시 접근이 상실되는 값은 '|| []' 폴백을 두지 않는다. Secret
   # 미설정/빈 값이면 빈 문자열이 되어 terraform이 halt한다(#305류 차단). optional
   # (readonly, training_image_ar_writer)은 폴백을 둔다.
@@ -77,6 +79,12 @@ jobs:
             echo "::error::allowlist Secret 미설정:$missing — 빈 값으로 apply하면 해당 접근이 삭제됩니다(#305). 설정 후 재실행하세요."
             exit 1
           fi
+
+      # 승인 거부/미승인 시 apply job의 cleanup이 돌지 않아 orphan plan이
+      # 누적된다(#342 리뷰). 새 run 시작 시 이전 잔재를 일괄 정리한다 —
+      # concurrency group이 동시 실행을 막아 대기 중 run의 plan은 안전하다.
+      - name: Cleanup stale plans
+        run: gcloud storage rm "$PLAN_PREFIX/**" 2>/dev/null || true
 
       - name: Plan all roots
         run: |

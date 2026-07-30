@@ -15,7 +15,7 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 | 앱 배포 | ArgoCD Application `mlflow`(source `deploy/mlflow`, manual sync) |
 | 이미지 | GAR `autoresearch-mlflow`(앱 `deploy/mlflow/Dockerfile`을 인프라 Cloud Build로 빌드) |
 | backend | Cloud SQL `autoresearch-dev-pg`, DB `mlflow`, user `mlflow`(private IP) |
-| artifact | GCS `ar-infra-501607-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
+| artifact | GCS `autoresearch-503903-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
 | Service | `mlflow.mlflow:5000`(ClusterIP, **내부 전용**) |
 | UI 인증(#232) | 앞단 **OAuth2-proxy**(`mlflow-oauth-proxy:4180`), Google 로그인 + 허용 이메일 목록. Secret `mlflow-oauth` |
 | 시크릿 | DB 비번=Secret Manager `autoresearch-dev-mlflow-db-password`, pod 주입=K8s Secret `mlflow-db` |
@@ -35,7 +35,7 @@ UI/API는 ClusterIP라 외부 노출이 없다. 접근은 **OAuth2-proxy(4180)�
 
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project ar-infra-501607 --tunnel-through-iap \
+  --zone asia-northeast3-a --project autoresearch-503903 --tunnel-through-iap \
   -- -N -L 4180:mlflow.dev.autoresearch.internal:4180
 # 터널 창은 두고, 브라우저: http://localhost:4180 → sign-in → Google 로그인
 ```
@@ -50,8 +50,12 @@ kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
 ```
 
 - redirect URI는 `http://localhost:4180/oauth2/callback`(OAuth client에 등록됨).
-- 허용 이메일·client secret 주입은 `terraform/admin/mlflow-k8s/README.md`의
-  `mlflow-oauth` Secret 절차. 목록 변경 후 `kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow`.
+- OAuth client 자격의 **정본은 Secret Manager**(`autoresearch-dev-mlflow-oauth-client-id`,
+  `...-client-secret`)이고 K8s Secret `mlflow-oauth`는 그 사본이다. 주입·갱신 절차는
+  `terraform/admin/mlflow-k8s/README.md`의 `mlflow-oauth` Secret 절차를 따르고,
+  변경 후 `kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow`.
+- client를 재발급하면 id/secret이 한 쌍으로 바뀐다. Secret Manager에 새 version을 올린
+  뒤 K8s Secret까지 전파해야 하며, secret만 바꾸면 `invalid_client`로 로그인이 막힌다.
 - MLflow 클라이언트(SDK)로 직접 쓸 때는 인증 우회가 필요하므로 GKE 내부 워크로드는
   `http://mlflow.mlflow:5000`(proxy 미경유, 내부 전용)을 tracking URI로 쓴다.
 - port-forward가 timeout이면 kubeconfig가 IP 엔드포인트를 쓰는 것이다. #279로
@@ -88,7 +92,7 @@ pod는 DB host(private IP)·비번을 K8s Secret `mlflow-db`에서 받는다. �
 ```bash
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
-PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project ar-infra-501607)"
+PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project autoresearch-503903)"
 HOST="$(terraform -chdir=terraform/envs/dev output -raw cloud_sql_private_ip_address)"
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_HOST=%s\n' "$PW" "$HOST" > "$env_file"; unset PW
 kubectl create secret generic mlflow-db -n mlflow --from-env-file="$env_file" \
@@ -123,6 +127,33 @@ kubectl -n argocd get application mlflow -o jsonpath='{.status.sync.status}/{.st
 
 앱팀이 자기 파이프라인으로 GAR에 이미지를 올리면 `deploy/mlflow`의 image를 그
 경로로 re-point한다(Dockerfile 동일이라 동작 동일).
+
+## 사용량 관측 (#357)
+
+Grafana `AutoResearch / MLflow`(uid `ar-mlflow`)에서 요청률(상태코드별)·p95
+지연·컨테이너 CPU/메모리를 본다. 수집 경로: oauth2-proxy
+`--metrics-address`(44180) → PodMonitor(`deploy/mlflow/podmonitor.yaml`,
+`release: kube-prometheus-stack` 라벨 필수) → kube-prometheus-stack.
+oauth2-proxy가 UI/API의 유일한 인입 경로라 전체 사용량이 여기서 관측된다.
+
+폴백 채택 사유(#357): MLflow 서버 자체 `--expose-prometheus`는 이미지에
+`prometheus_flask_exporter`가 없어(실측) 앱 저장소 runtime 변경 + Cloud
+Build 재빌드 + digest re-point가 필요하다. dev "사용량 확인" 요구에는
+proxy 메트릭 + cAdvisor로 충분해 서버 계측은 보류 — 엔드포인트별 정밀
+메트릭이 필요해지면 그때 앱 저장소 runtime에 exporter를 추가한다.
+
+메트릭명은 v7.7.1 런타임 실측으로 확정(2026-07-27, 1회용 파드):
+`oauth2_proxy_requests_total{code}`, `oauth2_proxy_response_duration_seconds`
+(histogram, `method`), `oauth2_proxy_requests_in_flight`. 시리즈는 **첫 요청이
+4180을 통과한 뒤에야 생성**되므로 배포 직후 상위 두 패널의 "No data"는 정상.
+
+반영 경로가 두 갈래라 증상으로 원인을 구분한다:
+
+| 증상 | 원인 | 확인 위치 |
+|---|---|---|
+| 대시보드 자체가 없음 | `monitoring` Application 미sync | ArgoCD app `monitoring` |
+| 패널은 있는데 타깃이 목록에 없음 | `mlflow` Application 미sync 또는 PodMonitor `release` 라벨 누락 | **Prometheus UI Status → Service Discovery**에 `podMonitor/mlflow/...` 항목 부재가 가장 빠른 신호 |
+| 타깃 up인데 빈 그래프 | 트래픽 0(위 지연 등록) 또는 PromQL 이름 불일치 | proxy로 요청 1회 보낸 뒤 재확인 |
 
 ## 장애 대응
 

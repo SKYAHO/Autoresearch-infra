@@ -174,6 +174,26 @@ output "github_actions_airflow_deployer_service_account_email" {
   value       = google_service_account.airflow_deployer.email
 }
 
+output "github_actions_feast_apply_service_account_email" {
+  description = "GitHub Actions (Autoresearch) WIF가 가장하여 feast apply로 GCS registry를 갱신하는 SA email(#332). Autoresearch 저장소 secrets.FEAST_APPLY_SA 값으로 사용."
+  value       = google_service_account.feast_apply.email
+}
+
+output "feast_apply_k8s_namespace" {
+  description = "feast apply Job이 실행되는 전용 Kubernetes namespace(#346). 앱 저장소 feast-apply.yml과 terraform/admin/autoresearch-k8s가 공유하는 계약 값."
+  value       = var.feast_apply_k8s_namespace
+}
+
+output "feast_apply_k8s_service_account" {
+  description = "feast apply Job Pod가 사용하는 KSA 이름(#346). Job spec의 serviceAccountName."
+  value       = var.feast_apply_k8s_service_account
+}
+
+output "feast_apply_workload_identity_principal" {
+  description = "feast apply KSA가 가장하는 principal 식별자(#346). KSA annotation 검증에 사용."
+  value       = local.feast_apply_workload_identity_principal
+}
+
 output "cloud_build_bucket_name" {
   description = "Autoresearch-airflow build가 사용하는 Cloud Build 기본 staging bucket 이름."
   value       = local.cloud_build_bucket_name
@@ -217,6 +237,24 @@ output "bigquery_dataset_self_link" {
 output "feast_offline_store_dataset_id" {
   description = "Feast offline store BigQuery dataset id."
   value       = google_bigquery_dataset.feast_offline_store.dataset_id
+}
+
+# #408 피처 스토어 dev 환경 좌표 3종.
+# SKYAHO/Autoresearch의 GitHub Environment `dev`에 등록할 변수 값이다. prod
+# Environment는 기존 repo-level vars 값을 그대로 옮기므로 output이 없다.
+output "feast_dev_offline_store_dataset_id" {
+  description = "피처 스토어 dev 환경 BigQuery offline store dataset id(#408). Autoresearch GitHub Environment dev의 vars.BQ_DATASET 값."
+  value       = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+}
+
+output "feast_dev_registry_path" {
+  description = "피처 스토어 dev 환경 registry 객체 경로(#408). Autoresearch GitHub Environment dev의 vars.GCS_REGISTRY_PATH 값."
+  value       = local.feast_dev_registry_path
+}
+
+output "feast_dev_staging_location" {
+  description = "피처 스토어 dev 환경 staging prefix(#408). Autoresearch GitHub Environment dev의 vars.GCS_STAGING_LOCATION 값."
+  value       = local.feast_dev_staging_location
 }
 
 # #285 raw 적재 job(Airflow lake_to_bigquery, 앱 load_raw_to_bigquery)이 참조할 dataset

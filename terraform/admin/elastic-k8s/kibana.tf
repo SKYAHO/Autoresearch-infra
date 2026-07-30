@@ -31,6 +31,22 @@ resource "kubernetes_manifest" "kibana" {
         "xpack.security.secureCookies" = false
       }
 
+      # #394 Kibana 자체 TLS 비활성 — Kibana 9.x는 자신이 TLS로 서빙되면
+      # secureCookies=false 설정과 무관하게 secure 세션을 강제해
+      # (login_state.requiresSecureConnection=true 실측), http 브라우저
+      # 구간(port-forward 4181)의 로그인이 "A secure connection is required"로
+      # 차단된다. 접근 통제는 NetworkPolicy(5601 직접 ingress 미개방) +
+      # oauth2-proxy Google 게이트가 담당하고, 평문 구간은 클러스터 내부
+      # proxy→Kibana뿐(dev 수용 — Airflow/MLflow/Grafana upstream과 동일 모델).
+      # ES 및 Kibana↔ES 구간 TLS는 불변.
+      http = {
+        tls = {
+          selfSignedCertificate = {
+            disabled = true
+          }
+        }
+      }
+
       podTemplate = {
         # 서버(ECK)가 빈 metadata를 정규화 결과로 유지하므로 동일하게
         # 선언해 desired와 server 상태를 일치시킨다(왕복 안정화, #99).

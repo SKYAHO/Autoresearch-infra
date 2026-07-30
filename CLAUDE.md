@@ -32,8 +32,6 @@
 | Terraform 스타일·구성 | `.claude/docs/agent-terraform-reference.md` | `.claude/docs/architecture-overview.md` |
 | 워크플로우, 커밋, PR | `.claude/docs/agent-workflow-reference.md` | `.claude/docs/agent-prohibitions.md` |
 | 보안, 시크릿, IAM | `.claude/docs/agent-security-guidelines.md` | `.claude/docs/agent-prohibitions.md` |
-| 코드 리뷰 | `.claude/docs/agent-peer-review.md` | `.claude/docs/agent-workflow-reference.md` |
-| 계획 리뷰 | `.claude/docs/agent-plan-review.md` | `.claude/docs/agent-peer-review.md` |
 
 각 문서는 현재 구현과 계획을 구분해 표기합니다.
 
@@ -57,8 +55,10 @@
   - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
   - `vault.tf` — #132 Vault auto-unseal용 KMS key/GSA/WI
   - `elastic.tf` — #102 Elasticsearch GCS snapshot bucket/GSA
-  - `github_actions.tf` — WIF pusher SA 3종(각각 최소권한·repo@ref 제한): GAR
-    pusher, app image pusher, Airflow deployer(container.clusterViewer)
+  - `github_actions.tf` — WIF pusher SA 4종(각각 최소권한·repo@ref 제한): GAR
+    pusher, app image pusher, Airflow deployer(container.clusterViewer),
+    feast apply SA(#332, feast_registry 버킷 objectAdmin + feast_offline_store
+    dataset metadataViewer)
   - `code_artifacts.tf` — #238 코드 아카이브 배포 GCS 버킷 + 업로더 SA(WIF,
     `code-archive.yml@main` workflow_ref 제한, 버킷 objectAdmin) + 파드 read IAM
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:

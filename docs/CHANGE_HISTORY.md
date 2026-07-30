@@ -3,6 +3,198 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-29: Alertmanager Slack 전환과 노이즈 제어 (#406)
+
+- **배경**: Kubernetes warning/resolved 이메일이 팀 inbox를 계속 채우고,
+  상태형 OOM 규칙은 과거 OOM 종료 이유가 남아 있는 동안 같은 사실을 반복했다.
+- **결정**: Slack App 하나의 channel-bound Incoming Webhook으로
+  `#alerts-infra`에 전달한다. 단방향 운영 알림만 필요해 메시지 수정·thread·
+  interactive action용 Bot Token은 도입하지 않는다.
+- **노이즈 제어**: workload namespace는
+  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`만
+  허용한다. `alertname+namespace`로 group하고 warning은 무멘션 12시간,
+  critical은 firing `@here`·4시간 반복, resolved는 무멘션으로 보낸다. 현재
+  rule에는 같은 key의 warning/critical pair가 없어 inhibit는 두지 않는다.
+- **OOM 의미**: 최근 5분 `restarts_total` 증가와 마지막 종료 이유
+  `OOMKilled`를 결합한 cluster-wide 사건형 rule로 바꿨다.
+  `keep_firing_for: 15m`으로 짧은 간격 재발을 한 사건으로 유지하며 Slack
+  전달 범위는 route에서 제한한다.
+- **보안·롤백**: webhook과 전체 Alertmanager config는 운영자 주입
+  `alertmanager-slack-config`에만 두고 Git·Terraform state·명령행에 넣지
+  않는다. live smoke 전에는 SMTP Secret을 rollback 자산으로 유지하고 dual
+  delivery는 금지한다.
+- **영향**: Terraform, IAM, GCP 리소스, public endpoint와 NetworkPolicy 변경이
+  없어 추가 클라우드 비용이나 권한 확대가 없다.
+
+## 2026-07-28: Kibana 자체 TLS 비활성 — 로그인 경로 첫 e2e 종결 (#394, #329)
+
+- **배경**: 첫 실제 브라우저 e2e에서 로그인 3중 결함 동시 발견 — 허용 이메일
+  누락, client secret 무효(#329 미이행), 그리고 구조 결함: **Kibana 9.x는
+  자신이 TLS로 서빙되면 `secureCookies: false`를 무시하고 secure 세션을
+  강제**(`login_state.requiresSecureConnection=true` 실측)해 http 프록시
+  구간 로그인이 차단된다. #325의 "이중 게이트" 검증이 CLI 배선까지만 본
+  잠복 결함.
+- **결정**: Kibana 자체 TLS 비활성(`http.tls.selfSignedCertificate.disabled`)
+  — 접근 통제는 NetworkPolicy(5601 직접 ingress 미개방) + oauth2-proxy
+  Google 게이트가 담당, 평문 구간은 클러스터 내부 proxy→Kibana뿐(다른 내부
+  UI upstream과 동일 모델). ES·Kibana↔ES TLS 불변. proxy upstream http 전환과
+  **saved-objects 자동 import Job의 --cacert 제거를 한 PR로 동반**(cert
+  secret 소멸 회귀 방지). 되돌릴 때도 셋을 한 apply로.
+- **교훈**: 인증 경로는 실제 브라우저 e2e 전엔 완료가 아니다. 에러 페이지의
+  소속 컴포넌트 식별(Oops=oauth2-proxy 템플릿)이 진단의 첫 갈림길.
+- **롤백**: 세 파일을 한 PR·한 apply로 되돌린다 — ① `kibana.tf`의
+  `http.tls.selfSignedCertificate.disabled` 블록 제거(TLS 재활성) ②
+  `oauth2_proxy.tf` upstream `https://` 복원 + `--ssl-upstream-insecure-skip-verify=true`
+  플래그 재추가 ③ `kibana_saved_objects.tf` `--cacert /certs/ca.crt` 복원 +
+  `kb-certs` volume/volume_mount(`autoresearch-kb-http-certs-public`) 재추가.
+  갈라지면 proxy 502 또는 Job CreateContainerConfigError.
+
+## 2026-07-27: 관측 스택 구축 — Grafana 대시보드 6장 as-code + 구조화 로깅 파이프라인 (#352~#365)
+
+- **배경**: 14회차 멘토 피드백(K8s 메트릭·서비스 사용량 대시보드, ELK 구조화
+  로깅). 3-에이전트 병렬 조사로 8개 이슈로 분해(infra 5 + 앱 1 + airflow 2),
+  1.5일 만에 전부 배포·검증.
+- **핵심 결정 — 대시보드 as-code(#355)**: 커스텀 대시보드는 UI가 아니라
+  `deploy/monitoring/dashboards/*.json` → sidecar ConfigMap(ArgoCD)으로 관리.
+  Kibana saved object도 같은 원칙 — 저장소 ndjson이 정본, 내용 해시 트리거
+  Job이 apply 시 자동 import(#365, 객체만 삭제된 경우는 `-replace` 강제).
+- **핵심 결정 — 스케일 판단 대시보드(#356)**: HPA가 없으므로 "오토스케일
+  대시보드"가 아니라 판정 표 기반 근거 대시보드로 정의. 리뷰가 quota-blocked
+  분기(E2_CPUS 8 < E2 풀 max 합 — max 미달인데 unschedulable) 누락을 잡음.
+- **핵심 결정 — 폴백 채택(#357)**: MLflow 서버 계측은 이미지에
+  prometheus_flask_exporter 부재(실측)로 기각, 유일한 인입 경로인
+  oauth2-proxy /metrics + PodMonitor로 충족.
+- **로그 스키마 계약(#359)**: Filebeat ndjson(expand_keys, 원문 보존 폴백) +
+  앱/airflow와 계약 — 대문자 `log.level`, 예약 object 키(log/error/host/…)
+  스칼라 금지(위반 시 ES 400 무음 드랍). 색인 거부는 Filebeat 자기 로그
+  수집(#365)으로 관측. Airflow는 `[logging] json_format`이 존재하지 않는
+  설정으로 판명(실측) — task 로그는 GCS 원격 로깅(airflow#147), dag 필터는
+  KPO 파드 라벨(`kubernetes.labels.dag_id`)로 충족.
+- **교차 ns 수집 패턴**: ServiceMonitor는 monitoring ns +
+  namespaceSelector(워크로드 root에 CRD plan 의존 없음). airflow처럼 ingress
+  deny ns는 scrape 포트 명시 허용 필요(#358 fix — 증상 context deadline
+  exceeded).
+- **검증 중 실증된 운영 결함**: scheduler OOMKilled(12h 태스크 종반,
+  airflow#158 후속), filebeat autodiscover가 재기동 후 신규 파드를 놓치는
+  간헐 결함(daemonset 재시작으로 회복 — 증상: 기존 파드만 수집).
+- **롤백**: 대시보드/SM/파서는 해당 파일 삭제 후 sync/apply. 계측·로깅은
+  앱 revert. 비용 영향: 상주 추가는 statsd-exporter 1개(10m/32Mi)뿐,
+  airflow 시리즈 119개(head 0.1%).
+
+## 2026-07-27: feast apply를 VPC 안 GKE Job으로 전환 (#346) — 인프라 측
+
+- **문제**: `full_scan_for_deletion: false`(GHA 러너가 private Redis에 못 닿아 끈
+  것)의 대체 완화책 `key_ttl_seconds`(7일)가 고아를 절반만 지운다. Redis 키는
+  `join_keys + 엔티티 값 + project`라 같은 엔티티를 쓰는 FV들이 키를 공유하는데,
+  TTL은 **키 단위이지 HASH 필드 단위가 아니라** 매일 materialize가 EXPIRE를 리셋해
+  삭제된 FV의 필드가 영구히 남는다(`UserStaticView`/`UserDynamicView`가 해당).
+- **해결**: GHA는 VPC 밖에 두고 **실행 주체만 VPC 안 Pod로** 옮긴다. 컨트롤
+  플레인이 DNS 엔드포인트로 공개 + IAM 검증이라 VPC 밖에서도 Job 생성이 가능하고,
+  VPC 안이어야 하는 것은 Redis 데이터 경로뿐이다. Bastion IAP 터널은 기각 —
+  Cluster 클라이언트가 `CLUSTER SLOTS`로 받은 노드별 PSC 주소에 직접 접속해
+  `ssh -L` 단일 포워딩으로 동작하지 않고 TLS 호스트네임 검증도 깨진다.
+- **전용 namespace 신설(핵심 결정)**: 앱 namespace 재사용 시 `batch/jobs: create`
+  보유 주체가 Job의 `serviceAccountName`을 `autoresearch-app`으로 지정해 `gke_app`
+  GSA(DB 비밀번호·Cloud SQL·BQ dataEditor)로 임의 컨테이너를 실행할 수 있어 GSA
+  분리 의미가 사라진다. `jobs: create`는 namespace 내 임의 K8s Secret 마운트도
+  가능해 RBAC에서 `secrets`를 빼는 것으로는 막히지 않는다. 대가는 앱 namespace의
+  `autoresearch-egress`(`pod_selector {}`)가 적용되지 않아 NetworkPolicy를 새로
+  써야 한다는 점.
+- **RBAC 계약**: `batch/jobs`에 `get,list,watch,create,delete`. `watch`는
+  `kubectl wait`가 list+watch라 필수. `update`/`patch`는 주지 않고 재실행 시
+  이름 충돌은 **"delete 후 create"**로 처리(Job spec이 대부분 immutable이라
+  `kubectl apply` 갱신이 실패). `pods`/`pods/log` read만, `exec`·cluster-admin 없음.
+- GSA는 #332 `autoresearch-dev-feast-apply@` 재사용(`gke_app` 재사용은 딸려오는
+  권한 때문에 기각). GHA와 Pod가 같은 GSA를 공유하지만, Job을 만들 수 있는 주체는
+  어차피 그 KSA로 실행할 수 있어 분리해도 실질 경계가 늘지 않는다.
+- 주의: 파트 B(admin root)는 `terraform-plan.yml` 경로 필터 밖이라 PR CI 검증이
+  없다(로컬 fmt/validate/plan 필수). `admin-apply.yml`은 `ROOTS` 8개 일괄 apply라
+  승인 전 전 root plan 요약 확인이 필요하다.
+- **후속 누락 보완(#370)**: 위 작업에서 `feast_apply` GSA에 코드 아카이브 버킷
+  `roles/storage.objectViewer`가 빠졌다. `Dockerfile.feast`는 코드를 이미지에
+  넣지 않고 ENTRYPOINT 부트스트랩이 `code/<sha>.tar.gz`를 받아 `/app`에 푸는
+  구조라, 이 권한 없이는 Job이 apply를 시작하기도 전에 exit 2로 죽는다. GHA도
+  같은 GSA로 아카이브 업로드 완료를 폴링하므로 grant 1건이 두 경로를 함께
+  연다. 교훈: **"실행 주체를 옮기는" 변경은 대상 워크로드가 실행 전에 무엇을
+  읽는지(부트스트랩 의존)까지 권한 목록에 포함해야 한다** — Redis·Secret
+  Manager 같은 "새로 필요해진" 권한에만 집중해 기존 파드가 이미 갖고 있던
+  공통 권한을 빠뜨렸다.
+
+## 2026-07-24: dev root 승인 게이트 CI apply 가동 (#341/#342) — 첫 run 검증 완료
+
+- admin root 8개(#307~#319)와 달리 dev root만 로컬 수동 apply라 "머지≠적용" 갭이
+  남아 매일 drift 알림이 발화했다(#306 실증). `dev-apply.yml`을 신설해 dev root도
+  **머지 → CI plan 요약 → Environment(`dev-apply`) 승인 → apply**가 표준 경로가
+  됐다. 로컬 tfvars apply는 break-glass·`terraform import` 선행용으로만 남는다.
+- **admin-apply와 분리(핵심 결정)**: dev root apply SA는 projectIamAdmin 포함
+  사실상 프로젝트 최강 자격증명이라, admin-apply `ROOTS` 편입 대신 별도 workflow로
+  사용 경로를 고정했다. SA 권한은 editor가 아니라 **리소스 타입 전수 스캔 기준
+  role 19종 열거**(감사 가능한 크기 명시). 통제 3중: 전용 SA
+  `autoresearch-dev-dev-apply` / WIF `dev-apply.yml@refs/heads/main` workflow_ref
+  제한 / Environment required reviewer.
+- **리뷰가 잡은 설계 결함 2건 반영**: (1) 승인 게이트 **이전**에 도는 plan job이
+  apply SA로 인증하면 승인 없이 최강 토큰이 발급된다 → plan은 읽기 전용
+  CI SA(`terraform-ci`), apply만 전용 SA로 분리. (2) 승인 거부 시 GCS에 남는
+  orphan plan(민감 속성 포함 가능)은 다음 run 시작 시 일괄 정리 —
+  admin-apply.yml에도 소급 적용. stale plan은 state serial 불일치로 하드 실패라
+  "승인한 diff와 다른 변경 적용" 경로는 없다.
+- 변수는 terraform-plan.yml과 동일 GitHub Vars 단일 원천(신규 Secret 0 — dev root엔
+  삭제-위험 allowlist 없음). 승인자 주의(#306 교훈): 요약의 in-place가 접근
+  변경(MAN·IAM)을 숨길 수 있어 해당 리소스가 보이면 상세 diff 확인 후 승인.
+- 검증(2026-07-24): SA IaC apply 21건, 첫 run e2e(plan→승인→apply) success, 로컬
+  plan `No changes`. 설계는 `superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md`.
+
+## 2026-07-24: dev root drift #306 해소 — placeholder 유입 경로 차단 (#339/#340)
+
+- 일일 drift 감지가 이틀 연속 보고한 dev root 불일치 2건을 해소했다. (1) BQ 테이블
+  `asset_virtual_user_vu_1000` "will be created": 앱 적재 스크립트가 테이블을 스스로
+  생성·소유(autodetect+WRITE_TRUNCATE)하므로 IaC 리소스는 이중 소유 → 코드 제거
+  +`terraform state rm`(원격 이미 부재라 데이터 영향 0). (2) GKE
+  `master_authorized_networks`의 `203.0.113.10/32`("user"): tfvars.example의
+  placeholder(RFC 5737 문서 전용 대역 — 실제 접근 경로 불가)가 로컬 tfvars를 거쳐
+  라이브에 유입된 잔재 → apply로 제거, example을 `[]`로 바꿔 재유입 차단.
+- 리뷰 교훈: drift 이슈 요약의 "in-place 1건"이 실제로는 **컨트롤플레인 접근 IP
+  회수**였다 — 요약만 보고 판단하지 말고 plan diff를 확인한다. 또한 "빨간 drift
+  run"은 workflow 고장이 아니라 `-detailed-exitcode` 기반 **드리프트 알림 설계**다.
+- 검증: 연속 plan `No changes`, drift run green 복귀, #306 close.
+
+## 2026-07-24: feast-apply 403 잔여 원인 — `FEAST_APPLY_SA` secret 미등록 (#334/#335)
+
+- #333 apply 후에도 feast-apply가 같은 403(`storage.buckets.get`)으로
+  실패했다. 버킷 IAM(`legacyBucketReader`)은 정상 반영돼 있었고(#334는 권한
+  부족으로 오진), 실제 원인은 앱 리포 secret `FEAST_APPLY_SA` 미등록 —
+  `auth@v2`에 빈 `service_account`가 전달되면 **SA 가장 없이 Direct WIF로
+  폴백**해 호출자가 federated principal이 되고, 이 신원은 버킷 IAM이 없어 첫
+  호출인 `storage.buckets.get`에서 403이 난다.
+- 진단 근거: 실패 run 로그의 auth 단계 `with:` 블록에 `service_account` 입력
+  부재 + `gh secret list`에 `FEAST_APPLY_SA` 없음. 이전 run의 "`gcloud storage
+  objects describe` 통과"는 해당 단계 `|| true`가 오류를 삼킨 것으로 권한
+  증거가 아니었다.
+- 조치는 Terraform 변경 없음: #332 plan의 후속 운영 단계였던 secret 등록
+  누락분을 등록하고 `workflow_dispatch` 재실행으로 검증한다. WIF SA 가장
+  경로는 `TERRAFORM_DEV.md`의 "feast apply registry 갱신" 섹션으로 문서화.
+
+## 2026-07-24: feast apply GHA용 SA·WIF 바인딩 (#332)
+
+- `SKYAHO/Autoresearch`의 `feast-apply.yml` 워크플로우(main merge 시 `feast
+  apply`로 GCS registry 갱신)가 WIF로 가장할 전용 service account를
+  `github_actions.tf`에 4번째 목적별 SA로 추가한다. 기존 목적별 SA 관례
+  (`code_uploader` 등)를 따른다.
+- 리소스: SA `autoresearch-dev-feast-apply` + WIF 바인딩 + `feast_registry`
+  버킷 IAM 2종 + `feast_offline_store` dataset IAM.
+- 최소권한 경계: feast apply SA는 **정확한 `feast-apply.yml@refs/heads/main`
+  `workflow_ref`만** 가장 허용(#175/#221 관례, 임의 브랜치·워크플로우 차단).
+  권한은 `feast_registry` 버킷 한정 `roles/storage.objectAdmin`(registry blob
+  전체 덮어쓰기 방식이라 get/create/delete 필요)과 `roles/storage.legacyBucketReader`
+  (#204 선례: Feast GCS registry client가 read/write 시 `bucket.reload()`로
+  `storage.buckets.get`을 호출하므로 objectAdmin을 보강, 동일 버킷을 쓰는 gke_app/
+  airflow SA와 동일 조합), `feast_offline_store` dataset 한정
+  `roles/bigquery.metadataViewer`(source validation의 `tables.get`만 필요,
+  dataViewer/jobUser 불필요)로 제한한다. project-level IAM은 신설하지 않는다.
+- `SKYAHO/Autoresearch`는 이미 WIF 허용 목록이라 bootstrap 변경 불필요. output
+  `github_actions_feast_apply_service_account_email`을 Autoresearch 저장소
+  secret `FEAST_APPLY_SA`에 등록(앱팀, apply 이후).
+
 ## 2026-07-23: Kibana 로그인 — anonymous 자동 로그인 폐기, oauth2-proxy+elastic basic 후퇴 (#293/#325/#326) — apply·검증 완료
 
 - Kibana(ECK, Basic 라이선스)에 "Google 로그인 + 허용 이메일"을 붙이는 목표는

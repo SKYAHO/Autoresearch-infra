@@ -48,6 +48,49 @@ resource "kubernetes_role_v1" "airflow_components" {
   }
 }
 
+resource "kubernetes_role_v1" "airflow_vpa" {
+  metadata {
+    name      = "airflow-vpa"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  rule {
+    api_groups = ["autoscaling.k8s.io"]
+    resources  = ["verticalpodautoscalers"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+
+resource "kubernetes_role_binding_v1" "airflow_vpa" {
+  metadata {
+    name      = "airflow-vpa"
+    namespace = var.airflow_k8s_namespace
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role_v1.airflow_vpa.metadata[0].name
+  }
+
+  dynamic "subject" {
+    for_each = toset(concat(
+      [local.airflow_deployer_service_account_email],
+      tolist(var.installer_user_emails),
+    ))
+
+    content {
+      api_group = "rbac.authorization.k8s.io"
+      kind      = "User"
+      name      = subject.value
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+
 resource "kubernetes_role_binding_v1" "airflow_sa" {
   metadata {
     name      = "airflow-sa"
@@ -180,6 +223,27 @@ resource "kubernetes_network_policy_v1" "airflow_ingress" {
             "kubernetes.io/metadata.name" = "kube-system"
           }
         }
+      }
+    }
+
+    # #358 Prometheus scrape 허용 — 이 규칙이 없으면 ServiceMonitor가
+    # 등록돼도 타깃이 context deadline exceeded로 down(#358 검증 실측).
+    # 매칭 의미(정확히): monitoring ns의 모든 Pod → airflow ns 모든 Pod의
+    # 9102(containerPort 기준). 9102를 listen하는 것은 statsd-exporter뿐이라
+    # 포트 한정으로 충분 — webserver(8080) 등은 열리지 않는다. ingest
+    # (UDP 9125)는 scheduler→statsd same-ns 트래픽이라 기존 규칙으로 허용.
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "monitoring"
+          }
+        }
+      }
+
+      ports {
+        port     = "9102"
+        protocol = "TCP"
       }
     }
 
@@ -392,6 +456,40 @@ resource "kubernetes_network_policy_v1" "airflow_egress" {
       ports {
         protocol = "TCP"
         port     = "5000"
+      }
+    }
+
+    # #344 Inference Server(champion 리랭킹, autoresearch 네임스페이스
+    # autoresearch-serving:8000). Calico가 egress를 DNAT 이전(service VIP 기준)에
+    # 평가하므로 namespace_selector가 VIP에 매칭되지 않는다 — 위 MLflow와 같은
+    # 이유로 services CIDR ipBlock을 사용한다.
+    egress {
+      to {
+        ip_block {
+          cidr = var.cluster_services_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "8000"
+      }
+    }
+
+    # DNAT 후 평가하는 dataplane용 autoresearch namespace selector 규칙(방어적
+    # 유지, 위 MLflow 패턴과 동일).
+    egress {
+      to {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "autoresearch"
+          }
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "8000"
       }
     }
   }

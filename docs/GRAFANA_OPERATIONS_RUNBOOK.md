@@ -85,6 +85,476 @@ admin으로 로그인 → Administration → Users → New user:
 - 권한은 기본 Viewer(대시보드 편집 담당만 Editor).
 - 팀원 목록은 이 문서에 기록하지 않는다(이메일 비노출 원칙)
 
+## Alertmanager Slack 알림 (#406)
+
+Alertmanager는 Slack App의 channel-bound Incoming Webhook으로
+`#alerts-infra`에 전달한다. Git에는
+`monitoring/alertmanager-slack-config` Secret 이름만 두며, 전체
+`alertmanager.yaml`, webhook URL과 실제 channel 값은 운영자 주입 Secret에만
+둔다.
+
+라우팅 계약은 다음과 같다.
+
+- root receiver는 `null`, group key는 `alertname`, `namespace`,
+  `group_wait: 30s`, `group_interval: 1m`
+- workload namespace allowlist는 활성 운영 namespace인
+  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`
+- cluster 장애 allowlist는 원본 rule의 severity와 관계없이 critical receiver로
+  승격하며
+  `KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown`
+- warning은 멘션 없이 12시간마다 반복, critical은 firing일 때만
+  `<!here>`를 넣고 4시간마다 반복
+- warning/critical 모두 `send_resolved: true`; resolved에는 멘션 없음
+- `ContainerOOMKilled`는 rule 단계에서 namespace를 제한하지 않아 Prometheus
+  UI에는 모든 발생을 남기고, Slack 전달 범위는 route 한 곳에서만 결정한다.
+  `keep_firing_for: 15m`이 10분 안팎의 반복 OOM을 연속 firing으로 유지하므로
+  warning의 `repeat_interval: 12h`가 재전송을 억제한다. 마지막 OOM 뒤에는
+  5분 조회 window와 keep-firing 구간이 지난 후 resolved 한 건을 보낸다.
+
+### Slack 입력과 전체 config 생성
+
+저장소 밖의 mode 0700 임시 디렉터리에 mode 0600 입력 파일
+`slack-webhook-url`, `slack-channel`을 만든다. 값을 command line에 직접
+입력하지 말고 숨김 prompt 또는 승인된 secret manager export로 파일에
+기록한다. 아래 generator는 정확한 두 key, 빈 값, trailing CR/LF, 파일 mode,
+webhook의 scheme/host/path만 검사하며 값을 출력하지 않는다.
+
+```bash
+umask 077
+set -e
+ALERTMANAGER_SECRET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alertmanager-slack-config.XXXXXX")"
+trap 'rm -f -- "$ALERTMANAGER_SECRET_DIR/slack-webhook-url" "$ALERTMANAGER_SECRET_DIR/slack-channel" "$ALERTMANAGER_SECRET_DIR/alertmanager.yaml" "$ALERTMANAGER_SECRET_DIR/candidate-secret.json" "$ALERTMANAGER_SECRET_DIR/existing-secret.json" "$ALERTMANAGER_SECRET_DIR/final-secret.json" "$ALERTMANAGER_SECRET_DIR/verified-secret.json"; rmdir -- "$ALERTMANAGER_SECRET_DIR"' EXIT
+
+for key in slack-webhook-url slack-channel; do
+  install -m 600 /dev/null "$ALERTMANAGER_SECRET_DIR/$key"
+  IFS= read -r -s -p "$key: " value
+  printf '\n'
+  printf '%s' "$value" >"$ALERTMANAGER_SECRET_DIR/$key"
+  unset value
+done
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+from pathlib import Path
+import sys
+from urllib.parse import urlsplit
+
+root = Path(sys.argv[1])
+required = {"slack-webhook-url", "slack-channel"}
+actual = {
+    path.name
+    for path in root.iterdir()
+    if path.is_file()
+}
+if actual != required:
+    raise SystemExit("Slack input key mismatch")
+
+values = {}
+for name in sorted(required):
+    path = root / name
+    value = path.read_bytes()
+    if not value or b"\n" in value or b"\r" in value:
+        raise SystemExit(f"Invalid Slack input file: {name}")
+    if path.stat().st_mode & 0o077:
+        raise SystemExit(f"Slack input file is not mode 0600: {name}")
+    values[name] = value.decode("utf-8")
+
+webhook = urlsplit(values["slack-webhook-url"])
+if (
+    webhook.scheme != "https"
+    or webhook.hostname != "hooks.slack.com"
+    or not webhook.path.startswith("/services/")
+    or webhook.username is not None
+    or webhook.password is not None
+):
+    raise SystemExit("Slack webhook URL shape is invalid")
+
+def scalar(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+config = f"""global:
+  resolve_timeout: 5m
+  slack_api_url: {scalar(values["slack-webhook-url"])}
+route:
+  receiver: "null"
+  group_by: [alertname, namespace]
+  group_wait: 30s
+  group_interval: 1m
+  routes:
+    - receiver: slack-critical
+      matchers:
+        - alertname=~"KubeNodeNotReady|KubeNodeUnreachable|KubeAPIDown|KubeSchedulerDown|KubeControllerManagerDown|KubeletDown"
+      repeat_interval: 4h
+    - receiver: slack-critical
+      matchers:
+        - severity="critical"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
+      repeat_interval: 4h
+    - receiver: slack-warning
+      matchers:
+        - severity="warning"
+        - namespace=~"airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault"
+      repeat_interval: 12h
+receivers:
+  - name: "null"
+  - name: slack-warning
+    slack_configs:
+      - channel: {scalar(values["slack-channel"])}
+        send_resolved: true
+        color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}warning{{{{ end }}}}'
+        title: '[{{{{ .Status }}}}] {{{{ printf "%.150s" (reReplaceAll "[<>&@]" "" .CommonLabels.alertname) }}}}'
+        text: |-
+          {{{{ $first := index .Alerts 0 }}}}
+          *Summary:* {{{{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}}}
+          *Description:* {{{{ printf "%.1000s" (reReplaceAll "[<>&@]" "" $first.Annotations.description) }}}}
+          *Target:* pod={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.pod) }}}} container={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.container) }}}}
+          {{{{ if gt (len .Alerts) 1 }}}}외 {{{{ len .Alerts }}}}건이 같은 그룹에 있습니다.{{{{ end }}}}
+        fields:
+          - title: Status
+            value: '{{{{ .Status }}}}'
+            short: true
+          - title: Severity
+            value: '{{{{ .CommonLabels.severity }}}}'
+            short: true
+          - title: Namespace
+            value: '{{{{ .CommonLabels.namespace }}}}'
+            short: true
+          - title: Alert count
+            value: '{{{{ len .Alerts }}}}'
+            short: true
+          - title: Started at
+            value: '{{{{ (index .Alerts 0).StartsAt }}}}'
+            short: false
+  - name: slack-critical
+    slack_configs:
+      - channel: {scalar(values["slack-channel"])}
+        send_resolved: true
+        color: '{{{{ if eq .Status "resolved" }}}}good{{{{ else }}}}danger{{{{ end }}}}'
+        title: '[{{{{ .Status }}}}] {{{{ printf "%.150s" (reReplaceAll "[<>&@]" "" .CommonLabels.alertname) }}}}'
+        text: |-
+          {{{{ if eq .Status "firing" }}}}<!here> {{{{ end }}}}
+          {{{{ $first := index .Alerts 0 }}}}
+          *Summary:* {{{{ printf "%.500s" (reReplaceAll "[<>&@]" "" $first.Annotations.summary) }}}}
+          *Description:* {{{{ printf "%.1000s" (reReplaceAll "[<>&@]" "" $first.Annotations.description) }}}}
+          *Target:* pod={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.pod) }}}} container={{{{ printf "%.200s" (reReplaceAll "[<>&@]" "" $first.Labels.container) }}}}
+          {{{{ if gt (len .Alerts) 1 }}}}외 {{{{ len .Alerts }}}}건이 같은 그룹에 있습니다.{{{{ end }}}}
+        fields:
+          - title: Status
+            value: '{{{{ .Status }}}}'
+            short: true
+          - title: Severity
+            value: '{{{{ .CommonLabels.severity }}}}'
+            short: true
+          - title: Namespace
+            value: '{{{{ .CommonLabels.namespace }}}}'
+            short: true
+          - title: Alert count
+            value: '{{{{ len .Alerts }}}}'
+            short: true
+          - title: Started at
+            value: '{{{{ (index .Alerts 0).StartsAt }}}}'
+            short: false
+"""
+(root / "alertmanager.yaml").write_text(config, encoding="utf-8")
+(root / "alertmanager.yaml").chmod(0o600)
+print("Alertmanager Slack config generated without displaying payloads.")
+PY
+```
+
+내부 Alertmanager URL의 scheme·userinfo를 generator가 신뢰성 있게 검증할 수
+없으므로 `title_link`는 기본적으로 생성하지 않는다. 본문은 첫 alert의
+summary 500자, description 1,000자, Pod/container 각 200자로 제한하고
+`<`, `>`, `&`, `@`를 제거하고 `link_names` 자동 파싱을 사용하지 않아
+annotation이나 label이 Slack mention/link 제어문자를 주입하지 못하게 한다.
+critical firing의 `<!here>`만 정적 template에서 명시적으로 추가한다. 나머지
+alert는 전체 그룹 건수로 요약하며 webhook을 template field에 넣지 않는다.
+
+### Config 검증과 Secret create-or-replace
+
+Kubernetes API를 변경하기 전에 `amtool`로 전체 config를 검증한다.
+
+```bash
+docker run --rm \
+  --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  check-config /work/alertmanager.yaml
+
+# chart 실제 severity를 사용한 route 회귀 검증
+docker run --rm --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  config routes test --config.file=/work/alertmanager.yaml \
+  alertname=KubeNodeNotReady severity=warning
+# 출력은 정확히 slack-critical
+
+docker run --rm --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  config routes test --config.file=/work/alertmanager.yaml \
+  alertname=ContainerOOMKilled severity=warning namespace=airflow
+# 출력은 정확히 slack-warning
+
+docker run --rm --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  config routes test --config.file=/work/alertmanager.yaml \
+  alertname=Unowned severity=warning namespace=kube-system
+# 출력은 정확히 null
+
+kubectl create secret generic alertmanager-slack-config \
+  --namespace monitoring \
+  --from-file=alertmanager.yaml="$ALERTMANAGER_SECRET_DIR/alertmanager.yaml" \
+  --dry-run=client -o json \
+  >"$ALERTMANAGER_SECRET_DIR/candidate-secret.json"
+
+kubectl -n monitoring get secret alertmanager-slack-config \
+  --ignore-not-found -o json \
+  >"$ALERTMANAGER_SECRET_DIR/existing-secret.json"
+```
+
+dry-run JSON도 Secret payload이므로 mode 0600 파일에만 저장하고 stdout에
+출력하지 않는다. 기존 Secret이 있으면 `resourceVersion`을 보존해 in-place
+replace한다.
+
+```bash
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+root = Path(sys.argv[1])
+candidate = json.loads((root / "candidate-secret.json").read_text())
+if set(candidate.get("data", {})) != {"alertmanager.yaml"}:
+    raise SystemExit("Generated Secret must contain exactly alertmanager.yaml")
+existing_path = root / "existing-secret.json"
+if existing_path.stat().st_size:
+    existing = json.loads(existing_path.read_text())
+    resource_version = existing.get("metadata", {}).get("resourceVersion")
+    if not resource_version:
+        raise SystemExit("Existing Secret has no resourceVersion")
+    candidate["metadata"]["resourceVersion"] = resource_version
+(root / "final-secret.json").write_text(json.dumps(candidate))
+(root / "final-secret.json").chmod(0o600)
+PY
+
+if [ -s "$ALERTMANAGER_SECRET_DIR/existing-secret.json" ]; then
+  kubectl replace -f "$ALERTMANAGER_SECRET_DIR/final-secret.json"
+else
+  kubectl create -f "$ALERTMANAGER_SECRET_DIR/final-secret.json"
+fi
+
+kubectl -n monitoring get secret alertmanager-slack-config -o json \
+  >"$ALERTMANAGER_SECRET_DIR/verified-secret.json"
+python - "$ALERTMANAGER_SECRET_DIR/verified-secret.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+secret = json.loads(Path(sys.argv[1]).read_text())
+metadata = secret["metadata"]
+print({
+    "name": metadata["name"],
+    "namespace": metadata["namespace"],
+    "type": secret["type"],
+    "resourceVersion": metadata["resourceVersion"],
+    "key_count": len(secret.get("data", {})),
+})
+if set(secret.get("data", {})) != {"alertmanager.yaml"}:
+    raise SystemExit("Applied Secret key mismatch")
+PY
+```
+
+### Cluster smoke와 rollback
+
+ArgoCD manual sync 전에 현재 context와 alert rule 이름을 read-only로 고정한다.
+sync 뒤 Alertmanager Ready와 config reload 성공, Slack API 오류 부재를
+확인한다. warning test는 무멘션 firing/resolved, critical test는 firing
+`<!here>` 한 번과 무멘션 resolved를 검증한다. 설치된 rule에는 같은
+`alertname`·`namespace`에서 warning과 critical이 동시에 firing하는 실제 쌍이
+없으므로 효과 없는 inhibit rule은 두지 않는다.
+
+`ContainerOOMKilled`는 `restartPolicy: Always`인 제한된 검증 Pod에서 첫 OOM
+restart의 firing, 10분 안팎의 반복 OOM이 새 메시지 없이 같은 firing으로
+유지되는지, 마지막 OOM 뒤 5분 window와 `keep_firing_for: 15m`이 지난 다음
+resolved 되는지 확인한다. watchdog과 제한 시간 삭제를 사용하고 검증 직후
+API로 Pod 부재를 확인한다. 실제 test alert, OOM Pod, Secret 주입과 ArgoCD
+sync는 별도 운영 승인 전에는 실행하지 않는다.
+
+Slack config load 또는 전달이 실패하면 같은 승인 창에서 기존
+`alertmanager-smtp-config`의 검증된 `alertmanager.yaml`을 현재 참조 중인
+`alertmanager-slack-config` Secret에 create-or-replace하여 config reload만으로
+즉시 SMTP 단일 전달을 복구한다. 그 뒤 별도 rollback PR에서
+`deploy/monitoring/values.yaml`의 `configSecret`을
+`alertmanager-smtp-config`로 되돌리고 ArgoCD manual sync를 수행한다. Slack
+live smoke와 운영 관찰 구간이 끝날 때까지 기존 SMTP Secret을 삭제하지 않는다.
+dual delivery는 금지하며, SMTP Secret 삭제는 별도 승인을 받는다.
+
+## Alertmanager SMTP rollback (legacy, #372)
+
+- 이 절은 Slack live smoke 전 rollback용 기존 설정 생성 기록이다.
+- Alertmanager가 Slack Secret을 참조하는 동안 SMTP receiver를 동시에 활성화하지 않는다.
+- `monitoring/alertmanager-smtp-config`는 rollback 승인 창까지 유지하며 ArgoCD는 이 Secret을 관리하거나 prune하지 않는다.
+- `airflow/airflow-email-alerts`를 namespace를 넘어 직접 참조할 수 없으므로 두 Secret은 같은 SMTP 값을 별도로 보관한다.
+- SMTP 회전 시 두 Secret을 같은 비공개 입력으로 함께 교체한다.
+
+### Secret 검증과 설정 생성
+
+다음 절차는 기존 Airflow Secret을 mode-0600 임시 파일에만 읽고, 누락·빈 값·개행으로 끝나는 값을 거부한다. 현재 승인된 STARTTLS/587 설정을 확인한 뒤 로컬 `alertmanager.yaml`만 생성한다.
+
+```bash
+umask 077
+set -e
+ALERTMANAGER_SECRET_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alertmanager-smtp-config.XXXXXX")"
+trap 'rm -f -- "$ALERTMANAGER_SECRET_DIR"/*; rmdir "$ALERTMANAGER_SECRET_DIR"' EXIT
+
+kubectl -n airflow get secret airflow-email-alerts -o json > "$ALERTMANAGER_SECRET_DIR/source-secret.json"
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+expected = {
+    "smtp-host", "smtp-port", "smtp-starttls", "smtp-ssl",
+    "smtp-user", "smtp-password", "smtp-mail-from", "alert-recipients",
+}
+source = json.loads((root / "source-secret.json").read_text())
+actual = set(source.get("data", {}))
+if actual != expected:
+    raise SystemExit(
+        f"Secret key mismatch: missing={sorted(expected - actual)}, "
+        f"extra={sorted(actual - expected)}"
+    )
+
+values = {}
+for key in sorted(expected):
+    value = base64.b64decode(source["data"][key])
+    if not value:
+        raise SystemExit(f"Secret value is empty: {key}")
+    if value.endswith((b"\n", b"\r")):
+        raise SystemExit(f"Secret value has trailing CR/LF: {key}")
+    values[key] = value.decode("utf-8")
+
+if values["smtp-port"] != "587":
+    raise SystemExit("Alertmanager SMTP requires the approved STARTTLS port: 587")
+if values["smtp-starttls"].lower() != "true" or values["smtp-ssl"].lower() != "false":
+    raise SystemExit("Alertmanager SMTP requires smtp-starttls=true and smtp-ssl=false")
+
+def scalar(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+config = f"""global:
+  resolve_timeout: 5m
+  smtp_smarthost: {scalar(values['smtp-host'] + ':' + values['smtp-port'])}
+  smtp_from: {scalar(values['smtp-mail-from'])}
+  smtp_auth_username: {scalar(values['smtp-user'])}
+  smtp_auth_password: {scalar(values['smtp-password'])}
+  smtp_require_tls: true
+route:
+  receiver: "null"
+  group_by: [alertname, namespace, pod]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: email
+      matchers:
+        - severity=~\"warning|critical\"
+receivers:
+  - name: "null"
+  - name: email
+    email_configs:
+      - to: {scalar(values['alert-recipients'])}
+        send_resolved: true
+"""
+(root / "alertmanager.yaml").write_text(config)
+print("Alertmanager config generated without displaying SMTP values.")
+PY
+```
+
+생성 직후, Kubernetes Secret API를 변경하기 전에 로컬 설정을 검증한다. 이 명령은
+생성한 `alertmanager.yaml`만 읽으며 Secret payload를 출력하지 않는다.
+
+```bash
+docker run --rm \
+  --entrypoint amtool \
+  --volume "$ALERTMANAGER_SECRET_DIR:/work:ro" \
+  quay.io/prometheus/alertmanager:v0.33.1 \
+  check-config /work/alertmanager.yaml
+```
+
+`amtool` 호출은 성공해야 하며, 그 입력 또는 출력을 티켓, 터미널 녹화, 로그에
+복사하지 않는다.
+
+검증이 성공한 경우에만 다음 절차로 Secret을 create-or-replace한다. 기존 Secret이 있으면
+`resourceVersion`을 포함한 전체 객체를 in-place replace하므로, 이전 `data` 키가
+남지 않고 결과는 `alertmanager.yaml` 키 하나만 가진다. Alertmanager가 참조 중일 수
+있으므로 delete-and-recreate는 사용하지 않는다. 모든 Secret payload는 mode-0600 임시
+디렉터리에만 쓰며 표준 출력으로 내보내지 않는다.
+
+```bash
+kubectl -n monitoring get secret alertmanager-smtp-config --ignore-not-found -o json \
+  > "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json"
+
+python - "$ALERTMANAGER_SECRET_DIR" <<'PY'
+import base64
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+config = (root / "alertmanager.yaml").read_bytes()
+if not config:
+    raise SystemExit("Generated Alertmanager config is empty")
+
+secret = {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {
+        "name": "alertmanager-smtp-config",
+        "namespace": "monitoring",
+    },
+    "type": "Opaque",
+    "data": {"alertmanager.yaml": base64.b64encode(config).decode("ascii")},
+}
+existing_path = root / "existing-alertmanager-secret.json"
+if existing_path.stat().st_size:
+    existing = json.loads(existing_path.read_text())
+    resource_version = existing.get("metadata", {}).get("resourceVersion")
+    if not resource_version:
+        raise SystemExit("Existing Secret has no resourceVersion")
+    secret["metadata"]["resourceVersion"] = resource_version
+
+(root / "alertmanager-secret.json").write_text(json.dumps(secret))
+PY
+
+if [ -s "$ALERTMANAGER_SECRET_DIR/existing-alertmanager-secret.json" ]; then
+  kubectl -n monitoring replace -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+else
+  kubectl -n monitoring create -f "$ALERTMANAGER_SECRET_DIR/alertmanager-secret.json"
+fi
+
+kubectl -n monitoring get secret alertmanager-smtp-config \
+  -o custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,TYPE:.type,RESOURCE-VERSION:.metadata.resourceVersion,CREATED:.metadata.creationTimestamp
+```
+
+update 뒤에는 위와 같이 Secret metadata만 확인한다. payload를 출력하거나 복사하지
+않는다. create-or-replace 입력은 `alertmanager.yaml` 키 하나만 포함하므로 결과 Secret도
+그 키 하나만 가진다.
+
+### Cluster 검증, 해소 알림, 롤백
+
+1. ArgoCD manual sync 전에 diff에서 `alertmanager-smtp-config` 참조와 `ContainerOOMKilled` 규칙만 추가되는지 확인한다.
+2. sync 뒤 Alertmanager StatefulSet이 Ready인지와 Alertmanager log에 config parse error가 없는지 확인한다.
+3. OOM 검증을 시작할 때 현재 Kubernetes context를 저장하고 이후 OOM·CrashLooping 검증의 모든 `kubectl` 호출에 그 context를 고정한다. 이전 `alertmanager-oom-test` Pod를 삭제하고 Kubernetes API로 부재를 확인한다. 삭제 또는 부재 확인이 실패하면 새 Pod를 만들지 않고, 수동 삭제와 Kubernetes API 장애 조사를 수행한다. 그 뒤 `restartPolicy: Always`와 낮은 memory limit을 가진 dummy Pod로 OOMKilled를 발생시킨다. container가 재시작되어야 `kube_pod_container_status_last_terminated_reason` metric이 생기므로, `ContainerOOMKilled`가 pending을 거쳐 1분 뒤 firing한 뒤 warning 이메일을 수신한다. 이 Pod는 OOMKilled와 재시작을 반복하므로 OOM 검증에만 단독으로 사용한다.
+4. warning 이메일을 수신하면 dummy Pod를 즉시 삭제해 metric이 해소된 뒤 resolved 이메일을 수신한다. `lastState`에 OOMKilled가 생긴 뒤 5분 안에 rule이 firing하지 않으면 Pod를 삭제하고 Prometheus rule 평가와 Alertmanager config를 조사한다. 실행 절차는 `lastState` OOMKilled를 관측한 뒤 8분에 watchdog cleanup을 시작해 최대 100초의 재시도 예산을 확보하고, API request 및 deletion wait를 각각 15초로 제한한 삭제를 세 번 시도한다. 세 시도가 모두 실패하면 오류를 기록하고 즉시 수동 삭제와 Kubernetes API 장애 조사를 수행한다.
+5. 같은 고정 context에서 OOM 검증 Pod의 부재를 API로 다시 확인한 뒤에만 기존 CrashLooping 조건도 warning/critical receiver로 전달되는지 확인한다. 부재 확인이 실패하거나 OOM Pod가 남아 있으면 CrashLooping Pod를 만들지 않고 수동 삭제와 Kubernetes API 장애 조사를 수행한다. 기본 `KubePodCrashLooping` rule의 `for: 15m` 전에 OOM 검증 Pod를 정리하므로 두 검증 신호는 겹치지 않는다.
+6. 검증 Pod는 즉시 삭제한다.
+
+config 오류 또는 메일 전달 실패 시 ArgoCD sync를 중단하거나 values를 기존 chart 생성 config로 되돌려 `null` receiver를 복원한다. Alertmanager가 `alertmanager-smtp-config`를 더 이상 참조하지 않는 것을 확인한 뒤에만 Secret을 삭제한다.
+
 ## 기본 확인 순서
 
 장애 알림이 없더라도 운영 점검은 아래 순서로 본다.
@@ -109,6 +579,53 @@ Grafana dashboard 검색 키워드:
 
 dashboard 이름은 chart 버전에 따라 조금 달라질 수 있다. 이름이 다르면 위 키워드로
 검색한다.
+
+## 커스텀 대시보드 as-code (#355)
+
+커스텀 대시보드는 UI에서 만들지 않고 Git으로 관리한다. `deploy/monitoring/dashboards/`
+의 JSON 파일이 `templates/grafana-dashboards.yaml`을 통해
+`grafana_dashboard: "1"` 라벨 ConfigMap으로 렌더링되고, Grafana sidecar가 자동
+로드한다(ArgoCD `monitoring` Application sync 경로).
+
+- 현재 대시보드: `AutoResearch / K8s 리소스`(uid `ar-k8s-resources` — 노드별
+  requests 점유율 vs 실사용률, namespace/pod CPU·메모리),
+  `AutoResearch / K8s 네트워크`(uid `ar-k8s-network` — namespace/pod 트래픽,
+  에러·드랍, TCP 소켓·재전송·conntrack). 둘 다 `namespace` 변수로 필터.
+  `AutoResearch / Airflow`(uid `ar-airflow`, #358 — scheduler heartbeat·
+  executor 슬롯·DAG run duration/실패·schedule delay + 파드 리소스.
+  statsd-exporter(airflow#146) 수집, ServiceMonitor는 monitoring ns에서
+  namespaceSelector로 airflow ns를 선택. **트러블슈팅**: airflow ns는
+  ingress deny-by-default라 admin root(airflow-k8s)의 9102 허용 규칙이
+  선행돼야 타깃이 UP — 타깃 down에 `context deadline exceeded`면 이 원인).
+  `AutoResearch / Serving`(uid `ar-serving`, #358 — rerank 요청률·지연
+  p95/p50·model_ready·unseen category + throttling·재시작).
+  `AutoResearch / MLflow`(uid `ar-mlflow`, #357 — oauth2-proxy 경유 요청률·
+  상태코드·p95 지연 + 컨테이너 CPU/메모리. 서버 자체 /metrics가 아닌
+  폴백 채택 사유는 MLFLOW_OPERATIONS_RUNBOOK 관측 절 참조).
+  `AutoResearch / 스케일 판단`(uid `ar-scale-decision`, #356 — 판정 기준
+  텍스트 패널 + 노드풀별 노드 수/unschedulable 파드/requests 점유율 vs
+  실사용률(분모 allocatable 정렬)/throttling/OOMKill. "지금 스케일이
+  필요한가"는 이 대시보드로 판단한다).
+  - **동기화 의무(추가, #401)**: 액션로그 KPO의 memory requests를
+    바꾸면(airflow 저장소) Airflow 대시보드의 메모리 프로파일 패널
+    기준선(threshold, 현재 512Mi)을 같은 시점에 갱신한다. 파드명
+    regex는 task_id 기반이라 task 명 변경 시에도 패턴 갱신 필요.
+  - **동기화 의무**: 노드풀 autoscaling(min/max)·머신타입을 변경하면(#331 등)
+    `autoresearch-scale-decision.json`의 판정 기준 텍스트 패널과 노드 수 패널
+    description의 max 수치를 같은 PR에서 갱신한다 — 이 값이 틀리면 "max 도달"
+    판정 자체가 틀린다. 클러스터명은 `cluster` 상수 변수 한 곳에서 관리한다.
+- **대시보드 추가**: JSON 파일을 `dashboards/`에 추가하고 PR → 머지 → ArgoCD
+  sync. UI 클릭으로만 만든 대시보드는 재구축 시 소실된다.
+  - 파일명 제약: ConfigMap 이름이 `grafana-dashboard-<파일명>`으로 생성되므로
+    소문자·숫자·하이픈만 사용한다(DNS-1123 — 밑줄·공백·대문자 불가).
+  - 전제: monitoring Application의 `targetRevision`이 `main`일 때 머지+sync로
+    반영된다(2026-07-26 live 확인). 커밋 SHA로 pin된 상태라면
+    `terraform/admin/argocd-k8s`의 `monitoring_target_revision` 갱신(admin-apply)
+    이 선행돼야 한다.
+- **대시보드 수정**: UI에서 편집했으면 Share → Export JSON을 같은 파일에
+  덮어써 커밋한다(sidecar 대시보드는 UI 저장이 유지되지 않는다).
+- 검증: `helm template deploy/monitoring --show-only
+  templates/grafana-dashboards.yaml` 렌더링과 JSON 파싱 확인.
 
 ## GKE Node 상태
 

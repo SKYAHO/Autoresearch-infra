@@ -166,39 +166,6 @@ resource "google_bigquery_table" "data_lake_youtube_trending_kr" {
   }
 }
 
-# #300 가상 유저 raw 테이블 (정적 자산, 비 hive-partition)
-# 스키마/데이터는 SKYAHO/Autoresearch scripts/load_raw_to_bigquery.py가 소유하고
-# (parquet autodetect + WRITE_TRUNCATE, hive_partitioned=False), Terraform은 존재와
-# 삭제 보호, 관리 라벨만 보장한다.
-#
-# parquet의 LIST<string> 필드는 BigQuery load 시 flat ARRAY<STRING>이 아니라
-# wrapper record로 적재된다:
-#   <field> RECORD NULLABLE { list: RECORD REPEATED { element: STRING NULLABLE } }
-# feature_materialize.py의 _string_array()가 UNNEST(<col>.list)로 언래핑한다.
-# Terraform은 스키마를 소유하지 않고 ignore_changes = [schema]로 둔다.
-resource "google_bigquery_table" "asset_virtual_user_vu_1000" {
-  dataset_id          = google_bigquery_dataset.data_lake_raw.dataset_id
-  table_id            = "asset_virtual_user_vu_1000"
-  description         = "가상 유저 페르소나 원본 parquet(vu_1000) raw 적재 테이블. 정적 자산이라 파티션 없음. 스키마는 SKYAHO/Autoresearch scripts/load_raw_to_bigquery.py가 소유(WRITE_TRUNCATE)한다."
-  deletion_protection = true
-
-  # 적재 스크립트가 전체 스키마를 소유한다. 존재 보장용 최소 seed 컬럼만 둔다.
-  schema = jsonencode([
-    { name = "user_id", type = "STRING", mode = "NULLABLE" },
-  ])
-
-  labels = {
-    data_class = "raw"
-    purpose    = "data-lake-raw"
-    managed_by = "terraform"
-    owner      = "infra"
-  }
-
-  lifecycle {
-    ignore_changes = [schema]
-  }
-}
-
 # #280 Feast 피처 테이블 4종
 #
 # data_lake_* 테이블과 달리 스키마를 Terraform이 소유한다. Feast FeatureView
@@ -214,6 +181,98 @@ resource "google_bigquery_table" "asset_virtual_user_vu_1000" {
 # 확인했다. DML(TRUNCATE + INSERT)은 스키마를 바꾸지 않아 이 정의가 보호되고,
 # REQUIRED 컬럼에 NULL이 들어오면 BigQuery가 거부한다. 상세는 #280 참조.
 
+# #408 prod/dev 공통 컬럼 계약
+#
+# 피처 스토어 prod/dev 분리(SKYAHO/Autoresearch#399)로 dev dataset도 같은 테이블
+# 5종을 갖는다. 스키마를 양쪽에 복제하면 두 환경의 컬럼 계약이 조용히 어긋나고,
+# 그러면 dev에서 검증한 실험을 prod로 승격할 근거가 사라진다. 계약을 여기 한 곳에
+# 두고 prod 리소스와 dev for_each가 함께 참조한다.
+#
+# prod 테이블을 for_each로 접지 않는 이유: 리소스 주소가 바뀌어 state 이동이
+# 필요하고(deletion_protection이 걸린 실데이터 테이블이다), 테이블별 파티션 근거
+# 주석을 잃는다. prod는 기존 주소를 그대로 두고 schema만 이 계약을 참조한다.
+locals {
+  feast_feature_table_contracts = {
+    user_static_feature = {
+      partition_field = null
+
+      schema = [
+        { name = "user_id", type = "STRING", mode = "REQUIRED" },
+        { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+        { name = "age_group", type = "STRING", mode = "NULLABLE" },
+        { name = "occupation", type = "STRING", mode = "NULLABLE" },
+        { name = "preferred_category", type = "STRING", mode = "REPEATED" },
+        { name = "preferred_topics", type = "STRING", mode = "REPEATED" },
+        { name = "watch_time_band", type = "STRING", mode = "NULLABLE" },
+      ]
+    }
+
+    user_dynamic_feature = {
+      partition_field = "event_timestamp"
+
+      schema = [
+        { name = "user_id", type = "STRING", mode = "REQUIRED" },
+        { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+        { name = "recent_click_count_7d", type = "INTEGER", mode = "NULLABLE" },
+        { name = "recent_view_count_7d", type = "INTEGER", mode = "NULLABLE" },
+        { name = "recent_watch_time_7d", type = "INTEGER", mode = "NULLABLE" },
+        { name = "recent_like_count_7d", type = "INTEGER", mode = "NULLABLE" },
+        { name = "historical_category_affinity", type = "STRING", mode = "NULLABLE" },
+        { name = "total_event_count_7d", type = "INTEGER", mode = "NULLABLE" },
+      ]
+    }
+
+    video_feature = {
+      partition_field = "event_timestamp"
+
+      schema = [
+        { name = "video_id", type = "STRING", mode = "REQUIRED" },
+        { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+        { name = "category_id", type = "STRING", mode = "NULLABLE" },
+        { name = "duration_sec", type = "INTEGER", mode = "NULLABLE" },
+        { name = "view_count", type = "INTEGER", mode = "NULLABLE" },
+        { name = "like_ratio", type = "FLOAT", mode = "NULLABLE" },
+        { name = "comment_ratio", type = "FLOAT", mode = "NULLABLE" },
+        { name = "days_since_upload", type = "INTEGER", mode = "NULLABLE" },
+        { name = "channel_subscriber_count", type = "INTEGER", mode = "NULLABLE" },
+        { name = "channel_view_count", type = "INTEGER", mode = "NULLABLE" },
+        { name = "channel_video_count", type = "INTEGER", mode = "NULLABLE" },
+      ]
+    }
+
+    user_category_similarity = {
+      partition_field = null
+
+      schema = [
+        { name = "user_id", type = "STRING", mode = "REQUIRED" },
+        { name = "category_id", type = "STRING", mode = "REQUIRED" },
+        { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+        { name = "topic_similarity", type = "FLOAT", mode = "NULLABLE" },
+        { name = "topic_similarity_top_topic", type = "STRING", mode = "NULLABLE" },
+        { name = "embedding_model", type = "STRING", mode = "NULLABLE" },
+        { name = "embedding_dim", type = "INTEGER", mode = "NULLABLE" },
+        { name = "user_topic_embedding_version", type = "STRING", mode = "NULLABLE" },
+        { name = "category_embedding_version", type = "STRING", mode = "NULLABLE" },
+        { name = "similarity_method", type = "STRING", mode = "NULLABLE" },
+        { name = "similarity_pooling", type = "STRING", mode = "NULLABLE" },
+      ]
+    }
+
+    training_entity = {
+      partition_field = "event_timestamp"
+
+      schema = [
+        { name = "dataset_id", type = "STRING", mode = "REQUIRED" },
+        { name = "user_id", type = "STRING", mode = "REQUIRED" },
+        { name = "video_id", type = "STRING", mode = "REQUIRED" },
+        { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
+        { name = "clicked", type = "INTEGER", mode = "REQUIRED" },
+        { name = "source_event_id", type = "STRING", mode = "REQUIRED" },
+      ]
+    }
+  }
+}
+
 resource "google_bigquery_table" "user_static_feature" {
   dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
   table_id            = "user_static_feature"
@@ -223,15 +282,7 @@ resource "google_bigquery_table" "user_static_feature" {
   # event_timestamp가 1970-01-01 고정값(정적 피처가 모든 action log보다 먼저
   # 유효하다는 규약)이라 파티셔닝이 무의미하다.
 
-  schema = jsonencode([
-    { name = "user_id", type = "STRING", mode = "REQUIRED" },
-    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "age_group", type = "STRING", mode = "NULLABLE" },
-    { name = "occupation", type = "STRING", mode = "NULLABLE" },
-    { name = "preferred_category", type = "STRING", mode = "REPEATED" },
-    { name = "preferred_topics", type = "STRING", mode = "REPEATED" },
-    { name = "watch_time_band", type = "STRING", mode = "NULLABLE" },
-  ])
+  schema = jsonencode(local.feast_feature_table_contracts["user_static_feature"].schema)
 
   labels = {
     data_class = "feature-store"
@@ -252,16 +303,7 @@ resource "google_bigquery_table" "user_dynamic_feature" {
     field = "event_timestamp"
   }
 
-  schema = jsonencode([
-    { name = "user_id", type = "STRING", mode = "REQUIRED" },
-    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "recent_click_count_7d", type = "INTEGER", mode = "NULLABLE" },
-    { name = "recent_view_count_7d", type = "INTEGER", mode = "NULLABLE" },
-    { name = "recent_watch_time_7d", type = "INTEGER", mode = "NULLABLE" },
-    { name = "recent_like_count_7d", type = "INTEGER", mode = "NULLABLE" },
-    { name = "historical_category_affinity", type = "STRING", mode = "NULLABLE" },
-    { name = "total_event_count_7d", type = "INTEGER", mode = "NULLABLE" },
-  ])
+  schema = jsonencode(local.feast_feature_table_contracts["user_dynamic_feature"].schema)
 
   labels = {
     data_class = "feature-store"
@@ -333,19 +375,7 @@ resource "google_bigquery_table" "video_feature" {
     field = "event_timestamp"
   }
 
-  schema = jsonencode([
-    { name = "video_id", type = "STRING", mode = "REQUIRED" },
-    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "category_id", type = "STRING", mode = "NULLABLE" },
-    { name = "duration_sec", type = "INTEGER", mode = "NULLABLE" },
-    { name = "view_count", type = "INTEGER", mode = "NULLABLE" },
-    { name = "like_ratio", type = "FLOAT", mode = "NULLABLE" },
-    { name = "comment_ratio", type = "FLOAT", mode = "NULLABLE" },
-    { name = "days_since_upload", type = "INTEGER", mode = "NULLABLE" },
-    { name = "channel_subscriber_count", type = "INTEGER", mode = "NULLABLE" },
-    { name = "channel_view_count", type = "INTEGER", mode = "NULLABLE" },
-    { name = "channel_video_count", type = "INTEGER", mode = "NULLABLE" },
-  ])
+  schema = jsonencode(local.feast_feature_table_contracts["video_feature"].schema)
 
   labels = {
     data_class = "feature-store"
@@ -362,22 +392,104 @@ resource "google_bigquery_table" "user_category_similarity" {
   # user_static_feature와 동일하게 event_timestamp가 1970-01-01 고정값이라
   # 파티셔닝하지 않는다.
 
-  schema = jsonencode([
-    { name = "user_id", type = "STRING", mode = "REQUIRED" },
-    { name = "category_id", type = "STRING", mode = "REQUIRED" },
-    { name = "event_timestamp", type = "TIMESTAMP", mode = "REQUIRED" },
-    { name = "topic_similarity", type = "FLOAT", mode = "NULLABLE" },
-    { name = "topic_similarity_top_topic", type = "STRING", mode = "NULLABLE" },
-    { name = "embedding_model", type = "STRING", mode = "NULLABLE" },
-    { name = "embedding_dim", type = "INTEGER", mode = "NULLABLE" },
-    { name = "user_topic_embedding_version", type = "STRING", mode = "NULLABLE" },
-    { name = "category_embedding_version", type = "STRING", mode = "NULLABLE" },
-    { name = "similarity_method", type = "STRING", mode = "NULLABLE" },
-    { name = "similarity_pooling", type = "STRING", mode = "NULLABLE" },
-  ])
+  schema = jsonencode(local.feast_feature_table_contracts["user_category_similarity"].schema)
 
   labels = {
     data_class = "feature-store"
     purpose    = "feast-feature-table"
+  }
+}
+
+# 학습 데이터셋 spine(impression 기준행 + 30분 click 라벨). Feast PIT 조회의
+# entity dataframe이며 SKYAHO/Autoresearch feature_store_build --tables
+# training_entity가 일 단위 증분 DELETE+INSERT로 적재한다(스키마 계약 #355).
+resource "google_bigquery_table" "training_entity" {
+  dataset_id          = google_bigquery_dataset.feast_offline_store.dataset_id
+  table_id            = "training_entity"
+  description         = "학습 데이터셋 spine(impression 기준행 + 30분 click 라벨). Feast PIT 조회의 entity dataframe."
+  deletion_protection = true
+
+  # event_timestamp(impression 시각) 기준 DAY 파티션.
+  # 주의: feature_store_build의 predicate는 KST(DATE(event_timestamp,'Asia/Seoul'))인데
+  # BQ 파티션은 UTC 캘린더 일 기준이라 경계가 어긋난다 — KST 하루 쿼리가 UTC 파티션
+  # 2개(training_entity는 후보 CTE가 D∪D+1의 KST 2일을 스캔하므로 최대 3개)에 걸친다.
+  # 그래도 전체 스캔보다는 훨씬 저렴하다(video_feature도 동일 조합).
+  time_partitioning {
+    type  = "DAY"
+    field = "event_timestamp"
+  }
+
+  schema = jsonencode(local.feast_feature_table_contracts["training_entity"].schema)
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-training-spine"
+  }
+}
+
+# #408 피처 스토어 dev 환경 offline store
+#
+# 오토리서치 에이전트의 실험(SKYAHO/Autoresearch#399)은 오프라인 전용이다 —
+# 피처를 정의(feast apply)하고 BigQuery PIT로 학습셋을 조립·평가한다. 온라인
+# 서빙(Redis)·materialize는 prod만의 책임이라 dev용 Redis 리소스는 없다.
+#
+# registry·staging은 기존 버킷의 dev/ prefix를 쓰므로 신규 버킷도 IAM도 없다
+# (bucket-level objectAdmin이 prefix까지 덮는다). 실제 신규 리소스는 이 dataset과
+# 하위 테이블 5종, dataset IAM 2건뿐이다.
+#
+# prod dataset과 달리 prevent_destroy를 걸지 않는다. 실험 환경이라 좌표를 통째로
+# 정리할 수 있어야 하고, 서빙이 이 dataset을 읽지 않아 파괴 시 영향이 dev에 갇힌다.
+resource "google_bigquery_dataset" "feast_offline_store_dev" {
+  dataset_id                 = local.feast_dev_dataset_id
+  friendly_name              = "Feast offline store (dev)"
+  description                = "Feature store dev environment offline store (#408). Autoresearch agent experiments write here; prod serving never reads it."
+  location                   = var.bigquery_location
+  delete_contents_on_destroy = var.bigquery_delete_contents_on_destroy
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-offline-store-dev"
+  }
+}
+
+resource "google_bigquery_dataset_iam_member" "feast_offline_store_dev_gke_app_data_editor" {
+  dataset_id = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.gke_app.email}"
+}
+
+# dev 피처 테이블 5종.
+#
+# dataset만 만들고 테이블을 두지 않으면 dev apply 자체가 실패한다 — FeatureView가
+# BigQuerySource를 `{project}.{BQ_DATASET}.{table}`로 참조하고 feast apply가 그
+# 존재를 검증하며, get_historical_features도 이 테이블들을 읽는다.
+#
+# 컬럼 계약은 prod와 같은 local.feast_feature_table_contracts를 참조한다. 파티션
+# 근거는 위 prod 테이블 주석과 동일하다.
+#
+# deletion_protection은 prod(true)와 달리 끈다. 실험 데이터라 재생성 가능하고,
+# 위 dataset을 정리할 때 테이블이 걸림돌이 되지 않아야 한다.
+resource "google_bigquery_table" "feast_offline_store_dev" {
+  for_each = local.feast_feature_table_contracts
+
+  dataset_id          = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+  table_id            = each.key
+  description         = "${each.key} dev 환경 사본(#408). 컬럼 계약은 prod와 동일하며 오토리서치 실험이 적재한다."
+  deletion_protection = false
+
+  dynamic "time_partitioning" {
+    for_each = each.value.partition_field == null ? [] : [each.value.partition_field]
+
+    content {
+      type  = "DAY"
+      field = time_partitioning.value
+    }
+  }
+
+  schema = jsonencode(each.value.schema)
+
+  labels = {
+    data_class = "feature-store"
+    purpose    = "feast-feature-table-dev"
   }
 }

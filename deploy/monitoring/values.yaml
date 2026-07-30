@@ -101,6 +101,44 @@ kube-prometheus-stack:
 
   alertmanager:
     enabled: true
+    # Slack webhook과 전체 Alertmanager route는 Git이 아닌 운영자 주입
+    # Secret에 둔다. Secret이 없으면 sync 전에 먼저 주입해야 하며 ArgoCD는
+    # 이를 관리하거나 prune하지 않는다. SMTP Secret은 live smoke 전 rollback
+    # 자산으로만 유지한다.
+    alertmanagerSpec:
+      useExistingSecret: true
+      configSecret: alertmanager-slack-config
+
+  additionalPrometheusRulesMap:
+    container-oom-killed:
+      groups:
+        - name: autoresearch.container-termination
+          rules:
+            - alert: ContainerOOMKilled
+              expr: |
+                (
+                  increase(
+                    kube_pod_container_status_restarts_total[5m]
+                  ) > 0
+                )
+                and on (namespace, pod, container)
+                (
+                  kube_pod_container_status_last_terminated_reason{
+                    reason="OOMKilled"
+                  } == 1
+                )
+              for: 1m
+              # 10분 안팎으로 반복되는 OOM을 하나의 firing lifecycle로 묶어
+              # Alertmanager repeat_interval이 실제로 노이즈를 억제하게 한다.
+              keep_firing_for: 15m
+              labels:
+                severity: warning
+              annotations:
+                summary: Container had a recent OOM restart
+                description: >-
+                  {{ $labels.namespace }}/{{ $labels.pod }}의 컨테이너
+                  {{ $labels.container }}가 최근 5분 내 OOMKilled로
+                  재시작했습니다.
 
   prometheusOperator:
     internalPort: 10250

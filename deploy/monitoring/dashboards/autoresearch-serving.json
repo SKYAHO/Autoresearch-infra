@@ -1,0 +1,194 @@
+{
+  "title": "AutoResearch / Serving",
+  "uid": "ar-serving",
+  "tags": [
+    "autoresearch",
+    "as-code"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "rerank 요청률",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "rate(rerank_requests_total[5m]) or rate(rerank_requests[5m])",
+          "legendFormat": "req/s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "prometheus_client Counter는 _total 접미사로 노출될 수 있어 양쪽 모두 질의."
+    },
+    {
+      "type": "timeseries",
+      "title": "rerank 지연 p95 / p50",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rerank_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(rerank_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "모델 준비 상태·미학습 카테고리",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "rerank_model_ready",
+          "legendFormat": "model_ready(1=정상)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum(increase(rerank_unseen_category_total[1h])) or sum(increase(rerank_unseen_category[1h]))",
+          "legendFormat": "unseen category(1h)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "model_ready 0 지속 = 서빙 불능. unseen category 증가 = 학습-서빙 스큐 신호(재학습 트리거)."
+    },
+    {
+      "type": "timeseries",
+      "title": "serving 파드 CPU throttling·재시작",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* restarts/1h"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"autoresearch\", container!=\"\"}[5m])) / sum by (pod) (rate(container_cpu_cfs_periods_total{namespace=\"autoresearch\", container!=\"\"}[5m]))",
+          "legendFormat": "{{pod}} throttle",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        },
+        {
+          "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"autoresearch\"}[1h]))",
+          "legendFormat": "{{pod}} restarts/1h",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ],
+      "description": "throttle 지속 25%+ 는 limit 상향 대상(스케일 판단 대시보드 판정 기준과 동일)."
+    }
+  ]
+}

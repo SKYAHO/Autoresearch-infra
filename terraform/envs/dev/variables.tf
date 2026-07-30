@@ -582,6 +582,12 @@ variable "admin_apply_workflow_ref" {
   default     = "SKYAHO/Autoresearch-infra/.github/workflows/admin-apply.yml@refs/heads/main"
 }
 
+variable "dev_apply_workflow_ref" {
+  description = "#341 dev root CI apply SA를 가장할 수 있는 정확한 dev-apply.yml workflow_ref. main의 이 workflow만 허용해 임의 브랜치/workflow의 가장을 막는다."
+  type        = string
+  default     = "SKYAHO/Autoresearch-infra/.github/workflows/dev-apply.yml@refs/heads/main"
+}
+
 variable "application_release_workflow_ref" {
   description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. workflow_dispatch는 main source ref로 제한한다."
   type        = string
@@ -598,4 +604,37 @@ variable "application_release_workflow_event_path" {
   description = "애플리케이션 GAR push SA를 가장할 수 있는 tag 기반 release 이벤트의 정확한 Autoresearch release 워크플로우 경로. event_name과 workflow path를 함께 검증한다."
   type        = string
   default     = "release:SKYAHO/Autoresearch/.github/workflows/release.yml"
+}
+
+variable "feast_apply_workflow_ref" {
+  description = "feast apply SA를 가장할 수 있는 정확한 Autoresearch feast-apply workflow_ref (#332). push(main)·workflow_dispatch(main) 모두 이 ref다."
+  type        = string
+  default     = "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main"
+}
+
+# #346 feast apply를 GKE Job으로 실행하기 위한 전용 namespace/KSA.
+# 앱 namespace(gke_app_k8s_namespace)를 재사용하면 `batch/jobs: create` 보유
+# 주체가 autoresearch-app KSA(= gke_app GSA)로 임의 컨테이너를 실행할 수 있어
+# GSA 분리 의미가 사라진다. 그래서 별도 변수로 전용 경계를 만든다.
+# 실제 namespace/KSA 오브젝트는 terraform/admin/autoresearch-k8s가 생성한다.
+variable "feast_apply_k8s_namespace" {
+  description = "feast apply Job 전용 Kubernetes namespace (#346). terraform/admin/autoresearch-k8s의 feast_apply_k8s_namespace와 같은 값이어야 한다."
+  type        = string
+  default     = "feast-apply"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_namespace))
+    error_message = "feast_apply_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "feast_apply_k8s_service_account" {
+  description = "feast apply GSA에 Workload Identity로 매핑할 Kubernetes service account (#346). terraform/admin/autoresearch-k8s의 feast_apply_k8s_service_account와 같은 값이어야 한다."
+  type        = string
+  default     = "feast-apply"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_service_account))
+    error_message = "feast_apply_k8s_service_account must be a valid Kubernetes service account name."
+  }
 }

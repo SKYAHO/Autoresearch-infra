@@ -24,3 +24,8 @@ variable "region" {
   type        = string
   default     = "asia-northeast3"
 }
+
+variable "state_bucket_name" {
+  description = "Terraform state GCS bucket name. Bucket names are globally unique, so no default can be safe across projects — always pass the value for the project being bootstrapped (#413). Must match the backend bucket in every root's versions.tf."
+  type        = string
+}

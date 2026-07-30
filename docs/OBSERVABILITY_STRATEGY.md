@@ -22,12 +22,14 @@ Cloud Monitoring은 GCP managed resource의 기본 관측 수단으로 유지한
 | Monitoring 설치 기반 | `monitoring` namespace(#78), chart는 ArgoCD Application `deploy/monitoring`이 관리(#183) |
 | Kubernetes 지표 전용 스택 | `kube-prometheus-stack` 설치·운영 중(#79~#81) |
 | Grafana UI | 설치·운영 중(Google OAuth 로그인 #155, port-forward 접속) |
-| Alerting | 기본 rule 설치, 별도 알림 채널 연동은 후속 |
+| Alerting | `#alerts-infra` Incoming Webhook 전환을 로컬 검증했고 live smoke 대기 중. workload allowlist는 `airflow`, `autoresearch`, `mlflow`, `monitoring`; warning은 무멘션 12시간, critical은 firing `@here`·4시간 반복, 둘 다 resolved 전송. node/control-plane availability allowlist는 chart 원본 severity와 무관하게 critical receiver로 승격 |
 | 외부 공개 endpoint | 없음(port-forward 전용) |
 
 현재 Cloud Logging/Monitoring은 GKE와 GCP 리소스의 기본 로그/지표를 제공한다.
 Prometheus/Grafana는 이를 대체하지 않고, Kubernetes application metric과 운영
 dashboard를 다루는 별도 계층으로 둔다.
+기존 SMTP Secret은 Slack live smoke 전 rollback 자산으로만 유지하고 두 채널의
+동시 전달은 사용하지 않는다.
 
 ## 설계 결정
 
@@ -40,12 +42,18 @@ dashboard를 다루는 별도 계층으로 둔다.
 | Prometheus 저장소 | PVC 사용. 초기 30Gi 기준, 사용량 확인 후 조정 |
 | 고가용성 | dev에서는 단일 replica. 운영 전환 전 HA 재검토 |
 | remote write | 초기 미사용. 장기 보관 요구가 생기면 별도 검토 |
-| Alertmanager | 설치는 허용하되, 알림 채널 연동은 별도 이슈에서 결정 |
+| Alertmanager | 설치·운영 중. `#alerts-infra` channel-bound Incoming Webhook 설정은 로컬 Helm 검증 완료, live smoke 대기. `alertname+namespace` grouping, warning 12시간/critical 4시간 반복과 resolved 전송을 사용한다. 현재 rule에는 같은 key의 warning/critical pair가 없어 inhibit는 두지 않는다. payload는 ArgoCD 비관리 운영자 주입 Secret으로 관리 |
 | Cloud Monitoring 관계 | GCP managed metric baseline 유지, Kubernetes/app 상세 dashboard는 Grafana 사용 |
 
 `kube-prometheus-stack`은 Prometheus Operator, Prometheus, Alertmanager,
 Grafana, kube-state-metrics, node-exporter, 기본 Kubernetes dashboard/rule을
 한 번에 구성할 수 있어 첫 운영 모니터링 기반으로 적합하다.
+
+`ContainerOOMKilled`는 현재 상태가 OOMKilled인 동안 반복되는 상태형 신호가
+아니라, cluster-wide로 최근 5분간 container restart counter가 증가했고 마지막
+종료 이유가 OOMKilled인 사건형 신호다. Slack 전달 범위는 Alertmanager route가
+제한한다. `keep_firing_for: 15m`이 짧은 간격의 반복 OOM을 한 사건으로
+유지하고, 이후 새 OOM restart가 발생하면 다시 firing한다.
 
 ## 모니터링 대상
 
@@ -127,7 +135,6 @@ Prometheus Operator CRD는 chart 제거 시 자동으로 정리되지 않을 수
 - Grafana 로그인은 dev에서 local admin으로 시작할지, Google OAuth를 바로 붙일지?
 - Airflow 저장소에서 어떤 metric endpoint 또는 StatsD exporter를 제공할지?
 - 앱 저장소에서 custom metric을 직접 노출할지, batch 결과를 로그/BigQuery만으로 볼지?
-- Alertmanager 알림 채널은 Slack, email, GitHub issue 중 무엇을 사용할지?
 - 운영 전환 시 7일 retention이 충분한지, 장기 보관을 Google Managed Service
   for Prometheus 또는 remote write로 넘길지?
 

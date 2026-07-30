@@ -1,0 +1,19 @@
+# #355 Grafana 대시보드 as-code — dashboards/*.json 을 sidecar ConfigMap으로
+# 렌더링한다. kube-prometheus-stack의 grafana sidecar(기본 활성)가
+# `grafana_dashboard: "1"` 라벨이 붙은 ConfigMap을 감시해 자동 로드하므로,
+# 대시보드 추가 = dashboards/ 에 JSON 파일 추가가 전부다. UI에서 수정한
+# 대시보드는 JSON export 후 여기 커밋해야 보존된다(재구축 시 소실 방지).
+# 주의: .Files.Get 은 Helm 템플릿을 렌더링하지 않으므로 JSON 안의
+# Grafana legendFormat 이중 중괄호 문법은 안전하다.
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-{{ base $path | trimSuffix ".json" }}
+  labels:
+    grafana_dashboard: "1"
+data:
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+---
+{{- end }}

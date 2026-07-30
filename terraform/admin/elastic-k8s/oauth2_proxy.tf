@@ -51,9 +51,10 @@ resource "kubernetes_deployment_v1" "kibana_oauth_proxy" {
           args = [
             "--provider=google",
             "--http-address=0.0.0.0:4180",
-            # 인증 후 프록시 대상 = 내부 Kibana Service(https, ECK self-signed).
-            "--upstream=https://autoresearch-kb-http.${kubernetes_namespace_v1.elastic.metadata[0].name}.svc:5601",
-            "--ssl-upstream-insecure-skip-verify=true",
+            # 인증 후 프록시 대상 = 내부 Kibana Service. #394에서 Kibana 자체
+            # TLS를 비활성(http)했다 — 9.x가 TLS 서빙 시 secure 세션을 강제해
+            # http 브라우저 구간 로그인이 차단되던 결함 해소.
+            "--upstream=http://autoresearch-kb-http.${kubernetes_namespace_v1.elastic.metadata[0].name}.svc:5601",
             # port-forward 시 브라우저는 localhost:4181. Google OAuth callback.
             "--redirect-url=${var.kibana_public_base_url}/oauth2/callback",
             # 실제 제한은 authenticated-emails-file(허용 목록)로 한다.

@@ -39,7 +39,7 @@ gke_node_disk_size                = 30
 gke_node_disk_type                = "pd-standard"
 gke_release_channel               = "REGULAR"
 gke_deletion_protection           = false
-master_authorized_networks        = ["203.0.113.10/32"] # IP 엔드포인트 예비 경로용(선택). 기본 kubectl 접속은 --dns-endpoint(#45)
+master_authorized_networks        = [] # IP 엔드포인트 예비 경로용(선택, CIDR 문자열 목록). 기본 kubectl 접속은 --dns-endpoint(#45)
 airflow_gke_node_pool_name        = "airflow-dev"
 airflow_gke_machine_type          = "e2-standard-2"
 airflow_gke_node_count_min        = 1
@@ -48,6 +48,12 @@ airflow_gke_node_disk_size        = 30
 airflow_gke_node_disk_type        = "pd-standard"
 gke_app_k8s_namespace             = "autoresearch"
 gke_app_k8s_service_account       = "autoresearch-app"
+
+# #346 feast apply GKE Job 전용 namespace/KSA. 오브젝트 자체는
+# terraform/admin/autoresearch-k8s가 만들고, 여기서는 WI 바인딩 member만 만든다.
+# 두 root의 값이 반드시 같아야 한다.
+feast_apply_k8s_namespace       = "feast-apply"
+feast_apply_k8s_service_account = "feast-apply"
 
 # MLflow (#91 설계, #92 bucket/GSA, #93 Cloud SQL DB/user). K8s namespace/SA는 #94에서 생성.
 mlflow_k8s_namespace              = "mlflow"

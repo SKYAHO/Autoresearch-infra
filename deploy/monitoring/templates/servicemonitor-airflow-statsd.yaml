@@ -1,0 +1,25 @@
+# #358 Airflow statsd-exporter(airflow#146) 수집 등록. ServiceMonitor는
+# monitoring namespace(이 Application의 destination)에 두고
+# namespaceSelector로 airflow ns의 airflow-statsd Service를 선택한다 —
+# ArgoCD 단일 경로 유지(airflow-k8s Terraform root에 CRD plan 의존을
+# 새로 만들지 않음). `release: kube-prometheus-stack` 라벨 필수(#206 함정 —
+# 누락 시 에러 없이 무시. 최속 확인 지점: Prometheus UI Service Discovery).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: airflow-statsd
+  labels:
+    app.kubernetes.io/name: airflow-statsd
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - airflow
+  selector:
+    matchLabels:
+      component: statsd
+      release: airflow
+  endpoints:
+    - port: statsd-scrape
+      path: /metrics
+      interval: 30s

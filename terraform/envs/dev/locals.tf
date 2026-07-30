@@ -78,6 +78,14 @@ locals {
   data_lake_raw_dataset_id = "data_lake_raw"
   feast_registry_bucket    = "${var.project_id}-feast-registry"
   feast_staging_bucket     = "${var.project_id}-feast-staging"
+
+  # #408 피처 스토어 dev 환경 좌표(SKYAHO/Autoresearch#399).
+  # prod는 dataset과 각 버킷의 루트를 현행 그대로 쓰고, dev만 새 dataset과 각
+  # 버킷의 dev/ prefix를 쓴다. prod를 prod/ prefix로 옮기면 registry 마이그레이션이
+  # 되어 회귀 위험만 늘고 얻는 것이 없다.
+  feast_dev_dataset_id       = "feast_offline_store_dev"
+  feast_dev_registry_path    = "gs://${local.feast_registry_bucket}/dev/registry.db"
+  feast_dev_staging_location = "gs://${local.feast_staging_bucket}/dev/"
   # #238 코드 아카이브 배포 버킷·업로더 SA. 버킷명은 이슈 예시(project_id 포함, 전역 유일).
   code_artifacts_bucket = "${var.project_id}-code-artifacts"
   code_uploader_sa_name = "${local.resource_prefix}-code-uploader"
@@ -118,4 +126,7 @@ locals {
   es_snapshot_bucket_name        = "${var.project_id}-${local.resource_prefix}-es-snapshots"
   es_snapshot_sa_name            = "${local.resource_prefix}-es-snapshot"
   es_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.elastic_k8s_namespace}/${var.es_k8s_service_account}]"
+
+  # #346 feast apply Job Pod가 feast_apply GSA를 가장할 principal.
+  feast_apply_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.feast_apply_k8s_namespace}/${var.feast_apply_k8s_service_account}]"
 }

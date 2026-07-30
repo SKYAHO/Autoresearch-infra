@@ -47,13 +47,13 @@ state로 관리한다. 아키텍처·정책은 #96 설계
 |---|---|---|
 | CR / 버전 | `autoresearch` / ES와 동일(`var.elasticsearch_version`) | `elasticsearchRef`로 operator가 ES 연결(계정/CA 자동) |
 | 리소스 | request 1Gi/200m, limit 1Gi | dev-default pool 고정(#98과 동일 이유) |
-| 노출 | ClusterIP + port-forward만 | LB/Ingress 없음. TLS는 ECK 기본(self-signed) |
+| 노출 | ClusterIP + port-forward만 | LB/Ingress 없음. **Kibana 자체 TLS 비활성(#394)** — 9.x가 TLS 서빙 시 secure 세션을 강제해 http 프록시 로그인이 차단되던 결함 해소. ES·Kibana↔ES TLS는 유지 |
 
 접속 (내부 전용):
 
 ```bash
 kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
-# 브라우저: https://localhost:5601 (self-signed 경고는 dev 내부 경로 특성상 허용)
+# 브라우저: http://localhost:5601 (#394부터 Kibana는 http — break-glass 직접 접속 시)
 ```
 
 로그인은 `elastic` 사용자. 비밀번호는 운영자가 Secret에서 회수하고
@@ -131,7 +131,7 @@ anonymous를 폐기(#325)해 Kibana 5601은 이제 항상 basic 로그인을 요
 | 항목 | 값 | 비고 |
 |---|---|---|
 | 수집기 | Filebeat (ECK `Beat` CR, DaemonSet) | Elastic Agent 대신 단일 용도로 단순화(#96) |
-| 수집 범위 | **`airflow`·`autoresearch` namespace 컨테이너 로그만** | autodiscover 조건 allowlist. 시스템/플랫폼 로그는 Cloud Logging 담당 — 중복 수집 방지 기준(#96 역할 분리) |
+| 수집 범위 | **`airflow`·`autoresearch` namespace 컨테이너 로그 + `elastic` ns의 filebeat 컨테이너(자기 로그, #365)** | autodiscover 조건 allowlist. 그 외 시스템/플랫폼 로그는 Cloud Logging 담당 — 중복 수집 방지 기준(#96 역할 분리) |
 | RBAC | 전용 SA + 읽기 전용 ClusterRole | pods/namespaces/nodes/replicasets/jobs get·list·watch만 |
 | PSS | hostPath(/var/log) read가 baseline 위반 — **audit/warn만 발생(비강제), 수용** | 로그 수집기의 본질적 요구. enforce 전환 시 Beat 전용 예외 설계 필요 |
 | 인덱스 | data stream `filebeat-<version>` | 템플릿 replicas 0(#101 — single-node green 전제) |
@@ -186,7 +186,7 @@ repository 등록과 SLM policy는 ES 내부 리소스라 운영자 절차로 �
 # 1) repository 등록 + 검증 (verify가 bucket 권한/경로를 end-to-end 확인)
 curl -sk -u "elastic:$PW" -X PUT https://localhost:19200/_snapshot/gcs_snapshots   -H 'Content-Type: application/json' -d '{
   "type": "gcs",
-  "settings": { "bucket": "ar-infra-501607-autoresearch-dev-es-snapshots" }
+  "settings": { "bucket": "autoresearch-503903-autoresearch-dev-es-snapshots" }
 }'
 
 # 2) SLM policy (일 1회 03:30 KST, 7일 보관)
@@ -204,6 +204,12 @@ curl -sk -u "elastic:$PW" "https://localhost:19200/_snapshot/gcs_snapshots/_all?
 ```
 
 ### 복구 절차 (#102 완료 조건)
+
+> 주의(#359): SLM 정책은 `include_global_state: false`이고 아래 절차는
+> `.ds-filebeat-*`만 restore하므로 **Kibana saved object(`.kibana*`)는
+> 스냅샷·복구 범위 밖**이다. saved object는 apply 시
+> `kibana_saved_objects.tf` Job이 저장소 ndjson에서 자동 복원한다(#365 —
+> 수동 import는 폴백).
 
 ```bash
 # 1) snapshot 목록에서 대상 확인
@@ -269,6 +275,16 @@ terraform apply
 terraform apply -target=helm_release.eck_operator
 terraform apply
 ```
+
+Kibana saved object(data view·저장 검색·Logs Overview 대시보드)는 `.kibana`
+시스템 인덱스에 살고 아래 SLM 스냅샷 범위 밖이라, 저장소의
+`kibana-saved-objects/logs-overview.ndjson`이 유일한 복구 원본이다.
+**#365부터 자동 import** — `kibana_saved_objects.tf`의 Job이 ndjson 해시가
+바뀔 때(파일 변경)와 완전 재구성 시 `_import?overwrite=true`(멱등)를
+실행한다(Kibana 기동 전이면 선폴링+backoff로 흡수). **파일이 그대로인 채
+객체만 삭제된 경우 apply는 No changes** — 복원 강제는
+`terraform apply -replace=kubernetes_job_v1.kibana_saved_objects_import`.
+수동 import는 폴백: Stack Management → Saved Objects → Import.
 
 로컬 검증:
 
