@@ -1,6 +1,11 @@
 locals {
   app_gcp_service_account_email = var.app_gcp_service_account_email != "" ? var.app_gcp_service_account_email : "${var.resource_prefix}-app@${var.project_id}.iam.gserviceaccount.com"
 
+  # dev root의 짧은 GSA account_id(orch-api/orch-runner)와 같은 값을 기본으로
+  # 파생한다. GSA local part와 KSA 이름은 서로 다르므로 혼동하지 않는다.
+  agent_orchestration_api_gcp_service_account_email    = var.agent_orchestration_api_gcp_service_account_email != "" ? var.agent_orchestration_api_gcp_service_account_email : "${var.resource_prefix}-orch-api@${var.project_id}.iam.gserviceaccount.com"
+  agent_orchestration_runner_gcp_service_account_email = var.agent_orchestration_runner_gcp_service_account_email != "" ? var.agent_orchestration_runner_gcp_service_account_email : "${var.resource_prefix}-orch-runner@${var.project_id}.iam.gserviceaccount.com"
+
   # #424 Task 2의 Workload Identity subject와 정확히 같은 namespace/KSA 기본값을
   # 사용한다. annotation과 RoleBinding은 반드시 같은 환경의 GSA만 참조한다.
   # GSA local part는 dev root의 feast_apply_{dev,prod}_sa_name과 같아야 한다.

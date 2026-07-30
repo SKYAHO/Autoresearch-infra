@@ -46,6 +46,41 @@ resource "google_service_account_iam_member" "gke_app_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
+# API와 Codex Runner는 파일 시스템·Secret Manager·Cloud SQL 권한을 공유하지
+# 않는다. API만 Cloud SQL client와 전용 DB password secret accessor를 받고,
+# Runner의 Secret Manager IAM은 secret_manager.tf의 OAuth bootstrap 하나뿐이다.
+resource "google_service_account" "agent_orchestration_api" {
+  account_id   = local.agent_orchestration_api_sa_name
+  display_name = "Autoresearch dev Agent Orchestration API workload identity SA"
+}
+
+resource "google_project_iam_member" "agent_orchestration_api_cloudsql" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.agent_orchestration_api.email}"
+}
+
+resource "google_service_account_iam_member" "agent_orchestration_api_wi" {
+  service_account_id = google_service_account.agent_orchestration_api.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.agent_orchestration_api_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
+resource "google_service_account" "agent_orchestration_runner" {
+  account_id   = local.agent_orchestration_runner_sa_name
+  display_name = "Autoresearch dev Agent Orchestration Codex Runner workload identity SA"
+}
+
+resource "google_service_account_iam_member" "agent_orchestration_runner_wi" {
+  service_account_id = google_service_account.agent_orchestration_runner.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.agent_orchestration_runner_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
 # #5 dev GKE 클러스터 + 노드풀
 # Standard zonal, private nodes. kubectl 기본 경로는 DNS 엔드포인트(#45),
 # master authorized networks(IP 엔드포인트)는 예비. autoscaling min1/max2.

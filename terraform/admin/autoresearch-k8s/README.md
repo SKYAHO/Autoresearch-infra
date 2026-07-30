@@ -9,6 +9,9 @@ Kubernetes 측 경계를 별도 state로 관리합니다.
   NetworkPolicy
 - `feast-apply-dev`, `feast-apply-prod` namespace + 환경별 KSA + GitHub Actions용
   Job RBAC + 전용 egress/ingress NetworkPolicy (#424, `feast_apply.tf`)
+- Agent Orchestration API·Codex Runner 전용 KSA. 실제 Deployment/Service/PVC와
+  Agent 전용 NetworkPolicy는 `deploy/agent-orchestration/`의 ArgoCD plain manifest가
+  소유하며, 이 root의 기존 namespace-wide egress 정책에서는 제외한다.
 
 GCP Redis Cluster, PSC subnet/policy, TLS CA Secret Manager, app GSA와 Workload
 Identity IAM member는 `terraform/envs/dev`에서 관리합니다. 애플리케이션

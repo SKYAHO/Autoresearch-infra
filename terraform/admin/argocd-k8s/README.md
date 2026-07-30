@@ -16,6 +16,7 @@ AppProject와 샘플 Application을 추가했다.
 | Application `argo-rollouts` | 예 (#186) | infra repo `deploy/argo-rollouts` umbrella chart, manual sync. helm_release에서 이관 |
 | Application `mlflow` | 예 (#94) | infra repo `deploy/mlflow` plain 매니페스트, manual sync. 신규 배포(adopt 아님) |
 | Application `serving` | 예 (#302) | infra repo `deploy/serving`(Deployment/Service/ServiceMonitor) plain 매니페스트, destination `var.app_namespace`(`autoresearch-k8s` 소유), manual sync. 신규 배포(adopt 아님). 이미지 digest는 앱 저장소 `release.yml`이 GAR에 push한 값 |
+| Application `agent-orchestration` | 예 (#453) | infra repo `deploy/agent-orchestration`(API/Runner Deployment·Service·PVC·NetworkPolicy) plain 매니페스트, destination `var.app_namespace`, manual sync. API/Runner image는 앱 release workflow가 검증한 immutable digest만 사용 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 
 ## 설치 구성 (#84)
@@ -249,6 +250,25 @@ terraform -chdir=terraform/admin/argocd-k8s apply \
 
 pin을 풀고 다시 `main` HEAD를 따라가려면 `-var` 없이(또는 `main` 값으로) 다시
 apply한다.
+
+## Agent Orchestration Application (#453)
+
+`application_agent_orchestration`은 infra repo
+`deploy/agent-orchestration`의 API·Codex Runner plain manifest를
+`var.app_namespace`(`autoresearch`, `autoresearch-k8s` 소유)에 manual sync로
+배포합니다. namespace와 KSA는 먼저 `autoresearch-k8s` root가 만들며,
+`CreateNamespace=false`, auto-sync, prune, self-heal은 추가하지 않습니다.
+
+`agent_orchestration_deployment_enabled=false`가 기본 안전 상태입니다. Application은
+의도적으로 존재하지 않는 `agent-orchestration-disabled` ref를 바라보므로, 수동 sync를
+시도해도 partial resource를 만들 수 없습니다. 앱 release workflow가 출력한 두
+immutable image digest와 dev Terraform output을 별도 배포 커밋에 주입하고 DB runtime
+권한 migration까지 검증한 뒤에만, 해당 병합 commit SHA를
+`agent_orchestration_target_revision`에 넣고
+`agent_orchestration_deployment_enabled=true`로 apply합니다. OAuth·DB password·완성
+DB URL은 Git이나 Application spec에 넣지 않습니다. 자세한 운영 절차는
+[`docs/runbooks/2026-07-30-agent-orchestration-gke.md`](../../../docs/runbooks/2026-07-30-agent-orchestration-gke.md)를
+따릅니다.
 
 ## ⚠️ apply 전 필수 — admin 이메일 변수 (#304)
 

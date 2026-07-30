@@ -11,6 +11,14 @@ app_k8s_service_account = "autoresearch-app"
 # autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
 app_gcp_service_account_email = ""
 
+# Agent Orchestration API와 Runner GSA는 dev root output
+# agent_orchestration_deployment_contract와 대조한다. 빈 값은 아래 기본값을
+# 파생한다: autoresearch-dev-orch-api|runner@<project_id>.iam.gserviceaccount.com
+agent_orchestration_api_k8s_service_account    = "agent-orchestration-api"
+agent_orchestration_runner_k8s_service_account = "agent-orchestration-runner"
+agent_orchestration_api_gcp_service_account_email    = ""
+agent_orchestration_runner_gcp_service_account_email = ""
+
 # #424 GitHub Environment → WIF provider → GSA → namespace → KSA 튜플은 불변이다.
 # 아래 namespace/KSA는 terraform/envs/dev의 feast_apply_kubernetes_identities,
 # GSA는 해당 GitHub Environment의 FEAST_APPLY_SA와 반드시 함께 바꾼다.

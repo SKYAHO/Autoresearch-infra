@@ -287,6 +287,47 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "agent_orchestration_db_name" {
+  description = "Agent Orchestration 전용 Cloud SQL database 이름."
+  type        = string
+  default     = "agent_orchestration"
+}
+
+variable "agent_orchestration_db_user" {
+  description = "Agent Orchestration 전용 Cloud SQL user 이름."
+  type        = string
+  default     = "agent_orchestration_app"
+}
+
+variable "agent_orchestration_runtime_database_role" {
+  description = "Cloud SQL built-in runtime user에만 부여할 사전 생성 PostgreSQL custom role. 이 역할이 있어야 cloudsqlsuperuser 자동 부여를 피할 수 있다."
+  type        = string
+  default     = "agent_orchestration_runtime"
+
+  validation {
+    condition     = can(regex("^[a-z_][a-z0-9_]*$", var.agent_orchestration_runtime_database_role))
+    error_message = "agent_orchestration_runtime_database_role must be a lowercase PostgreSQL role identifier."
+  }
+}
+
+variable "agent_orchestration_k8s_namespace" {
+  description = "Agent Orchestration API와 Runner KSA가 배치되는 Kubernetes namespace."
+  type        = string
+  default     = "autoresearch"
+}
+
+variable "agent_orchestration_api_k8s_service_account" {
+  description = "Agent Orchestration API GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "agent-orchestration-api"
+}
+
+variable "agent_orchestration_runner_k8s_service_account" {
+  description = "Agent Orchestration Codex Runner GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "agent-orchestration-runner"
+}
+
 variable "mlflow_db_name" {
   description = "기존 Cloud SQL 인스턴스 내 MLflow 전용 database 이름(Airflow/앱과 분리)."
   type        = string
