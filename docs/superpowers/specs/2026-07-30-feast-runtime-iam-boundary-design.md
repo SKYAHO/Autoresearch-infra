@@ -75,8 +75,10 @@ provider를 별도 생성한다.
 
 - GitHub OIDC `repository`가 `SKYAHO/Autoresearch`이다.
 - OIDC `environment`가 각각 `dev` 또는 `prod`이다.
-- GSA의 Workload Identity User binding은
-  `feast-apply.yml@refs/heads/main` workflow ref만 허용한다.
+- 각 GSA의 Workload Identity User binding은 해당 `environment` principalSet과
+  `feast-apply.yml@refs/heads/main` workflow-ref principalSet을 함께
+  요구한다. 기존 generic provider도 `workflow_ref`를 매핑하므로 workflow ref만
+  바인딩하면 안 된다.
 
 앱 저장소 workflow의 Feast apply Job은 반드시
 `environment: ${{ inputs.environment || 'prod' }}`를 선언해야 한다. 각 GitHub

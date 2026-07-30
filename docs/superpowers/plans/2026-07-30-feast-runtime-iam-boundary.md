@@ -13,7 +13,7 @@
 - Keep one GCP project and the existing `terraform/envs/dev` root/state; do not run `terraform apply`, state migration, destroy, or resource import.
 - Preserve existing prod Feast registry/staging bucket names and objects; create only dev-specific buckets.
 - Use resource-level IAM wherever supported; dev Feast apply must receive no Redis connection or Redis CA secret access.
-- Keep existing generic GitHub WIF provider unchanged; scope new providers to `SKYAHO/Autoresearch`, an exact GitHub Environment, and the exact main-branch `feast-apply.yml` workflow.
+- Keep existing generic GitHub WIF provider unchanged; scope new providers to `SKYAHO/Autoresearch` and an exact GitHub Environment. Each Feast apply GSA binding must require both its `attribute.environment` and the exact main-branch `feast-apply.yml` `attribute.workflow_ref`.
 - Do not commit tfvars, Terraform state, service-account credentials, GitHub secrets, or real project identifiers.
 - Document required app-repository and GitHub Environment configuration without changing the `SKYAHO/Autoresearch` repository in this issue.
 
@@ -90,7 +90,7 @@ Keep existing registry/staging resource addresses and names as prod. Add dev reg
 
 - [ ] **Step 3: Replace the shared Feast apply GSA**
 
-Replace `feast_apply` with dev/prod service accounts. Bind each to its environment-specific WIF provider and exact `feast-apply.yml@refs/heads/main` workflow ref. Grant each SA only its matching registry/staging bucket permissions and dataset `metadataViewer` binding.
+Replace `feast_apply` with dev/prod service accounts. For each GSA, create two Workload Identity User bindings: an environment-specific `attribute.environment` principalSet and an exact `attribute.workflow_ref` principalSet for `feast-apply.yml@refs/heads/main`. Do not bind only by workflow ref: the existing generic provider maps that attribute. Grant each SA only its matching registry/staging bucket permissions and dataset `metadataViewer` binding.
 
 - [ ] **Step 4: Restrict Redis, CA secret, code artifact, and GKE metadata access**
 
