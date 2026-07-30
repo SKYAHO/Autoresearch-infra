@@ -203,8 +203,10 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
   `agent-orchestration-runner-timeout` ConfigMap의 같은 `CODEX_RUNNER_TIMEOUT_SEC` key를
   `valueFrom.configMapKeyRef`로 주입받아 모두 120초를 사용합니다. Runner는 기동 시
   `CODEX_TIMEOUT_SEC + 5 < CODEX_RUNNER_TIMEOUT_SEC`를 검증하며, 공통 key가 없으면
-  startup을 fail-close합니다. `python3 scripts/check-agent-orchestration-timeout-contract.py`로
-  ConfigMap 값과 양 deployment의 참조를 sync 전에 검사합니다.
+  startup을 fail-close합니다. macOS 기본 Ruby와 GitHub Actions의 고정 Ruby가 제공하는
+  Psych만 사용하는 `ruby scripts/check-agent-orchestration-timeout-contract.rb`로 ConfigMap
+  값과 양 deployment의 참조를 sync 전에 검사합니다. lint job도 같은 checker와 부정
+  mutation self-test를 실행하므로 timeout 계약 위반은 CI에서 실패합니다.
   Runner의 동시 실행 한도를 초과하면 대기열에 넣지 않고 즉시 503을 반환하며 API도
   해당 상태를 503으로 보존합니다.
 
