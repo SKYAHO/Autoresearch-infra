@@ -71,6 +71,7 @@ locals {
   db_password_secret_id                 = "${local.resource_prefix}-db-password"
   mlflow_db_password_secret_id          = "${local.resource_prefix}-mlflow-db-password"
   mlflow_oauth_client_secret_secret_id  = "${local.resource_prefix}-mlflow-oauth-client-secret"
+  mlflow_oauth_client_id_secret_id      = "${local.resource_prefix}-mlflow-oauth-client-id"
   raw_data_bucket_name                  = "${var.project_id}-${local.resource_prefix}-raw-data"
   bigquery_dataset_id                   = replace("${local.resource_prefix}_analytics", "-", "_")
   feast_dataset_id                      = "feast_offline_store"
