@@ -72,6 +72,14 @@ spec:
               value: http://agent-orchestration-runner.autoresearch.svc.cluster.local:8080
             - name: CODEX_RUNNER_TIMEOUT_SEC
               value: "120"
+            - name: ORCH_RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  # API와 Runner 사이에서만 쓰는 별도 내부 인증 토큰이다. 이
+                  # 토큰은 OAuth·DB 시크릿과 분리되며 Secret Manager 접근권한을
+                  # 추가로 부여하지 않는다.
+                  name: agent-orchestration-runner-token
+                  key: ORCH_RUNNER_TOKEN
             - name: ORCH_RUNTIME_DIR
               value: /runtime
             - name: ORCH_API_TOKEN

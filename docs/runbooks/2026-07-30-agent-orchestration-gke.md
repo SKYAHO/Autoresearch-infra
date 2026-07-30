@@ -130,6 +130,11 @@ Runner PVC는 Codex가 갱신한 인증 상태를 유지합니다. bootstrap 시
 `auth.json`이 없는 최초 기동 때만 읽습니다. 기존 PVC의 갱신된 `auth.json`은
 덮어쓰지 않습니다.
 
+Runner의 bootstrap init container는 `bootstrap_secrets.py`를 포함하는 API 이미지를
+재사용합니다. 그러나 이 container도 Runner 전용 KSA와 OAuth 전용 GSA로 실행하고,
+Runner PVC만 mount합니다. API Deployment는 OAuth bootstrap 시크릿과 Runner PVC를
+mount하지 않으므로, 이미지 재사용이 API runtime의 OAuth 접근 권한을 뜻하지는 않습니다.
+
 신뢰된 운영자 로컬 환경에서 별도 `CODEX_HOME`으로 로그인합니다. 실제 `auth.json`,
 access token, `codex login` 출력은 터미널 공유·Git·PR·티켓에 붙이지 않습니다.
 
@@ -152,13 +157,20 @@ gcloud secrets versions add "$CODEX_AUTH_BOOTSTRAP_SECRET_ID" \
 PVC를 삭제하는 방식은 갱신된 인증 상태를 잃으므로 OAuth 장애 복구의 기본 절차가
 아닙니다.
 
-## API 요청 토큰 등록
+## API·Runner 요청 토큰 등록
 
 API는 `/chat`에 `X-Orch-Token`을 요구합니다. 이 토큰은 DB password와 OAuth
 시크릿과 다른 공유 요청 토큰이며, API GSA에는 Secret Manager accessor를 추가하지
 않습니다. 허가된 운영자는 임시 파일(권한 0600)에서 Kubernetes Secret
 `agent-orchestration-api-token`의 `ORCH_API_TOKEN` key만 생성·갱신합니다. payload를
 manifest, Git, Terraform state, shell history에 넣지 않습니다.
+
+API가 Runner의 `/generate`를 호출할 때에는 별도의 `X-Runner-Token`을 사용합니다.
+운영자는 32자 이상의 무작위 값을 0600 임시 파일에만 보관해 Kubernetes Secret
+`agent-orchestration-runner-token`의 `ORCH_RUNNER_TOKEN` key로 생성·갱신합니다. 이
+Secret은 API와 Runner Pod에만 mount하며, 외부 호출자·DB bootstrap·OAuth bootstrap
+용으로 재사용하지 않습니다. 이 역시 GSA Secret Manager accessor를 추가하지 않는
+Kubernetes Secret입니다.
 
 `autoresearch` namespace의 `view` 권한에는 Secret read가 포함되지 않습니다. 토큰을
 호출자에게 전달할 별도 보관·배포 방식은 팀의 승인된 비밀 관리 절차를 따릅니다.
@@ -172,9 +184,11 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
 
 - API와 Runner image가 모두 `@sha256:` immutable digest입니다.
 - API에는 `agent-orchestration-api` KSA와 DB runtime `emptyDir`만 있고 OAuth PVC가
-  없습니다.
+  없습니다. API에는 `ORCH_API_TOKEN`과 `ORCH_RUNNER_TOKEN`만 전달되며 OAuth
+  bootstrap Secret은 전달되지 않습니다.
 - Runner에는 `agent-orchestration-runner` KSA와 1Gi `ReadWriteOnce` PVC만 있으며,
-  DB URL·DB password·Cloud SQL secret reference가 없습니다.
+  DB URL·DB password·Cloud SQL secret reference가 없습니다. Runner에는
+  `ORCH_RUNNER_TOKEN`만 전달되고 `ORCH_API_TOKEN`은 전달되지 않습니다.
 - Runner ingress는 API pod label과 node subnet의 kubelet probe만 TCP 8080으로
   허용합니다. Runner Service는 port-forward하거나 외부 노출하지 않습니다.
 - API ingress는 node subnet의 kubelet probe·초기 `kubectl port-forward`만 TCP 8000으로
@@ -184,6 +198,9 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
   private Google APIs VIP(`199.36.153.8/30`) TCP 443뿐이고 Runner egress에는 Cloud SQL
   TCP 5432가 없습니다. API는 Codex/OpenAI 직접 호출을 하지 않으므로 전체 인터넷
   HTTPS egress를 열지 않습니다.
+- Runner의 `CODEX_TIMEOUT_SEC`은 110초, API의 `CODEX_RUNNER_TIMEOUT_SEC`은 120초입니다.
+  Runner의 동시 실행 한도를 초과하면 대기열에 넣지 않고 즉시 503을 반환하며 API도
+  해당 상태를 503으로 보존합니다.
 
 sync 뒤에는 다음 상태를 확인합니다.
 
