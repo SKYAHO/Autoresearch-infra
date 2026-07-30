@@ -588,6 +588,17 @@ variable "dev_apply_workflow_ref" {
   default     = "SKYAHO/Autoresearch-infra/.github/workflows/dev-apply.yml@refs/heads/main"
 }
 
+# #451 단일 진입점 이전용. 1단계에서 apply SA 2종에 이 ref 바인딩을 **추가**하고
+# (기존 admin-apply/dev-apply ref 유지), 2단계에서 workflow를 apply.yml 하나로
+# 교체한 뒤, 3단계에서 옛 ref 바인딩과 위 두 변수를 제거한다. 순서를 지켜야
+# "새 파일은 아직 가장 불가 + 옛 파일은 삭제됨"으로 CI가 IAM을 못 고치는
+# 구간이 생기지 않는다.
+variable "apply_workflow_ref" {
+  description = "#451 통합 apply.yml workflow_ref. dev root와 admin root apply SA를 모두 이 workflow가 가장한다(진입점 단일화 — 통제는 SA 분리 + Environment 승인 게이트)."
+  type        = string
+  default     = "SKYAHO/Autoresearch-infra/.github/workflows/apply.yml@refs/heads/main"
+}
+
 variable "application_release_workflow_ref" {
   description = "애플리케이션 GAR push SA를 가장할 수 있는 정확한 Autoresearch release workflow_ref. workflow_dispatch는 main source ref로 제한한다."
   type        = string
