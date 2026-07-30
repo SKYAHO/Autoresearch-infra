@@ -535,9 +535,9 @@ variable "batch_spot_gke_node_pool_name" {
 }
 
 variable "batch_spot_gke_machine_type" {
-  description = "batch Spot pool 머신 타입(#173). airflow pool과 동일 사양으로 시작."
+  description = "batch Spot pool 머신 타입(#173). #422에서 n2로 전환 — 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot도 E2_CPUS(한도 24)를 소모해 8노드 버스트가 한도 초과. N2_CPUS(한도 200)로 수요를 이전한다."
   type        = string
-  default     = "e2-standard-2"
+  default     = "n2-standard-2"
 }
 
 variable "batch_spot_gke_node_count_max" {
