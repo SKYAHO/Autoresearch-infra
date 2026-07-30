@@ -399,6 +399,16 @@ output "airflow_oauth_client_secret_secret_id" {
   value       = google_secret_manager_secret.airflow_oauth_client_secret.secret_id
 }
 
+output "mlflow_oauth_client_id_secret_id" {
+  description = "MLflow OAuth2-proxy Google OAuth client ID Secret Manager secret id(#404). Payload는 Terraform 밖에서 관리."
+  value       = google_secret_manager_secret.mlflow_oauth_client_id.secret_id
+}
+
+output "mlflow_oauth_client_secret_secret_id" {
+  description = "MLflow OAuth2-proxy Google OAuth client secret Secret Manager secret id(#232). Payload는 Terraform 밖에서 관리."
+  value       = google_secret_manager_secret.mlflow_oauth_client_secret.secret_id
+}
+
 output "vault_service_account_email" {
   description = "Vault auto-unseal용 GSA email(#132). vault-k8s root의 KSA annotation 값."
   value       = google_service_account.vault.email
