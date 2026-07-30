@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T06:30:36Z",
+  "generated_at": "2026-07-30T06:31:20Z",
   "reports": [
+    {
+      "number": 446,
+      "title": "docs: 첫 apply 닭-달걀 검토 spec — 안 B(현행 유지) 권고 (#440)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T06:31:04Z",
+      "summary_ko": [
+        "인프라 재구축 시 발생하는 '첫 apply 닭-달걀' 순환 문제 해결 방안을 검토한 설계 스펙 문서를 추가하였습니다.",
+        "apply 전용 서비스 계정을 bootstrap으로 이관하는 안 A와 현행 구조를 유지하는 안 B의 트레이드오프를 비교 분석하였습니다.",
+        "상시 관리 리스크 및 권한 경계를 고려하여 현행 유지 및 절차 명문화를 골자로 하는 '안 B'를 최종 권고하였습니다."
+      ],
+      "report_url": "pr/446/"
+    },
     {
       "number": 445,
       "title": "feat: OAuth 자격 SM 정본화 확장(Grafana·Kibana) + 반영 검증 스크립트 (#439)",
