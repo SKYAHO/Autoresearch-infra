@@ -556,7 +556,7 @@ Auto-Provisioning)가 꺼져 있어 클러스터 수준 `resourceLimits`도 없�
 | --- | --- | --- | --- |
 | `dev-default` | e2-standard-4 (4/16GB) | min1 / max2 | 앱·플랫폼 상주 워크로드 |
 | `airflow-dev` | e2-standard-2 (2/8GB) | min1 / max2 | Airflow 제어영역 고정 |
-| `batch-spot` | e2-standard-2 (2/8GB) Spot | min0 / max2(#331로 8 예정) | 재시도 내성 KPO |
+| `batch-spot` | n2-standard-2 (2/8GB) Spot | min0 / max8 (#331 상향, #422 N2 전환 — E2 quota 회피) | 재시도 내성 KPO |
 | `batch-od` | e2-standard-2 (2/8GB) | min0 / max2 | 재시도 내성 없는 KPO(#297) |
 | `ctr-model-retrain` | n2-highmem-4 (4/32GB) | min0 / max1(#331로 2 예정) | 재학습(#316). 라이브 선적용, main 편입은 #331 |
 
