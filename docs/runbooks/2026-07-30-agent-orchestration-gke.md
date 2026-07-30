@@ -268,8 +268,10 @@ curl --fail --silent http://127.0.0.1:8000/healthcheck
    않습니다. 요청 본문은 승인된 비공개 stdin 경로로만 공급하고, 다음 명령은 status를
    shell 변수에서만 비교해 response·prompt·token·OAuth 값을 출력하지 않습니다. 공유
    토큰은 curl argv에 넣지 않고 0600 임시 header 파일에서만 읽으며, path·payload·token은
-   출력하지 않습니다. subshell의 EXIT/HUP/INT/TERM trap은 HTTP 201 성공, 실패, 중단
-   모두에서 header 파일을 삭제합니다.
+   출력하지 않습니다. subshell의 EXIT trap은 HTTP 201 성공·실패·중단 모두에서 header
+   파일을 삭제합니다. HUP/INT/TERM handler는 즉시 `exit 1`로 종료해 signal 뒤의
+   `printf`나 `curl`이 실행되어 0600 경로를 다시 만들 수 없게 하고, 그 종료가 EXIT
+   cleanup을 실행합니다.
 
    ```bash
    (
@@ -279,7 +281,8 @@ curl --fail --silent http://127.0.0.1:8000/healthcheck
    fi
 
    chat_header_file="$(mktemp)" || exit 1
-   trap 'rm -f "$chat_header_file"' EXIT HUP INT TERM
+   trap 'rm -f "$chat_header_file"' EXIT
+   trap 'exit 1' HUP INT TERM
    chmod 600 "$chat_header_file" || exit 1
    printf 'X-Orch-Token: %s\n' "$ORCH_API_TOKEN" > "$chat_header_file" || exit 1
 
