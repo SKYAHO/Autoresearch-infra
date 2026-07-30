@@ -63,6 +63,11 @@ resource "kubernetes_role_v1" "airflow_components" {
     resources  = ["jobs", "cronjobs"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
+
+  # #436: ns 의존 간선 — namespace를 var로 참조해 암시 의존이 없어, 신선
+  # 클러스터 apply에서 ns 생성과 레이스가 났다(#404 "namespaces airflow not
+  # found" 실측 원인). 이 root에서 유일하게 누락돼 있던 리소스.
+  depends_on = [kubernetes_namespace_v1.airflow]
 }
 
 resource "kubernetes_role_v1" "airflow_vpa" {
