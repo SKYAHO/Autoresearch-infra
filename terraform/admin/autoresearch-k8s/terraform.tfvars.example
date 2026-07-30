@@ -18,12 +18,12 @@ feast_apply_identities = {
   dev = {
     namespace                 = "feast-apply-dev"
     service_account           = "feast-apply"
-    gcp_service_account_email = "autoresearch-dev-feast-apply-dev@your-gcp-project-id.iam.gserviceaccount.com"
+    gcp_service_account_email = "autoresearch-dev-feast-dev@your-gcp-project-id.iam.gserviceaccount.com"
   }
   prod = {
     namespace                 = "feast-apply-prod"
     service_account           = "feast-apply"
-    gcp_service_account_email = "autoresearch-dev-feast-apply-prod@your-gcp-project-id.iam.gserviceaccount.com"
+    gcp_service_account_email = "autoresearch-dev-feast-prod@your-gcp-project-id.iam.gserviceaccount.com"
   }
 }
 

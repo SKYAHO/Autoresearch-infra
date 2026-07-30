@@ -39,6 +39,12 @@
   `feast-apply.yml` workflow ref를 함께 검증한다. #332/#346의 단일
   `autoresearch-dev-feast-apply`·`feast-apply` 설명은 당시 이력이며 현재
   Terraform 계약은 아니다.
+- **GSA 이름 제약**: GCP `account_id`는 6~30자다. 최초 구성의
+  `autoresearch-dev-feast-apply-{dev,prod}`(32/33자)는 이 한도를 넘어 #431
+  merge 후 dev root plan이 실패했고, #433에서 GSA만
+  `autoresearch-dev-feast-{dev,prod}`로 줄였다.
+  namespace는 `feast-apply-{dev,prod}`를 유지하므로 두 이름은 의도적으로
+  다르다. 이 제한은 provider가 plan에서 검증해 `validate`로는 걸러지지 않는다.
 - 이번 단계는 런타임 GCS/IAM/WIF/Kubernetes 환경 격리 구성까지다. 단일
   `terraform/envs/dev` root/state는 유지하며, GHA runner와 GKE runtime을
   분리한 네 개 SA 모델은 후속 하드닝으로 미룬다.

@@ -8,8 +8,16 @@ locals {
   gar_pusher_sa_name         = "${local.resource_prefix}-gar-pusher"
   application_pusher_sa_name = "${local.resource_prefix}-app-pusher"
   airflow_deployer_sa_name   = "${local.resource_prefix}-airflow-cd"
-  feast_apply_dev_sa_name    = "${local.resource_prefix}-feast-apply-dev"
-  feast_apply_prod_sa_name   = "${local.resource_prefix}-feast-apply-prod"
+
+  # GSA account_id는 6~30자다. resource_prefix가 16자(`autoresearch-dev`)라
+  # 접미사 예산은 선행 `-` 포함 14자뿐이어서 `-feast-apply-dev`(16자)는 들어가지
+  # 않는다(#424 최초 구성의 plan 실패, #433에서 수정).
+  # `airflow_deployer_sa_name`이 `-airflow-deployer`를
+  # `-airflow-cd`로 줄인 것과 같은 방식으로 역할어를 생략하고, "Feast apply"
+  # 용도는 display_name/description에 남긴다. 이 제한은 provider가 plan 단계에서
+  # 검증하므로 validate만으로는 걸러지지 않는다.
+  feast_apply_dev_sa_name  = "${local.resource_prefix}-feast-dev"
+  feast_apply_prod_sa_name = "${local.resource_prefix}-feast-prod"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).

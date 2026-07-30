@@ -416,7 +416,7 @@ terraform init && terraform plan   # team_bigquery_data_lake_raw_data_editors �
 | Registry | `gs://<project>-feast-registry/registry.db` | `gs://<project>-feast-registry-dev/registry.db` |
 | Staging | `gs://<project>-feast-staging/` | `gs://<project>-feast-staging-dev/` |
 | Online store | Memorystore Redis Cluster | 없음 |
-| Feast apply GSA | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` |
+| Feast apply GSA | `autoresearch-dev-feast-prod@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-dev@<project>.iam.gserviceaccount.com` |
 
 registry 버킷은 versioning과 noncurrent version 30일 보존을 사용하고, staging
 버킷 객체는 7일 후 삭제합니다. prod 버킷과 registry 객체는 기존 주소를 그대로
@@ -473,7 +473,7 @@ terraform -chdir=terraform/admin/autoresearch-k8s output -json feast_apply_envir
 | 계약 항목 | `dev` Environment | `prod` Environment | Terraform output |
 | --- | --- | --- | --- |
 | `WIF_PROVIDER_ID` 전체 이름 | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github/providers/github-feast-dev` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github/providers/github-feast-prod` | bootstrap `feast_dev_wif_provider_name` / `feast_prod_wif_provider_name` |
-| `FEAST_APPLY_SA` | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` | dev root `github_actions_feast_apply_dev_service_account_email` / `github_actions_feast_apply_prod_service_account_email` |
+| `FEAST_APPLY_SA` | `autoresearch-dev-feast-dev@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-prod@<project>.iam.gserviceaccount.com` | dev root `github_actions_feast_apply_dev_service_account_email` / `github_actions_feast_apply_prod_service_account_email` |
 | `GCS_REGISTRY_PATH` | `gs://<project>-feast-registry-dev/registry.db` | `gs://<project>-feast-registry/registry.db` | dev root `feast_dev_registry_path` / `feast_prod_registry_path` |
 | `GCS_STAGING_LOCATION` | `gs://<project>-feast-staging-dev/` | `gs://<project>-feast-staging/` | dev root `feast_dev_staging_location` / `feast_prod_staging_location` |
 | `BQ_DATASET` | `feast_offline_store_dev` | `feast_offline_store` | dev root `feast_dev_offline_store_dataset_id` / `feast_prod_offline_store_dataset_id` |
@@ -1516,7 +1516,7 @@ Terraform 계약은 dev/prod 두 환경 튜플입니다. GHA는 VPC 밖에서 �
 
 | 권한/경계 | dev | prod |
 |---|---|---|
-| GSA | `autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-apply-prod@<project>.iam.gserviceaccount.com` |
+| GSA | `autoresearch-dev-feast-dev@<project>.iam.gserviceaccount.com` | `autoresearch-dev-feast-prod@<project>.iam.gserviceaccount.com` |
 | GCS | dev registry/staging bucket의 `objectAdmin` + bucket metadata read | 기존 prod registry/staging bucket의 같은 권한 |
 | BigQuery | `feast_offline_store_dev`의 `metadataViewer` | `feast_offline_store`의 `metadataViewer` |
 | Redis / CA | 권한 없음 | cluster 한정 `dbConnectionUser` + CA secret 한정 `secretAccessor` |
