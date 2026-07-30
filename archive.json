@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T01:57:35Z",
+  "generated_at": "2026-07-30T01:59:31Z",
   "reports": [
+    {
+      "number": 423,
+      "title": "feat: batch-spot 노드풀 n2 전환 — E2 quota 한도 회피 (#422)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T01:59:19Z",
+      "summary_ko": [
+        "새 GCP 프로젝트의 E2_CPUS 할당량 한도로 인한 batch-spot 노드풀 버스트 오류 문제를 해결하였습니다.",
+        "batch-spot GKE 노드풀의 기본 머신 타입을 e2-standard-2에서 n2-standard-2로 전환하였습니다.",
+        "관련 Terraform 변수 정의 및 TERRAFORM_DEV.md 운영 문서를 최신 사양으로 업데이트하였습니다."
+      ],
+      "report_url": "pr/423/"
+    },
     {
       "number": 421,
       "title": "feat: MLflow OAuth client id를 Secret Manager 정본으로 관리 (#420)",
