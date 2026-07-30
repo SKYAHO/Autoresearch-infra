@@ -22,9 +22,19 @@
   레이아웃으로 통일됐다(회수 경로·절차는 TERRAFORM_DEV.md에 기록). secret은
   `inherit` 대신 `workflow_call.secrets` 명시 선언으로 넘겨, dev 호출부의 secret
   노출면을 리팩터 전(=0)과 동일하게 유지한다(#449 리뷰 반영).
-- **검증**: `actionlint` 통과. 실동작은 머지 후 dev-apply·admin-apply를 각각
-  dispatch해 plan job 성공(= WIF 가장 유지 확인)까지 확인하고 승인 없이 run을
-  취소하는 왕복 검증으로 확인한다.
+- **검증**(2026-07-30 머지 후 왕복, 실측): `actionlint` 통과. `dev-apply`
+  (run 30523575159)·`admin-apply`(run 30523669570)를 각각 dispatch해 **plan job이
+  둘 다 success**, apply job은 승인 대기 상태에서 run 취소. 특히 admin-apply의
+  plan job은 workflow_ref로 고정된 `admin-apply` SA로 인증되므로, **재사용
+  워크플로우를 거쳐도 OIDC `workflow_ref`가 호출부를 가리킨다는 이 리팩터의
+  전제가 실측으로 확인**됐다. dev의 apply SA(`dev-apply`) 가장은 apply job에서만
+  일어나 승인 없이는 실증할 수 없으며, 같은 메커니즘의 admin 측 실증으로
+  갈음한다(승인은 곧 실제 apply라 검증 목적으로 수행하지 않음).
+- **plan 객체 실측**: 취소된 run이 남긴 plan은 `dev-apply-plans/dev/<run_id>.tfplan`
+  1건과 `admin-apply-plans/<root 7종>/<run_id>.tfplan`로, 새 레이아웃대로
+  생성됐고 옛 flat 경로 잔재는 없었다. 취소 run은 apply job의 cleanup이 돌지
+  않으므로(민감 속성값 포함 가능) 검증 직후 `gcloud storage rm`으로 8건 전부
+  수동 삭제했다 — 왕복 검증의 마지막 단계로 절차에 포함한다.
 
 ## 2026-07-29~30: GCP 프로젝트 이전 — dev 전체 재구축 (#404)
 
