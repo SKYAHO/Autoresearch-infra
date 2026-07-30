@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T06:31:20Z",
+  "generated_at": "2026-07-30T06:32:02Z",
   "reports": [
+    {
+      "number": 447,
+      "title": "docs: deploy 좌표 변수화 검토 spec — 보류(환경 분리 트리거) 권고 (#441)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T06:31:46Z",
+      "summary_ko": [
+        "배포 매니페스트 내 GCP 프로젝트 좌표 변수화 방안에 대한 비교 검토 사양 문서를 추가하였습니다.",
+        "Kustomize 도입(안 A)과 현행 유지 및 런북 방어(안 B)를 비교하여 현행 유지 및 보류(안 B)를 최종 권고하였습니다.",
+        "단일 dev 환경에서의 구조적 복잡성을 피하고 추후 staging/prod 분리 시점에 Kustomize 도입을 재검토하기로 결정하였습니다."
+      ],
+      "report_url": "pr/447/"
+    },
     {
       "number": 446,
       "title": "docs: 첫 apply 닭-달걀 검토 spec — 안 B(현행 유지) 권고 (#440)",
