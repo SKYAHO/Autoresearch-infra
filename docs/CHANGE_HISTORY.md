@@ -24,7 +24,9 @@
 - **quota 구조**: 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot이 E2를 소모 —
   증설 대신 batch-spot을 n2로 전환해 수요를 N2 quota(200)로 이전(#422).
 - **롤백·정리**: 옛 프로젝트는 결제 분리로 정지(재연결 시 복구 가능). OAuth
-  전환 완료로 옛 프로젝트 의존 0 확인 후 삭제 예약 예정.
+  전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·데이터 경로 기준) 확인.
+  코드 잔재는 드랍된 vault 샌드박스의 helm-values 1건뿐이며 #412 B~C(root째
+  삭제)가 정리한다. 삭제 예약은 그 이후.
 
 ## 2026-07-29: Alertmanager Slack 전환과 노이즈 제어 (#406)
 
@@ -1407,14 +1409,3 @@
   Registry reader, logging/monitoring writer 권한을 적용했다.
 - app Workload Identity는 `autoresearch/autoresearch-app` KSA와
   `autoresearch-dev-app` GSA 매핑으로 시작했다.
-## 2026-07-30: Filebeat 평문 Airflow 로그의 JSON 파싱 오류 마커 제거 (#403)
-
-- **현상**: Filebeat `ndjson` parser의 `add_error_key=true` 설정이 일반 텍스트
-  Airflow scheduler 로그에도 `error.type=json`과 디코딩 오류를 추가했다. 원문과
-  Kubernetes Pod 메타데이터는 정상 수집됐지만, 수집기 파싱 오류가 애플리케이션
-  오류처럼 검색·집계될 수 있었다.
-- **변경**: `add_error_key=false`로 바꿔 비JSON 라인은 `message` 원문만 보존한다.
-  JSON 한 줄 로그의 최상위 필드 전개(`expand_keys`)와 Kubernetes 메타데이터 보강은
-  유지한다.
-- **검증/롤백**: Filebeat 설정을 렌더링해 parser 값과 Terraform validate를 확인한다.
-  문제가 있으면 해당 값을 `true`로 되돌리고 admin root를 재적용한다.

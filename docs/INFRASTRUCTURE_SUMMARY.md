@@ -540,9 +540,10 @@ flowchart TB
 
 | Quota | 한도 | 실측 영향 |
 | --- | --- | --- |
-| `E2_CPUS` (리전) | 8 | 기존 E2 노드가 소진 → retrain 풀이 E2 대신 N2 계열 선택(#316) |
-| `N2_CPUS` (리전) | 32 | retrain n2-highmem-4 여유 |
-| `SSD_TOTAL_GB` (리전) | 250 | pd-balanced 실패 사례(#98) → 노드/ES 디스크는 pd-standard |
+| `E2_CPUS` (리전) | 24 (#404 새 프로젝트 실측) | 상주 풀(dev-default·airflow·batch-od) 최악 16 vCPU — 여유 확보를 위해 버스트는 N2로 이전(#422) |
+| `N2_CPUS` (리전) | 200 (#404 실측) | batch-spot(max8=16) + retrain(max2=8) 동시 최악 24/200 |
+| `PREEMPTIBLE_CPUS` (리전) | 0 (#422 실측) | 한도 0이면 Spot이 해당 계열 일반 quota를 소모 — batch-spot N2 전환의 직접 근거 |
+| `SSD_TOTAL_GB` (리전) | 500 (#404 실측) | pd-balanced 실패 사례(#98) → 노드/ES 디스크는 pd-standard |
 
 ### 계층 1 — 클러스터 (용량 직접 지정 없음)
 
