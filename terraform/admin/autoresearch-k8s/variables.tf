@@ -55,35 +55,35 @@ variable "app_gcp_service_account_email" {
   default     = ""
 }
 
-# #346 feast apply GKE Job 전용 경계. 앱 namespace를 재사용하면 jobs:create
-# 보유 주체가 autoresearch-app KSA(= app GSA)로 임의 컨테이너를 실행할 수 있어
-# GSA 분리 의미가 사라지므로 전용 namespace를 신설한다.
-variable "feast_apply_k8s_namespace" {
-  description = "Kubernetes namespace dedicated to the feast apply Job (#346). Must match terraform/envs/dev feast_apply_k8s_namespace."
-  type        = string
-  default     = "feast-apply"
+# #424 환경 이름은 GitHub Environment → WIF provider → GSA → namespace → KSA
+# 신뢰 경계 전체의 키다. null 기본값은 resource_prefix/project_id에서 안전한 기본값을
+# 파생하며, map override는 두 환경의 완전한 튜플만 허용한다.
+variable "feast_apply_identities" {
+  description = "Feast apply 환경별 GSA/namespace/KSA 계약. terraform/envs/dev의 feast_apply_kubernetes_identities 및 Task 2의 WI subject와 정확히 같아야 한다."
+  type = map(object({
+    namespace                 = string
+    service_account           = string
+    gcp_service_account_email = string
+  }))
+  default  = null
+  nullable = true
 
   validation {
-    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_namespace))
-    error_message = "feast_apply_k8s_namespace must be a valid Kubernetes namespace name."
+    condition = (
+      var.feast_apply_identities == null ||
+      (
+        setequals(toset(keys(var.feast_apply_identities)), toset(["dev", "prod"])) &&
+        alltrue([
+          for identity in values(var.feast_apply_identities) :
+          can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.namespace)) &&
+          can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.service_account)) &&
+          trimspace(identity.gcp_service_account_email) != "" &&
+          can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", identity.gcp_service_account_email))
+        ])
+      )
+    )
+    error_message = "feast_apply_identities override must contain exactly dev and prod with valid Kubernetes identifiers and non-empty GSA emails."
   }
-}
-
-variable "feast_apply_k8s_service_account" {
-  description = "Kubernetes service account mapped to the feast apply GCP service account (#346). Must match terraform/envs/dev feast_apply_k8s_service_account."
-  type        = string
-  default     = "feast-apply"
-
-  validation {
-    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_service_account))
-    error_message = "feast_apply_k8s_service_account must be a valid Kubernetes service account name."
-  }
-}
-
-variable "feast_apply_gcp_service_account_email" {
-  description = "feast apply GCP service account email (#346). Used both as the KSA Workload Identity annotation and as the GitHub Actions RoleBinding subject. Empty value derives the dev default name."
-  type        = string
-  default     = ""
 }
 
 variable "private_services_cidr" {
