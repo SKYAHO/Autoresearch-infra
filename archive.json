@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T07:50:23Z",
+  "generated_at": "2026-07-30T07:57:56Z",
   "reports": [
+    {
+      "number": 450,
+      "title": "docs: apply workflow 통합(#448) 왕복 검증 결과 기록",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T07:57:45Z",
+      "summary_ko": [
+        "이전 작업(#448)에서 진행한 apply 워크플로우 통합에 대한 머지 후 왕복 검증 실측 결과를 변경 이력 문서에 반영하였습니다.",
+        "dev-apply 및 admin-apply 수동 실행을 통해 OIDC 권한 인증 전제와 GCS plan 저장 경로의 정상 동작을 입증하였습니다.",
+        "실행 취소로 남아있던 GCS plan 객체 8건을 수동 삭제하고 이를 검증 수순의 일부로 함께 명시하였습니다."
+      ],
+      "report_url": "pr/450/"
+    },
     {
       "number": 449,
       "title": "refactor: apply workflow 공용 구현을 재사용 워크플로우로 통합 (#448)",
