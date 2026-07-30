@@ -25,6 +25,12 @@ variable "feast_apply_github_repository" {
   default     = "SKYAHO/Autoresearch"
 }
 
+variable "feast_apply_workflow_ref" {
+  description = "Exact GitHub Actions workflow_ref allowed to obtain Feast apply WIF tokens."
+  type        = string
+  default     = "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main"
+}
+
 variable "region" {
   description = "Location for the Terraform state GCS bucket."
   type        = string

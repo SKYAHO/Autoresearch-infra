@@ -91,9 +91,13 @@ claim이 다음 값과 정확히 일치해야 한다.
 이름을 설정한다. 예를 들어 `dev` Environment에는
 `github-feast-dev` provider 이름만, `prod` Environment에는
 `github-feast-prod` provider 이름만 설정한다. 교차 설정하면 OIDC provider
-조건에서 거부된다. `workflow_ref` claim은 두 provider에 매핑되며, 정확한
-`main` 브랜치 `feast-apply.yml` 제한은 Feast apply 서비스 계정 IAM binding에서
-적용한다.
+조건에서 거부된다. 각 provider는 `workflow_ref` claim도 매핑하고,
+`SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main`과의
+정확한 일치를 provider 조건에서 검증한다. 후속 Feast apply 서비스 계정의
+`roles/iam.workloadIdentityUser` binding은 해당 환경의
+`attribute.environment` principalSet **하나만** 사용한다. environment와
+workflow ref를 별도 IAM member로 추가하면 member가 OR로 평가되어 정확한
+workflow 경계를 보장하지 못한다.
 
 ## 3. GitHub repo variables 등록(4개)
 

@@ -83,8 +83,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 }
 
 # Feast apply는 앱 저장소와 GitHub Environment 별 provider로 분리한다.
-# workflow_ref의 정확한 main 브랜치 경계는 각 Feast apply SA의 IAM binding에서
-# 적용한다(#424).
+# repository, environment, workflow_ref를 provider 조건에서 함께 검증한다.
+# Workload Identity User IAM member는 OR로 결합되므로 workflow_ref를 별도
+# IAM member로 분리하지 않는다(#424).
 resource "google_iam_workload_identity_pool_provider" "github_feast_dev" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "github-feast-dev"
@@ -97,7 +98,7 @@ resource "google_iam_workload_identity_pool_provider" "github_feast_dev" {
     "attribute.workflow_ref" = "assertion.workflow_ref"
   }
 
-  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'dev'"
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'dev' && assertion.workflow_ref == '${var.feast_apply_workflow_ref}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -116,7 +117,7 @@ resource "google_iam_workload_identity_pool_provider" "github_feast_prod" {
     "attribute.workflow_ref" = "assertion.workflow_ref"
   }
 
-  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'prod'"
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'prod' && assertion.workflow_ref == '${var.feast_apply_workflow_ref}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
