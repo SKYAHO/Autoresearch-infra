@@ -15,8 +15,14 @@
 #
 # 승인 주의(#306 교훈): 요약의 "will be updated in-place"가 접근 변경(GKE
 # master_authorized_networks, IAM 계열)을 숨길 수 있다. 승인 전 해당 리소스가
-# 보이면 Actions 로그의 상세 diff를 확인한다. plan 회수 경로는
-# `<PLAN_PREFIX>/<root>/<run_id>.tfplan`(docs/TROUBLESHOOTING_LOG.md).
+# 보이면 Actions 로그의 상세 diff를 확인한다. plan 회수 경로와 절차는
+# docs/TERRAFORM_DEV.md "두 apply workflow의 공용 구현" 절.
+#
+# 호출부 추가 시 불변식 2가지:
+# 1) `plan_prefix` ↔ `concurrency.group`은 1:1이어야 한다. 아래 "Cleanup stale
+#    plans"가 자기 prefix 전체를 지우므로, 서로 다른 concurrency group이 같은
+#    prefix를 공유하면 승인 대기 중인 다른 run의 plan을 지울 수 있다.
+# 2) target별 root의 변수 이름공간이 겹치면 안 된다(아래 TF_VAR 합집합 주석).
 name: terraform-apply (reusable)
 
 on:
@@ -43,10 +49,26 @@ on:
         required: true
         type: string
       guard_admin_allowlist:
-        description: "admin root의 allowlist Secret 비어 있음 가드(#305) 수행 여부"
+        description: "admin root의 allowlist Secret 비어 있음 가드(#305) 수행 여부. admin root를 포함하는 호출부는 반드시 true."
         required: false
         default: false
         type: boolean
+    # secret은 `secrets: inherit`(repo/org 전체 전달) 대신 명시 선언한다 —
+    # dev-apply 호출부는 아래를 하나도 넘기지 않아, 최강 SA로 인증되는 dev apply
+    # job의 secret 노출면이 리팩터 전(=vars만 사용)과 동일하게 유지된다(#449 리뷰).
+    secrets:
+      ARGOCD_ADMIN_USER_EMAILS:
+        required: false
+      ARGOCD_READONLY_USER_EMAILS:
+        required: false
+      AUTORESEARCH_VIEWER_USER_EMAILS:
+        required: false
+      AIRFLOW_INSTALLER_USER_EMAILS:
+        required: false
+      MONITORING_PORT_FORWARD_USER_EMAILS:
+        required: false
+      MLFLOW_VIEWER_USER_EMAILS:
+        required: false
 
 permissions:
   id-token: write # GitHub OIDC → GCP WIF
@@ -60,7 +82,11 @@ env:
   #
   # 두 target의 TF_VAR를 합집합으로 둔다. Terraform은 해당 root가 선언하지 않은
   # TF_VAR_* 환경변수를 조용히 무시하므로(-var와 달리 오류 아님) target별 분기가
-  # 필요 없다. 변수는 terraform-plan.yml과 동일한 GitHub Vars/Secrets 단일
+  # 필요 없다. **불변식**: 이 안전성은 dev root와 admin root의 변수 이름이 겹치지
+  # 않는다는 데 의존한다(#449 리뷰 실측 — 양방향 충돌 0건). 예컨대 admin root가
+  # `labels`를 선언하면 default 대신 vars.TF_LABELS_JSON이 조용히 주입돼 plan이
+  # 달라진다. 이름이 겹치기 시작하면 target별 분기(입력 또는 *.auto.tfvars 생성)로
+  # 전환한다. 변수는 terraform-plan.yml과 동일한 GitHub Vars/Secrets 단일
   # 원천에서만 온다(로컬 tfvars가 default를 덮는 #305류 차단).
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
   TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
@@ -123,8 +149,11 @@ jobs:
 
       # 승인 거부/미승인 시 apply job의 cleanup이 돌지 않아 orphan plan이
       # 누적된다(#342 리뷰). plan 바이너리는 민감 속성값을 포함할 수 있으므로
-      # 새 run 시작 시 이전 잔재를 일괄 정리한다 — concurrency group이 동시
-      # 실행을 막아 승인 대기 중인 다른 run의 plan은 지워지지 않는다.
+      # 새 run 시작 시 이전 잔재를 일괄 정리한다 — 이 안전성은 호출부의
+      # concurrency group이 같은 prefix를 쓰는 run의 동시 실행을 막아 준다는
+      # 전제 위에 선다(파일 상단 불변식 1). prefix를 공유하면서 group이 다르면
+      # 승인 대기 중 run의 plan이 지워지고, 그 run은 승인 후 apply job의
+      # `gcloud storage cp`에서 눈에 띄게 실패한다(조용한 통과는 없다).
       - name: Cleanup stale plans
         run: gcloud storage rm "$PLAN_PREFIX/**" 2>/dev/null || true
 

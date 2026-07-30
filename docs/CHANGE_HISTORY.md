@@ -19,7 +19,9 @@
 - **범위**: Terraform/IAM 변경 0건. target 차이는 호출부 입력(`roots`,
   `plan_prefix`, `environment`, plan/apply SA, `guard_admin_allowlist`)으로만
   표현한다. dev의 plan 객체 경로가 admin과 같은 `<root>/<run_id>.tfplan`
-  레이아웃으로 통일됐다(회수 절차는 TROUBLESHOOTING_LOG 갱신).
+  레이아웃으로 통일됐다(회수 경로·절차는 TERRAFORM_DEV.md에 기록). secret은
+  `inherit` 대신 `workflow_call.secrets` 명시 선언으로 넘겨, dev 호출부의 secret
+  노출면을 리팩터 전(=0)과 동일하게 유지한다(#449 리뷰 반영).
 - **검증**: `actionlint` 통과. 실동작은 머지 후 dev-apply·admin-apply를 각각
   dispatch해 plan job 성공(= WIF 가장 유지 확인)까지 확인하고 승인 없이 run을
   취소하는 왕복 검증으로 확인한다.

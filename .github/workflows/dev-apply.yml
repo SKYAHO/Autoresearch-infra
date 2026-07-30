@@ -31,7 +31,9 @@ concurrency:
 jobs:
   apply:
     uses: ./.github/workflows/terraform-apply.yml
-    secrets: inherit
+    # secret을 하나도 넘기지 않는다 — dev root는 allowlist Secret을 쓰지 않으므로
+    # 최강 SA로 인증되는 apply job의 secret 노출면을 리팩터 전과 동일하게(=0)
+    # 유지한다(#449 리뷰). 변수는 전부 GitHub Vars 단일 원천.
     with:
       roots: terraform/envs/dev
       plan_prefix: gs://autoresearch-503903-dev-tfstate/dev-apply-plans

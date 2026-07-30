@@ -24,7 +24,15 @@ concurrency:
 jobs:
   apply:
     uses: ./.github/workflows/terraform-apply.yml
-    secrets: inherit
+    # allowlist secret은 admin root만 쓴다. `inherit`(repo 전체 전달) 대신 필요한
+    # 것만 명시해 dev 호출부의 노출면과 분리한다(#449 리뷰).
+    secrets:
+      ARGOCD_ADMIN_USER_EMAILS: ${{ secrets.ARGOCD_ADMIN_USER_EMAILS }}
+      ARGOCD_READONLY_USER_EMAILS: ${{ secrets.ARGOCD_READONLY_USER_EMAILS }}
+      AUTORESEARCH_VIEWER_USER_EMAILS: ${{ secrets.AUTORESEARCH_VIEWER_USER_EMAILS }}
+      AIRFLOW_INSTALLER_USER_EMAILS: ${{ secrets.AIRFLOW_INSTALLER_USER_EMAILS }}
+      MONITORING_PORT_FORWARD_USER_EMAILS: ${{ secrets.MONITORING_PORT_FORWARD_USER_EMAILS }}
+      MLFLOW_VIEWER_USER_EMAILS: ${{ secrets.MLFLOW_VIEWER_USER_EMAILS }}
     with:
       # apply 순서: 의존성 고려(namespace 소유 root 먼저, argocd는 다른 namespace를
       # 참조하므로 마지막). #404 신선 클러스터의 "namespaces airflow not found"는
