@@ -85,3 +85,30 @@ resource "google_secret_manager_secret_iam_member" "mlflow_db_password" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.mlflow.email}"
 }
+
+# #439 Grafana·Kibana UI OAuth client 자격 정본. mlflow(#420)·argocd와 대칭 —
+# 재발급은 id/secret이 한 쌍으로 바뀌므로 둘 다 SM에 정본을 둬야 runbook
+# 하드코딩/클러스터 값 갈림("재발급 ≠ 반영", #404 실측)이 재발하지 않는다.
+# 값(version)은 operator가 넣고, 주입도 운영자 자격으로 읽는다(accessor 없음).
+resource "google_secret_manager_secret" "ui_oauth_clients" {
+  for_each = toset([
+    "grafana-oauth-client-id",
+    "grafana-oauth-client-secret",
+    "kibana-oauth-client-id",
+    "kibana-oauth-client-secret",
+  ])
+  secret_id = "${local.resource_prefix}-${each.key}"
+
+  replication {
+    auto {}
+  }
+
+  # payload는 destroy 시 복구 불가 — airflow #54·mlflow #420과 같은 보호.
+  # 운영 주의(#445 리뷰): for_each 항목 제거/키 변경은 해당 인스턴스 destroy를
+  # 유발하므로 plan 단계에서 이 lifecycle이 오류로 막는다 — 의도된 제거라면
+  # ① payload 백업 ② 이 블록을 임시 해제(또는 state rm) ③ 항목 제거 순.
+  # dev root 전체 destroy도 같은 이유로 여기서 멈춘다(기존 SM secret들과 동일).
+  lifecycle {
+    prevent_destroy = true
+  }
+}
