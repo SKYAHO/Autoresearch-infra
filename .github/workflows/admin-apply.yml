@@ -23,7 +23,18 @@ concurrency:
 env:
   TF_IN_AUTOMATION: "true"
   # apply 순서: 의존성 고려(namespace 소유 root 먼저, argocd는 다른 namespace를
-  # 참조하므로 마지막). gke-team-access는 제외한다(#314): 프로젝트 IAM 외에
+  # 참조하므로 마지막). #404 신선 클러스터의 "namespaces airflow not found"는
+  # root 간 순서 문제가 아니라 airflow-k8s **내부**의 ns 의존 간선 누락
+  # (airflow_components Role — #436에서 depends_on 보강)이었다. cross-root
+  # 참조는 실측상 없어 현행 순서를 유지한다.
+  #
+  # 신선 클러스터 재구축 시 선행 단계(#436 — docs/CHANGE_HISTORY.md 2026-07-29
+  # 항목 요약, 실행형 상세는 docs/MIGRATION_RUNBOOK.md(#443에서 추가)):
+  # 1) CRD 의존 root(elastic-k8s·argocd-k8s)는 operator helm만 로컬 -target
+  #    선적용(CRD 없이는 CR plan 자체가 불가) 2) oauth-proxy류가 참조하는
+  #    operator 주입 Secret을 선주입(없으면 rollout 대기 10분 타임아웃).
+  #
+  # gke-team-access는 제외한다(#314): 프로젝트 IAM 외에
   # BigQuery dataset·Artifact Registry repo IAM까지 관리해 apply SA에 bigquery.admin
   # + artifactregistry.admin까지 필요한 과도한 escalation이라, 사람 IAM은 로컬
   # break-glass로 유지한다. vault-k8s도 제외한다(#412): 2026-07-15 드랍 결정된
