@@ -58,18 +58,22 @@ trap 'rm -f "$env_file"' EXIT               # 오류 포함 종료 시 폐기
 #   gcloud secrets versions add autoresearch-dev-grafana-oauth-client-id --data-file=-
 #   gcloud secrets versions add autoresearch-dev-grafana-oauth-client-secret --data-file=-
 # 주입은 SM에서 내려받는다(빈 정본 가드 포함 — 값은 화면·히스토리 비노출).
+gdir="$(mktemp -d)"   # 고정 경로 금지 — 공유 호스트 심링크/선점 위험
 for k in client-id client-secret; do
   gcloud secrets versions access latest \
     --secret "autoresearch-dev-grafana-oauth-$k" --project "$PROJECT_ID" \
-    | tr -d '\n' > "/tmp/g-$k"
-  test -s "/tmp/g-$k" || { echo "ERROR: $k 정본 비어 있음 — versions add 먼저"; exit 1; }
+    | tr -d '\n' > "$gdir/$k"
+  test -s "$gdir/$k" || { echo "ERROR: $k 정본 비어 있음 — versions add 먼저"; exit 1; }
 done
 printf 'GF_AUTH_GOOGLE_CLIENT_ID=%s\nGF_AUTH_GOOGLE_CLIENT_SECRET=%s\n' \
-  "$(cat /tmp/g-client-id)" "$(cat /tmp/g-client-secret)" > "$env_file"
-rm -f /tmp/g-client-id /tmp/g-client-secret
+  "$(cat "$gdir/client-id")" "$(cat "$gdir/client-secret")" > "$env_file"
+rm -rf "$gdir"
 
+# 재발급(기존 Secret 존재) 시에도 멱등 — create 단독은 AlreadyExists로 실패한다
 kubectl -n monitoring create secret generic grafana-google-oauth \
-  --from-env-file="$env_file"
+  --from-env-file="$env_file" --dry-run=client -o yaml | kubectl apply -f -
+# envFromSecret는 pod 기동 시에만 읽힌다 — 갱신 반영에는 재기동 필수
+kubectl -n monitoring rollout restart deploy/kube-prometheus-stack-grafana
 
 rm -f "$env_file"; trap - EXIT              # 즉시 삭제
 ```

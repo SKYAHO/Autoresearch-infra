@@ -104,6 +104,10 @@ resource "google_secret_manager_secret" "ui_oauth_clients" {
   }
 
   # payload는 destroy 시 복구 불가 — airflow #54·mlflow #420과 같은 보호.
+  # 운영 주의(#445 리뷰): for_each 항목 제거/키 변경은 해당 인스턴스 destroy를
+  # 유발하므로 plan 단계에서 이 lifecycle이 오류로 막는다 — 의도된 제거라면
+  # ① payload 백업 ② 이 블록을 임시 해제(또는 state rm) ③ 항목 제거 순.
+  # dev root 전체 destroy도 같은 이유로 여기서 멈춘다(기존 SM secret들과 동일).
   lifecycle {
     prevent_destroy = true
   }

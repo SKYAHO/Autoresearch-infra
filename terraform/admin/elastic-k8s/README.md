@@ -112,9 +112,9 @@ kubectl create secret generic kibana-oauth -n elastic \
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
+```
 
 반영 검증(값 비노출): `scripts/verify-oauth-clients.sh <k8s-context> <project-id>` — 5종 프리픽스·SM 해시 일괄 대조(#439).
-```
 
 접속:
 
