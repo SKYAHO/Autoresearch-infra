@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T06:29:33Z",
+  "generated_at": "2026-07-30T06:30:36Z",
   "reports": [
+    {
+      "number": 445,
+      "title": "feat: OAuth 자격 SM 정본화 확장(Grafana·Kibana) + 반영 검증 스크립트 (#439)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T06:30:22Z",
+      "summary_ko": [
+        "Grafana 및 Kibana UI의 OAuth 클라이언트 자격을 Secret Manager 정본 리소스로 추가 정의하여 보안 통합 관리를 확장했습니다.",
+        "5개 웹 UI 서비스의 OAuth client ID 및 Secret 설정이 정본과 일치하는지 자격 정보 노출 없이 검증하는 스크립트를 신설했습니다.",
+        "Grafana 및 Elastic-Kibana 운영 런북의 자격 주입 절차를 터미널 직접 입력에서 Secret Manager 정본 다운로드 방식으로 개정했습니다."
+      ],
+      "report_url": "pr/445/"
+    },
     {
       "number": 444,
       "title": "feat: DB random_password URI-safe 하드닝 (#438) — apply는 파이프라인 완주 후 조율",
