@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T08:48:03Z",
+  "generated_at": "2026-07-30T08:53:38Z",
   "reports": [
+    {
+      "number": 452,
+      "title": "feat: apply SA 2종에 통합 진입점(apply.yml) WI 바인딩 추가 (#451 1단계)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T08:53:19Z",
+      "summary_ko": [
+        "배포 워크플로우 통합(#451)의 1단계 작업으로 신규 통합 진입점(apply.yml)에 대한 Workload Identity 바인딩을 선행 추가하였습니다.",
+        "기존 admin 및 dev 배포 권한을 유지한 채 신규 경로 바인딩만 추가하여 워크플로우 교체 시 CI 권한 상실 위험을 방지하였습니다.",
+        "이번 변경은 역할 추가 없이 동일 서비스 계정에 인가 주체만 추가하는 작업이며 기존 자동화 실행 환경에 영향을 주지 않습니다."
+      ],
+      "report_url": "pr/452/"
+    },
     {
       "number": 450,
       "title": "docs: apply workflow 통합(#448) 왕복 검증 결과 기록",
