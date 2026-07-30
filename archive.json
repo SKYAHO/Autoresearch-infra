@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T05:42:09Z",
+  "generated_at": "2026-07-30T05:43:03Z",
   "reports": [
+    {
+      "number": 434,
+      "title": "fix: Feast apply GSA account_id 30자 제한 초과 수정 (#433)",
+      "author": "hyochangsung",
+      "merged_at": "2026-07-30T05:41:55Z",
+      "summary_ko": [
+        "GCP 서비스 계정 식별자(account_id)의 30자 길이 제한을 초과해 발생하던 Terraform plan 오류를 수정했습니다.",
+        "Feast apply용 서비스 계정 이름을 'autoresearch-dev-feast-dev/prod'로 축소하고 K8s Workload Identity 설정을 일치시켰습니다.",
+        "쿠버네티스 네임스페이스 이름은 유지하되 관련 운영 문서 및 구성 예시 파일들을 변경된 이름으로 일괄 갱신했습니다."
+      ],
+      "report_url": "pr/434/"
+    },
     {
       "number": 431,
       "title": "feat: Feast 런타임 환경 IAM 및 GCS 경계 분리",
