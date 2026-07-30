@@ -141,3 +141,15 @@ variable "ui_ingress_source_cidr" {
     error_message = "ui_ingress_source_cidr must be a valid CIDR in a.b.c.d/n form."
   }
 }
+
+variable "airflow_batch_k8s_service_account" {
+  description = "KPO 배치 파드용 KSA 이름(#427). dev root의 airflow_batch GSA와 WI로 연결된다."
+  type        = string
+  default     = "autoresearch-batch"
+}
+
+variable "airflow_batch_gcp_service_account_email" {
+  description = "배치 KSA에 연결할 GSA email. 비우면 resource_prefix/project_id로 파생."
+  type        = string
+  default     = ""
+}

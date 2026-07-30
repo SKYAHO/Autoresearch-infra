@@ -990,14 +990,16 @@ Terraform은 GCP-side 리소스(node pool, IAM, Workload Identity binding)를
 관리한다. Terraform CI plan이 GKE master authorized networks에 막히지
 않도록 Kubernetes provider는 이 루트 모듈에 추가하지 않는다.
 
-사전 리소스:
+사전 리소스: airflow namespace와 `airflow/autoresearch-batch` KSA(WI annotation
+포함)는 **`terraform/admin/airflow-k8s` root가 관리한다**(#427 — 과거에는 아래
+kubectl 수동 절차였는데, 코드 밖 오브젝트라 프로젝트 이전(#404) 재구축에서
+누락되어 야간 배치 전체가 "serviceaccount not found"로 실패했다. admin root
+apply로 대체하고 수동 절차는 폐기).
 
 ```bash
-kubectl create namespace airflow --dry-run=client -o yaml | kubectl apply -f -
-kubectl create serviceaccount autoresearch-batch -n airflow --dry-run=client -o yaml | kubectl apply -f -
-kubectl annotate serviceaccount autoresearch-batch -n airflow \
-  iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com \
-  --overwrite
+# 상태 확인만 필요할 때
+kubectl get serviceaccount autoresearch-batch -n airflow \
+  -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}'
 ```
 
 `#62`부터 `airflow/autoresearch-batch` KSA는 app GSA가 아니라 batch 전용
