@@ -74,7 +74,7 @@ kubectl port-forward -n mlflow svc/mlflow-oauth-proxy 4180:4180
 
 ```python
 import mlflow
-mlflow.set_tracking_uri("http://localhost:5000")   # port-forward 기준
+mlflow.set_tracking_uri("http://localhost:5000")   # kubectl -n mlflow port-forward svc/mlflow 5000:5000 기준(#236 RBAC, oauth 미경유)
 mlflow.set_experiment("my-exp")
 with mlflow.start_run():
     mlflow.log_metric("acc", 0.9)
