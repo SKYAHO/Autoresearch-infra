@@ -266,17 +266,32 @@ curl --fail --silent http://127.0.0.1:8000/healthcheck
    HTTP status **201만** 확인하고 response body는 stdout에 출력하지 않습니다. prompt,
    token, OAuth/auth 원문도 shell history, stdout, runbook, 티켓에 기록하거나 출력하지
    않습니다. 요청 본문은 승인된 비공개 stdin 경로로만 공급하고, 다음 명령은 status를
-   shell 변수에서만 비교해 response·prompt·token·OAuth 값을 출력하지 않습니다.
+   shell 변수에서만 비교해 response·prompt·token·OAuth 값을 출력하지 않습니다. 공유
+   토큰은 curl argv에 넣지 않고 0600 임시 header 파일에서만 읽으며, path·payload·token은
+   출력하지 않습니다. subshell의 EXIT/HUP/INT/TERM trap은 HTTP 201 성공, 실패, 중단
+   모두에서 header 파일을 삭제합니다.
 
    ```bash
+   (
+   if [ -z "${ORCH_API_TOKEN:-}" ]; then
+     echo "ORCH_API_TOKEN is required for the approved /chat smoke test." >&2
+     exit 1
+   fi
+
+   chat_header_file="$(mktemp)" || exit 1
+   trap 'rm -f "$chat_header_file"' EXIT HUP INT TERM
+   chmod 600 "$chat_header_file" || exit 1
+   printf 'X-Orch-Token: %s\n' "$ORCH_API_TOKEN" > "$chat_header_file" || exit 1
+
    chat_status="$(
      curl --fail --silent --show-error --output /dev/null --write-out '%{http_code}' \
        --request POST http://127.0.0.1:8000/chat \
        --header "Content-Type: application/json" \
-       --header "X-Orch-Token: ${ORCH_API_TOKEN}" \
+       --header "@${chat_header_file}" \
        --data-binary @-
    )"
    test "$chat_status" = "201"
+   )
    ```
 
 3. 아래 조회가 1행을 반환해 `pre_chat_max_id`보다 큰 id의 새 저장 행을 확인하면
