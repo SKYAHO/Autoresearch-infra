@@ -55,17 +55,9 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - python
-            - -c
-            - |
-              from agent_orchestration.bootstrap_secrets import (
-                  bootstrap_runner_codex_auth,
-                  load_runner_codex_auth_bootstrap_settings,
-                  read_secret_manager_secret,
-              )
-              bootstrap_runner_codex_auth(
-                  load_runner_codex_auth_bootstrap_settings(),
-                  read_secret_manager_secret,
-              )
+            - -m
+            - agent_orchestration.bootstrap_secrets
+            - runner-codex-auth
           env:
             - name: ORCH_CODEX_AUTH_SECRET_ID
               value: projects/REPLACE_WITH_PROJECT_ID/secrets/REPLACE_WITH_CODEX_AUTH_BOOTSTRAP_SECRET_ID/versions/latest

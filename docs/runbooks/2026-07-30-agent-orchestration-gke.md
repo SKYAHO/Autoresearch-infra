@@ -131,7 +131,8 @@ Runner PVC는 Codex가 갱신한 인증 상태를 유지합니다. bootstrap 시
 덮어쓰지 않습니다.
 
 Runner의 bootstrap init container는 `bootstrap_secrets.py`를 포함하는 API 이미지를
-재사용합니다. 그러나 이 container도 Runner 전용 KSA와 OAuth 전용 GSA로 실행하고,
+재사용하고 `python -m agent_orchestration.bootstrap_secrets runner-codex-auth` CLI 역할만
+호출합니다. 그러나 이 container도 Runner 전용 KSA와 OAuth 전용 GSA로 실행하고,
 Runner PVC만 mount합니다. API Deployment는 OAuth bootstrap 시크릿과 Runner PVC를
 mount하지 않으므로, 이미지 재사용이 API runtime의 OAuth 접근 권한을 뜻하지는 않습니다.
 
