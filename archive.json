@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-30T02:51:25Z",
+  "generated_at": "2026-07-30T02:52:16Z",
   "reports": [
+    {
+      "number": 426,
+      "title": "fix: MLflow oauth2-proxy ILB를 새 프로젝트 예약 IP로 교체 (#425)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-30T02:51:08Z",
+      "summary_ko": [
+        "MLflow oauth2-proxy의 내부 LoadBalancer IP를 구 프로젝트 주소(10.10.0.22)에서 신규 프로젝트 예약 IP(10.10.0.2)로 변경하였습니다.",
+        "하드코딩된 IP로 인해 DNS 레코드와 실제 서비스 IP가 불일치하여 발생하던 접속 타임아웃 문제를 해결하였습니다.",
+        "관련 매니페스트 및 인프라 문서의 IP 표기를 신규 예약 IP 및 Terraform output 참조 안내로 업데이트하였습니다."
+      ],
+      "report_url": "pr/426/"
+    },
     {
       "number": 423,
       "title": "feat: batch-spot 노드풀 n2 전환 — E2 quota 한도 회피 (#422)",
