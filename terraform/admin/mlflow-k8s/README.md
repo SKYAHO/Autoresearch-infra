@@ -48,21 +48,33 @@ UI 앞단 OAuth2-proxy는 Google OAuth client 자격·cookie 비밀·허용 이�
 값이 명령행·히스토리에 남지 않도록 파일 기반(`--from-file`)으로 만든다.
 
 선행: GCP 콘솔에서 OAuth client(웹) 생성, redirect URI
-`http://localhost:4180/oauth2/callback` 등록. client id는 공개값, client secret은
-비공개.
+`http://localhost:4180/oauth2/callback` 등록. **발급 직후 client id와 client secret을
+Secret Manager에 넣는다** — 이 두 secret이 정본이고, K8s Secret은 그 사본이다.
+
+```bash
+# 정본 등록(값은 stdin으로만 전달 → 붙여넣기 후 Enter, Ctrl+D)
+gcloud secrets versions add autoresearch-dev-mlflow-oauth-client-id \
+  --project "$PROJECT_ID" --data-file=-
+gcloud secrets versions add autoresearch-dev-mlflow-oauth-client-secret \
+  --project "$PROJECT_ID" --data-file=-
+```
+
+주입은 Secret Manager에서 읽어 파일로 떨어뜨린다(`--from-file`). 값이 명령행·셸
+히스토리에 남지 않고, runbook에 client id를 하드코딩하지 않으므로 재발급 때 문서와
+클러스터가 갈리지 않는다.
 
 ```bash
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 
-# client secret: read -s로 입력(화면·히스토리 미노출)
-read -rs -p 'client-secret: ' CS; echo
-printf '%s' "$CS" > "$d/client-secret"; unset CS
+# client id/secret: Secret Manager 정본에서 내려받기(끝 개행 제거)
+for k in client-id client-secret; do
+  gcloud secrets versions access latest \
+    --secret "autoresearch-dev-mlflow-oauth-$k" --project "$PROJECT_ID" \
+    | tr -d '\n' > "$d/$k"
+done
 
-# client id(공개값)
-printf '%s' '185508640491-p0rosojfsj118hqn8pc2flhsv3fcqaag.apps.googleusercontent.com' > "$d/client-id"
-
-# cookie 비밀(랜덤 32바이트, oauth2-proxy 권장 생성)
+# cookie 비밀(랜덤 32바이트, oauth2-proxy 권장 생성) — 기존 Secret이 있으면 재생성하지 말고 보존
 python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
 
 # 허용 이메일(한 줄에 하나) — 목록 밖 Google 계정은 거부된다
@@ -80,7 +92,24 @@ rm -rf "$d"; trap - EXIT
 kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
 ```
 
-이메일 목록·client secret 변경 시 위를 다시 실행(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+이메일 목록·client 자격 변경 시 위를 다시 실행(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+
+갱신 시 주의:
+
+- **cookie-secret은 재생성하지 않는다.** 기존 값을
+  `kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' | base64 -d > "$d/cookie-secret"`로
+  보존한다. 길이가 32바이트가 아니면 oauth2-proxy가 기동에 실패하고, 새로 만들면 전원 재로그인이 필요하다.
+- **client id도 함께 바꾼다.** client 재발급은 id/secret이 한 쌍으로 바뀌므로 secret만
+  교체하면 `invalid_client`로 로그인이 막힌다.
+- 반영 확인은 값 노출 없이 해시로 대조한다.
+
+  ```bash
+  kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.client-secret}' \
+    | base64 -d | shasum -a 256 | cut -c1-8
+  gcloud secrets versions access latest \
+    --secret autoresearch-dev-mlflow-oauth-client-secret --project "$PROJECT_ID" \
+    | tr -d '\n' | shasum -a 256 | cut -c1-8
+  ```
 
 ## Model Training 담당자 port-forward 권한 (#236)
 

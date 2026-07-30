@@ -74,4 +74,27 @@ resource "google_secret_manager_secret" "mlflow_oauth_client_secret" {
   replication {
     auto {}
   }
+
+  # operator가 콘솔 발급값을 넣는 payload는 destroy 시 저장소에서 복구할 수 없다.
+  # airflow #54의 두 oauth secret과 같은 보호를 적용한다.
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# #404 client id 컨테이너. client id는 공개값이지만 client secret과 짝이라
+# 같은 위치에서 관리해야 재발급 시 둘이 어긋나지 않는다(프로젝트 이전 때 실제로
+# runbook 하드코딩 값과 클러스터 값이 갈렸다). airflow는 이미 id/secret 두 개를
+# 모두 SM에 두고 있어 그 대칭을 맞춘다. accessor는 client secret과 동일하게
+# 부여하지 않는다(주입은 운영자 자격으로 SM에서 읽음).
+resource "google_secret_manager_secret" "mlflow_oauth_client_id" {
+  secret_id = local.mlflow_oauth_client_id_secret_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
