@@ -16,6 +16,7 @@ module AgentOrchestrationTimeoutContract
   TIMEOUT_CONFIG_MAP_NAME = "agent-orchestration-runner-timeout"
   TIMEOUT_ENV_NAME = "CODEX_RUNNER_TIMEOUT_SEC"
   TIMEOUT_VALUE = "120"
+  TIMEOUT_TEMPLATE_ANNOTATION = "autoresearch.io/codex-runner-timeout-sec"
 
   class ContractError < StandardError; end
 
@@ -46,14 +47,21 @@ module AgentOrchestrationTimeoutContract
       config_map.dig("metadata", "name"),
       "timeout ConfigMap 이름"
     )
+    config_map_data = config_map.fetch("data")
+    timeout_value = config_map_data.fetch(TIMEOUT_ENV_NAME)
     expect_equal(
-      { TIMEOUT_ENV_NAME => TIMEOUT_VALUE },
-      config_map.fetch("data"),
+      { TIMEOUT_ENV_NAME => timeout_value },
+      config_map_data,
       "timeout ConfigMap data"
     )
 
-    check_deployment_reference!(deploy_directory, "api-deployment.yaml")
-    runner_environment = check_deployment_reference!(deploy_directory, "runner-deployment.yaml")
+    check_deployment_reference!(deploy_directory, "api-deployment.yaml", timeout_value)
+    runner_environment = check_deployment_reference!(
+      deploy_directory,
+      "runner-deployment.yaml",
+      timeout_value
+    )
+    expect_equal(TIMEOUT_VALUE, timeout_value, "timeout ConfigMap data")
     expect_equal("110", runner_environment.fetch("CODEX_TIMEOUT_SEC").fetch("value"), "Runner Codex timeout")
   end
 
@@ -83,7 +91,7 @@ module AgentOrchestrationTimeoutContract
     end
   end
 
-  def check_deployment_reference!(deploy_directory, filename)
+  def check_deployment_reference!(deploy_directory, filename, timeout_value)
     deployment_document = deployment(File.join(deploy_directory, filename))
     deployment_environment = environment(deployment_document)
     expected_reference = {
@@ -99,6 +107,17 @@ module AgentOrchestrationTimeoutContract
       expected_reference,
       deployment_environment.fetch(TIMEOUT_ENV_NAME),
       "#{filename} timeout ConfigMap reference"
+    )
+    pod_template_annotations = deployment_document.dig(
+      "spec",
+      "template",
+      "metadata",
+      "annotations"
+    ) || {}
+    expect_equal(
+      timeout_value,
+      pod_template_annotations.fetch(TIMEOUT_TEMPLATE_ANNOTATION, nil),
+      "#{filename} pod template timeout annotation"
     )
     deployment_environment
   end

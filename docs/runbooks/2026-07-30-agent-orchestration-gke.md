@@ -162,11 +162,22 @@ Git, PR, 티켓에 기록하지 않습니다. PVC를 삭제하는 방식은 갱�
    않습니다.
 4. ArgoCD에서 해당 revision의 diff를 확인한 뒤 manual sync합니다. Runner rollout이
    Ready이고 Runner readiness probe의 `/healthcheck`가 성공하는지 확인한 다음, API
-   `/healthcheck`도 확인합니다.
-5. 즉시 다음 manifest commit에서 `--replace-existing`을 제거합니다. 그 다음 commit의
+   `/healthcheck`도 확인합니다. 그 뒤 승인된 `X-Orch-Token`으로 API public `/chat`을
+   실제 호출해 HTTP 201 생성 성공만 확인하고 response body는 출력하지 않습니다. 호출
+   직전에 최대 `chat_interactions.id`만 기록해 두고, 그 값과 비교해 Cloud SQL에 새 행이 생겼는지
+   `id`, `model`, `latency_ms`, `created_at` 메타데이터만 확인합니다. prompt, response,
+   OAuth/auth 및 token 원문은 출력하거나 기록하지 않습니다.
+5. 위 Runner/API readiness, `/chat` 201, Cloud SQL 신규 행 gate가 모두 성공한 경우에만
+   다음 manifest commit에서 `--replace-existing`을 제거합니다. 그 다음 commit의
    정확한 40자리 SHA로 `AGENT_ORCHESTRATION_TARGET_REVISION`을 다시 갱신하고,
    `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 설정합니다. reviewed Terraform
    plan/apply와 ArgoCD manual sync를 같은 순서로 수행합니다.
+
+하나라도 실패하면 5단계의 정상 flag 제거 commit으로 진행하지 말고, 즉시 승인된
+rollback/incident handling으로 멈춥니다. force init container는 이미 PVC의 기존 인증을
+새 bootstrap 값으로 덮어썼으므로, manifest rollback이나 flag 제거만으로 이전 PVC 인증을
+복구할 수 없습니다. 반복 재시작을 피하고, 노출 없는 incident 기록과 승인된 OAuth 복구
+절차로 다음 조치를 결정합니다.
 
 `--replace-existing`을 남긴 상태로 Runner를 재시작하면 이후 Codex refresh 상태도
 bootstrap Secret Manager 값으로 덮어쓸 수 있습니다. 따라서 이 flag는 일반 배포나
@@ -219,8 +230,12 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
   `CODEX_TIMEOUT_SEC + 5 < CODEX_RUNNER_TIMEOUT_SEC`를 검증하며, 공통 key가 없으면
   startup을 fail-close합니다. macOS 기본 Ruby와 GitHub Actions의 고정 Ruby가 제공하는
   Psych만 사용하는 `ruby scripts/check-agent-orchestration-timeout-contract.rb`로 ConfigMap
-  값과 양 deployment의 참조를 sync 전에 검사합니다. lint job도 같은 checker와 부정
-  mutation self-test를 실행하므로 timeout 계약 위반은 CI에서 실패합니다.
+  값, 양 deployment의 참조, 양 pod template의 timeout annotation을 sync 전에 검사합니다.
+  ConfigMap timeout을 바꾸는 manifest commit은 같은 값을 양 annotation에도 갱신해야 합니다.
+  annotation 변경은 pod template hash를 바꾸므로 API와 Runner가 함께 새 env 값으로
+  rollout됩니다. ConfigMap만 갱신하면 기존 Pod는 서로 다른 env 값으로 남을 수 있으므로
+  금지합니다. lint job도 같은 checker와 부정 mutation self-test를 실행하므로 timeout
+  계약 위반은 CI에서 실패합니다.
   Runner의 동시 실행 한도를 초과하면 대기열에 넣지 않고 즉시 503을 반환하며 API도
   해당 상태를 503으로 보존합니다.
 
@@ -238,19 +253,20 @@ port-forward하거나 외부 노출하지 않습니다.
 ```bash
 kubectl -n autoresearch port-forward service/agent-orchestration-api 8000:8000
 curl --fail --silent http://127.0.0.1:8000/healthcheck
-curl --fail --silent --request POST http://127.0.0.1:8000/chat \
-  --header "Content-Type: application/json" \
-  --header "X-Orch-Token: ${ORCH_API_TOKEN}" \
-  --data '{"prompt":"한 문장으로 상태를 알려주세요."}'
 ```
 
-Cloud SQL에서는 저장된 행의 메타데이터만 확인합니다. 프롬프트, 모델 응답, token
-원문, OAuth 내용은 출력하지 않습니다.
+`/chat` 생성 검증은 OAuth 복구 절의 승인 gate로만 수행합니다. 승인된
+`X-Orch-Token`과 비공개 요청 본문으로 실제 HTTP 201만 확인하고, prompt·response·auth·token
+원문은 출력하거나 runbook에 기록하지 않습니다.
+
+Cloud SQL에서는 `/chat` 호출 전 최대 id보다 큰 새 행의 메타데이터만 확인합니다.
+프롬프트, 모델 응답, token 원문, OAuth 내용은 출력하지 않습니다.
 
 ```sql
 SELECT id, model, latency_ms, created_at
 FROM chat_interactions
-ORDER BY id DESC
+WHERE id > :pre_chat_max_id
+ORDER BY id ASC
 LIMIT 1;
 ```
 

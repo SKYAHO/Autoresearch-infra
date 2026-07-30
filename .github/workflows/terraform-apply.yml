@@ -123,6 +123,49 @@ jobs:
       PLAN_PREFIX: ${{ inputs.plan_prefix }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # enabled revision이 현재 repository history에서 도달 가능한 commit인지
+          # Terraform plan 전에 fail-close 검증한다.
+          fetch-depth: 0
+
+      - name: Validate and summarize Agent Orchestration revision input
+        run: |
+          enabled="$TF_VAR_agent_orchestration_deployment_enabled"
+          target="$TF_VAR_agent_orchestration_target_revision"
+          echo "### Agent Orchestration GitOps revision" >> "$GITHUB_STEP_SUMMARY"
+
+          case "$enabled" in
+            true)
+              if ! [[ "$target" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "::error::AGENT_ORCHESTRATION_TARGET_REVISION must be a lowercase 40-character commit SHA when deployment is enabled."
+                exit 1
+              fi
+              if ! git cat-file -e "${target}^{commit}" 2>/dev/null; then
+                echo "::error::AGENT_ORCHESTRATION_TARGET_REVISION does not name a commit available in this checkout."
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "$target" HEAD; then
+                echo "::error::AGENT_ORCHESTRATION_TARGET_REVISION is not reachable from the checked-out repository revision."
+                exit 1
+              fi
+              {
+                echo "- deployment: enabled"
+                echo "- target revision: \`$target\`"
+                echo "- repository reachability: verified"
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            false)
+              {
+                echo "- deployment: disabled"
+                echo "- target revision: not evaluated while disabled"
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED must be true or false."
+              exit 1
+              ;;
+          esac
+
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}

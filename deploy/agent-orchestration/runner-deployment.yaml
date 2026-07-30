@@ -36,6 +36,9 @@ spec:
       app.kubernetes.io/name: agent-orchestration-runner
   template:
     metadata:
+      # ConfigMap 값과 함께 바뀌어 API·Runner Pod를 같은 timeout으로 재기동한다.
+      annotations:
+        autoresearch.io/codex-runner-timeout-sec: "120"
       labels:
         app.kubernetes.io/name: agent-orchestration-runner
         app.kubernetes.io/part-of: agent-orchestration
