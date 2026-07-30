@@ -22,9 +22,24 @@
   레이아웃으로 통일됐다(회수 경로·절차는 TERRAFORM_DEV.md에 기록). secret은
   `inherit` 대신 `workflow_call.secrets` 명시 선언으로 넘겨, dev 호출부의 secret
   노출면을 리팩터 전(=0)과 동일하게 유지한다(#449 리뷰 반영).
-- **검증**: `actionlint` 통과. 실동작은 머지 후 dev-apply·admin-apply를 각각
-  dispatch해 plan job 성공(= WIF 가장 유지 확인)까지 확인하고 승인 없이 run을
-  취소하는 왕복 검증으로 확인한다.
+- **검증**(2026-07-30 머지 후 왕복, 실측): `actionlint` 통과. `dev-apply`
+  (run 30523575159)·`admin-apply`(run 30523669570)를 각각 dispatch해 **plan job이
+  둘 다 success**, apply job은 승인 대기 상태에서 run 취소. 특히 admin-apply의
+  plan job은 workflow_ref로 고정된 `admin-apply` SA로 인증되므로, **재사용
+  워크플로우를 거쳐도 OIDC `workflow_ref`가 호출부를 가리킨다는 이 리팩터의
+  전제가 실측으로 확인**됐다. dev의 apply SA(`dev-apply`) 가장은 apply job에서만
+  일어나 승인 없이는 실증할 수 없으며, 같은 메커니즘의 admin 측 실증으로
+  갈음한다(승인은 곧 실제 apply라 검증 목적으로 수행하지 않음).
+- **plan 객체 실측**: 취소된 run이 남긴 plan은 `dev-apply-plans/dev/<run_id>.tfplan`
+  1건과 `admin-apply-plans/<root 7종>/<run_id>.tfplan`으로, **새 레이아웃대로
+  생성**됐다(이것이 이 실측의 증거). 옛 flat 경로 객체가 남아 있지 않은 것은
+  레이아웃 이전의 증거가 아니다 — 같은 run의 plan job 첫 단계 `Cleanup stale
+  plans`가 `$PLAN_PREFIX/**`로 prefix 전체를 선삭제하므로 항진적으로 성립한다.
+- **orphan plan 처리**: 취소 run은 apply job의 cleanup이 돌지 않아 plan이 남지만
+  영구 잔존은 아니다 — 같은 진입점의 다음 run이 시작될 때 `Cleanup stale plans`가
+  일괄 삭제한다(#342). 따라서 실제 위험은 "다음 dispatch까지 민감 속성값을 담은
+  plan이 버킷에 남는 노출 창"이고, 검증 직후의 수동 `gcloud storage rm` 8건은
+  유일한 정리 수단이 아니라 그 창을 좁히는 방어 심화다(절차는 TERRAFORM_DEV.md).
 
 ## 2026-07-29~30: GCP 프로젝트 이전 — dev 전체 재구축 (#404)
 
