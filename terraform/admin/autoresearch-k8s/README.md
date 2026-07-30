@@ -224,6 +224,11 @@ override하면 dev/prod 두 키와 비어 있지 않은 유효 email을 모두 �
 각각 하나씩 생성됩니다. RoleBinding subject와 KSA annotation은 같은 환경의 GSA를
 공유하므로 dev GSA는 prod namespace의 RoleBinding을 얻지 못합니다.
 
+두 Feast apply namespace에는 `pod-security.kubernetes.io/enforce=baseline`도
+설정합니다. Role이 Job 생성 권한을 가지므로, baseline이 `hostNetwork`, `hostPID`,
+`hostIPC`를 거부하지 않으면 임의 Job이 host network namespace를 사용해
+NetworkPolicy의 Redis PSC egress 경계를 우회할 수 있습니다.
+
 ### RBAC와 NetworkPolicy
 
 각 Role에는 다음 동사만 있습니다.
@@ -262,6 +267,11 @@ terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvar
 적용이 승인·완료된 뒤에는 환경별 subject와 NetworkPolicy를 다음처럼 확인합니다.
 
 ```bash
+for namespace in feast-apply-dev feast-apply-prod; do
+  kubectl get namespace "$namespace" \
+    -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}{"\n"}'
+done
+
 kubectl auth can-i create jobs -n feast-apply-dev \
   --as=autoresearch-dev-feast-apply-dev@<project>.iam.gserviceaccount.com  # yes
 kubectl auth can-i create jobs -n feast-apply-prod \
@@ -275,6 +285,19 @@ kubectl -n feast-apply-prod get networkpolicy feast-apply-prod-egress -o yaml
 있어야 합니다. GKE의 GSA `--as` 결과는 IAM impersonation 경로 때문에 실제와 다르게
 나올 수 있으므로, 최종 확인 때에는 각 namespace의 RoleBinding subject와 roleRef도
 함께 대조합니다.
+
+두 namespace label 출력은 모두 `baseline`이어야 합니다. 다음 server-side dry-run은
+개발 namespace에서 `hostNetwork: true` Job을 만들려는 음성 검증이며, Pod Security
+Admission에 의해 거부되어야 합니다. `--dry-run=server`를 유지해 실제 Job을 만들지
+않습니다.
+
+```bash
+kubectl -n feast-apply-dev create job feast-apply-hostnetwork-negative \
+  --image=busybox:1.36 \
+  --dry-run=server \
+  --overrides='{"apiVersion":"batch/v1","spec":{"template":{"spec":{"hostNetwork":true}}}}' \
+  -- sh -c 'true'
+```
 
 롤백은 Feast apply 실행을 중지한 뒤 #424 이전 Terraform 구성을 복원하여 기존 공유
 provider/GSA/namespace를 먼저 되살리는 절차입니다. bootstrap → dev root → admin root

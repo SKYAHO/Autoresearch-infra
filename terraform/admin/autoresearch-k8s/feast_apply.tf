@@ -12,6 +12,10 @@ resource "kubernetes_namespace_v1" "feast_apply" {
     labels = {
       "app.kubernetes.io/name"        = "feast-apply"
       "app.kubernetes.io/environment" = each.key
+      # baseline PSA는 hostNetwork, hostPID, hostIPC를 거부한다. Job 생성 권한을
+      # 가진 GSA가 host network namespace로 NetworkPolicy Redis PSC 경계를 우회하는
+      # 것을 admission 단계에서 막는다.
+      "pod-security.kubernetes.io/enforce" = "baseline"
     }
   }
 }
