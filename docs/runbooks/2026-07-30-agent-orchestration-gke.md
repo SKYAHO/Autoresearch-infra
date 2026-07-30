@@ -162,12 +162,9 @@ Git, PR, 티켓에 기록하지 않습니다. PVC를 삭제하는 방식은 갱�
    않습니다.
 4. ArgoCD에서 해당 revision의 diff를 확인한 뒤 manual sync합니다. Runner rollout이
    Ready이고 Runner readiness probe의 `/healthcheck`가 성공하는지 확인한 다음, API
-   `/healthcheck`도 확인합니다. 그 뒤 승인된 `X-Orch-Token`으로 API public `/chat`을
-   실제 호출해 HTTP 201 생성 성공만 확인하고 response body는 출력하지 않습니다. 호출
-   직전에 최대 `chat_interactions.id`만 기록해 두고, 그 값과 비교해 Cloud SQL에 새 행이 생겼는지
-   `id`, `model`, `latency_ms`, `created_at` 메타데이터만 확인합니다. prompt, response,
-   OAuth/auth 및 token 원문은 출력하거나 기록하지 않습니다.
-5. 위 Runner/API readiness, `/chat` 201, Cloud SQL 신규 행 gate가 모두 성공한 경우에만
+   `/healthcheck`도 확인한 뒤 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를
+   수행합니다. 이 gate는 OAuth 복구 전용 절차가 아니라 모든 배포의 공통 검증입니다.
+5. 위 Runner/API readiness와 공통 post-sync end-to-end gate가 모두 성공한 경우에만
    다음 manifest commit에서 `--replace-existing`을 제거합니다. 그 다음 commit의
    정확한 40자리 SHA로 `AGENT_ORCHESTRATION_TARGET_REVISION`을 다시 갱신하고,
    `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 설정합니다. reviewed Terraform
@@ -247,28 +244,56 @@ kubectl -n autoresearch rollout status deployment/agent-orchestration-api --time
 kubectl -n autoresearch get pod -l app.kubernetes.io/part-of=agent-orchestration
 ```
 
-초기 검증은 권한 있는 운영자의 port-forward로 제한합니다. Runner Service를
-port-forward하거나 외부 노출하지 않습니다.
+## 공통 post-sync end-to-end gate
+
+이 gate는 최초 배포, 이미지 promotion, 이미지 rollback, OAuth force 복구 뒤의 모든
+manual sync에 적용합니다. Runner Service를 port-forward하거나 외부 노출하지 않습니다.
+권한 있는 운영자는 API Service만 port-forward합니다.
 
 ```bash
 kubectl -n autoresearch port-forward service/agent-orchestration-api 8000:8000
 curl --fail --silent http://127.0.0.1:8000/healthcheck
 ```
 
-`/chat` 생성 검증은 OAuth 복구 절의 승인 gate로만 수행합니다. 승인된
-`X-Orch-Token`과 비공개 요청 본문으로 실제 HTTP 201만 확인하고, prompt·response·auth·token
-원문은 출력하거나 runbook에 기록하지 않습니다.
+1. `/chat` 호출 전 `chat_interactions`의 최대 id를 비민감 메타데이터로만 기록합니다.
 
-Cloud SQL에서는 `/chat` 호출 전 최대 id보다 큰 새 행의 메타데이터만 확인합니다.
-프롬프트, 모델 응답, token 원문, OAuth 내용은 출력하지 않습니다.
+   ```sql
+   SELECT COALESCE(MAX(id), 0) AS pre_chat_max_id
+   FROM chat_interactions;
+   ```
 
-```sql
-SELECT id, model, latency_ms, created_at
-FROM chat_interactions
-WHERE id > :pre_chat_max_id
-ORDER BY id ASC
-LIMIT 1;
-```
+2. 승인된 `X-Orch-Token`과 승인된 비공개 요청 본문으로 API `/chat`을 실제 호출합니다.
+   HTTP status **201만** 확인하고 response body는 stdout에 출력하지 않습니다. prompt,
+   token, OAuth/auth 원문도 shell history, stdout, runbook, 티켓에 기록하거나 출력하지
+   않습니다. 요청 본문은 승인된 비공개 stdin 경로로만 공급하고, 다음 명령은 status를
+   shell 변수에서만 비교해 response·prompt·token·OAuth 값을 출력하지 않습니다.
+
+   ```bash
+   chat_status="$(
+     curl --fail --silent --show-error --output /dev/null --write-out '%{http_code}' \
+       --request POST http://127.0.0.1:8000/chat \
+       --header "Content-Type: application/json" \
+       --header "X-Orch-Token: ${ORCH_API_TOKEN}" \
+       --data-binary @-
+   )"
+   test "$chat_status" = "201"
+   ```
+
+3. 아래 조회가 1행을 반환해 `pre_chat_max_id`보다 큰 id의 새 저장 행을 확인하면
+   end-to-end gate를 통과합니다. `id`, `model`, `latency_ms`, `created_at` 이외의 값은
+   출력하지 않습니다.
+
+   ```sql
+   SELECT id, model, latency_ms, created_at
+   FROM chat_interactions
+   WHERE id > :pre_chat_max_id
+   ORDER BY id ASC
+   LIMIT 1;
+   ```
+
+HTTP 201 또는 신규 저장 행 확인에 실패하면 deployment success로 진행하지 않습니다.
+승인된 incident/rollback 판단으로 멈추고, Runner를 외부 노출하거나 민감 값을 출력해
+원인을 추적하지 않습니다.
 
 ## 롤백과 보안 확인
 
@@ -286,13 +311,16 @@ LIMIT 1;
    `TF_VAR_agent_orchestration_deployment_enabled`로 주입된 Terraform 변경의 reviewed
    plan을 확인하고 apply합니다.
 3. ArgoCD에서 갱신된 Application target revision과 diff를 확인한 뒤 manual sync하고,
-   Runner Ready 및 API `/healthcheck`를 확인합니다.
+   Runner Ready 및 API `/healthcheck`를 확인한 뒤
+   [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과합니다.
 
 이미지 rollback도 같은 순서입니다. 이전에 검증된 두 digest를 포함한 새 rollback
 manifest commit을 만들고, 그 commit의 정확한 40자리 SHA로
 `AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하며
 `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 두 Variables가 주입된
 Terraform Application을 reviewed plan/apply로 갱신한 뒤에만 ArgoCD manual sync합니다.
+sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과해야
+하며, 실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로 멈춥니다.
 OAuth 장애와 이미지 장애를 같은 롤백으로 처리하지 않습니다.
 
 마지막으로 다음을 확인합니다.
