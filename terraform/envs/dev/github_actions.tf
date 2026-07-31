@@ -117,7 +117,7 @@ resource "google_service_account" "admin_apply" {
 # 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
 # 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
 # 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
-# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰).
+# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰). 정리 추적: #458.
 resource "google_service_account_iam_member" "admin_apply_wi_unified" {
   service_account_id = google_service_account.admin_apply.name
   role               = "roles/iam.workloadIdentityUser"
@@ -170,7 +170,7 @@ resource "google_service_account" "dev_apply" {
 # 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
 # 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
 # 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
-# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰).
+# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰). 정리 추적: #458.
 resource "google_service_account_iam_member" "dev_apply_wi_unified" {
   service_account_id = google_service_account.dev_apply.name
   role               = "roles/iam.workloadIdentityUser"

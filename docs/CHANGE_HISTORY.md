@@ -24,9 +24,15 @@
 - **3단계(#456)**: apply SA 2종의 옛 workflow_ref 바인딩
   (`admin-apply.yml@main`/`dev-apply.yml@main`)과 관련 변수 2종을 제거했다.
   surviving `_unified` 리소스(`apply.yml@main` 가장)는 값을 건드리지 않고
-  그대로 뒀다 — `member`는 사실상 리소스 identity라 rename하면 destroy+create
-  (replace)가 되므로, `_unified` 접미사째 남기고 후속 정리는 `moved` 블록
-  (state 주소만 이동, API 호출 0건)으로 넘겼다.
+  그대로 뒀다 — 원인은 `member` 값 변경(ForceNew)이 아니라 **Terraform
+  state 주소** 자체다. 리소스 라벨을 코드에서 rename하면(`moved` 블록 없이)
+  Terraform은 옛 주소를 "설정에서 사라짐"으로 보아 destroy, 새 주소를
+  "state에 없음"으로 보아 create로 계획한다. 이 destroy와 create의 실행
+  순서가 보장되지 않아, destroy가 나중에 실행되면 이 워크플로우 자신을
+  인증하는 WIF 바인딩이 apply 도중 사라져 CI가 스스로를 복구하지 못하는
+  상태가 될 수 있다(self-lockout, #456 리뷰). 그래서 `_unified` 접미사째
+  남기고, 후속 정리는 `moved` 블록(state 주소만 이동, GCP API 호출 0건)으로
+  넘겼다 — 추적: #458.
 - **범위**: `apply.yml` 신설, 옛 워크플로우 3개 삭제, GitHub Environment
   `apply` 신설(기존 admin-apply/dev-apply와 동일한 6인 reviewer, API로 사전
   생성·검증 — Environment 부재 시 GitHub이 보호 규칙 없이 자동 생성해 승인
