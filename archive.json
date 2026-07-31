@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T13:34:57Z",
+  "generated_at": "2026-07-31T13:55:43Z",
   "reports": [
+    {
+      "number": 471,
+      "title": "feat: Agent Runner 모델을 GPT-5.6 Luna로 전환",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-07-31T13:55:23Z",
+      "summary_ko": [
+        "에이전트 오케스트레이션 공용 Codex OAuth Runner의 전역 기본 모델을 gpt-5.6-luna로 전환하였습니다.",
+        "모델 전환에 맞춰 배포 매니페스트의 환경 변수를 변경하고 전환·검증·롤백 상세 계획 문서 두 건을 추가하였습니다.",
+        "인증 시크릿과 DB 구조 변경 없이 배포 후 내부 /chat API 테스트로 호환성 및 저장을 검증할 예정입니다."
+      ],
+      "report_url": "pr/471/"
+    },
     {
       "number": 466,
       "title": "feat: Agent Orchestration 배포 매니페스트 활성화",
