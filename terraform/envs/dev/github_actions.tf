@@ -112,16 +112,22 @@ resource "google_service_account" "admin_apply" {
 }
 
 # apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
-# admin-apply.yml@main 전용 바인딩은 3단계에서 제거됨). `_unified` 접미사는
-# 그대로 둔다 — 후속 정리 시 반드시 `moved` 블록으로 옮긴다(state 주소만
-# 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
-# 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
-# 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
-# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰). 정리 추적: #458.
-resource "google_service_account_iam_member" "admin_apply_wi_unified" {
+# admin-apply.yml@main 전용 바인딩은 3단계에서 제거됨). 두 workflow_ref
+# 바인딩이 공존하던 시절의 `_unified` 접미사는 #458에서 `moved` 블록으로
+# 제거했다(state 주소만 이동, GCP API 호출 0건).
+resource "google_service_account_iam_member" "admin_apply_wi" {
   service_account_id = google_service_account.admin_apply.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.apply_workflow_ref}"
+}
+
+# #458: 두 workflow_ref 바인딩이 공존하던 #451 1~2단계의 흔적인 `_unified`
+# 접미사를 제거. state 주소만 옮기고 GCP API는 호출하지 않는다 — moved 없이
+# rename하면 신규 create + 기존 destroy 순서가 보장되지 않아, destroy가 나중에
+# 실행되면 이 워크플로우 자신을 인증하는 바인딩이 apply 도중 사라진다(#456 리뷰).
+moved {
+  from = google_service_account_iam_member.admin_apply_wi_unified
+  to   = google_service_account_iam_member.admin_apply_wi
 }
 
 # GKE 접속 + K8s cluster-admin(자동 매핑). CRD/ClusterRole 설치가 필요한
@@ -165,16 +171,19 @@ resource "google_service_account" "dev_apply" {
 }
 
 # apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
-# dev-apply.yml@main 전용 바인딩은 3단계에서 제거됨). `_unified` 접미사는
-# 그대로 둔다 — 후속 정리 시 반드시 `moved` 블록으로 옮긴다(state 주소만
-# 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
-# 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
-# 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
-# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰). 정리 추적: #458.
-resource "google_service_account_iam_member" "dev_apply_wi_unified" {
+# dev-apply.yml@main 전용 바인딩은 3단계에서 제거됨). 두 workflow_ref
+# 바인딩이 공존하던 시절의 `_unified` 접미사는 #458에서 `moved` 블록으로
+# 제거했다(state 주소만 이동, GCP API 호출 0건).
+resource "google_service_account_iam_member" "dev_apply_wi" {
   service_account_id = google_service_account.dev_apply.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.apply_workflow_ref}"
+}
+
+# #458: admin_apply_wi와 동일한 사유로 `_unified` 접미사 제거.
+moved {
+  from = google_service_account_iam_member.dev_apply_wi_unified
+  to   = google_service_account_iam_member.dev_apply_wi
 }
 
 # dev root가 관리하는 리소스 타입 전수 스캔 기준 role 열거(#341 spec 표).
