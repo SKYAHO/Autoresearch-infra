@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T09:07:44Z",
+  "generated_at": "2026-07-31T12:18:10Z",
   "reports": [
+    {
+      "number": 466,
+      "title": "feat: Agent Orchestration 배포 매니페스트 활성화",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-07-31T12:17:51Z",
+      "summary_ko": [
+        "Agent Orchestration API 및 Runner 배포 매니페스트의 임시 자리표시자를 실제 불변 이미지 디제스트와 인프라 식별자로 교체하였습니다.",
+        "Secret Manager 시크릿 경로, Cloud SQL 사설 IP, DB 사용자 정보 등 dev 환경 접속 정보를 매니페스트에 고정하였습니다.",
+        "최초 배포 시 비활성화 상태에서 검토·병합 후 main 커밋 SHA를 고정하여 안전하게 배포하는 순서를 운영 런북에 명시하였습니다."
+      ],
+      "report_url": "pr/466/"
+    },
     {
       "number": 467,
       "title": "feat: MLflow training snapshot registry 구성 추가",
