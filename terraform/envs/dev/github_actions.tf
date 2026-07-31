@@ -112,9 +112,12 @@ resource "google_service_account" "admin_apply" {
 }
 
 # apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
-# admin-apply.yml@main 전용 바인딩은 3단계에서 제거됨. 리소스 주소는
-# `_unified` 접미사를 그대로 둔다 — rename은 destroy+create/replace 위험이
-# 있는 변경이라, 순수 제거만 하는 이 PR 범위 밖의 후속 정리로 남긴다).
+# admin-apply.yml@main 전용 바인딩은 3단계에서 제거됨). `_unified` 접미사는
+# 그대로 둔다 — 후속 정리 시 반드시 `moved` 블록으로 옮긴다(state 주소만
+# 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
+# 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
+# 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
+# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰).
 resource "google_service_account_iam_member" "admin_apply_wi_unified" {
   service_account_id = google_service_account.admin_apply.name
   role               = "roles/iam.workloadIdentityUser"
@@ -162,9 +165,12 @@ resource "google_service_account" "dev_apply" {
 }
 
 # apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
-# dev-apply.yml@main 전용 바인딩은 3단계에서 제거됨. 리소스 주소는
-# `_unified` 접미사를 그대로 둔다 — rename은 destroy+create/replace 위험이
-# 있는 변경이라, 순수 제거만 하는 이 PR 범위 밖의 후속 정리로 남긴다).
+# dev-apply.yml@main 전용 바인딩은 3단계에서 제거됨). `_unified` 접미사는
+# 그대로 둔다 — 후속 정리 시 반드시 `moved` 블록으로 옮긴다(state 주소만
+# 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
+# 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
+# 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
+# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰).
 resource "google_service_account_iam_member" "dev_apply_wi_unified" {
   service_account_id = google_service_account.dev_apply.name
   role               = "roles/iam.workloadIdentityUser"
