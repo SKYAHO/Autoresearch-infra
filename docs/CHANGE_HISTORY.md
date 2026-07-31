@@ -3,6 +3,19 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-31: MLflow content-addressed training snapshot registry (#464)
+
+- 기존 MLflow artifact GCS bucket을 재사용해 `training-snapshots/sha256=<digest>/`
+  canonical prefix를 정의했다. CSV와 `snapshot_manifest.json`은 create-if-absent로
+  게시하고, consumer는 object generation과 SHA-256을 함께 검증한다.
+- bucket Object Versioning과 기존 7일 soft delete를 유지하고, age lifecycle은
+  `mlflow_training_snapshot_retention_days = 0` 기본값으로 비활성화했다. 따라서
+  재현에 필요한 snapshot을 조용히 삭제하지 않으며, 보존 기간을 줄일 때는 참조
+  run/model과 비용을 먼저 검토한다.
+- 기존 `airflow/autoresearch-batch` GSA에 `training-snapshots/` prefix 한정
+  `storage.objectCreator`·`storage.objectViewer`만 추가했다. MLflow proxy 서버의
+  기존 bucket-wide artifact 권한과 service-account key 없는 WI 경계는 유지한다.
+
 ## 2026-07-31: apply workflow 단일 진입점 통합 (#451)
 
 - **배경**: #448에서 apply 구현은 `terraform-apply.yml` 한 곳으로 모았지만

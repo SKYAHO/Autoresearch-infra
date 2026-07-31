@@ -36,6 +36,8 @@
 - GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer
   (#121/#157/#187), 환경별 Feast apply SA(#424)
 - 코드 아카이브 배포 GCS 버킷 + 업로더 SA/WIF + 파드 read IAM(`code_artifacts.tf`, #238)
+- MLflow artifact GCS 버킷의 immutable content-addressed training snapshot registry
+  (`mlflow.tf`, `training-snapshots/`, #464)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
 ## 로컬 실행
@@ -67,7 +69,7 @@ apply 경계는 코드에 구성되었지만 이 변경에서 실제 GCP/Kuberne
 | Network | `autoresearch-dev-vpc`, `autoresearch-dev-subnet`, `autoresearch-dev-router`, `autoresearch-dev-nat` |
 | Artifact Registry | `autoresearch-dev-docker` |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
-| GCS | raw data, prod Feast registry/staging, dev Feast registry/staging(`-dev`), Airflow DAG/log, `code-artifacts` bucket |
+| GCS | raw data, prod Feast registry/staging, dev Feast registry/staging(`-dev`), Airflow DAG/log, `code-artifacts`, MLflow artifact/training snapshot bucket |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store`, `feast_offline_store_dev` |
 | BigQuery connection | `autoresearch-dev-vertex-ai` (`CLOUD_RESOURCE`, `asia-northeast3`, #280) |
 | Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key`, `autoresearch-dev-airflow-oauth-client-id`, `autoresearch-dev-airflow-oauth-client-secret` |
@@ -98,6 +100,23 @@ BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있
 | `autoresearch-dev-redis-server-ca` secret | `roles/secretmanager.secretAccessor` | secret 단위 (`secret_manager.tf`) | TLS(`SERVER_AUTHENTICATION`) 검증용 CA 조회 |
 
 기존 app GSA(`gke_app`)의 Redis/CA/코드 아카이브 권한은 변경하지 않았습니다.
+
+## MLflow training snapshot registry (#464)
+
+기존 MLflow artifact bucket을 재사용하며 새 bucket은 만들지 않습니다. 앱이 생성한
+학습 CSV는 다음 canonical prefix에 SHA-256으로 주소화합니다.
+
+```text
+gs://<mlflow_artifacts_bucket>/training-snapshots/sha256=<64자리 hex>/training_dataset.csv
+gs://<mlflow_artifacts_bucket>/training-snapshots/sha256=<64자리 hex>/snapshot_manifest.json
+```
+
+`airflow/autoresearch-batch`의 GSA에는 이 prefix에 한해 `objectCreator`와
+`objectViewer`가 부여됩니다. creator 권한으로 기존 객체 overwrite를 막으므로
+publisher는 generation `0` create-if-absent로 업로드하고, 재실행 시 기존 CSV를
+읽어 SHA-256·generation을 검증한 뒤 재사용해야 합니다. 기본
+`mlflow_training_snapshot_retention_days = 0`은 age 기반 자동 삭제를 비활성화하며,
+bucket versioning과 기존 7일 soft delete가 복구층으로 유지됩니다.
 
 ## Feast apply 환경별 런타임 경계 (#424)
 

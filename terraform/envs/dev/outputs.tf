@@ -428,6 +428,16 @@ output "mlflow_internal_fqdn" {
   value       = trimsuffix(google_dns_record_set.mlflow.name, ".")
 }
 
+output "mlflow_artifacts_bucket_name" {
+  description = "MLflow artifact 및 content-addressed training snapshot GCS bucket 이름(#464)."
+  value       = google_storage_bucket.mlflow_artifacts.name
+}
+
+output "mlflow_training_snapshot_prefix" {
+  description = "Immutable training snapshot canonical object prefix(#464)."
+  value       = "training-snapshots/"
+}
+
 output "airflow_oauth_client_id_secret_id" {
   description = "Airflow Google OAuth client ID Secret Manager secret id(#54). Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_oauth_client_id.secret_id

@@ -266,6 +266,33 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
   member = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 
+# #464 canonical training snapshot publisher/consumer 경계. 기존 MLflow 서버의
+# bucket-wide artifact 권한을 학습 파드에 상속하지 않고, batch GSA에만 prefix
+# 한정 create/read를 부여한다. objectCreator는 기존 객체 overwrite를 막는다.
+resource "google_storage_bucket_iam_member" "airflow_batch_mlflow_training_snapshot_creator" {
+  bucket = google_storage_bucket.mlflow_artifacts.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+
+  condition {
+    title       = "training-snapshot-prefix-create"
+    description = "Allow Airflow batch workloads to create immutable training snapshots only."
+    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.mlflow_artifacts.name}/objects/training-snapshots/')"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "airflow_batch_mlflow_training_snapshot_viewer" {
+  bucket = google_storage_bucket.mlflow_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+
+  condition {
+    title       = "training-snapshot-prefix-read"
+    description = "Allow Airflow batch workloads to verify and compare training snapshots only."
+    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.mlflow_artifacts.name}/objects/training-snapshots/')"
+  }
+}
+
 # Feast registry/staging은 registry 갱신과 임시 staging 파일 처리에 객체 변경이 필요하다.
 # 프로젝트 전체가 아니라 bucket 단위 권한으로 제한한다.
 resource "google_storage_bucket_iam_member" "airflow_feast_registry_admin" {

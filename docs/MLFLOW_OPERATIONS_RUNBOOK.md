@@ -109,8 +109,73 @@ apply) → ② Secret Manager 새 version → ③ 위 절차로 `mlflow-db` 재�
 
 - **backend(Cloud SQL)**: `autoresearch-dev-pg`는 자동 백업 + PITR 활성(`cloud_sql.tf`).
   실험/모델 메타데이터는 여기 저장된다. 복구는 인스턴스 PITR/백업 복원.
-- **artifact(GCS)**: 버킷 `prevent_destroy` + **7일 soft delete**. 실수 삭제 시 7일 내
-  복구 가능. 모델 artifact는 immutable(versioning 없음).
+- **artifact(GCS)**: 버킷 `prevent_destroy` + Object Versioning + **7일 soft delete**.
+  실수 삭제 시 7일 내 복구 가능하며, training snapshot은 기본적으로 age 기반
+  삭제하지 않는다.
+
+### Content-addressed training snapshot (#464)
+
+학습 CSV의 canonical 저장소는 MLflow artifact bucket 안의 다음 두 객체다. 새
+bucket이나 MLflow Model Registry version을 만들지 않는다.
+
+```text
+gs://<bucket>/training-snapshots/sha256=<64자리 hex>/training_dataset.csv
+gs://<bucket>/training-snapshots/sha256=<64자리 hex>/snapshot_manifest.json
+```
+
+`snapshot_manifest.json`에는 최소한 `sha256`, CSV object `gs://` URI,
+`generation`, `size_bytes`, 생성 시각과 데이터셋 schema/row-count 메타데이터를
+기록한다. generation은 GCS object version이며 SHA-256은 다운로드한 CSV bytes의
+해시다. consumer는 두 값을 함께 확인해야 하며, 하나라도 manifest와 다르면 해당
+학습·비교 실행을 실패시킨다.
+
+publisher 계약은 다음 순서다.
+
+1. CSV bytes의 SHA-256을 계산하고 canonical object 경로를 만든다.
+2. CSV와 manifest를 generation `0` 조건으로 create-if-absent 업로드한다.
+3. 이미 같은 digest의 객체가 있으면 overwrite하지 말고 기존 object를 읽어
+   generation·size·SHA-256을 검증한 뒤 재사용한다.
+4. 다른 bytes를 같은 digest 경로에 쓰려는 시도는 `objectCreator`만 가진
+   `autoresearch-dev-airflow-batch` GSA에서 거부되어야 한다.
+
+검증 consumer도 기존 `airflow/autoresearch-batch` KSA를 사용한다. Terraform output으로
+bucket과 prefix를 확인하고, live 검증 승인 후 다음처럼 metadata·generation·hash를
+확인한다(명령의 bucket/digest는 실제 값으로 치환한다).
+
+```bash
+SNAPSHOT_URI="gs://<bucket>/training-snapshots/sha256=<digest>/training_dataset.csv"
+gcloud storage objects describe "$SNAPSHOT_URI" --format='yaml(name,generation,size,md5Hash,crc32c)'
+gcloud storage cp "$SNAPSHOT_URI" "/tmp/training_dataset.csv"
+sha256sum /tmp/training_dataset.csv
+```
+
+권한 경계 검증은 batch workload에서 canonical prefix 생성·조회는 성공하고,
+다른 bucket 또는 `training-snapshots/` 밖의 object 조회·삭제는 실패하는지 확인한다.
+실제 GCS upload/delete 테스트는 Terraform apply 및 별도 운영 승인 이후에만 수행한다.
+
+### Retention, 비용, rollback
+
+- `mlflow_training_snapshot_retention_days = 0`이 기본값이다. 양수로 설정한
+  환경에만 `training-snapshots/` live object age lifecycle이 적용된다. 재현성
+  보존 정책을 합의하기 전에는 값을 변경하지 않는다.
+- content address로 동일 CSV가 run마다 중복 저장되지 않지만, 기본 영구 보존은
+  snapshot byte size × 고유 snapshot 수에 비례하는 GCS 저장 비용을 만든다. 향후
+  retention을 줄일 때는 해당 snapshot을 참조하는 MLflow run·모델의 보존 기간을
+  먼저 확인한다.
+- 최근 삭제 객체는 soft delete 보존 기간 내 GCS restore 절차로 복구한다. Object
+  Versioning으로 이전 generation이 남아 있으면 `gs://.../object#GENERATION`을
+  source로 별도 복구 객체에 복사한 뒤 SHA-256과 manifest를 재검증한다. 원본
+  canonical object를 직접 overwrite하지 않는다.
+
+복구 전후에는 다음 조건을 기록한다.
+
+```text
+restored object URI + generation + sha256 == snapshot_manifest.json의 값
+```
+
+Terraform plan에서는 기존 bucket이 replace/destroy되지 않고 versioning, lifecycle,
+두 prefix IAM binding만 의도대로 변경되는지 확인한다. 실제 apply는 이슈 #464의
+별도 명시 승인 뒤에만 실행한다.
 
 ## 배포·업데이트
 

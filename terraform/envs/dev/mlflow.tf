@@ -12,6 +12,27 @@ resource "google_storage_bucket" "mlflow_artifacts" {
   public_access_prevention    = "enforced"
   force_destroy               = false
 
+  # canonical training snapshot은 generation과 함께 재현성의 일부이므로
+  # 이전 object generation을 보존한다. lifecycle은 기본 0일 때 비활성이다.
+  versioning {
+    enabled = true
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.mlflow_training_snapshot_retention_days > 0 ? [1] : []
+
+    content {
+      action {
+        type = "Delete"
+      }
+
+      condition {
+        age            = var.mlflow_training_snapshot_retention_days
+        matches_prefix = ["training-snapshots/"]
+      }
+    }
+  }
+
   # 실수/침해로 artifact 삭제 시 7일 복구 가능(#179 ES snapshot 교훈).
   soft_delete_policy {
     retention_duration_seconds = var.mlflow_artifacts_soft_delete_seconds
