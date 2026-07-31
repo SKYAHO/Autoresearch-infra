@@ -60,9 +60,11 @@ jobs:
         run: |
           set -o pipefail
           terraform -chdir=terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
-          # allowlist: '# <addr> will be/must be ...' 리소스 주소 헤더와
-          # 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는 포함하지 않는다.
-          grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' \
+          # allowlist: '# <addr> will be/must be/has moved to ...' 리소스
+          # 주소 헤더와 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는
+          # 포함하지 않는다. 'has moved to'는 #468에서 추가 — moved 블록만
+          # 있는 plan의 요약이 누락되지 않게 한다.
+          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^Plan: [0-9]|^No changes\.' \
             /tmp/plan.out > /tmp/plan.summary || true
 
       - name: PR 댓글 게시

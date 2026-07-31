@@ -199,7 +199,9 @@ jobs:
             {
               echo "### $root"
               echo '```text'
-              grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
+              # 'has moved to'는 #468에서 추가 — moved 블록만 있는 plan(주소
+              # 이동, create/destroy 0건)의 요약이 누락되지 않게 한다.
+              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$rc" -ne 0 ]; then
@@ -290,7 +292,9 @@ jobs:
             {
               echo "### $root"
               echo '```text'
-              grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
+              # 'has moved to'는 #468에서 추가 — moved 블록만 있는 plan(주소
+              # 이동, create/destroy 0건)의 요약이 누락되지 않게 한다.
+              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$rc" -ne 0 ]; then
