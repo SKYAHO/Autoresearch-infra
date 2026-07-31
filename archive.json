@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T03:04:57Z",
+  "generated_at": "2026-07-31T06:30:16Z",
   "reports": [
+    {
+      "number": 454,
+      "title": "feat: 오케스트레이션 GKE 배포 경계 추가",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-07-31T06:30:04Z",
+      "summary_ko": [
+        "에이전트 오케스트레이션 API 및 Codex Runner를 dev GKE 클러스터 내부 전용으로 배포하기 위한 인프라 경계를 신설하였습니다.",
+        "전용 DB, Secret Manager 시크릿, 분리된 Workload Identity 및 NetworkPolicy를 적용하여 최소 권한 및 격리를 구현하였습니다.",
+        "ArgoCD 수동 동기화 검증 조건과 배포, DB 역할 이관, OAuth 초기화, 롤백, 서비스 폐기 절차를 다루는 룬북을 추가하였습니다."
+      ],
+      "report_url": "pr/454/"
+    },
     {
       "number": 461,
       "title": "feat: Prometheus retentionSize 25GiB — 시간+크기 이중 리텐션 (#459)",
