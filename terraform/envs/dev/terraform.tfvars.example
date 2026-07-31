@@ -76,6 +76,10 @@ mlflow_k8s_namespace              = "mlflow"
 mlflow_k8s_service_account        = "mlflow"
 mlflow_db_name                    = "mlflow"
 mlflow_db_user                    = "mlflow"
+# 0이면 training snapshot을 age 기반으로 자동 삭제하지 않는다(#464).
+mlflow_training_snapshot_retention_days   = 0
+# MLflow artifact의 noncurrent generation은 30일 후 정리한다.
+mlflow_artifact_noncurrent_retention_days = 30
 airflow_k8s_namespace             = "airflow"
 airflow_k8s_service_account       = "airflow"
 airflow_batch_k8s_service_account = "autoresearch-batch"
