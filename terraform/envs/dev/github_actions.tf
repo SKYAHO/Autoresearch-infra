@@ -98,28 +98,26 @@ resource "google_project_iam_member" "airflow_deployer_cluster_viewer" {
 }
 
 # #307 admin root CI apply 전용 service account.
-# admin-apply.yml 워크플로우가 WIF로 가장해 terraform/admin/*-k8s를 apply한다.
+# apply.yml 워크플로우가 WIF로 가장해 terraform/admin/*-k8s를 apply한다(#451
+# 단일 진입점으로 이관 — 옛 admin-apply.yml 전용이었다).
 # argocd-k8s는 CRD/ClusterRole/ClusterRoleBinding을 설치하므로 K8s cluster-admin이
 # 불가피하다. GKE는 roles/container.admin에 cluster-admin RBAC를 자동 매핑한다.
-# 광범위한 권한이므로 (1) 전용 SA, (2) admin-apply.yml@main repo@ref 제한,
-# (3) GitHub Environment 승인 게이트 3중으로 사용을 제한한다. clusterViewer +
+# 광범위한 권한이므로 (1) 전용 SA, (2) apply.yml@main repo@ref 제한, (3) GitHub
+# Environment(apply) 승인 게이트 3중으로 사용을 제한한다. clusterViewer +
 # scoped ClusterRoleBinding 하드닝은 후속(#307 참고).
 resource "google_service_account" "admin_apply" {
   account_id   = "${local.resource_prefix}-admin-apply"
   display_name = "Autoresearch dev admin root CI apply SA"
-  description  = "Impersonated by Autoresearch-infra admin-apply.yml via WIF to apply terraform/admin/*-k8s roots."
+  description  = "Impersonated by Autoresearch-infra apply.yml via WIF to apply terraform/admin/*-k8s roots."
 }
 
-# admin-apply.yml@main workflow_ref만 이 SA 가장 허용. 임의 브랜치/다른
-# workflow의 가장을 차단한다(application_pusher와 동일 패턴).
-resource "google_service_account_iam_member" "admin_apply_wi" {
-  service_account_id = google_service_account.admin_apply.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.admin_apply_workflow_ref}"
-}
-
-# #451 1단계: 통합 진입점 apply.yml 바인딩 추가. 옛 바인딩과 공존하는 이 구간이
-# 있어야 workflow 교체(2단계)를 CI로 수행할 수 있다. 3단계에서 옛 것을 제거한다.
+# apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
+# admin-apply.yml@main 전용 바인딩은 3단계에서 제거됨). `_unified` 접미사는
+# 그대로 둔다 — 후속 정리 시 반드시 `moved` 블록으로 옮긴다(state 주소만
+# 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
+# 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
+# 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
+# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰).
 resource "google_service_account_iam_member" "admin_apply_wi_unified" {
   service_account_id = google_service_account.admin_apply.name
   role               = "roles/iam.workloadIdentityUser"
@@ -152,28 +150,27 @@ resource "google_project_iam_member" "admin_apply_compute_viewer" {
   member  = "serviceAccount:${google_service_account.admin_apply.email}"
 }
 # #341 dev root(terraform/envs/dev) CI apply 전용 service account.
-# dev-apply.yml이 WIF로 가장해 dev root를 plan/apply한다. dev root는 프로젝트
-# IAM·SA·WIF 바인딩까지 관리하므로 이 SA는 사실상 프로젝트 최강 자격증명이다.
-# 통제 3중: (1) 전용 SA, (2) dev-apply.yml@main workflow_ref 제한, (3) GitHub
-# Environment(dev-apply) 승인 게이트. admin-apply와 SA를 분리해 최강 권한의
-# 사용 경로를 이 workflow 하나로 고정한다(설계:
-# docs/superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md).
+# apply.yml이 WIF로 가장해 dev root를 plan/apply한다(#451 단일 진입점으로
+# 이관 — 옛 dev-apply.yml 전용이었다). dev root는 프로젝트 IAM·SA·WIF 바인딩
+# 까지 관리하므로 이 SA는 사실상 프로젝트 최강 자격증명이다. 진입점 단일화
+# 후 통제는 (1) 전용 SA 유지, (2) apply.yml@main ref 제한, (3)
+# Environment(apply) 승인 게이트로 남는다 — 파일 단위 분리(admin-apply와
+# 별개 workflow)가 사라지는 것을 #451에서 명시적으로 수용한 결과다(설계:
+# docs/superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md, #451 결정은
+# docs/CHANGE_HISTORY.md 2026-07-31 항목).
 resource "google_service_account" "dev_apply" {
   account_id   = "${local.resource_prefix}-dev-apply"
   display_name = "Autoresearch dev root CI apply SA"
-  description  = "Impersonated by Autoresearch-infra dev-apply.yml via WIF to apply terraform/envs/dev."
+  description  = "Impersonated by Autoresearch-infra apply.yml via WIF to apply terraform/envs/dev."
 }
 
-resource "google_service_account_iam_member" "dev_apply_wi" {
-  service_account_id = google_service_account.dev_apply.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.dev_apply_workflow_ref}"
-}
-
-# #451 1단계: 통합 진입점 apply.yml 바인딩 추가(위 admin_apply_wi_unified와 동일
-# 취지). 이 SA는 프로젝트 최강 자격이므로, 진입점 단일화 후 통제는 (1) 전용 SA
-# 유지, (2) apply.yml@main ref 제한, (3) Environment(apply) 승인 게이트로 남는다
-# — 파일 단위 분리가 사라지는 것을 #451에서 명시적으로 수용한 결과다.
+# apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
+# dev-apply.yml@main 전용 바인딩은 3단계에서 제거됨). `_unified` 접미사는
+# 그대로 둔다 — 후속 정리 시 반드시 `moved` 블록으로 옮긴다(state 주소만
+# 이동, GCP API 호출 0건, CI의 terraform 1.13.5는 지원 범위 안). `moved`
+# 없이 rename하면 같은 member/role의 신규 create + 기존 destroy 두 리소스가
+# 잡히고 둘 사이 순서 보장이 없어, destroy가 나중에 실행되면 바인딩이
+# 통째로 사라져 CI가 자기 자신을 복구하지 못하는 상태가 된다(#456 리뷰).
 resource "google_service_account_iam_member" "dev_apply_wi_unified" {
   service_account_id = google_service_account.dev_apply.name
   role               = "roles/iam.workloadIdentityUser"
