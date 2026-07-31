@@ -46,7 +46,6 @@ resource "google_storage_bucket" "mlflow_artifacts" {
     condition {
       with_state                 = "ARCHIVED"
       days_since_noncurrent_time = var.mlflow_artifact_noncurrent_retention_days
-      num_newer_versions         = 1
     }
   }
 

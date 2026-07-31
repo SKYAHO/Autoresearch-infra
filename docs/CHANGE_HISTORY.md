@@ -14,6 +14,10 @@
   run/model과 비용을 먼저 검토한다.
 - 버킷 전체 versioning의 noncurrent MLflow artifact generation은 기본 30일
   lifecycle로 정리하고, snapshot prefix의 live lifecycle은 별도 변수로 제어한다.
+- batch GSA에는 bucket-wide list를 허용하는 `legacyBucketReader`를 부여하지 않고,
+  known snapshot object URI의 직접 GET만 사용하도록 경계를 유지한다. 기존 7일
+  soft delete와 30일 noncurrent version 보존은 서로 다른 복구층으로 의도적으로
+  중첩한다.
 - 기존 `airflow/autoresearch-batch` GSA에 `training-snapshots/` prefix 한정
   `storage.objectCreator`·`storage.objectViewer`만 추가했다. MLflow proxy 서버의
   기존 bucket-wide artifact 권한과 service-account key 없는 WI 경계는 유지한다.

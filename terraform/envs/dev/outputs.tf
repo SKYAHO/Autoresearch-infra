@@ -435,7 +435,7 @@ output "mlflow_artifacts_bucket_name" {
 
 output "mlflow_training_snapshot_prefix" {
   description = "Immutable training snapshot canonical object prefix(#464)."
-  value       = "training-snapshots/"
+  value       = local.mlflow_training_snapshot_prefix
 }
 
 output "airflow_oauth_client_id_secret_id" {

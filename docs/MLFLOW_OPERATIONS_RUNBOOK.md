@@ -144,8 +144,14 @@ failure가 발생하면 두 known URI를 직접 조회하여 CSV와 manifest가 
 digest·size·generation 검증을 통과할 때만 idempotent reuse한다. CSV만 존재하거나
 manifest가 불일치하면 batch GSA는 overwrite/delete할 수 없으므로 실행을 실패시키고
 운영자가 승인된 MLflow GSA 복구 절차로 partial object를 정리한 뒤 재시도한다.
-403은 권한 오류이므로 reuse 경로로 분류하지 않는다. publisher는 bucket listing에
-의존하지 않고 known object URI의 GET을 사용한다.
+generation `0` precondition으로 동일 bytes를 재업로드해도, 다른 bytes를 재업로드해도
+GCS는 모두 `412 Precondition Failed`를 반환하므로 응답만으로 두 경우를 구분할 수
+없다. publisher는 그 뒤 CSV와 manifest를 각각 GET하여 digest·size·generation을
+검증해야 한다. 둘 다 일치하면 정상 reuse이고, manifest 404·digest 불일치·size
+불일치면 오염/partial publish로 실패한다. 403은 권한 오류이므로 reuse 경로로
+분류하지 않는다. publisher는 bucket listing이나 metadata reload에 의존하지 않고
+known object URI의 GET을 사용한다. partial object 삭제·복구는 현재 bucket-wide
+objectAdmin을 가진 MLflow 서버 GSA를 통한 승인된 운영 절차가 필요하다.
 
 검증 consumer도 기존 `airflow/autoresearch-batch` KSA를 사용한다. Terraform output으로
 bucket과 prefix를 확인하고, live 검증 승인 후 다음처럼 metadata·generation·hash를
@@ -166,7 +172,10 @@ sha256sum /tmp/training_dataset.csv
 
 - `mlflow_training_snapshot_retention_days = 0`이 기본값이다. 양수로 설정한
   환경에만 `training-snapshots/` live object age lifecycle이 적용된다. 재현성
-  보존 정책을 합의하기 전에는 값을 변경하지 않는다.
+  보존 정책을 합의하기 전에는 값을 변경하지 않는다. GCS `age`는 live object의
+  생성 시각을 기준으로 계산하므로, 아직 run/model이 참조하는 오래된 snapshot도
+  삭제될 수 있다. Terraform plan은 lifecycle 규칙 변경은 보여주지만 어떤 객체가
+  삭제될지는 미리 나열하지 않는다.
 - content address로 동일 CSV가 run마다 중복 저장되지 않지만, 기본 영구 보존은
   snapshot byte size × 고유 snapshot 수에 비례하는 GCS 저장 비용을 만든다. 향후
   retention을 줄일 때는 해당 snapshot을 참조하는 MLflow run·모델의 보존 기간을
@@ -178,6 +187,12 @@ sha256sum /tmp/training_dataset.csv
 - Object Versioning은 버킷 전체 MLflow artifact에 적용되므로 noncurrent generation은
   기본 30일 lifecycle로 정리한다. snapshot은 overwrite하지 않는 publish 계약이므로
   정상적인 canonical snapshot generation은 이 정리 규칙에 의해 새로 생성되지 않는다.
+- snapshot lifecycle로 삭제된 object를 consumer가 읽으면 known URI GET 단계에서
+  404가 발생하고, manifest/해시 검증 단계까지 진행하지 못한다. lifecycle 삭제와
+  미게시를 구분하려면 Cloud Audit Logs의 lifecycle/delete 기록과 MLflow run의
+  snapshot manifest를 함께 확인한다. retention을 다시 `0`으로 바꾸면 향후
+  자동 삭제는 중단되지만 이미 삭제된 object는 복구하지 않으며, 7일 soft delete
+  또는 30일 noncurrent generation 복구 창 안에서 별도로 복구해야 한다.
 
 복구 전후에는 다음 조건을 기록한다.
 

@@ -29,6 +29,7 @@
 - [ ] MLflow bucket에 `versioning { enabled = true }`와 기본 비활성 dynamic lifecycle을 추가한다.
 - [ ] `mlflow_training_snapshot_retention_days` 변수를 0 이상으로 검증한다.
 - [ ] 버킷 전체 Object Versioning의 noncurrent MLflow artifact를 기본 30일 후 정리한다.
+- [ ] noncurrent retention은 양수 정수만 허용하고, bucket-wide list 권한 없이 known URI GET 계약을 문서화한다.
 - [ ] Airflow batch GSA에 GCS IAM condition으로 `training-snapshots/` prefix의 objectCreator/viewer를 추가한다.
 - [ ] bucket 이름과 canonical prefix를 Terraform output으로 노출한다.
 

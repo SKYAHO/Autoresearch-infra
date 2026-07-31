@@ -47,7 +47,13 @@ digest·size·generation 검증을 통과할 때만 reuse한다. CSV만 있거�
   않으므로 이 규칙은 정상적인 canonical snapshot publish를 삭제하지 않는다.
 - `mlflow_training_snapshot_retention_days` 기본값은 `0`(age 기반 삭제 없음)으로
   하여 재현에 필요한 snapshot을 조용히 삭제하지 않는다. 명시적으로 양수를
-  설정한 환경만 live snapshot에 age lifecycle을 적용한다.
+  설정한 환경만 live snapshot에 age lifecycle을 적용한다. 이 값은 참조 중인
+  snapshot도 object 생성 시각 기준으로 삭제할 수 있으므로, 참조 run/model의
+  보존 기간과 함께 변경해야 한다.
+- soft delete 7일과 noncurrent version 30일은 서로 다른 복구 경로다. 전자는
+  최근 삭제의 단기 안전망이고 후자는 versioned artifact generation의 비용을
+  제한하는 장기 보존층이다. 두 층의 7일 중첩 비용은 dev에서 의도적으로 수용하며,
+  staging/prod에서는 보존 정책과 비용을 다시 검토한다.
 - canonical 객체는 digest 중복 제거로 저장량을 줄이지만, snapshot을 영구 보존하는
   기본값에서는 데이터 크기와 보존 기간에 비례해 GCS 저장 비용이 발생한다.
 - 실수 삭제는 soft delete 기간 내 undelete하고, versioning generation 문제는
@@ -59,5 +65,8 @@ digest·size·generation 검증을 통과할 때만 reuse한다. CSV만 있거�
   `autoresearch-dev-airflow-batch` GSA를 사용한다.
 - 해당 GSA에는 MLflow artifact 버킷의 `training-snapshots/` object prefix에만
   `storage.objectCreator`와 `storage.objectViewer`를 부여한다.
+- publisher/consumer는 bucket listing이나 bucket metadata reload에 의존하지 않고
+  manifest에 기록된 known object URI를 직접 GET한다. 따라서 bucket-wide
+  `legacyBucketReader`는 부여하지 않는다.
 - bucket 전체 objectAdmin 또는 service-account key는 추가하지 않는다.
 - MLflow 서버 GSA의 기존 artifact objectAdmin은 proxy 모드 동작을 위해 유지한다.
