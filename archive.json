@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T02:53:34Z",
+  "generated_at": "2026-07-31T03:04:57Z",
   "reports": [
+    {
+      "number": 461,
+      "title": "feat: Prometheus retentionSize 25GiB — 시간+크기 이중 리텐션 (#459)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-31T03:04:46Z",
+      "summary_ko": [
+        "프로메테우스 지표 데이터 보관 정책에 기존 7일 시간 기준 외에 25GiB 크기 상한을 추가했습니다.",
+        "카디널리티 급증 시 디스크(30GiB) 용량 초과로 프로메테우스 파드가 멈추는 장애 경로를 차단합니다.",
+        "Helm 설정 반영 및 ArgoCD 동기화 후 파드 롤링 재기동을 통해 용량 제어 플래그를 적용합니다."
+      ],
+      "report_url": "pr/461/"
+    },
     {
       "number": 462,
       "title": "feat: ArgoCD 자동 sync 전환 — main 머지 즉시 반영, prune 제외 (#460)",
