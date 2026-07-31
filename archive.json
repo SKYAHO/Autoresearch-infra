@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T07:38:11Z",
+  "generated_at": "2026-07-31T07:45:04Z",
   "reports": [
+    {
+      "number": 463,
+      "title": "refactor: apply SA WI 바인딩 _unified 접미사 정리",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-31T07:44:54Z",
+      "summary_ko": [
+        "CI 워크플로우용 서비스 계정 IAM 바인딩 리소스명에서 임시 표현이었던 접미사를 정리하였습니다.",
+        "권한 재구성에 따른 CI 인증 중단을 막기 위해 Terraform moved 블록을 선언하였습니다.",
+        "실제 구글 클라우드 리소스 변경 없이 테라폼 상태(State) 기록상의 주소만 안전하게 이전하였습니다."
+      ],
+      "report_url": "pr/463/"
+    },
     {
       "number": 454,
       "title": "feat: 오케스트레이션 GKE 배포 경계 추가",
