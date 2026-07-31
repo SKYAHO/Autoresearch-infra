@@ -90,7 +90,7 @@ spec:
             - name: CODEX_HOME
               value: /var/lib/codex
             - name: CODEX_MODEL
-              value: gpt-5.3-codex-spark
+              value: gpt-5.6-luna
             - name: CODEX_TIMEOUT_SEC
               value: "110"
             - name: CODEX_RUNNER_TIMEOUT_SEC
