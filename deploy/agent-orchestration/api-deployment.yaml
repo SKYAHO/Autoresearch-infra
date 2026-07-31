@@ -1,0 +1,136 @@
+# Agent Orchestration API. This manifest intentionally cannot be synced until
+# Task 6 replaces every REPLACE_WITH_* value with release digest or Terraform
+# output. A mutable tag must never be substituted for an immutable digest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestration-api
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-api
+    app.kubernetes.io/part-of: agent-orchestration
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-api
+  template:
+    metadata:
+      # ConfigMap 값과 함께 바뀌어 API·Runner Pod를 같은 timeout으로 재기동한다.
+      annotations:
+        autoresearch.io/codex-runner-timeout-sec: "120"
+      labels:
+        app.kubernetes.io/name: agent-orchestration-api
+        app.kubernetes.io/part-of: agent-orchestration
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: agent-orchestration-api
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: bootstrap-db
+          image: REPLACE_WITH_API_IMMUTABLE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - agent_orchestration.bootstrap_secrets
+          env:
+            - name: ORCH_DB_PASSWORD_SECRET_ID
+              value: projects/REPLACE_WITH_PROJECT_ID/secrets/REPLACE_WITH_DB_PASSWORD_SECRET_ID/versions/latest
+            - name: ORCH_DB_HOST
+              value: REPLACE_WITH_CLOUD_SQL_PRIVATE_IP
+            - name: ORCH_DB_NAME
+              value: REPLACE_WITH_DB_NAME
+            - name: ORCH_DB_USER
+              value: REPLACE_WITH_DB_USER
+            - name: ORCH_RUNTIME_DIR
+              value: /runtime
+          volumeMounts:
+            - name: db-runtime
+              mountPath: /runtime
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: api
+          image: REPLACE_WITH_API_IMMUTABLE_DIGEST
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: LLM_BACKEND
+              value: codex_runner
+            - name: CODEX_RUNNER_URL
+              value: http://agent-orchestration-runner.autoresearch.svc.cluster.local:8080
+            - name: CODEX_RUNNER_TIMEOUT_SEC
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-orchestration-runner-timeout
+                  key: CODEX_RUNNER_TIMEOUT_SEC
+            - name: ORCH_RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  # API와 Runner 사이에서만 쓰는 별도 내부 인증 토큰이다. 이
+                  # 토큰은 OAuth·DB 시크릿과 분리되며 Secret Manager 접근권한을
+                  # 추가로 부여하지 않는다.
+                  name: agent-orchestration-runner-token
+                  key: ORCH_RUNNER_TOKEN
+            - name: ORCH_RUNTIME_DIR
+              value: /runtime
+            - name: ORCH_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  # 운영자가 runbook 절차로 주입하는 공유 요청 토큰이다. DB/OAuth
+                  # 시크릿과 달리 GSA accessor를 부여하지 않는다.
+                  name: agent-orchestration-api-token
+                  key: ORCH_API_TOKEN
+          volumeMounts:
+            - name: db-runtime
+              mountPath: /runtime
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: db-runtime
+          emptyDir:
+            medium: Memory

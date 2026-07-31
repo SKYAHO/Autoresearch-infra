@@ -126,6 +126,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # enabled 상태의 고정 revision이 현재 infra commit에서 도달 가능한지
+          # plan 전에 검증하려면 전체 이력이 필요하다.
+          fetch-depth: 0
 
       # #305 방어: admin root를 다루는 dispatch에서만 의미가 있다 — scope=dev
       # 단독 실행이 무관한 admin secret 미설정으로 막히지 않게 한다.
@@ -215,6 +219,47 @@ jobs:
           workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
           service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
 
+      - name: Validate and summarize Agent Orchestration revision input
+        if: github.event.inputs.scope != 'dev'
+        env:
+          AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED: ${{ vars.AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED || 'false' }}
+          AGENT_ORCHESTRATION_TARGET_REVISION: ${{ vars.AGENT_ORCHESTRATION_TARGET_REVISION || '' }}
+        run: |
+          enabled="$AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED"
+          target="$AGENT_ORCHESTRATION_TARGET_REVISION"
+          echo "### Agent Orchestration GitOps revision" >> "$GITHUB_STEP_SUMMARY"
+
+          case "$enabled" in
+            true)
+              if ! [[ "$target" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "::error::AGENT_ORCHESTRATION_TARGET_REVISION must be a lowercase 40-character commit SHA when deployment is enabled."
+                exit 1
+              fi
+              if ! git cat-file -e "${target}^{commit}" 2>/dev/null; then
+                echo "::error::AGENT_ORCHESTRATION_TARGET_REVISION does not name a commit available in this checkout."
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "$target" HEAD; then
+                echo "::error::AGENT_ORCHESTRATION_TARGET_REVISION is not reachable from the checked-out repository revision."
+                exit 1
+              fi
+              {
+                echo "- deployment: enabled"
+                echo "- target revision: \`$target\`"
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            false)
+              {
+                echo "- deployment: disabled"
+                echo "- target revision: not evaluated while disabled"
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED must be true or false."
+              exit 1
+              ;;
+          esac
+
       - name: Plan admin roots
         if: github.event.inputs.scope != 'dev'
         env:
@@ -228,6 +273,10 @@ jobs:
           TF_VAR_installer_user_emails: ${{ secrets.AIRFLOW_INSTALLER_USER_EMAILS }}
           TF_VAR_monitoring_port_forward_user_emails: ${{ secrets.MONITORING_PORT_FORWARD_USER_EMAILS }}
           TF_VAR_mlflow_viewer_user_emails: ${{ secrets.MLFLOW_VIEWER_USER_EMAILS }}
+          # argocd-k8s root 전용 non-secret GitHub Variables. 다른 root는 선언하지
+          # 않은 TF_VAR를 무시하므로 admin roots 합동 plan에 안전하다.
+          TF_VAR_agent_orchestration_target_revision: ${{ vars.AGENT_ORCHESTRATION_TARGET_REVISION || '' }}
+          TF_VAR_agent_orchestration_deployment_enabled: ${{ vars.AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED || 'false' }}
         run: |
           mask='s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<email>/g'
           for d in $ROOTS; do

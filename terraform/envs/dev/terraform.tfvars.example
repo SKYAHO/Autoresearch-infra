@@ -48,6 +48,14 @@ airflow_gke_node_disk_size        = 30
 airflow_gke_node_disk_type        = "pd-standard"
 gke_app_k8s_namespace             = "autoresearch"
 gke_app_k8s_service_account       = "autoresearch-app"
+agent_orchestration_db_name        = "agent_orchestration"
+agent_orchestration_db_user        = "agent_orchestration_app"
+# Cloud SQL built-in user 생성 전에 운영자 migration 절차로 같은 custom role을
+# 만들어야 한다. role이 없으면 apply가 실패하며 cloudsqlsuperuser user를 만들지 않는다.
+agent_orchestration_runtime_database_role = "agent_orchestration_runtime"
+agent_orchestration_k8s_namespace  = "autoresearch"
+agent_orchestration_api_k8s_service_account    = "agent-orchestration-api"
+agent_orchestration_runner_k8s_service_account = "agent-orchestration-runner"
 
 # #424 Feast apply GKE Job의 환경별 namespace/KSA. 실제 오브젝트와 GSA annotation은
 # terraform/admin/autoresearch-k8s가 생성한다. Task 2의 WI subject와 아래 값 및

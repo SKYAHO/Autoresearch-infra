@@ -55,6 +55,30 @@ variable "app_gcp_service_account_email" {
   default     = ""
 }
 
+variable "agent_orchestration_api_k8s_service_account" {
+  description = "Agent Orchestration API의 전용 Kubernetes service account 이름."
+  type        = string
+  default     = "agent-orchestration-api"
+}
+
+variable "agent_orchestration_runner_k8s_service_account" {
+  description = "Agent Orchestration Codex Runner의 전용 Kubernetes service account 이름."
+  type        = string
+  default     = "agent-orchestration-runner"
+}
+
+variable "agent_orchestration_api_gcp_service_account_email" {
+  description = "Agent Orchestration API GSA email. 빈 값이면 resource_prefix/project_id에서 dev 기본값을 파생한다."
+  type        = string
+  default     = ""
+}
+
+variable "agent_orchestration_runner_gcp_service_account_email" {
+  description = "Agent Orchestration Codex Runner GSA email. 빈 값이면 resource_prefix/project_id에서 dev 기본값을 파생한다."
+  type        = string
+  default     = ""
+}
+
 # #424 환경 이름은 GitHub Environment → WIF provider → GSA → namespace → KSA
 # 신뢰 경계 전체의 키다. null 기본값은 resource_prefix/project_id에서 안전한 기본값을
 # 파생하며, map override는 두 환경의 완전한 튜플만 허용한다.

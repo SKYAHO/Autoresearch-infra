@@ -57,24 +57,30 @@ locals {
   gke_node_sa_name = "${local.resource_prefix}-gke-nodes"
   gke_app_sa_name  = "${local.resource_prefix}-app"
   mlflow_sa_name   = "${local.resource_prefix}-mlflow"
+  # Google service account account_id는 30자 제한이 있으므로 workload의 긴
+  # Kubernetes 이름 대신 짧은 orch-api/orch-runner 식별자를 사용한다.
+  agent_orchestration_api_sa_name    = "${local.resource_prefix}-orch-api"
+  agent_orchestration_runner_sa_name = "${local.resource_prefix}-orch-runner"
   # #226: 앱팀이 수동 생성한 기존 버킷명(${project_id}-${name_prefix}-mlflow-artifacts)을
   # 그대로 adopt한다. feast 버킷과 동일하게 project_id를 포함해 전역 유일성 확보.
-  mlflow_artifacts_bucket               = "${var.project_id}-${var.name_prefix}-mlflow-artifacts"
-  gke_node_pool_name                    = "dev-default"
-  airflow_batch_sa_name                 = "${local.resource_prefix}-airflow-batch"
-  airflow_youtube_api_key_secret_id     = "${local.resource_prefix}-youtube-api-key"
-  airflow_openrouter_api_secret_id      = "${local.resource_prefix}-openrouter-api-key"
-  airflow_oauth_client_id_secret_id     = "${local.resource_prefix}-airflow-oauth-client-id"
-  airflow_oauth_client_secret_secret_id = "${local.resource_prefix}-airflow-oauth-client-secret"
-  gke_pods_range_name                   = "gke-pods"
-  gke_services_range_name               = "gke-services"
-  db_password_secret_id                 = "${local.resource_prefix}-db-password"
-  mlflow_db_password_secret_id          = "${local.resource_prefix}-mlflow-db-password"
-  mlflow_oauth_client_secret_secret_id  = "${local.resource_prefix}-mlflow-oauth-client-secret"
-  mlflow_oauth_client_id_secret_id      = "${local.resource_prefix}-mlflow-oauth-client-id"
-  raw_data_bucket_name                  = "${var.project_id}-${local.resource_prefix}-raw-data"
-  bigquery_dataset_id                   = replace("${local.resource_prefix}_analytics", "-", "_")
-  feast_dataset_id                      = "feast_offline_store"
+  mlflow_artifacts_bucket                            = "${var.project_id}-${var.name_prefix}-mlflow-artifacts"
+  gke_node_pool_name                                 = "dev-default"
+  airflow_batch_sa_name                              = "${local.resource_prefix}-airflow-batch"
+  airflow_youtube_api_key_secret_id                  = "${local.resource_prefix}-youtube-api-key"
+  airflow_openrouter_api_secret_id                   = "${local.resource_prefix}-openrouter-api-key"
+  airflow_oauth_client_id_secret_id                  = "${local.resource_prefix}-airflow-oauth-client-id"
+  airflow_oauth_client_secret_secret_id              = "${local.resource_prefix}-airflow-oauth-client-secret"
+  gke_pods_range_name                                = "gke-pods"
+  gke_services_range_name                            = "gke-services"
+  db_password_secret_id                              = "${local.resource_prefix}-db-password"
+  mlflow_db_password_secret_id                       = "${local.resource_prefix}-mlflow-db-password"
+  agent_orchestration_db_password_secret_id          = "${local.resource_prefix}-agent-orchestration-db-password"
+  agent_orchestration_codex_auth_bootstrap_secret_id = "${local.resource_prefix}-agent-orchestration-codex-auth-bootstrap"
+  mlflow_oauth_client_secret_secret_id               = "${local.resource_prefix}-mlflow-oauth-client-secret"
+  mlflow_oauth_client_id_secret_id                   = "${local.resource_prefix}-mlflow-oauth-client-id"
+  raw_data_bucket_name                               = "${var.project_id}-${local.resource_prefix}-raw-data"
+  bigquery_dataset_id                                = replace("${local.resource_prefix}_analytics", "-", "_")
+  feast_dataset_id                                   = "feast_offline_store"
   # #285 raw layer 전용 dataset. feast_offline_store는 Feast 피처 테이블 전용으로 남긴다.
   data_lake_raw_dataset_id  = "data_lake_raw"
   feast_registry_bucket     = "${var.project_id}-feast-registry"
@@ -104,6 +110,9 @@ locals {
     personas_raw_snapshots = "data/raw/personas/"
   }
   gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
+
+  agent_orchestration_api_workload_identity_principal    = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_api_k8s_service_account}]"
+  agent_orchestration_runner_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_runner_k8s_service_account}]"
 
   mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
 

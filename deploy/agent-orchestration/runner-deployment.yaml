@@ -1,0 +1,146 @@
+# Agent Orchestration Codex Runner. Replace every REPLACE_WITH_* value only
+# with the release workflow's immutable digest and Terraform outputs before
+# the first manual ArgoCD sync; see docs/runbooks/2026-07-30-agent-orchestration-gke.md.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-orchestration-codex-home
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/part-of: agent-orchestration
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestration-runner
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-runner
+    app.kubernetes.io/part-of: agent-orchestration
+    app.kubernetes.io/component: runner
+spec:
+  replicas: 1
+  # 단일 ReadWriteOnce PVC를 다음 Pod에 attach하기 전에 이전 Pod에서 분리해야 한다.
+  # RollingUpdate는 두 Pod가 잠시 공존해 Multi-Attach로 rollout이 멈출 수 있으므로
+  # 의도적으로 Recreate를 사용한다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-runner
+  template:
+    metadata:
+      # ConfigMap 값과 함께 바뀌어 API·Runner Pod를 같은 timeout으로 재기동한다.
+      annotations:
+        autoresearch.io/codex-runner-timeout-sec: "120"
+      labels:
+        app.kubernetes.io/name: agent-orchestration-runner
+        app.kubernetes.io/part-of: agent-orchestration
+        app.kubernetes.io/component: runner
+    spec:
+      serviceAccountName: agent-orchestration-runner
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: bootstrap-codex-auth
+          # bootstrap_secrets.py is intentionally in the API image. This init
+          # container still runs with the Runner-only KSA and OAuth-only GSA.
+          image: REPLACE_WITH_API_IMMUTABLE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - agent_orchestration.bootstrap_secrets
+            - runner-codex-auth
+          env:
+            - name: ORCH_CODEX_AUTH_SECRET_ID
+              value: projects/REPLACE_WITH_PROJECT_ID/secrets/REPLACE_WITH_CODEX_AUTH_BOOTSTRAP_SECRET_ID/versions/latest
+            # Init container mounts the PVC at a separate path so only the
+            # main Runner mounts its runtime CODEX_HOME at /var/lib/codex.
+            - name: CODEX_HOME
+              value: /bootstrap-codex
+          volumeMounts:
+            - name: codex-home
+              mountPath: /bootstrap-codex
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: runner
+          image: REPLACE_WITH_RUNNER_IMMUTABLE_DIGEST
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: CODEX_HOME
+              value: /var/lib/codex
+            - name: CODEX_MODEL
+              value: gpt-5.3-codex-spark
+            - name: CODEX_TIMEOUT_SEC
+              value: "110"
+            - name: CODEX_RUNNER_TIMEOUT_SEC
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-orchestration-runner-timeout
+                  key: CODEX_RUNNER_TIMEOUT_SEC
+            - name: RUNNER_MAX_CONCURRENCY
+              value: "1"
+            - name: ORCH_RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  # API와 Runner만 공유하는 내부 인증 토큰이다. Runner GSA에는
+                  # OAuth bootstrap Secret Manager accessor 외 권한을 부여하지 않는다.
+                  name: agent-orchestration-runner-token
+                  key: ORCH_RUNNER_TOKEN
+          volumeMounts:
+            - name: codex-home
+              mountPath: /var/lib/codex
+            - name: scratch
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: codex-home
+          persistentVolumeClaim:
+            claimName: agent-orchestration-codex-home
+        - name: scratch
+          emptyDir: {}

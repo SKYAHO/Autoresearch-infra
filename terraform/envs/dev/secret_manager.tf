@@ -86,6 +86,48 @@ resource "google_secret_manager_secret_iam_member" "mlflow_db_password" {
   member    = "serviceAccount:${google_service_account.mlflow.email}"
 }
 
+# Agent Orchestration API만 전용 DB 비밀번호를 읽는다. Kubernetes Secret, Pod
+# manifest, 컨테이너 이미지에는 DB URL·비밀번호를 두지 않는다.
+resource "google_secret_manager_secret" "agent_orchestration_db_password" {
+  secret_id = local.agent_orchestration_db_password_secret_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "agent_orchestration_db_password" {
+  secret      = google_secret_manager_secret.agent_orchestration_db_password.id
+  secret_data = random_password.agent_orchestration_db.result
+}
+
+resource "google_secret_manager_secret_iam_member" "agent_orchestration_api_db_password" {
+  secret_id = google_secret_manager_secret.agent_orchestration_db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.agent_orchestration_api.email}"
+}
+
+# Codex OAuth 초기 인증 파일의 컨테이너 밖 정본. payload(version)는 Terraform이
+# 관리하지 않으며 신뢰된 운영자가 Task 6 runbook 절차로만 추가한다. 삭제하면
+# 갱신된 OAuth 상태를 복구할 수 없으므로 명시적인 lifecycle 보호를 둔다.
+resource "google_secret_manager_secret" "agent_orchestration_codex_auth_bootstrap" {
+  secret_id = local.agent_orchestration_codex_auth_bootstrap_secret_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "agent_orchestration_runner_codex_auth" {
+  secret_id = google_secret_manager_secret.agent_orchestration_codex_auth_bootstrap.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.agent_orchestration_runner.email}"
+}
+
 # #439 Grafana·Kibana UI OAuth client 자격 정본. mlflow(#420)·argocd와 대칭 —
 # 재발급은 id/secret이 한 쌍으로 바뀌므로 둘 다 SM에 정본을 둬야 runbook
 # 하드코딩/클러스터 값 갈림("재발급 ≠ 반영", #404 실측)이 재발하지 않는다.

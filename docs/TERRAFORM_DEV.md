@@ -135,6 +135,16 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 
 **MLflow 전용 DB/user (#93)**: 같은 인스턴스에 MLflow 전용 `google_sql_database`(`mlflow`) + `google_sql_user`(`mlflow`)를 추가해 Airflow/앱과 **논리 분리**한다(8회차 "DB 외부화"). 비밀번호는 전용 `random_password` → Secret Manager `autoresearch-dev-mlflow-db-password`에 저장, MLflow GSA(`autoresearch-dev-mlflow`)에만 resource-level `secretAccessor`. MLflow 서버는 `cloudsql.client`로 private IP 접속(신규 인스턴스 없음).
 
+**Agent Orchestration 전용 DB/user (#453, 아직 미적용)**: 같은 인스턴스에
+`agent_orchestration` database와 `agent_orchestration_app` built-in user를 추가한다.
+runtime user는 `agent_orchestration_runtime` custom database role만 받아
+`cloudsqlsuperuser` 자동 부여를 피한다. 이 custom role은 Terraform apply 전에
+승인된 migration owner가 생성하고, DB 생성 뒤 전용 DB의 `CONNECT` 및 `public` schema
+`USAGE, CREATE`만 grant해야 한다. 이 선행 migration과 immutable image digest가
+검증되기 전에는 ArgoCD Application을 enable/sync하지 않는다. 정확한 SQL·운영 순서는
+[`runbooks/2026-07-30-agent-orchestration-gke.md`](runbooks/2026-07-30-agent-orchestration-gke.md)를
+따른다.
+
 ## Feast Online Store Redis Cluster (#129, apply·GKE 검증 완료)
 
 Feast Online Store는 GCP Memorystore for Redis Cluster로 구성한다. dev 학습

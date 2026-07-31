@@ -20,6 +20,29 @@ resource "kubernetes_service_account_v1" "app" {
   }
 }
 
+# API와 Codex Runner는 서로 다른 Workload Identity 주체를 사용한다. API만
+# Cloud SQL과 DB password secret을, Runner만 OAuth bootstrap secret을 읽도록
+# dev root의 IAM이 분리한다.
+resource "kubernetes_service_account_v1" "agent_orchestration_api" {
+  metadata {
+    name      = var.agent_orchestration_api_k8s_service_account
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = local.agent_orchestration_api_gcp_service_account_email
+    }
+  }
+}
+
+resource "kubernetes_service_account_v1" "agent_orchestration_runner" {
+  metadata {
+    name      = var.agent_orchestration_runner_k8s_service_account
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = local.agent_orchestration_runner_gcp_service_account_email
+    }
+  }
+}
+
 resource "kubernetes_network_policy_v1" "app_egress" {
   metadata {
     name      = "autoresearch-egress"
@@ -27,7 +50,15 @@ resource "kubernetes_network_policy_v1" "app_egress" {
   }
 
   spec {
-    pod_selector {}
+    # Agent Orchestration은 DB·OAuth·Runner port를 더 좁게 분리해야 하므로
+    # namespace 전체의 기존 egress 정책에서 제외하고 전용 manifest가 소유한다.
+    pod_selector {
+      match_expressions {
+        key      = "app.kubernetes.io/part-of"
+        operator = "NotIn"
+        values   = ["agent-orchestration"]
+      }
+    }
 
     policy_types = ["Egress"]
 

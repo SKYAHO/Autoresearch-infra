@@ -129,6 +129,20 @@ output "gke_workload_identity_principal" {
   value       = local.gke_workload_identity_principal
 }
 
+output "agent_orchestration_deployment_contract" {
+  description = "Agent Orchestration API/Runner의 Cloud SQL·Secret Manager·Workload Identity 배포 좌표. 비밀번호와 OAuth payload는 output하지 않는다."
+  value = {
+    database_name                      = google_sql_database.agent_orchestration.name
+    database_user                      = google_sql_user.agent_orchestration.name
+    db_password_secret_id              = google_secret_manager_secret.agent_orchestration_db_password.secret_id
+    codex_auth_bootstrap_secret_id     = google_secret_manager_secret.agent_orchestration_codex_auth_bootstrap.secret_id
+    api_gcp_service_account_email      = google_service_account.agent_orchestration_api.email
+    runner_gcp_service_account_email   = google_service_account.agent_orchestration_runner.email
+    api_workload_identity_principal    = local.agent_orchestration_api_workload_identity_principal
+    runner_workload_identity_principal = local.agent_orchestration_runner_workload_identity_principal
+  }
+}
+
 output "airflow_gke_node_pool_name" {
   description = "Airflow Helm component 전용 dev GKE node pool 이름."
   value       = google_container_node_pool.airflow.name

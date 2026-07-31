@@ -20,3 +20,8 @@ argocd_server_url = "https://localhost:8443"
 # client id/secret은 여기가 아니라 argocd-google-oidc Secret으로 주입(README).
 argocd_admin_user_emails    = ["you@gmail.com"]
 argocd_readonly_user_emails = ["teammate@gmail.com"]
+
+# false가 기본 안전 상태다. release digest와 DB runtime 권한 migration을 검증한 뒤에만
+# true와 해당 배포 commit의 40자리 SHA를 함께 설정한다.
+agent_orchestration_deployment_enabled = false
+agent_orchestration_target_revision    = ""

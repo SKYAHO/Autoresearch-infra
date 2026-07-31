@@ -13,6 +13,20 @@ output "app_egress_network_policy" {
   value       = kubernetes_network_policy_v1.app_egress.metadata[0].name
 }
 
+output "agent_orchestration_service_accounts" {
+  description = "Agent Orchestration API와 Codex Runner의 분리된 Workload Identity Kubernetes service account."
+  value = {
+    api = {
+      name                      = kubernetes_service_account_v1.agent_orchestration_api.metadata[0].name
+      gcp_service_account_email = local.agent_orchestration_api_gcp_service_account_email
+    }
+    runner = {
+      name                      = kubernetes_service_account_v1.agent_orchestration_runner.metadata[0].name
+      gcp_service_account_email = local.agent_orchestration_runner_gcp_service_account_email
+    }
+  }
+}
+
 output "feast_apply_environments" {
   description = "GitHub Environment별 Feast apply namespace/KSA/GSA/NetworkPolicy 계약(#424). 각 키의 튜플은 함께 변경해야 한다."
   value = {

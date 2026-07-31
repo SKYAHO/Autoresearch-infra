@@ -1,0 +1,18 @@
+# ClusterIP keeps the API inside the cluster. Initial validation is limited to
+# an authorised operator's kubectl port-forward; no Ingress or LoadBalancer is created.
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-orchestration-api
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-api
+    app.kubernetes.io/part-of: agent-orchestration
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: agent-orchestration-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
