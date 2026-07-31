@@ -54,7 +54,7 @@ spec:
         - name: bootstrap-codex-auth
           # bootstrap_secrets.py is intentionally in the API image. This init
           # container still runs with the Runner-only KSA and OAuth-only GSA.
-          image: REPLACE_WITH_API_IMMUTABLE_DIGEST
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:34c991aea0010e384c4350f8073c898346ddceabad59fc1d24d56b750051c90b
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -63,7 +63,7 @@ spec:
             - runner-codex-auth
           env:
             - name: ORCH_CODEX_AUTH_SECRET_ID
-              value: projects/REPLACE_WITH_PROJECT_ID/secrets/REPLACE_WITH_CODEX_AUTH_BOOTSTRAP_SECRET_ID/versions/latest
+              value: projects/autoresearch-503903/secrets/autoresearch-dev-agent-orchestration-codex-auth-bootstrap/versions/latest
             # Init container mounts the PVC at a separate path so only the
             # main Runner mounts its runtime CODEX_HOME at /var/lib/codex.
             - name: CODEX_HOME
@@ -81,7 +81,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: runner
-          image: REPLACE_WITH_RUNNER_IMMUTABLE_DIGEST
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-runner@sha256:0c3cd32df262591802768de65dcaa9f8688fc8157e5db2d1ccc09d75dab04382
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -53,6 +53,17 @@ ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장 검증·롤백 절�
 출력하지 않습니다. output 값을 조회할 때도 CI log, PR 본문, 티켓에 복사하지
 않습니다.
 
+### 최초 활성화 매니페스트
+
+최초 활성화에서는 위 자리표시자를 release workflow가 검증한 immutable digest와
+적용된 dev Terraform output의 비밀이 아닌 식별자로만 바꾼 별도 manifest commit을
+만듭니다. 이 commit은 Application이 아직 disabled 상태인 동안 검토·병합할 수
+있습니다. 병합 뒤에만 그 정확한 main commit SHA를
+`AGENT_ORCHESTRATION_TARGET_REVISION`으로 지정하고,
+`AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`와 함께 reviewed admin apply를
+수행합니다. mutable tag, PR head SHA, 비밀번호·OAuth payload·요청 토큰은 이
+commit에 넣지 않습니다.
+
 ## DB runtime 권한 migration 선행 조건
 
 현재 앱 소스의 `ensure_schema()`는 API 시작마다 advisory lock 뒤
