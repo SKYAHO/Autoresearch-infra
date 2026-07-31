@@ -12,7 +12,7 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 |---|---|
 | namespace / KSA | `mlflow` / `mlflow`(Workload Identity → GSA `autoresearch-dev-mlflow`) |
 | 경계 소유 | `terraform/admin/mlflow-k8s`(ns/KSA/NetworkPolicy) |
-| 앱 배포 | ArgoCD Application `mlflow`(source `deploy/mlflow`, manual sync) |
+| 앱 배포 | ArgoCD Application `mlflow`(source `deploy/mlflow`, automated sync #460 — prune 없음) |
 | 이미지 | GAR `autoresearch-mlflow`(앱 `deploy/mlflow/Dockerfile`을 인프라 Cloud Build로 빌드) |
 | backend | Cloud SQL `autoresearch-dev-pg`, DB `mlflow`, user `mlflow`(private IP) |
 | artifact | GCS `autoresearch-503903-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
@@ -119,7 +119,7 @@ apply) → ② Secret Manager 새 version → ③ 위 절차로 `mlflow-db` 재�
 ```bash
 # 이미지 갱신: 앱 Dockerfile 변경 시 인프라 Cloud Build로 재빌드 후 deploy/mlflow의
 # image digest를 새 값으로 PR → merge → ArgoCD sync.
-# manual sync 트리거(argocd CLI 없이 kubectl로):
+# 수동 sync 트리거(긴급/선반영용 — 평시엔 main 머지로 자동, #460):
 kubectl patch application mlflow -n argocd --type merge \
   -p '{"operation":{"initiatedBy":{"username":"operator"},"sync":{"revision":"main"}}}'
 kubectl -n argocd get application mlflow -o jsonpath='{.status.sync.status}/{.status.health.status}{"\n"}'
