@@ -225,7 +225,7 @@ flowchart TB
 | Secret(학습) | ~~Vault~~ 드랍(#412) — helm release·namespace 삭제됨, dev root KMS/GSA 코드·state 정리는 #412 B~C 예정. 실 서비스 secret은 Secret Manager |
 | KMS | `autoresearch-dev-vault`/`vault-unseal` key (#132) | Vault auto-unseal. key 삭제 금지(데이터 복호화 불능) |
 | DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | Google API 고정 VIP 유도 — vault egress 443 축소 기반 |
-| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **admin root 승인 게이트 CI apply**(#307/#312, `admin-apply.yml`) + **dev root 승인 게이트 CI apply**(#341, `dev-apply.yml`) | drift 시 [DRIFT] 이슈 자동 생성. K8s admin root 7개(#412로 `vault-k8s` 제외)·dev root 모두 Environment 승인 후 CI apply, 로컬 apply는 break-glass |
+| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **단일 진입점 승인 게이트 CI apply**(`apply.yml`, #451 — admin root #307/#312 + dev root #341 통합) | drift 시 [DRIFT] 이슈 자동 생성. dev root + K8s admin root 7개(#412로 `vault-k8s` 제외)를 한 번의 dispatch·승인으로 CI apply(순서: dev root 먼저), 로컬 apply는 break-glass |
 
 ## 인프라별 상세 구조
 
@@ -252,10 +252,10 @@ flowchart LR
   GCS, BigQuery, Cloud Run, Secret Manager, Airflow GCP 리소스가 여기 있다.
 - PR이 열리면 GitHub Actions가 실제 GCP 자격 증명을 service account key 없이
   OIDC/WIF로 얻고, dev root에 대해 plan을 실행한다.
-- dev root apply는 자동화하지 않았다 — 운영자가 로컬에서 명시적으로 `terraform apply`를
-  실행한다. K8s admin root 7개(#412로 vault-k8s 제외)는 `admin-apply.yml` 승인 게이트 CI apply로 이관됐다
-  (#307/#312, 민감 tfvars는 GitHub Secrets 단일 원천, Environment 승인 필요). 로컬
-  apply는 break-glass. gke-team-access(사람 IAM)는 로컬 유지(#314).
+- dev root apply(#341)와 K8s admin root 7개 apply(#307/#312, #412로 vault-k8s
+  제외)는 `apply.yml` 승인 게이트 CI apply로 이관됐다(#451에서 단일 워크플로우로
+  통합 — 한 번의 dispatch·승인으로 전체 적용, 민감 tfvars는 GitHub Secrets 단일
+  원천). 로컬 apply는 break-glass. gke-team-access(사람 IAM)는 로컬 유지(#314).
 
 주요 설정 상세:
 

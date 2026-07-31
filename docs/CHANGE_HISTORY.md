@@ -3,6 +3,58 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-31: apply workflow 단일 진입점 통합 (#451)
+
+- **배경**: #448에서 apply 구현은 `terraform-apply.yml` 한 곳으로 모았지만
+  진입점은 `admin-apply.yml`·`dev-apply.yml` 둘로 남았다. 운영자가 인프라를
+  적용하려면 여전히 워크플로우 2개를 각각 dispatch·승인해야 했다.
+- **결정**: 세 파일(admin-apply.yml, dev-apply.yml, terraform-apply.yml)을
+  `apply.yml` 하나로 합쳤다. 한 번의 dispatch가 dev root + admin root 7개를
+  전부 plan하고, GitHub Environment `apply` 승인 1회로 전부 apply한다(순서:
+  dev root 먼저 — admin root의 K8s namespace/RBAC이 dev root의 GKE 클러스터에
+  의존하므로 #436류 함정을 코드로 방지).
+- **명시적으로 수용한 트레이드오프**: #341이 세운 "최강 자격(dev-apply SA)의
+  사용 경로를 파일 하나로 고정"은 파일 단위 분리에서 **단일 파일 + Environment
+  승인 게이트**로 바뀐다. SA 자체는 계속 분리하고(dev-apply SA / admin-apply
+  SA, 같은 job 안에서 `google-github-actions/auth@v2`를 두 번 호출해 전환),
+  admin allowlist secret은 admin root를 다루는 step의 env에만 선언해 dev
+  apply step의 노출면을 리팩터 전과 동일(0)하게 유지한다. 승인이 하나로
+  합쳐져 plan 요약이 최대 8개 root 분량으로 오므로 #306 교훈(in-place가 접근
+  변경을 숨김)이 더 중요해졌다.
+- **3단계(#456)**: apply SA 2종의 옛 workflow_ref 바인딩
+  (`admin-apply.yml@main`/`dev-apply.yml@main`)과 관련 변수 2종을 제거했다.
+  surviving `_unified` 리소스(`apply.yml@main` 가장)는 값을 건드리지 않고
+  그대로 뒀다 — 원인은 `member` 값 변경(ForceNew)이 아니라 **Terraform
+  state 주소** 자체다. 리소스 라벨을 코드에서 rename하면(`moved` 블록 없이)
+  Terraform은 옛 주소를 "설정에서 사라짐"으로 보아 destroy, 새 주소를
+  "state에 없음"으로 보아 create로 계획한다. 이 destroy와 create의 실행
+  순서가 보장되지 않아, destroy가 나중에 실행되면 이 워크플로우 자신을
+  인증하는 WIF 바인딩이 apply 도중 사라져 CI가 스스로를 복구하지 못하는
+  상태가 될 수 있다(self-lockout, #456 리뷰). 그래서 `_unified` 접미사째
+  남기고, 후속 정리는 `moved` 블록(state 주소만 이동, GCP API 호출 0건)으로
+  넘겼다 — 추적: #458.
+- **범위**: `apply.yml` 신설, 옛 워크플로우 3개 삭제, GitHub Environment
+  `apply` 신설(기존 admin-apply/dev-apply와 동일한 6인 reviewer, API로 사전
+  생성·검증 — Environment 부재 시 GitHub이 보호 규칙 없이 자동 생성해 승인
+  게이트가 조용히 사라지는 위험을 회피). `workflow_dispatch.inputs.scope`
+  (all/dev/admin, 기본 all)를 추가해 두 가지를 지원한다: ① 신선 클러스터
+  부트스트랩(admin root plan은 GKE 클러스터 전제 — `scope: dev`로 먼저 적용)
+  ② plan 신선도 완화(admin root plan은 dev root apply **이전** 시점 상태로
+  계산되므로, 같은 dispatch에서 dev 변경을 admin이 즉시 참조해야 하면
+  `scope: dev` → `scope: admin`으로 분리 — Terraform의 stale-plan 보호는 그
+  root 자신의 state lineage만 검사하고 다른 root의 apply로 바뀐 live 조회
+  값까지는 잡지 못하므로 코드가 아니라 운영 규칙으로 막는다).
+- **최종 검증(2026-07-31, `scope: all` 실apply)**: 1단계에서 만든
+  `apply.yml@main` 바인딩이 실제로 존재함을 라이브 `gcloud
+  iam service-accounts get-iam-policy`로 재확인한 뒤, 새 `apply.yml`을
+  dispatch했다. CI와 같은 버전(1.13.5)으로 8개 root의 plan 원문을 전부 직접
+  확인 — dev root는 정확히 4건(SA description in-place 갱신 2 + 옛
+  workflow_ref 바인딩 삭제 2), admin root 7개는 전부 `No changes`. 승인 후
+  apply job의 두 SA 전환(dev-apply → admin-apply)과 cleanup까지 전 단계
+  success. 적용 후 두 SA 모두 `apply.yml@main` 바인딩 단 하나만 남았고 plan
+  객체 8건은 cleanup으로 정리됨을 확인했다 — 통합 경로(단일 진입점·SA
+  전환·승인 1회·scope 입력) 전체가 실동작함이 실증됐다.
+
 ## 2026-07-30: apply workflow 공용 구현 통합 (#448)
 
 - **배경**: `admin-apply.yml`(#307/#312)과 `dev-apply.yml`(#341)이 plan→승인→

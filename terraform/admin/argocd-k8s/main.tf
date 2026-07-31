@@ -303,7 +303,23 @@ resource "kubernetes_manifest" "application_monitoring" {
       }
       syncPolicy = {
         # 실행 중 리소스의 helm managed-by 라벨 차이를 흡수 + namespace는
-        # TF 소유라 생성 안 함. auto-sync/prune 없음(수동).
+        # TF 소유라 생성 안 함.
+        # #460 자동 sync 전환: main 머지 즉시 반영. prune 없음(리소스 삭제는
+        # 사람 판단 유지), selfHeal 없음(수동 드리프트 개입 여지 유지).
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
         syncOptions = [
           "ServerSideApply=true",
           "CreateNamespace=false",
@@ -340,6 +356,22 @@ resource "kubernetes_manifest" "application_argo_rollouts" {
         namespace = var.rollouts_namespace
       }
       syncPolicy = {
+        # #460 자동 sync 전환: main 머지 즉시 반영. prune 없음(리소스 삭제는
+        # 사람 판단 유지), selfHeal 없음(수동 드리프트 개입 여지 유지).
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
         syncOptions = [
           "ServerSideApply=true",
           "CreateNamespace=false",
@@ -374,6 +406,22 @@ resource "kubernetes_manifest" "application_mlflow" {
         namespace = var.mlflow_namespace
       }
       syncPolicy = {
+        # #460 자동 sync 전환: main 머지 즉시 반영. prune 없음(리소스 삭제는
+        # 사람 판단 유지), selfHeal 없음(수동 드리프트 개입 여지 유지).
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
         syncOptions = [
           "CreateNamespace=false",
         ]
@@ -408,6 +456,22 @@ resource "kubernetes_manifest" "application_serving" {
         namespace = var.app_namespace
       }
       syncPolicy = {
+        # #460 자동 sync 전환: main 머지 즉시 반영. prune 없음(리소스 삭제는
+        # 사람 판단 유지), selfHeal 없음(수동 드리프트 개입 여지 유지).
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
         syncOptions = [
           "CreateNamespace=false",
         ]
