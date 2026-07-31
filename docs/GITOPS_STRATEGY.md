@@ -39,7 +39,8 @@ Airflow 연결은 2026-07-14 결정 보류 상태다 — 전환 효과는 크지
 
 | 환경 | 기본 정책 | 설명 |
 |---|---|---|
-| dev 초기 | manual sync | 사람이 diff를 확인하고 sync한다 |
+| dev 초기 | manual sync | 사람이 diff를 확인하고 sync한다 (#183~#404 기간) |
+| dev 운영(현행, #460) | **automated**(prune·selfHeal 없음) | main 머지 즉시 반영. 삭제(prune)와 드리프트 되돌림은 여전히 사람 판단 |
 | dev 안정화 후 | auto-sync 후보 | prune/self-heal은 리소스별로 신중히 켠다 |
 | 운영 전환 | Application별 결정 | DB, PVC, Secret 관련 변경은 manual 우선 |
 
@@ -125,7 +126,7 @@ ArgoCD=앱" 책임 분리를 실제로 구현한다. **monitoring을 첫 파일�
   managed-by 라벨 차이는 ServerSideApply로 흡수). 롤백은 helm_release import.
 - **operator 주입 secret**(grafana-admin/oauth)은 chart 밖이라 ArgoCD가
   관리·prune하지 않는다 — values는 이름만 참조.
-- sync는 manual부터(초기 원칙).
+- sync는 manual로 시작해(초기 원칙) 스택 안정화 후 automated로 전환했다(#460 — prune 제외).
 
 **이관 진행 현황**:
 
