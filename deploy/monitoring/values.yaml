@@ -13,9 +13,13 @@ kube-prometheus-stack:
         cloud.google.com/gke-nodepool: dev-default
       retention: 7d
       # #459 크기 상한(두 번째 안전벨트): 시간 기준만 있으면 카디널리티 폭증 시
-      # 7일치가 PVC(30Gi)를 넘어 쓰기 실패로 죽는다. PVC의 ~83%로 잡아 WAL·
-      # 컴팩션 여유를 남긴다(실측 2026-07-31: TSDB 0.6GiB/2일 → 7d 만재 ~3GiB).
-      retentionSize: "25GiB"
+      # 7일치가 PVC(30Gi)를 넘어 쓰기 실패로 죽는다. retention.size 합산에는
+      # 블록뿐 아니라 WAL·m-mapped head chunk도 포함되므로(공식 문서) 헤드룸은
+      # WAL 몫이 아니라 삭제 지연·컴팩션 일시 초과·FS 오버헤드용이다.
+      # 24GiB = PVC의 80% → 상한 발동 상태에서도 free 20%로, kps 기본 경보
+      # KubePersistentVolumeFillingUp(free 15%)·runbook 85% 기준과 겹치지 않게
+      # 여유를 둔다(실측 2026-07-31: TSDB 0.6GiB/2일 → 7d 만재 ~3GiB).
+      retentionSize: "24GiB"
       # #106 실측(508Mi) 기반 requests — 미설정이면 스케줄러/CA가 이 pod의
       # 비용을 0으로 계산해 배치·증설 판단이 왜곡된다. limit은 retention
       # 축적(7d TSDB) 성장 여유.
