@@ -1,6 +1,6 @@
-# Agent Orchestration API. This manifest intentionally cannot be synced until
-# Task 6 replaces every REPLACE_WITH_* value with release digest or Terraform
-# output. A mutable tag must never be substituted for an immutable digest.
+# Agent Orchestration API의 최초 배포 manifest다. API container와 DB bootstrap은
+# 같은 immutable digest를 사용한다. 이후 promotion·rollback도 두 참조를 같은
+# manifest commit에서 함께 갱신하며 mutable tag는 사용하지 않는다.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: bootstrap-db
-          image: REPLACE_WITH_API_IMMUTABLE_DIGEST
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:34c991aea0010e384c4350f8073c898346ddceabad59fc1d24d56b750051c90b
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -41,13 +41,13 @@ spec:
             - agent_orchestration.bootstrap_secrets
           env:
             - name: ORCH_DB_PASSWORD_SECRET_ID
-              value: projects/REPLACE_WITH_PROJECT_ID/secrets/REPLACE_WITH_DB_PASSWORD_SECRET_ID/versions/latest
+              value: projects/autoresearch-503903/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
             - name: ORCH_DB_HOST
-              value: REPLACE_WITH_CLOUD_SQL_PRIVATE_IP
+              value: 192.168.0.3
             - name: ORCH_DB_NAME
-              value: REPLACE_WITH_DB_NAME
+              value: agent_orchestration
             - name: ORCH_DB_USER
-              value: REPLACE_WITH_DB_USER
+              value: agent_orchestration_app
             - name: ORCH_RUNTIME_DIR
               value: /runtime
           volumeMounts:
@@ -63,7 +63,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: api
-          image: REPLACE_WITH_API_IMMUTABLE_DIGEST
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:34c991aea0010e384c4350f8073c898346ddceabad59fc1d24d56b750051c90b
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
