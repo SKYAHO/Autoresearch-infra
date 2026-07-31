@@ -60,8 +60,8 @@ IaC 재적용 + 데이터 복사가 기본 전략이다.
 
 ## Phase 3 — admin roots apply
 
-ROOTS 순서는 admin-apply.yml이 정본(#436 — ns 소유 root 선행). 신선 클러스터
-한정 선행 2단계:
+ROOTS 순서는 `apply.yml`의 `ADMIN_ROOTS`가 정본(#451 — 옛 `admin-apply.yml`
+정의를 이관, #436 — ns 소유 root 선행). 신선 클러스터 한정 선행 2단계:
 
 1. CRD 의존 root는 operator만 로컬 `-target` 선적용:
    `elastic-k8s → helm_release.eck_operator`, `argocd-k8s → helm_release.argo_cd`

@@ -3,6 +3,31 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-31: apply workflow 단일 진입점 통합 (#451)
+
+- **배경**: #448에서 apply 구현은 `terraform-apply.yml` 한 곳으로 모았지만
+  진입점은 `admin-apply.yml`·`dev-apply.yml` 둘로 남았다. 운영자가 인프라를
+  적용하려면 여전히 워크플로우 2개를 각각 dispatch·승인해야 했다.
+- **결정**: 세 파일(admin-apply.yml, dev-apply.yml, terraform-apply.yml)을
+  `apply.yml` 하나로 합쳤다. 한 번의 dispatch가 dev root + admin root 7개를
+  전부 plan하고, GitHub Environment `apply` 승인 1회로 전부 apply한다(순서:
+  dev root 먼저 — admin root의 K8s namespace/RBAC이 dev root의 GKE 클러스터에
+  의존하므로 #436류 함정을 코드로 방지).
+- **명시적으로 수용한 트레이드오프**: #341이 세운 "최강 자격(dev-apply SA)의
+  사용 경로를 파일 하나로 고정"은 파일 단위 분리에서 **단일 파일 + Environment
+  승인 게이트**로 바뀐다. SA 자체는 계속 분리하고(dev-apply SA / admin-apply
+  SA, 같은 job 안에서 `google-github-actions/auth@v2`를 두 번 호출해 전환),
+  admin allowlist secret은 admin root를 다루는 step의 env에만 선언해 dev
+  apply step의 노출면을 리팩터 전과 동일(0)하게 유지한다. 승인이 하나로
+  합쳐져 plan 요약이 최대 8개 root 분량으로 오므로 #306 교훈(in-place가 접근
+  변경을 숨김)이 더 중요해졌다.
+- **3단계(선행 IAM #452 완료 전제)**: apply SA 2종의 옛 workflow_ref 바인딩
+  (`admin-apply.yml@main`/`dev-apply.yml@main`)과 관련 변수를 제거하고, 새
+  `apply.yml`로 그 제거 자체를 적용해 통합 경로가 실동작함을 실증한다.
+- **범위**: `apply.yml` 신설, 옛 워크플로우 3개 삭제, GitHub Environment
+  `apply` 신설(기존 admin-apply/dev-apply와 동일한 6인 reviewer). Terraform
+  변경은 #452(1단계)로 이미 반영됨 — 이 PR 자체는 워크플로우/문서만 변경한다.
+
 ## 2026-07-30: apply workflow 공용 구현 통합 (#448)
 
 - **배경**: `admin-apply.yml`(#307/#312)과 `dev-apply.yml`(#341)이 plan→승인→
