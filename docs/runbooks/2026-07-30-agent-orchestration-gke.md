@@ -152,9 +152,11 @@ Degraded 상태, API rollout status, `bootstrap-db`·API container의 오류를 
 탐지합니다.
 
 DB 비밀번호 rotation도 Secret version 변경만으로 기존 API Pod를 자동 재기동하지
-않습니다. 기존 Pod는 이미 작성된 `db.env`의 이전 URL을 계속 사용하고, 이미 맺은
-PostgreSQL 연결은 유지될 수 있으나 이후 재연결은 실패할 수 있습니다. 새 Pod는
-`versions/latest`의 새 비밀번호로 부트스트랩합니다. 다음 절차로 수렴시킵니다.
+않습니다. 기존 Pod는 이미 작성된 `db.env`의 이전 URL을 계속 사용합니다. 현 API는
+연결 pool을 유지하지 않고 `/chat` 저장마다 새 PostgreSQL 연결을 열므로,
+`/healthcheck`는 성공해도 password 교체 뒤 `/chat`은 저장 단계에서 HTTP 500이 될 수
+있습니다. 새 Pod는 `versions/latest`의 새 비밀번호로 부트스트랩합니다. 다음 절차로
+수렴시킵니다.
 
 1. 승인된 절차로 Cloud SQL user password와 Secret Manager 최신 version을 함께
    갱신합니다. 둘 중 하나만 갱신하면 안 됩니다.
