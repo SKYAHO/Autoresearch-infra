@@ -576,23 +576,11 @@ variable "airflow_deploy_ref" {
   default     = "refs/heads/main"
 }
 
-variable "admin_apply_workflow_ref" {
-  description = "#307 admin root CI apply SA를 가장할 수 있는 정확한 admin-apply.yml workflow_ref. main의 이 workflow만 허용해 임의 브랜치/workflow의 가장을 막는다."
-  type        = string
-  default     = "SKYAHO/Autoresearch-infra/.github/workflows/admin-apply.yml@refs/heads/main"
-}
-
-variable "dev_apply_workflow_ref" {
-  description = "#341 dev root CI apply SA를 가장할 수 있는 정확한 dev-apply.yml workflow_ref. main의 이 workflow만 허용해 임의 브랜치/workflow의 가장을 막는다."
-  type        = string
-  default     = "SKYAHO/Autoresearch-infra/.github/workflows/dev-apply.yml@refs/heads/main"
-}
-
-# #451 단일 진입점 이전용. 1단계에서 apply SA 2종에 이 ref 바인딩을 **추가**하고
-# (기존 admin-apply/dev-apply ref 유지), 2단계에서 workflow를 apply.yml 하나로
-# 교체한 뒤, 3단계에서 옛 ref 바인딩과 위 두 변수를 제거한다. 순서를 지켜야
-# "새 파일은 아직 가장 불가 + 옛 파일은 삭제됨"으로 CI가 IAM을 못 고치는
-# 구간이 생기지 않는다.
+# #451 단일 진입점. apply SA 2종(dev-apply·admin-apply) 모두 이 workflow_ref
+# 하나만 가장할 수 있다. 옛 admin_apply_workflow_ref·dev_apply_workflow_ref
+# 변수(admin-apply.yml/dev-apply.yml 전용)는 3단계에서 이 변수로 교체돼
+# 제거됐다 — 이관 순서(1단계 바인딩 추가 → 2단계 workflow 교체 → 3단계 옛
+# 바인딩·변수 제거)는 docs/CHANGE_HISTORY.md 2026-07-31 항목 참고.
 variable "apply_workflow_ref" {
   description = "#451 통합 apply.yml workflow_ref. dev root와 admin root apply SA를 모두 이 workflow가 가장한다(진입점 단일화 — 통제는 SA 분리 + Environment 승인 게이트)."
   type        = string
