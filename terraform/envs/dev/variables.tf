@@ -370,6 +370,28 @@ variable "mlflow_artifacts_soft_delete_seconds" {
   default     = 604800
 }
 
+variable "mlflow_training_snapshot_retention_days" {
+  description = "training-snapshots/ live object age lifecycle 보존 일수. 0이면 자동 삭제하지 않는다."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.mlflow_training_snapshot_retention_days >= 0 && floor(var.mlflow_training_snapshot_retention_days) == var.mlflow_training_snapshot_retention_days
+    error_message = "mlflow_training_snapshot_retention_days must be an integer greater than or equal to 0."
+  }
+}
+
+variable "mlflow_artifact_noncurrent_retention_days" {
+  description = "MLflow artifact bucket noncurrent generation 보존 일수. 0은 즉시 정리 위험 때문에 허용하지 않으며 기본 30일."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.mlflow_artifact_noncurrent_retention_days > 0 && floor(var.mlflow_artifact_noncurrent_retention_days) == var.mlflow_artifact_noncurrent_retention_days
+    error_message = "mlflow_artifact_noncurrent_retention_days must be an integer greater than 0."
+  }
+}
+
 variable "airflow_k8s_namespace" {
   description = "Airflow Helm release, Airflow KSA, batch KSA가 배치될 Kubernetes namespace."
   type        = string

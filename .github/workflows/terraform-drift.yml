@@ -55,9 +55,17 @@ jobs:
           terraform -chdir=terraform/envs/dev plan -no-color -input=false -detailed-exitcode > /tmp/plan.out 2>&1
           code=$?
           echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
-          # allowlist: '# <addr> will be/must be ...' 리소스 주소 헤더와
-          # 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는 포함 안 함.
-          grep -E '^[[:space:]]*# .+ (will be|must be) |^Plan: [0-9]|^No changes\.' \
+          # allowlist: '# <addr> will be/must be/has moved to ...' 리소스
+          # 주소 헤더와 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는
+          # 포함 안 함. 'has moved to'는 #468에서 추가 — 이게 빠지면 moved
+          # 블록만 있는 plan(exitcode 2, create/destroy 0건)이 원인 설명 없이
+          # 'Plan: 0 to add, 0 to change, 0 to destroy.' 한 줄만 담긴 채
+          # drift 이슈로 올라간다. '(moved from ...)'도 함께 추가 — moved
+          # 대상 리소스에 동시에 속성 변경이 있으면 Terraform이 헤더를
+          # '# <new> will be updated in-place' + '# (moved from <old>)' 두
+          # 줄로 나눠 렌더링하는데, 이 두 번째 줄이 없으면 같은 종류의 정보
+          # 손실(주소 이동 사실 누락)이 남는다.
+          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' \
             /tmp/plan.out > /tmp/plan.summary || true
           # 이 step 자체는 항상 성공 처리하고 판정은 아래 step에서 한다
           exit 0
