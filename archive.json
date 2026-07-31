@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T01:40:04Z",
+  "generated_at": "2026-07-31T01:46:47Z",
   "reports": [
+    {
+      "number": 457,
+      "title": "docs: apply workflow 단일 진입점(#451) 최종 검증 결과 기록",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-31T01:46:31Z",
+      "summary_ko": [
+        "통합 apply 워크플로우(#451)의 3단계 작업 완료 내역과 최종 실검증 결과를 문서에 반영하였습니다.",
+        "실제 `scope: all` 실행으로 dev/admin 환경의 apply 및 서비스 계정 전환 통합 경로가 정상 동작함을 실증하였습니다.",
+        "본 PR은 변경 이력 문서(`docs/CHANGE_HISTORY.md`) 업데이트만 포함하며 인프라 코드 변경은 없습니다."
+      ],
+      "report_url": "pr/457/"
+    },
     {
       "number": 456,
       "title": "feat: apply SA의 옛 workflow_ref 바인딩·변수 제거 (#451 3단계)",
