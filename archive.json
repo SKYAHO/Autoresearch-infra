@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T00:31:48Z",
+  "generated_at": "2026-07-31T00:46:14Z",
   "reports": [
+    {
+      "number": 455,
+      "title": "feat: apply workflow를 단일 진입점(apply.yml)으로 통합 (#451 2단계)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-31T00:45:52Z",
+      "summary_ko": [
+        "기존 삼원화되어 있던 Terraform apply 워크플로우(admin-apply, dev-apply, terraform-apply)를 apply.yml 하나로 통합하였습니다.",
+        "한 번의 수동 실행으로 dev root 및 7개 admin root 전체를 plan하고, Environment 승인 1회로 일괄 적용하도록 개선하였습니다.",
+        "동일 job 내 스텝별 GCP 계정 전환과 스텝 스코프 시크릿 주입을 통해 권한 경계 및 보안성을 최우선으로 유지하였습니다."
+      ],
+      "report_url": "pr/455/"
+    },
     {
       "number": 452,
       "title": "feat: apply SA 2종에 통합 진입점(apply.yml) WI 바인딩 추가 (#451 1단계)",
