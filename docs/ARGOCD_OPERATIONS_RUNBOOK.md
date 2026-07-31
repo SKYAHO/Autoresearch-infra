@@ -90,7 +90,7 @@ kubectl -n argocd get application <app> -o jsonpath='{.status.sync.status}{"\n"}
 
 ## sync (수동)
 
-현재 모든 Application은 manual sync만 사용한다(auto-sync/prune/self-heal 없음).
+모든 Application은 automated sync를 사용한다(#460 — main 머지 즉시 반영). 단 prune과 selfHeal은 계속 꺼져 있어 리소스 삭제·수동 드리프트 되돌림은 사람 판단이다.
 sync는 사람이 diff를 확인한 뒤 트리거한다.
 
 - **UI**: Application 화면의 `SYNC` 버튼 (prune 체크는 기본 해제 유지).

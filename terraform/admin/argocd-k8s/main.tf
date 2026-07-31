@@ -310,6 +310,16 @@ resource "kubernetes_manifest" "application_monitoring" {
           prune    = false
           selfHeal = false
         }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
         syncOptions = [
           "ServerSideApply=true",
           "CreateNamespace=false",
@@ -352,6 +362,16 @@ resource "kubernetes_manifest" "application_argo_rollouts" {
           prune    = false
           selfHeal = false
         }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
         syncOptions = [
           "ServerSideApply=true",
           "CreateNamespace=false",
@@ -392,6 +412,16 @@ resource "kubernetes_manifest" "application_mlflow" {
           prune    = false
           selfHeal = false
         }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
         syncOptions = [
           "CreateNamespace=false",
         ]
@@ -431,6 +461,16 @@ resource "kubernetes_manifest" "application_serving" {
         automated = {
           prune    = false
           selfHeal = false
+        }
+        # 일시 오류(repo fetch·webhook 경합 등) 자동 재시도. 소진 후에도 실패면
+        # OutOfSync로 남는다 — 실패 가시화(경보)는 후속 이슈로 다룬다(#460 본문).
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
         }
         syncOptions = [
           "CreateNamespace=false",
