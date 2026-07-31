@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T09:04:58Z",
+  "generated_at": "2026-07-31T09:07:44Z",
   "reports": [
+    {
+      "number": 467,
+      "title": "feat: MLflow training snapshot registry 구성 추가",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-31T09:07:31Z",
+      "summary_ko": [
+        "기존 MLflow artifact GCS 버킷에 학습 데이터셋 스냅샷 저장을 위한 canonical prefix 경로와 버킷 오브젝트 버저닝 설정을 추가하였습니다.",
+        "Airflow 배치 워크로드 권한(GSA)에 스냅샷 경로 전용 생성 및 조회 IAM 조건을 적용하여 파일 덮어쓰기를 방지하고 최소 권한을 보장하도록 구성하였습니다.",
+        "스냅샷 생주기 관리 변수, 복구 절차, 해시 기반 검증 계약을 문서화하고 운영 런북을 업데이트하였습니다."
+      ],
+      "report_url": "pr/467/"
+    },
     {
       "number": 469,
       "title": "fix: plan 요약 allowlist 정규식에 moved 리소스 라인 추가",
