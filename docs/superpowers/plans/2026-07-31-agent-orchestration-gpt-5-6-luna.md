@@ -13,6 +13,8 @@
 - `CODEX_MODEL`의 단일 출처는 `deploy/agent-orchestration/runner-deployment.yaml`이며, 직접 `kubectl set env` 또는 rollout restart를 사용하지 않는다.
 - OAuth bootstrap 시크릿, Runner PVC, API·Runner 요청 토큰, Cloud SQL DB 권한·비밀번호, 이미지 digest, API JSON 계약은 변경하지 않는다.
 - `gpt-5.6-luna`의 실제 Codex OAuth 호출 가능 여부는 post-sync 인증된 `/chat` 요청으로만 판정한다.
+- Runner `/healthcheck`는 Codex 모델 호출을 수행하지 않는다. 지원되지 않는 모델명 또는 Codex 110초 timeout은 Runner가 Ready인 뒤 첫 `/chat`에서 API HTTP 502로 나타나며, LLM 응답 전 실패이므로 `chat_interactions` 행을 만들지 않는다.
+- 이 내부 MVP에는 모델별 canary·traffic drain이 없다. sync 후 즉시 end-to-end gate를 실행하는 동안 알려진 다른 내부 호출자를 중지하고, gate 성공 또는 rollback 완료 전에는 정상 서비스로 선언하지 않는다.
 - 실패 시 추가 요청을 중단하고, `gpt-5.3-codex-spark`로 되돌린 새 manifest commit을 같은 GitOps 절차로 배포한다.
 
 ---
@@ -85,7 +87,7 @@ Expected: 하나의 모델 전환 commit이 생성되고 secret·OAuth payload·
 
 - [ ] **Step 1: PR 검토·병합 후 target revision 적용**
 
-Set the non-secret GitHub Actions Variable `AGENT_ORCHESTRATION_TARGET_REVISION` to the merged 40-character main commit SHA. Keep `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`, run the reviewed admin apply workflow, and approve its protected deployment only after the plan succeeds.
+Set the non-secret GitHub Actions Variable `AGENT_ORCHESTRATION_TARGET_REVISION` to the merged 40-character main commit SHA. Keep `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`, run the reviewed admin apply workflow, and approve its protected deployment only after the plan succeeds. Before sync, verify the Application `spec.source.targetRevision` equals that exact SHA and inspect the Argo CD diff for that declared target. If either check fails, stop; do not issue a revision-overriding sync operation.
 
 Expected: Terraform updates only the Argo CD Application source target revision; it does not create, replace, or widen OAuth, DB, or IAM resources.
 
@@ -94,18 +96,18 @@ Expected: Terraform updates only the Argo CD Application source target revision;
 Run:
 
 ```bash
-kubectl -n argocd patch applications.argoproj.io agent-orchestration --type merge --patch '{"operation":{"sync":{"revision":"<merged-main-sha>","prune":false}}}'
+kubectl -n argocd patch applications.argoproj.io agent-orchestration --type merge --patch '{"operation":{"sync":{"prune":false}}}'
 kubectl -n autoresearch rollout status deployment/agent-orchestration-runner --timeout=5m
 kubectl -n autoresearch rollout status deployment/agent-orchestration-api --timeout=5m
 ```
 
-Expected: Application is `Synced`/`Healthy`, both pods are Ready, and neither has a restart.
+Expected: Application is `Synced`/`Healthy`, both pods are Ready, and neither has a restart. The operation syncs only the previously verified `spec.source.targetRevision`; a direct `operation.sync.revision` is prohibited because it can leave the live cluster ahead of the fixed Application revision without self-heal.
 
 - [ ] **Step 3: 내부 채팅·저장 gate 수행**
 
 Use an ephemeral file to read `agent-orchestration-api-token` without printing its payload. Port-forward only the ClusterIP API service, send one authenticated JSON `POST /chat`, and inspect only HTTP status, `id`, `model`, and `latency_ms` from the response.
 
-Expected: HTTP 201, a new integer `id`, `model=gpt-5.6-luna`, and a non-negative latency. The returned ID proves the API stored the interaction before responding.
+Expected: HTTP 201, a new integer `id`, `model=gpt-5.6-luna`, and `0 <= latency_ms < 120000`. The existing `CODEX_TIMEOUT_SEC=110` and API-to-Runner timeout=120 are separately checked by the deployment contract. A model rejection or execution over 110 seconds returns API HTTP 502 before persistence, so it has no `latency_ms` response or saved interaction row.
 
 - [ ] **Step 4: 실패 시 GitOps 롤백**
 
