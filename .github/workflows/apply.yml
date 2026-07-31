@@ -199,9 +199,12 @@ jobs:
             {
               echo "### $root"
               echo '```text'
-              # 'has moved to'는 #468에서 추가 — moved 블록만 있는 plan(주소
-              # 이동, create/destroy 0건)의 요약이 누락되지 않게 한다.
-              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
+              # 'has moved to'/'(moved from ...)'는 #468에서 추가 — 전자는
+              # moved-only(주소 이동만, create/destroy 0건), 후자는
+              # move+change 병존(이동+동시 속성 변경) 케이스의 주소 이동
+              # 사실이 요약에서 누락되지 않게 한다. 두 헤더 모두 리소스
+              # 주소만 담고 있어 속성값 비공개 원칙을 깨지 않는다.
+              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$rc" -ne 0 ]; then
@@ -292,9 +295,12 @@ jobs:
             {
               echo "### $root"
               echo '```text'
-              # 'has moved to'는 #468에서 추가 — moved 블록만 있는 plan(주소
-              # 이동, create/destroy 0건)의 요약이 누락되지 않게 한다.
-              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
+              # 'has moved to'/'(moved from ...)'는 #468에서 추가 — 전자는
+              # moved-only(주소 이동만, create/destroy 0건), 후자는
+              # move+change 병존(이동+동시 속성 변경) 케이스의 주소 이동
+              # 사실이 요약에서 누락되지 않게 한다. 두 헤더 모두 리소스
+              # 주소만 담고 있어 속성값 비공개 원칙을 깨지 않는다.
+              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$rc" -ne 0 ]; then
