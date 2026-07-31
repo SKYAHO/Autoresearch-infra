@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T02:45:45Z",
+  "generated_at": "2026-07-31T02:53:34Z",
   "reports": [
+    {
+      "number": 462,
+      "title": "feat: ArgoCD 자동 sync 전환 — main 머지 즉시 반영, prune 제외 (#460)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-31T02:53:21Z",
+      "summary_ko": [
+        "ArgoCD가 관리하는 4개 애플리케이션(monitoring, argo-rollouts, mlflow, serving)의 동기화 정책을 자동(automated)으로 전환했습니다.",
+        "자동 삭제(prune) 및 수동 드리프트 자동 원복(selfHeal)은 비활성화(false)하여 무단 리소스 삭제나 의도치 않은 수동 조치 원복을 방지했습니다.",
+        "GitOps 운영 전략 문서(GITOPS_STRATEGY.md)를 최신 자동 동기화 방침에 맞게 업데이트했습니다."
+      ],
+      "report_url": "pr/462/"
+    },
     {
       "number": 457,
       "title": "docs: apply workflow 단일 진입점(#451) 최종 검증 결과 기록",
