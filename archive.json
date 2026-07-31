@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-31T01:20:45Z",
+  "generated_at": "2026-07-31T01:28:38Z",
   "reports": [
+    {
+      "number": 456,
+      "title": "feat: apply SA의 옛 workflow_ref 바인딩·변수 제거 (#451 3단계)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-07-31T01:28:22Z",
+      "summary_ko": [
+        "통합 배포 진입점 이관(#451)의 마무리를 위해 옛 배포 워크플로우 전용 IAM 바인딩 2건을 삭제했습니다.",
+        "더 이상 사용하지 않는 이전 배포용 변수 2종을 제거하고, 유지되는 통합 바인딩의 설명 주석을 최신화했습니다.",
+        "리소스 재생성(replace) 위험 없이 죽은 권한만 순수 삭제하여 보안성과 관리성을 높였습니다."
+      ],
+      "report_url": "pr/456/"
+    },
     {
       "number": 455,
       "title": "feat: apply workflow를 단일 진입점(apply.yml)으로 통합 (#451 2단계)",
