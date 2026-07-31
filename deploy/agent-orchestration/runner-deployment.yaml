@@ -1,6 +1,6 @@
-# Agent Orchestration Codex Runner. Replace every REPLACE_WITH_* value only
-# with the release workflow's immutable digest and Terraform outputs before
-# the first manual ArgoCD sync; see docs/runbooks/2026-07-30-agent-orchestration-gke.md.
+# Agent Orchestration Codex Runner의 최초 배포 manifest다. OAuth bootstrap init
+# container는 API와 같은 immutable digest를 사용하고, Runner 본체는 검증된 별도
+# digest를 사용한다. promotion·rollback 절차는 runbook을 따른다.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

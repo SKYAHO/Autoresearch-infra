@@ -20,10 +20,10 @@ jobs:
         with:
           ruby-version: "3.4"
 
-      - name: Check Agent Orchestration timeout contract
+      - name: Check Agent Orchestration deployment contract
         run: ruby scripts/check-agent-orchestration-timeout-contract.rb
 
-      - name: Run Agent Orchestration timeout contract self-test
+      - name: Run Agent Orchestration deployment contract self-test
         run: ruby scripts/test-agent-orchestration-timeout-contract.rb
 
       - name: Run actionlint

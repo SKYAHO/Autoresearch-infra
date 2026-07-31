@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Timeout ConfigMap 계약 checker의 부정 mutation 회귀 테스트입니다.
+# Timeout ConfigMap·immutable image 계약 checker의 부정 mutation 회귀 테스트입니다.
 require "fileutils"
 require "tmpdir"
 
@@ -56,4 +56,26 @@ Dir.mktmpdir("agent-orchestration-timeout-config-map-") do |temporary_root|
   raise "ConfigMap value와 pod template annotation 불일치를 감지하지 못했습니다"
 end
 
-puts "Agent Orchestration timeout contract self-test: passed"
+Dir.mktmpdir("agent-orchestration-api-image-contract-") do |temporary_root|
+  deploy_root = File.join(temporary_root, "deploy")
+  FileUtils.mkdir_p(deploy_root)
+  FileUtils.cp_r(AgentOrchestrationTimeoutContract::DEPLOY_DIRECTORY, deploy_root)
+  api_path = File.join(deploy_root, "agent-orchestration", "api-deployment.yaml")
+  runner_path = File.join(deploy_root, "agent-orchestration", "runner-deployment.yaml")
+  api_image = AgentOrchestrationTimeoutContract.deployment(api_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  runner_image = AgentOrchestrationTimeoutContract.deployment(runner_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  File.write(runner_path, File.read(runner_path).sub(api_image, runner_image))
+
+  begin
+    AgentOrchestrationTimeoutContract.check!(temporary_root)
+  rescue AgentOrchestrationTimeoutContract::ContractError
+    next
+  end
+  raise "Runner bootstrap API image 불일치를 감지하지 못했습니다"
+end
+
+puts "Agent Orchestration deployment contract self-test: passed"

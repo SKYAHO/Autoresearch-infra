@@ -33,6 +33,12 @@ ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장 검증·롤백 절�
    port-forward ingress, 둘째 값은 Runner Service VIP·DNS egress, 셋째 값은 Cloud SQL
    private IP egress에 사용됩니다. CIDR 변경은 Terraform과 NetworkPolicy를 같은 배포
    변경에서 함께 갱신한 뒤 sync합니다.
+5. API manifest의 `ORCH_DB_HOST`가 reviewed Terraform state의
+   `cloud_sql_private_ip_address` output과 일치해야 합니다. Cloud SQL instance를
+   재생성하면 private IP가 달라질 수 있고, ArgoCD plain manifest의 리터럴 값은
+   Terraform drift만으로 자동 갱신되지 않습니다. 불일치하면 sync하지 말고 새
+   manifest commit에 현재 output을 반영한 뒤 target SHA → reviewed admin apply →
+   manual sync 전체 순서를 다시 수행합니다.
 
 `deploy/agent-orchestration/*.yaml`의 `REPLACE_WITH_*` 문자열이 하나라도 남아
 있으면 의도적으로 배포하지 않습니다. release digest와 Terraform output을 확인한
@@ -134,6 +140,33 @@ role을 임의로 비우거나 `cloudsqlsuperuser`를 무계획 revoke하면 현
 실패하므로 금지합니다. Cloud SQL built-in user와 custom database role 동작은
 [Google Cloud 공식 사용자·역할 문서](https://cloud.google.com/sql/docs/postgres/create-manage-users)를
 기준으로 합니다.
+
+## Cloud SQL 주소·비밀번호 변경 대응
+
+`bootstrap-db` init container는 API Pod가 생성될 때만 `ORCH_DB_HOST`와 Secret
+Manager `versions/latest` 비밀번호를 `/runtime/db.env`에 기록합니다. 따라서 Cloud
+SQL private IP가 manifest와 다르면 init container가 잘못된 주소로 DB URL을 만들고,
+API container는 DB 연결·schema 초기화에 실패해 Ready가 되지 않습니다. Runner는
+Cloud SQL을 사용하지 않으므로 별도로 Ready일 수 있습니다. ArgoCD Application의
+Degraded 상태, API rollout status, `bootstrap-db`·API container의 오류를 함께 확인해
+탐지합니다.
+
+DB 비밀번호 rotation도 Secret version 변경만으로 기존 API Pod를 자동 재기동하지
+않습니다. 기존 Pod는 이미 작성된 `db.env`의 이전 URL을 계속 사용하고, 이미 맺은
+PostgreSQL 연결은 유지될 수 있으나 이후 재연결은 실패할 수 있습니다. 새 Pod는
+`versions/latest`의 새 비밀번호로 부트스트랩합니다. 다음 절차로 수렴시킵니다.
+
+1. 승인된 절차로 Cloud SQL user password와 Secret Manager 최신 version을 함께
+   갱신합니다. 둘 중 하나만 갱신하면 안 됩니다.
+2. API Pod template에 비밀값·Secret payload를 넣지 않는 새
+   `autoresearch.io/db-bootstrap-revision` annotation 값을 추가한 manifest commit을
+   만듭니다. 이 annotation 변경은 API rollout을 유발합니다.
+3. 그 commit의 main SHA를 target revision Variable에 지정하고 reviewed admin apply 뒤
+   ArgoCD manual sync를 수행합니다. `kubectl rollout restart`로 ArgoCD 관리
+   manifest를 직접 변경하지 않습니다.
+4. API rollout과 공통 end-to-end gate가 성공했는지 확인합니다. 실패 시 단순
+   manifest rollback으로는 `versions/latest`를 되돌리지 못하므로, 승인된 password와
+   Secret version을 다시 일치시킨 뒤 새 restart manifest revision으로 복구합니다.
 
 ## OAuth bootstrap 시크릿 초기 등록·회전·장애 복구
 
@@ -351,6 +384,20 @@ Terraform Application을 reviewed plan/apply로 갱신한 뒤에만 ArgoCD manua
 sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과해야
 하며, 실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로 멈춥니다.
 OAuth 장애와 이미지 장애를 같은 롤백으로 처리하지 않습니다.
+
+### 이미지 참조 원자성
+
+API digest는 `api` container, API의 `bootstrap-db` init container, Runner의
+`bootstrap-codex-auth` init container 세 곳을 **같은 commit에서 함께** 갱신합니다.
+세 번째 init container도 API 이미지의 `bootstrap_secrets` CLI와 OAuth 파일 형식 계약을
+실행하므로, 이 참조만 이전 digest로 남기면 API runtime과 Runner bootstrap의 인자·파일
+형식이 달라질 수 있습니다. CI 계약 검사는 세 API image reference의 동등성과 모든
+image의 `@sha256` pin을 검증합니다.
+
+Runner 본체만 promotion할 때에는 Runner container digest만 별도로 바꿀 수 있습니다.
+다만 API 또는 Runner 중 한 쪽의 rollback이 필요하고 해당 release 조합의 호환성이
+검증되지 않았다면, 마지막으로 end-to-end gate를 통과한 API 세 참조와 Runner 본체
+digest의 조합 전체를 새 rollback manifest commit으로 되돌립니다.
 
 마지막으로 다음을 확인합니다.
 

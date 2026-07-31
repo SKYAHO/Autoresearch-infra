@@ -1,10 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Agent Orchestration API와 Runner의 단일 timeout ConfigMap 계약을 검증한다.
+# Agent Orchestration API·Runner의 timeout 및 immutable image 계약을 검증한다.
 # Ruby 표준 라이브러리 Psych로 YAML 객체를 읽어 외부 Python 의존성 없이 실행한다.
 # API와 OAuth Runner가 같은 ConfigMap key를 참조하고, Runner Codex timeout 110초 및
-# 공통 Runner HTTP timeout 120초가 유지되는지 검사한다.
+# 공통 Runner HTTP timeout 120초, API image 세 참조의 동등한 digest pin을 검사한다.
 
 require "fileutils"
 require "tmpdir"
@@ -55,6 +55,9 @@ module AgentOrchestrationTimeoutContract
       "timeout ConfigMap data"
     )
 
+    api_deployment = deployment(File.join(deploy_directory, "api-deployment.yaml"))
+    runner_deployment = deployment(File.join(deploy_directory, "runner-deployment.yaml"))
+    check_image_reference_contract!(api_deployment, runner_deployment)
     check_deployment_reference!(deploy_directory, "api-deployment.yaml", timeout_value)
     runner_environment = check_deployment_reference!(
       deploy_directory,
@@ -122,6 +125,39 @@ module AgentOrchestrationTimeoutContract
     deployment_environment
   end
 
+  def check_image_reference_contract!(api_deployment, runner_deployment)
+    api_image = container_image(api_deployment, "containers", "api")
+    api_bootstrap_image = container_image(api_deployment, "initContainers", "bootstrap-db")
+    runner_bootstrap_image = container_image(
+      runner_deployment,
+      "initContainers",
+      "bootstrap-codex-auth"
+    )
+    runner_image = container_image(runner_deployment, "containers", "runner")
+
+    {
+      "API container image" => api_image,
+      "API DB bootstrap image" => api_bootstrap_image,
+      "Runner Codex auth bootstrap image" => runner_bootstrap_image,
+      "Runner container image" => runner_image
+    }.each do |description, image|
+      unless image.match?(%r{\A.+@sha256:[0-9a-f]{64}\z})
+        raise ContractError, "#{description}는 immutable digest여야 합니다: #{image.inspect}"
+      end
+    end
+
+    expect_equal(api_image, api_bootstrap_image, "API DB bootstrap image")
+    expect_equal(api_image, runner_bootstrap_image, "Runner Codex auth bootstrap API image")
+  end
+
+  def container_image(deployment_document, section, container_name)
+    containers = deployment_document.dig("spec", "template", "spec", section) || []
+    container = containers.find { |item| item.fetch("name") == container_name }
+    raise ContractError, "#{section}에 #{container_name} container가 없습니다" unless container
+
+    container.fetch("image")
+  end
+
   def expect_equal(expected, actual, description)
     return if expected == actual
 
@@ -131,5 +167,5 @@ end
 
 if $PROGRAM_NAME == __FILE__
   AgentOrchestrationTimeoutContract.check!
-  puts "Agent Orchestration timeout contract: Codex=110, shared Runner HTTP=120"
+  puts "Agent Orchestration deployment contract: Codex=110, shared Runner HTTP=120"
 end
