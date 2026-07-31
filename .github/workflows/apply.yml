@@ -1,55 +1,74 @@
 # #451 apply workflow 단일 진입점. admin-apply(#307/#312)·dev-apply(#341)·
 # terraform-apply(#448 재사용 워크플로우) 3개 파일을 이 하나로 통합했다.
 # 한 번의 dispatch가 dev root + admin root 7개(총 8개) 전체를 plan하고,
-# **승인 1회**로 전체를 apply한다.
+# **승인 1회**로 전체를 apply한다(`scope: all`, 기본값).
 #
-# ## 이 통합이 만드는 상태 — 명시적으로 수용한 트레이드오프
+# ## 전제 조건 — merge 전 반드시 확인
 #
-# 이전에는 apply SA 2종의 WIF 가장 조건이 파일 경로(admin-apply.yml@main /
-# dev-apply.yml@main)로 갈라져 있어, "최강 자격(dev-apply SA, projectIamAdmin
-# 포함)의 사용 경로를 파일 하나로 고정"하는 것이 통제 수단이었다(#341 설계).
-# 진입점을 하나로 합치면 **이 파일 하나가 두 SA를 모두 가장**한다. 즉 파일
-# 단위 분리는 사라지고, 통제는 다음 3가지로 좁혀진다:
-#   1) SA 자체는 계속 분리한다 — dev root는 dev-apply SA, admin root 7개는
-#      admin-apply SA. 이 파일 안에서 job마다 SA를 전환한다(아래 "SA 전환"
-#      참고).
-#   2) `apply.yml@main` workflow_ref만 두 SA를 가장할 수 있다(#451 1단계로
-#      선반영된 WI 바인딩).
-#   3) apply job은 GitHub Environment `apply` 승인 게이트 뒤에 있다 — **단,
-#      이 게이트는 GCP가 아니라 GitHub의 job 스케줄링이 강제한다.** GCP
-#      WIF 조건은 workflow_ref만 검사하므로, 승인 전 job이 이 SA를 요청하지
-#      않는다는 보증은 이 파일의 코드 리뷰가 전부다(#449 리뷰 문답 참고,
-#      docs/TERRAFORM_DEV.md). GCP 측 강제(assertion.environment attribute
-#      추가)는 #451 3단계 이후 후보로 남아 있다.
+# GitHub은 워크플로우가 참조하는 Environment가 없으면 **보호 규칙 없이
+# 자동 생성**하고 job을 즉시 실행한다. `apply` Environment(reviewer 6인)가
+# 먼저 만들어져 있지 않은 채 이 파일이 main에 올라가면 승인 게이트가 조용히
+# 사라진다(#455 리뷰). 이 워크플로우를 도입한 PR에서는 GitHub API로 미리
+# `apply` Environment + required reviewers를 생성해 확인했다 — 이후 이
+# 워크플로우를 다른 저장소에 이식하거나 Environment를 재생성할 때는 **먼저**
+# Environment를 만들고 나서 dispatch 가능한 상태로 만들어야 한다.
 #
-# 승인이 하나로 합쳐진 결과, **plan 요약도 최대 8개 root 분량이 한 번에
-# 온다.** #306 교훈(요약의 in-place가 접근 변경을 숨길 수 있음)이 이전보다
-# 더 중요해진다 — 승인 전 해당 리소스가 보이면 반드시 Actions 로그의 상세
-# diff를 확인한다.
+# ## `scope` 입력 — 부분 적용과 신선도 완화
+#
+# `workflow_dispatch.inputs.scope`(all/dev/admin, 기본 all)로 dev root만,
+# admin root만, 또는 전체를 고를 수 있다. 두 가지 이유로 필요하다.
+#
+# 1) **부트스트랩/재구축**: admin root(`data.google_container_cluster` 등)는
+#    GKE 클러스터가 이미 있어야 plan이 된다. 신선 클러스터에서는
+#    `scope: dev`로 먼저 dev root만 적용해 클러스터를 만든 뒤,
+#    `scope: all`(또는 `admin`)로 admin root를 적용해야 한다
+#    (`docs/MIGRATION_RUNBOOK.md` Phase 3). `scope` 없이는 admin root plan
+#    실패가 dev root apply까지 막아 로컬 break-glass가 강제된다.
+# 2) **plan 신선도**: 이 workflow는 admin root plan을 **dev root apply 이전**
+#    시점의 상태로 계산한다(승인 1회를 지키기 위한 설계상 선택 — #455 리뷰).
+#    dev root 변경이 admin root가 조회하는 live 값(GKE 클러스터 속성 등)에
+#    영향을 주고, 같은 dispatch의 admin root가 그 최신값을 즉시 참조해야
+#    하는 경우 이 dispatch에서는 반영되지 않을 수 있다. 그런 의존이 있는
+#    변경은 `scope: dev`로 먼저 적용해 완료를 확인한 뒤, 별도 dispatch로
+#    `scope: admin`(또는 `all`)을 실행한다. Terraform 자체의 stale-plan
+#    보호(저장된 plan의 상태 lineage 검사)는 **그 root 자신의 원격 state**만
+#    보호하고, 다른 root의 apply로 바뀐 live 조회 값(data source)까지는
+#    잡아내지 못한다 — 그래서 코드가 아니라 운영 규칙(scope 분리)으로 막는다.
 #
 # ## apply 순서 — dev root 먼저, admin root 7개 나중
 #
 # admin root(K8s namespace/RBAC 등)는 dev root가 만드는 GKE 클러스터·VPC에
-# 의존한다. #436에서 겪은 "신선 클러스터의 ns 참조 순서" 함정과 같은 종류의
-# 문제를 피하려면 dev root가 항상 먼저 끝나 있어야 한다. 이 워크플로우는 그
-# 순서를 코드로 고정한다(운영자가 매번 순서를 기억할 필요가 없다).
+# 의존한다. #436에서 겪은 함정을 피하려면 dev root가 항상 먼저 끝나 있어야
+# 한다. 같은 job 안의 순차 스텝이라 이 순서가 코드로 보장된다.
 #
-# ## SA 전환 — 같은 job 안에서 google-github-actions/auth를 두 번 호출
+# ## SA 전환 — 같은 job 안에서 google-github-actions/auth를 여러 번 호출
 #
 # `google-github-actions/auth@v2`는 한 job 안에서 여러 번 호출해 각기 다른
-# SA로 재인증할 수 있다(호출마다 활성 자격증명을 덮어쓴다 — 공식적으로 지원되는
-# 패턴). plan job은 CI SA(dev root, 읽기 전용) → admin-apply SA(admin root,
-# 클러스터 read 필요) 순으로, apply job은 dev-apply SA → admin-apply SA
-# 순으로 전환한다.
+# SA로 재인증할 수 있다(공식 지원 패턴 — 호출마다 ADC 자격증명 파일과 gcloud
+# 활성 계정을 덮어쓴다). 이후의 `gcloud`/`terraform`(google provider, ADC
+# 경유)은 모두 그 시점의 최신 자격증명을 읽으므로 캐시 문제가 없다. 재인증
+# 자체가 실패하면 해당 step에서 job이 즉시 실패해 뒤 step으로 넘어가지
+# 않는다 — 또한 admin root는 K8s RBAC이 `container.admin` 매핑으로만 오므로
+# (dev-apply SA는 `container.clusterAdmin`만 보유, K8s object 접근 불가),
+# 재인증이 조용히 실패해 dev-apply SA로 admin root apply가 진행되는 경로는
+# 없다: 그 즉시 401/403으로 눈에 띄게 실패한다.
 #
 # ## secret 노출 범위 — step 단위로 좁힌다
 #
-# admin root 전용 allowlist(#305) TF_VAR는 **admin root를 다루는 step의
-# env에만** 선언한다(workflow/job 레벨이 아니라 step 레벨). dev root를
-# apply하는 step(dev-apply SA, projectIamAdmin 보유)의 프로세스 환경에는
-# 이 secret들이 존재하지 않는다 — #449 리뷰에서 지적된 "secrets: inherit이
-# 노출면을 넓힌다"는 우려를 단일 job 구조에서도 같은 원칙(필요한 곳에만)으로
-# 이어간다.
+# admin root 전용 allowlist(#305) TF_VAR는 admin root를 다루는 step의
+# env에만 선언한다. dev root를 다루는 step(dev-apply SA, projectIamAdmin
+# 보유)의 프로세스 환경에는 이 secret들이 존재하지 않는다(#449 원칙 계승).
+#
+# ## 부분 실패 시 복구
+#
+# admin root 7개 중 하나가 실패하면 나머지는 적용되지 않은 채 job이
+# 종료되고, `Cleanup plans`(if: always())가 이번 run의 admin plan 객체를
+# 전부 지운다 — 즉 "실패 지점부터 이어서" 적용할 수 없고, 원인을 고친 뒤
+# 전체(또는 `scope: admin`)를 재dispatch해야 한다. 이미 성공한 root는 다음
+# plan에서 `No changes`로 나오므로 재실행 자체는 안전하다(idempotent) —
+# 다만 승인을 다시 받아야 한다. 통합 전 `admin-apply.yml`만 재dispatch하면
+# 됐던 것과 비교해 재시도 범위가 "admin 7개"에서 "scope에 따라 최대 8개"로
+# 늘었을 뿐, 복구 매커니즘 자체는 동일하다(둘 다 root 그룹 단위 전체 재실행).
 #
 # ## 공개 저장소(#211) / plan 회수
 #
@@ -61,7 +80,17 @@
 name: apply
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "적용 범위 — all: dev+admin 전체(기본) · dev: dev root만 · admin: admin root 7개만"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - dev
+          - admin
 
 permissions:
   id-token: write # GitHub OIDC → GCP WIF
@@ -98,9 +127,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # #305 방어: 삭제 시 접근 상실되는 admin allowlist Secret이 비면 apply
-      # 자체를 막는다. GCP 인증 전에 수행 가능한 순수 bash 체크라 가장 먼저 둔다.
+      # #305 방어: admin root를 다루는 dispatch에서만 의미가 있다 — scope=dev
+      # 단독 실행이 무관한 admin secret 미설정으로 막히지 않게 한다.
       - name: Guard required allowlist secrets (admin root)
+        if: github.event.inputs.scope != 'dev'
         env:
           A1: ${{ secrets.ARGOCD_ADMIN_USER_EMAILS }}
           A2: ${{ secrets.AUTORESEARCH_VIEWER_USER_EMAILS }}
@@ -119,26 +149,29 @@ jobs:
             exit 1
           fi
 
-      # dev root plan — 읽기 전용 CI SA(승인 게이트 이전이므로 최소 권한).
-      - name: Authenticate as CI SA (dev root plan)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
-          service_account: ${{ vars.CI_SA_EMAIL }}
       - uses: google-github-actions/setup-gcloud@v2
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      # dev root plan — 읽기 전용 CI SA(승인 게이트 이전이므로 최소 권한).
+      # scope와 무관하게 항상 인증한다 — 버킷 전체 objectAdmin이 있어 바로
+      # 아래 cleanup을 이 SA로 수행할 수 있다(admin-apply SA로 전환하기 전).
+      - name: Authenticate as CI SA (dev root plan / cleanup)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.CI_SA_EMAIL }}
+
       # 승인 거부/미승인 시 apply job의 cleanup이 돌지 않아 orphan plan이
       # 누적된다(#342). plan 바이너리는 민감 속성값을 포함할 수 있으므로 새
       # run 시작 시 이전 잔재를 일괄 정리한다 — concurrency group이 `apply`
       # 하나뿐이라 이 prefix를 쓰는 동시 run은 없다(#448 불변식 자동 충족).
-      # CI SA는 state 버킷 전체에 objectAdmin이 있어 이 삭제가 가능하다.
       - name: Cleanup stale plans
-        run: gcloud storage rm "$PLAN_PREFIX/**" 2>/dev/null || true
+        run: gcloud storage rm "$PLAN_PREFIX/**" || true
 
       - name: Plan dev root
+        if: github.event.inputs.scope != 'admin'
         env:
           ROOTS: ${{ env.DEV_ROOT }}
           # dev root 전용 변수(admin root는 선언하지 않음).
@@ -176,12 +209,14 @@ jobs:
 
       # admin root plan — cluster read가 필요해 admin-apply SA로 전환한다.
       - name: Authenticate as admin-apply SA (admin root plan)
+        if: github.event.inputs.scope != 'dev'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
           service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
 
       - name: Plan admin roots
+        if: github.event.inputs.scope != 'dev'
         env:
           ROOTS: ${{ env.ADMIN_ROOTS }}
           # admin root 전용 변수 — allowlist 5종은 삭제 시 접근이 상실되므로
@@ -224,19 +259,21 @@ jobs:
     environment: apply
     steps:
       - uses: actions/checkout@v4
-
-      # dev root apply — dev-apply SA(프로젝트 최강 자격, #341).
-      - name: Authenticate as dev-apply SA (dev root apply)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
-          service_account: ${{ vars.DEV_APPLY_SA_EMAIL }}
       - uses: google-github-actions/setup-gcloud@v2
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      # dev root apply — dev-apply SA(프로젝트 최강 자격, #341).
+      - name: Authenticate as dev-apply SA (dev root apply)
+        if: github.event.inputs.scope != 'admin'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.DEV_APPLY_SA_EMAIL }}
+
       - name: Apply dev root
+        if: github.event.inputs.scope != 'admin'
         env:
           ROOTS: ${{ env.DEV_ROOT }}
         run: |
@@ -263,12 +300,14 @@ jobs:
       # 실행된다(위 "apply 순서" 참고 — needs가 아니라 같은 job 안의 순차 스텝
       # 이라 순서가 코드로 보장된다).
       - name: Authenticate as admin-apply SA (admin root apply)
+        if: github.event.inputs.scope != 'dev'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
           service_account: ${{ vars.ADMIN_APPLY_SA_EMAIL }}
 
       - name: Apply admin roots
+        if: github.event.inputs.scope != 'dev'
         env:
           ROOTS: ${{ env.ADMIN_ROOTS }}
         run: |
@@ -291,10 +330,21 @@ jobs:
             echo "::endgroup::"
           done
 
+      # cleanup은 scope·이전 step 성공 여부와 무관하게 항상 시도한다. 마지막
+      # 활성 자격이 dev-apply/admin-apply SA 중 무엇이었든(또는 아무 apply도
+      # 안 했든) 관계없이 지울 수 있도록 버킷 전체 objectAdmin을 가진 CI SA로
+      # 재인증한다.
+      - name: Authenticate as CI SA (cleanup)
+        if: always()
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.CI_SA_EMAIL }}
+
       - name: Cleanup plans
         if: always()
         run: |
-          gcloud storage rm "$PLAN_PREFIX/$(basename "$DEV_ROOT")/${{ github.run_id }}.tfplan" 2>/dev/null || true
+          gcloud storage rm "$PLAN_PREFIX/$(basename "$DEV_ROOT")/${{ github.run_id }}.tfplan" || true
           for d in $ADMIN_ROOTS; do
-            gcloud storage rm "$PLAN_PREFIX/$(basename "$d")/${{ github.run_id }}.tfplan" 2>/dev/null || true
+            gcloud storage rm "$PLAN_PREFIX/$(basename "$d")/${{ github.run_id }}.tfplan" || true
           done

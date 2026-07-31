@@ -61,7 +61,11 @@ IaC 재적용 + 데이터 복사가 기본 전략이다.
 ## Phase 3 — admin roots apply
 
 ROOTS 순서는 `apply.yml`의 `ADMIN_ROOTS`가 정본(#451 — 옛 `admin-apply.yml`
-정의를 이관, #436 — ns 소유 root 선행). 신선 클러스터 한정 선행 2단계:
+정의를 이관, #436 — ns 소유 root 선행). Phase 2(dev root apply)가 CI로
+전환된 뒤에는 `apply.yml`을 `scope: admin`으로 dispatch한다 — admin root는
+Phase 2가 만든 GKE 클러스터가 이미 있어야 plan이 되므로, `scope: all`로
+같이 돌리면 admin root plan 실패가 (이미 끝난) dev root apply까지 막지
+않도록 `scope`를 명시적으로 좁힌다. 신선 클러스터 한정 선행 2단계:
 
 1. CRD 의존 root는 operator만 로컬 `-target` 선적용:
    `elastic-k8s → helm_release.eck_operator`, `argocd-k8s → helm_release.argo_cd`
