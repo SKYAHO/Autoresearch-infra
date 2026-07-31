@@ -13,7 +13,8 @@ resource "google_storage_bucket" "mlflow_artifacts" {
   force_destroy               = false
 
   # canonical training snapshot은 generation과 함께 재현성의 일부이므로
-  # 이전 object generation을 보존한다. lifecycle은 기본 0일 때 비활성이다.
+  # 이전 object generation을 보존한다. snapshot live lifecycle은 기본 0일 때
+  # 비활성이고, 버킷 전체 artifact의 noncurrent 정리는 아래 별도 규칙을 따른다.
   versioning {
     enabled = true
   }
@@ -28,8 +29,24 @@ resource "google_storage_bucket" "mlflow_artifacts" {
 
       condition {
         age            = var.mlflow_training_snapshot_retention_days
-        matches_prefix = ["training-snapshots/"]
+        matches_prefix = [local.mlflow_training_snapshot_prefix]
+        with_state     = "LIVE"
       }
+    }
+  }
+
+  # Object Versioning은 버킷 전체에 적용되므로 MLflow artifact의 이전
+  # generation도 무기한 쌓이지 않도록 정리한다. snapshot은 objectCreator로
+  # overwrite하지 않으므로 이 규칙의 대상이 되지 않는 것이 기본 동작이다.
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      with_state                 = "ARCHIVED"
+      days_since_noncurrent_time = var.mlflow_artifact_noncurrent_retention_days
+      num_newer_versions         = 1
     }
   }
 

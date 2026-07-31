@@ -376,8 +376,19 @@ variable "mlflow_training_snapshot_retention_days" {
   default     = 0
 
   validation {
-    condition     = var.mlflow_training_snapshot_retention_days >= 0
-    error_message = "mlflow_training_snapshot_retention_days must be greater than or equal to 0."
+    condition     = var.mlflow_training_snapshot_retention_days >= 0 && floor(var.mlflow_training_snapshot_retention_days) == var.mlflow_training_snapshot_retention_days
+    error_message = "mlflow_training_snapshot_retention_days must be an integer greater than or equal to 0."
+  }
+}
+
+variable "mlflow_artifact_noncurrent_retention_days" {
+  description = "MLflow artifact bucket noncurrent generation 보존 일수. 기본 30일."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.mlflow_artifact_noncurrent_retention_days >= 0 && floor(var.mlflow_artifact_noncurrent_retention_days) == var.mlflow_artifact_noncurrent_retention_days
+    error_message = "mlflow_artifact_noncurrent_retention_days must be an integer greater than or equal to 0."
   }
 }
 

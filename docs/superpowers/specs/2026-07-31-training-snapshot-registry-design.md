@@ -30,10 +30,21 @@
 6. consumer는 다운로드한 CSV의 SHA-256과 manifest의 digest, URI, generation을
    모두 대조하고 불일치 시 실행을 실패시킨다.
 
+CSV 업로드 후 manifest 업로드 전에 publisher가 종료되면 partial publish로
+판정한다. 다음 실행은 CSV와 manifest를 각각 generation `0` 조건으로 재시도하고,
+precondition failure가 발생하면 두 known URI를 직접 GET하여 둘 다 존재하고
+digest·size·generation 검증을 통과할 때만 reuse한다. CSV만 있거나 manifest가
+불일치하면 batch GSA는 overwrite/delete 권한이 없으므로 실행을 실패시키고
+운영자가 MLflow GSA 또는 승인된 복구 절차로 정리한 뒤 재시도한다. 403은 권한
+실패로 그대로 전파하며 기존 snapshot 재사용으로 처리하지 않는다.
+
 ## 보존·복구·비용
 
 - MLflow artifact 버킷은 `prevent_destroy`를 유지한다.
 - GCS Object Versioning을 켜고, 기존 7일 soft delete 복구층을 유지한다.
+- 버킷 전체 versioning으로 생기는 MLflow artifact의 noncurrent generation은
+  기본 30일 후 lifecycle로 정리한다. snapshot은 creator-only로 overwrite하지
+  않으므로 이 규칙은 정상적인 canonical snapshot publish를 삭제하지 않는다.
 - `mlflow_training_snapshot_retention_days` 기본값은 `0`(age 기반 삭제 없음)으로
   하여 재현에 필요한 snapshot을 조용히 삭제하지 않는다. 명시적으로 양수를
   설정한 환경만 live snapshot에 age lifecycle을 적용한다.

@@ -138,6 +138,15 @@ publisher 계약은 다음 순서다.
 4. 다른 bytes를 같은 digest 경로에 쓰려는 시도는 `objectCreator`만 가진
    `autoresearch-dev-airflow-batch` GSA에서 거부되어야 한다.
 
+CSV create 이후 manifest create 전에 publisher가 종료될 수 있으므로 두 객체의
+publish는 하나의 원자적 GCS 연산으로 간주하지 않는다. 재시도 시 precondition
+failure가 발생하면 두 known URI를 직접 조회하여 CSV와 manifest가 모두 존재하고
+digest·size·generation 검증을 통과할 때만 idempotent reuse한다. CSV만 존재하거나
+manifest가 불일치하면 batch GSA는 overwrite/delete할 수 없으므로 실행을 실패시키고
+운영자가 승인된 MLflow GSA 복구 절차로 partial object를 정리한 뒤 재시도한다.
+403은 권한 오류이므로 reuse 경로로 분류하지 않는다. publisher는 bucket listing에
+의존하지 않고 known object URI의 GET을 사용한다.
+
 검증 consumer도 기존 `airflow/autoresearch-batch` KSA를 사용한다. Terraform output으로
 bucket과 prefix를 확인하고, live 검증 승인 후 다음처럼 metadata·generation·hash를
 확인한다(명령의 bucket/digest는 실제 값으로 치환한다).
@@ -166,6 +175,9 @@ sha256sum /tmp/training_dataset.csv
   Versioning으로 이전 generation이 남아 있으면 `gs://.../object#GENERATION`을
   source로 별도 복구 객체에 복사한 뒤 SHA-256과 manifest를 재검증한다. 원본
   canonical object를 직접 overwrite하지 않는다.
+- Object Versioning은 버킷 전체 MLflow artifact에 적용되므로 noncurrent generation은
+  기본 30일 lifecycle로 정리한다. snapshot은 overwrite하지 않는 publish 계약이므로
+  정상적인 canonical snapshot generation은 이 정리 규칙에 의해 새로 생성되지 않는다.
 
 복구 전후에는 다음 조건을 기록한다.
 

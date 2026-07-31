@@ -277,7 +277,7 @@ resource "google_storage_bucket_iam_member" "airflow_batch_mlflow_training_snaps
   condition {
     title       = "training-snapshot-prefix-create"
     description = "Allow Airflow batch workloads to create immutable training snapshots only."
-    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.mlflow_artifacts.name}/objects/training-snapshots/')"
+    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.mlflow_artifacts.name}/objects/${local.mlflow_training_snapshot_prefix}')"
   }
 }
 
@@ -289,8 +289,17 @@ resource "google_storage_bucket_iam_member" "airflow_batch_mlflow_training_snaps
   condition {
     title       = "training-snapshot-prefix-read"
     description = "Allow Airflow batch workloads to verify and compare training snapshots only."
-    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.mlflow_artifacts.name}/objects/training-snapshots/')"
+    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.mlflow_artifacts.name}/objects/${local.mlflow_training_snapshot_prefix}')"
   }
+}
+
+# GCS object API 일부 client가 bucket metadata를 먼저 조회하는 #204 패턴을
+# 유지한다. legacyBucketReader는 object 권한이 아니며 object prefix 밖의
+# 파일을 읽거나 쓸 수 있게 만들지 않는다.
+resource "google_storage_bucket_iam_member" "airflow_batch_mlflow_training_snapshot_bucket_reader" {
+  bucket = google_storage_bucket.mlflow_artifacts.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 
 # Feast registry/staging은 registry 갱신과 임시 staging 파일 처리에 객체 변경이 필요하다.

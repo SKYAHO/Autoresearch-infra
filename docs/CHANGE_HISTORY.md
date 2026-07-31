@@ -12,6 +12,8 @@
   `mlflow_training_snapshot_retention_days = 0` 기본값으로 비활성화했다. 따라서
   재현에 필요한 snapshot을 조용히 삭제하지 않으며, 보존 기간을 줄일 때는 참조
   run/model과 비용을 먼저 검토한다.
+- 버킷 전체 versioning의 noncurrent MLflow artifact generation은 기본 30일
+  lifecycle로 정리하고, snapshot prefix의 live lifecycle은 별도 변수로 제어한다.
 - 기존 `airflow/autoresearch-batch` GSA에 `training-snapshots/` prefix 한정
   `storage.objectCreator`·`storage.objectViewer`만 추가했다. MLflow proxy 서버의
   기존 bucket-wide artifact 권한과 service-account key 없는 WI 경계는 유지한다.
