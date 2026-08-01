@@ -1,0 +1,18 @@
+# Runner is intentionally private. Only the API pod is allowed to reach port
+# 8080 by network policy; callers never use this ClusterIP directly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-orchestration-runner
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-runner
+    app.kubernetes.io/part-of: agent-orchestration
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: agent-orchestration-runner
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

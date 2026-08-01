@@ -23,10 +23,11 @@ terraform/
 │   ├── airflow-k8s/          # Airflow namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/      # 팀원 GKE container.viewer IAM (전역 k8s 읽기, secrets 제외 — 의도된 방침) + bastion 접속 IAM (separate state)
 │   ├── monitoring-k8s/       # monitoring namespace + port-forward RBAC (chart는 ArgoCD Application, #183) (separate state)
-│   ├── argocd-k8s/           # ArgoCD + AppProject/Application(monitoring·argo-rollouts) (separate state)
+│   ├── argocd-k8s/           # ArgoCD + AppProject/Application(monitoring·argo-rollouts·mlflow·serving·agent-orchestration) (separate state)
 │   ├── argo-rollouts-k8s/    # argo-rollouts namespace/NetworkPolicy (chart는 ArgoCD Application, #186) (separate state)
-│   ├── vault-k8s/            # Vault namespace/NetworkPolicy + Helm release (#134) (separate state)
-│   └── elastic-k8s/          # ECK operator + ES/Kibana/Filebeat CR (#97) (separate state)
+│   ├── mlflow-k8s/           # MLflow namespace/KSA(WI)/NetworkPolicy (#94) (separate state)
+│   ├── elastic-k8s/          # ECK operator + ES/Kibana/Filebeat CR (#97) (separate state)
+│   └── vault-k8s/            # retired: #412에서 운영 제외, 완전 제거는 #478 (separate state)
 ├── envs/
 │   └── dev/                 # dev 환경 root module
 │       ├── versions.tf      # Terraform/provider 버전, provider 설정
@@ -47,7 +48,7 @@ terraform/
 │       ├── secret_manager.tf     # Secret Manager
 │       ├── bastion.tf       # IAP 전용 bastion host (#47)
 │       ├── dns.tf           # Airflow ILB 고정 IP + private DNS zone (#48)
-│       ├── vault.tf         # Vault auto-unseal KMS key/GSA/WI (#132)
+│       ├── vault.tf         # retired: Vault auto-unseal 잔여 구성, #478에서 제거 예정
 │       ├── elastic.tf       # Elasticsearch GCS snapshot bucket/GSA (#102)
 │       ├── github_actions.tf     # WIF pusher SA (GAR/app image/Airflow deployer)
 │       ├── code_artifacts.tf     # 코드 아카이브 GCS bucket + 업로더 SA/WIF + 파드 read IAM (#238)
@@ -66,7 +67,10 @@ terraform/
 
 deploy/                      # ArgoCD umbrella chart (Terraform helm_release에서 이관)
 ├── monitoring/              # kube-prometheus-stack umbrella (Application monitoring, #183)
-└── argo-rollouts/           # argo-rollouts umbrella (Application argo-rollouts, #186)
+├── argo-rollouts/           # argo-rollouts umbrella (Application argo-rollouts, #186)
+├── mlflow/                  # MLflow plain manifests (Application mlflow, #94)
+├── serving/                 # Serving plain manifests (Application serving, #302)
+└── agent-orchestration/     # Agent orchestration manifests (Application agent-orchestration, #453)
 
 docs/
 ├── README.md                # 운영 문서 진입점
@@ -80,7 +84,7 @@ docs/
 ├── GRAFANA_OPERATIONS_RUNBOOK.md   # Grafana 점검·앱 메트릭 e2e 검증
 ├── ROLLOUTS_OPERATIONS_RUNBOOK.md  # Argo Rollouts promote/abort 운영
 ├── KIBANA_OPERATIONS_RUNBOOK.md    # Kibana/ELK 로그 운영
-├── VAULT_OPERATIONS_RUNBOOK.md     # Vault 접속·시크릿 운영
+├── VAULT_OPERATIONS_RUNBOOK.md     # Vault 폐기 이력 참고(운영 경로 아님, #478)
 ├── CHANGE_HISTORY.md        # 완료된 주요 인프라 변경 결정 요약
 ├── BRANCH_RULESET_MAIN.md   # main ruleset 설명
 ├── GITHUB_LABELS_AND_PROJECT.md  # label/Project 운영 기준
@@ -145,7 +149,7 @@ branch_ruleset_main.json     # main branch ruleset 정의
   Artifact Registry, Cloud SQL(PostgreSQL 15, private IP), GKE,
   Secret Manager, GCS, BigQuery, Cloud Run(내부 proxy),
   Cloud DNS(private zone `dev.autoresearch.internal`), bastion host(IAP 전용)
-- **State:** GCS remote backend(`autoresearch-dev-tfstate`)
+- **State:** GCS remote backend(`autoresearch-503903-dev-tfstate`)
 - **CI:** GitHub Actions — `lint`(actionlint, required check),
   Terraform plan(OIDC/WIF, PR 댓글 게시), Claude Code PR Review
 - **정책:** GCP API는 수동 활성화 (`google_project_service` 미사용),

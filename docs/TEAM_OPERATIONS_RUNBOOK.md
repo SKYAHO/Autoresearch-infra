@@ -7,10 +7,10 @@
 
 | 항목 | 값 |
 |---|---|
-| GCP project | `ar-infra-501607` |
+| GCP project | `autoresearch-503903` |
 | Region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | GKE cluster | `autoresearch-dev-gke` |
-| Expected context | `gke_ar-infra-501607_asia-northeast3-a_autoresearch-dev-gke` |
+| Expected context | `gke_autoresearch-503903_asia-northeast3-a_autoresearch-dev-gke` |
 | App namespace | `autoresearch` (#129, apply·검증 완료) |
 | Airflow namespace | `airflow` |
 | Monitoring namespace | `monitoring` |
@@ -103,11 +103,11 @@ ClusterRole/ClusterRoleBinding 생성, node 수정, 다른 namespace 작업은 �
 
 ```bash
 gcloud auth login
-gcloud config set project ar-infra-501607
+gcloud config set project autoresearch-503903
 
 gcloud container clusters get-credentials autoresearch-dev-gke \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --dns-endpoint
 ```
 
@@ -121,7 +121,7 @@ kubectl get namespaces
 다른 context가 선택되어 있으면 전환한다.
 
 ```bash
-kubectl config use-context gke_ar-infra-501607_asia-northeast3-a_autoresearch-dev-gke
+kubectl config use-context gke_autoresearch-503903_asia-northeast3-a_autoresearch-dev-gke
 ```
 
 ## Airflow 설치 권한 확인
@@ -229,7 +229,7 @@ Bastion은 외부 IP가 없고 IAP 터널로만 접속한다. SSH 단독 접속�
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap
 ```
 
@@ -240,7 +240,7 @@ Airflow UI는 인터넷에 공개하지 않는다. 기본 접속 경로는 Basti
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap \
   -- -N -L 8080:airflow.dev.autoresearch.internal:8080
 ```
@@ -263,7 +263,7 @@ MLflow UI도 인터넷에 공개하지 않는다(#244). 앞단 OAuth2-proxy가 G
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap \
   -- -N -L 4180:mlflow.dev.autoresearch.internal:4180
 ```
@@ -323,11 +323,13 @@ Secret payload)은 비상용으로만 쓰고, 실제 비밀번호를 문서, PR,
 Kibana도 인터넷에 공개하지 않는다. Airflow/앱 로그 검색이 필요하면:
 
 ```bash
-kubectl -n elastic port-forward svc/autoresearch-kb-http 5601:5601
+kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 ```
 
-브라우저에서 `https://localhost:5601` (self-signed 경고 허용). 로그인
-계정은 운영자에게 요청한다. 검색 방법과 KQL 예시는
+브라우저에서 `http://localhost:4181` → Google 로그인(허용 이메일 목록, #294).
+이것이 단일 표준 경로다. `svc/autoresearch-kb-http 5601` 직결 + elastic 계정
+로그인은 break-glass(운영자 전용)로만 쓴다(#394부터 Kibana 자체 TLS 비활성 — http).
+검색 방법과 KQL 예시는
 [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) 참조.
 
 ## Inference Server 운영 (#302)
@@ -344,11 +346,16 @@ operator가 주입하는 `autoresearch-serving-redis` Secret이 있어야 한다
 Terraform state 어디에도 값이 없음). 값은 dev root output에서 그대로 가져온다.
 
 ```bash
-REDIS_HOST=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_address)
-REDIS_PORT=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_port)
+# 값이 명령행·히스토리에 남지 않도록 env 파일 경유(#213 컨벤션)
+umask 077
+env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
+{
+  printf 'REDIS_HOST=%s\n' "$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_address)"
+  printf 'REDIS_PORT=%s\n' "$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_port)"
+} > "$env_file"
 kubectl -n autoresearch create secret generic autoresearch-serving-redis \
-  --from-literal=REDIS_HOST="$REDIS_HOST" \
-  --from-literal=REDIS_PORT="$REDIS_PORT"
+  --from-env-file="$env_file" --dry-run=client -o yaml | kubectl apply -f -
+rm -f "$env_file"; trap - EXIT
 ```
 
 값을 화면·로그·PR 본문에 출력하지 않는다. 이 저장소는 public이다.
@@ -394,7 +401,7 @@ alias만 재지정한 경우에도 재시작이 없으면 이전 모델이 계�
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
   --zone asia-northeast3-a \
-  --project ar-infra-501607 \
+  --project autoresearch-503903 \
   --tunnel-through-iap \
   -- -N -D 1080
 ```
@@ -421,6 +428,8 @@ http://airflow.dev.autoresearch.internal:8080
 | VPC 내부 DNS 확인 | Bastion IAP 터널 + SOCKS5 | 보조 경로 |
 | Cloud SQL private IP | GKE 내부 proxy 또는 pod 경유 | 로컬에서 private IP 직접 접속하지 않음 |
 | Online Store Redis Cluster | `autoresearch` pod에서 PSC discovery endpoint로 TLS 접속 | app GSA Workload Identity로 IAM token 발급, CA는 Secret Manager 조회, 로컬 직접 접속 금지 (#129, apply·검증 완료) |
+| MLflow UI | Bastion IAP 터널 `-L 4180` 또는 `kubectl -n mlflow port-forward svc/mlflow-oauth-proxy 4180:4180` | Google 로그인(#232), 외부 공개 금지 |
+| Kibana UI | `kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180` | Google 로그인(#294), 외부 공개 금지 |
 | GKE node SSH | IAP tunneling | 디버깅 목적, 최소 사용 |
 
 VPN은 현재 dev 규모에서는 기본 경로가 아니다. 팀원 수가 늘거나 내부 서비스 접속이
@@ -432,14 +441,14 @@ Airflow 기본 component와 batch pod는 서로 다른 GCP service account를 �
 
 | Kubernetes service account | GCP service account | 목적 |
 |---|---|---|
-| `autoresearch/autoresearch-app` | `autoresearch-dev-app@ar-infra-501607.iam.gserviceaccount.com` | 앱 DB secret과 Redis CA 조회, cluster 한정 IAM 연결 token 발급 (#129, apply·검증 완료) |
-| `airflow/airflow` | `autoresearch-dev-airflow@ar-infra-501607.iam.gserviceaccount.com` | Airflow metadata DB, DAG/log bucket, OAuth secret |
-| `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery, Cloud Run proxy invoker |
+| `autoresearch/autoresearch-app` | `autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com` | 앱 DB secret과 Redis CA 조회, cluster 한정 IAM 연결 token 발급 (#129, apply·검증 완료) |
+| `airflow/airflow` | `autoresearch-dev-airflow@autoresearch-503903.iam.gserviceaccount.com` | Airflow metadata DB, DAG/log bucket, OAuth secret |
+| `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery, Cloud Run proxy invoker |
 
 `autoresearch-batch` annotation은 아래 값이어야 한다.
 
 ```text
-iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@ar-infra-501607.iam.gserviceaccount.com
+iam.gke.io/gcp-service-account=autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com
 ```
 
 확인 명령:
@@ -477,6 +486,8 @@ Cloud Run proxy 호출은 `autoresearch-dev-airflow-batch` GSA에
 - `terraform/admin/gke-team-access/terraform.tfvars`
 - `terraform/admin/autoresearch-k8s/terraform.tfvars`
 - `terraform/admin/airflow-k8s/terraform.tfvars`
+- `terraform/admin/monitoring-k8s/terraform.tfvars` (`monitoring_port_forward_user_emails`)
+- `terraform/admin/mlflow-k8s/terraform.tfvars` (`mlflow_viewer_user_emails`, #236)
 
 이미 발급된 access token은 보통 최대 1시간 정도 더 유효할 수 있다. kubeconfig가
 로컬에 남아 있어도 다음 인증부터는 권한이 없어 403으로 실패한다.

@@ -98,10 +98,13 @@ spec:
               - key: authenticated-emails
                 path: authenticated-emails
 ---
-# 접근: (1) Bastion(#47) 터널 → 내부 LB VIP(10.10.0.22 =
+# 접근: (1) Bastion(#47) 터널 → 내부 LB VIP(10.10.0.2 =
 # mlflow.dev.autoresearch.internal), (2) kubectl port-forward. 둘 다 브라우저는
 # localhost:4180로 접속 → oauth2-proxy 인증. internal LB는 VPC 전용(외부 노출 없음).
 # loadBalancerIP는 terraform output mlflow_ilb_ip(#244). Airflow #48과 동일 패턴.
+# 값을 여기 리터럴로 두면 프로젝트/subnet이 바뀔 때 따라오지 않는다 — 실제로 #404
+# 프로젝트 이전에서 구 예약 IP(10.10.0.22)가 남아 DNS(신 예약 IP)와 갈렸다(#425).
+# 예약 IP가 재생성되면 반드시 output 값으로 다시 맞춘다.
 apiVersion: v1
 kind: Service
 metadata:
@@ -113,7 +116,7 @@ metadata:
     networking.gke.io/load-balancer-type: "Internal"
 spec:
   type: LoadBalancer
-  loadBalancerIP: "10.10.0.22"
+  loadBalancerIP: "10.10.0.2"
   selector:
     app.kubernetes.io/name: mlflow-oauth-proxy
   ports:

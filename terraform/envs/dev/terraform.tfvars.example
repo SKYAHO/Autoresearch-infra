@@ -48,18 +48,38 @@ airflow_gke_node_disk_size        = 30
 airflow_gke_node_disk_type        = "pd-standard"
 gke_app_k8s_namespace             = "autoresearch"
 gke_app_k8s_service_account       = "autoresearch-app"
+agent_orchestration_db_name        = "agent_orchestration"
+agent_orchestration_db_user        = "agent_orchestration_app"
+# Cloud SQL built-in user 생성 전에 운영자 migration 절차로 같은 custom role을
+# 만들어야 한다. role이 없으면 apply가 실패하며 cloudsqlsuperuser user를 만들지 않는다.
+agent_orchestration_runtime_database_role = "agent_orchestration_runtime"
+agent_orchestration_k8s_namespace  = "autoresearch"
+agent_orchestration_api_k8s_service_account    = "agent-orchestration-api"
+agent_orchestration_runner_k8s_service_account = "agent-orchestration-runner"
 
-# #346 feast apply GKE Job 전용 namespace/KSA. 오브젝트 자체는
-# terraform/admin/autoresearch-k8s가 만들고, 여기서는 WI 바인딩 member만 만든다.
-# 두 root의 값이 반드시 같아야 한다.
-feast_apply_k8s_namespace       = "feast-apply"
-feast_apply_k8s_service_account = "feast-apply"
+# #424 Feast apply GKE Job의 환경별 namespace/KSA. 실제 오브젝트와 GSA annotation은
+# terraform/admin/autoresearch-k8s가 생성한다. Task 2의 WI subject와 아래 값 및
+# admin root의 feast_apply_identities 값은 반드시 함께 유지한다.
+feast_apply_kubernetes_identities = {
+  dev = {
+    namespace       = "feast-apply-dev"
+    service_account = "feast-apply"
+  }
+  prod = {
+    namespace       = "feast-apply-prod"
+    service_account = "feast-apply"
+  }
+}
 
 # MLflow (#91 설계, #92 bucket/GSA, #93 Cloud SQL DB/user). K8s namespace/SA는 #94에서 생성.
 mlflow_k8s_namespace              = "mlflow"
 mlflow_k8s_service_account        = "mlflow"
 mlflow_db_name                    = "mlflow"
 mlflow_db_user                    = "mlflow"
+# 0이면 training snapshot을 age 기반으로 자동 삭제하지 않는다(#464).
+mlflow_training_snapshot_retention_days   = 0
+# MLflow artifact의 noncurrent generation은 30일 후 정리한다.
+mlflow_artifact_noncurrent_retention_days = 30
 airflow_k8s_namespace             = "airflow"
 airflow_k8s_service_account       = "airflow"
 airflow_batch_k8s_service_account = "autoresearch-batch"

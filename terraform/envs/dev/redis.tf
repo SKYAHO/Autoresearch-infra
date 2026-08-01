@@ -91,14 +91,14 @@ resource "google_project_iam_member" "airflow_batch_redis_connection" {
 # 삭제 스캔은 SCAN + DEL/HDEL이라 read-only로는 부족한데, 같은 role로 materialize
 # write를 수행하는 airflow_batch(위) 선례로 충분성이 확인된다. condition은 위
 # 두 바인딩과 동일하게 이 cluster 하나로 제한한다.
-resource "google_project_iam_member" "feast_apply_redis_connection" {
+resource "google_project_iam_member" "feast_apply_prod_redis_connection" {
   project = var.project_id
   role    = "roles/redis.dbConnectionUser"
-  member  = "serviceAccount:${google_service_account.feast_apply.email}"
+  member  = "serviceAccount:${google_service_account.feast_apply_prod.email}"
 
   condition {
     title       = "autoresearch-dev-redis-cluster-only"
-    description = "Allow the feast apply job to authenticate only to the dev Online Store cluster."
+    description = "Allow the production feast apply job to authenticate only to the dev Online Store cluster."
     expression  = "resource.name == 'projects/${var.project_id}/locations/${var.region}/clusters/${local.redis_cluster_name}'"
   }
 }

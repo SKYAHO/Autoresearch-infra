@@ -23,6 +23,10 @@ resource "google_service_networking_connection" "private_sql" {
 resource "random_password" "db_app_password" {
   length  = 24
   special = true
+  # #438: URI-unsafe 문자 배제 — airflow metadata conn 등이 비번을 URI에 삽입.
+  # 이 문자셋 변경은 다음 apply에서 비밀번호를 재생성(rotate)하므로,
+  # apply 직후 소비 Secret 재주입·재기동이 한 절차다(MIGRATION_RUNBOOK 참조).
+  override_special = "-_.~"
 }
 
 resource "google_sql_database_instance" "dev" {
@@ -76,6 +80,9 @@ resource "google_sql_user" "app" {
 resource "random_password" "mlflow_db_password" {
   length  = 24
   special = true
+  # #438: mlflow가 backend-store URI에 비번을 원문 삽입 — URL-인코딩 우회(#404)
+  # 없이 안전하도록 URI-unsafe 문자를 배제한다. 변경은 rotate를 유발(위 주석 참조).
+  override_special = "-_.~"
 }
 
 resource "google_sql_database" "mlflow" {
@@ -87,4 +94,32 @@ resource "google_sql_user" "mlflow" {
   name     = var.mlflow_db_user
   instance = google_sql_database_instance.dev.name
   password = random_password.mlflow_db_password.result
+}
+
+# Agent Orchestration은 기존 인스턴스를 공유하되, 다른 앱 DB와 사용자 자격 증명을
+# 공유하지 않는다. 신규 인스턴스를 만들지 않아 dev 비용을 늘리지 않는다.
+resource "random_password" "agent_orchestration_db" {
+  length  = 24
+  special = true
+  # DB URL에 percent-encoding을 적용하더라도 운영 중 수동 접속 시 혼선을 줄이기 위해
+  # URI-unsafe 문자는 배제한다. 이 변경은 apply 시 password rotate를 유발한다.
+  override_special = "-_.~"
+}
+
+resource "google_sql_database" "agent_orchestration" {
+  name     = var.agent_orchestration_db_name
+  instance = google_sql_database_instance.dev.name
+}
+
+resource "google_sql_user" "agent_orchestration" {
+  name           = var.agent_orchestration_db_user
+  instance       = google_sql_database_instance.dev.name
+  password       = random_password.agent_orchestration_db.result
+  database_roles = [var.agent_orchestration_runtime_database_role]
+
+  # PostgreSQL role membership이 있는 Cloud SQL user는 API delete가 실패할 수 있다.
+  # 서비스 폐기는 runbook의 SQL 정리 절차를 먼저 거친 뒤 Terraform state/config을
+  # 정리한다. 이 리소스를 config에서 제거할 때 provider가 membership을 임의로
+  # 해제하거나 user delete를 시도하지 않도록 명시적으로 abandon한다.
+  deletion_policy = "ABANDON"
 }

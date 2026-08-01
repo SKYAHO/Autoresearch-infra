@@ -47,7 +47,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "### 판정 기준 — \"지금 스케일이 필요한가?\"\n\n| 신호 | 판정 |\n|---|---|\n| **unschedulable 파드 지속(5분+)** 그리고 해당 풀 노드 수 **max 도달** | 그 풀의 max 증설 검토 (#330/#331) |\n| **unschedulable 파드 지속인데 노드 수 max 미달** | CA가 늘리지 **못하는** 상태 — GCP quota(`E2_CPUS` 8 등) 소진, Spot 재고 부족 등. `kubectl get events`(FailedScaleUp)·콘솔 quota 확인. **max 증설로 해결 안 됨** |\n| requests 점유율 높음(80%+) 그런데 실사용률 낮음 | 스케일 아웃이 아니라 **requests 재조정** |\n| CPU throttling 지속 25%+ | 해당 컨테이너 CPU limit/requests 상향 (노드 증설로 해결 안 됨) |\n| OOMKill 발생 + 재시작 반복 | memory limit 재조정 (노드 증설로 해결 안 됨) |\n| 위 신호 전부 없음 | **스케일 불필요** |\n\n**상한(벽) — 이 이상은 자동으로 늘지 않는다**: 노드풀 max = dev-default 1–2(e2-std-4) · airflow-dev 1–2(e2-std-2) · batch-spot 0–2(Spot) · batch-od 0–2 · ctr-model-retrain 0–1(n2-highmem-4) — *#331 증설 시 이 표와 노드 수 패널 description을 함께 갱신할 것(runbook 참조)*. 리전 `E2_CPUS` quota 8 — E2 풀들이 max까지 다 늘기엔 quota가 먼저 소진된다(#316에서 실측). NAP 비활성(새 노드풀 자동 생성 없음), HPA 없음(replica 자동 증감 없음 — 노드가 늘어도 파드 수는 그대로)."
+        "content": "### 판정 기준 — \"지금 스케일이 필요한가?\"\n\n| 신호 | 판정 |\n|---|---|\n| **unschedulable 파드 지속(5분+)** 그리고 해당 풀 노드 수 **max 도달** | 그 풀의 max 증설 검토 (#330/#331) |\n| **unschedulable 파드 지속인데 노드 수 max 미달** | CA가 늘리지 **못하는** 상태 — GCP quota 소진(현행 한도: `E2_CPUS` 24 · `N2_CPUS` 200, `PREEMPTIBLE_CPUS` 0이라 Spot도 일반 계열 quota 소모 — #422), Spot 재고 부족 등. `kubectl get events`(FailedScaleUp)·콘솔 quota 확인. **max 증설로 해결 안 됨** |\n| requests 점유율 높음(80%+) 그런데 실사용률 낮음 | 스케일 아웃이 아니라 **requests 재조정** |\n| CPU throttling 지속 25%+ | 해당 컨테이너 CPU limit/requests 상향 (노드 증설로 해결 안 됨) |\n| OOMKill 발생 + 재시작 반복 | memory limit 재조정 (노드 증설로 해결 안 됨) |\n| 위 신호 전부 없음 | **스케일 불필요** |\n\n**상한(벽) — 이 이상은 자동으로 늘지 않는다**: 노드풀 max = dev-default 1–2(e2-std-4) · airflow-dev 1–2(e2-std-2) · batch-spot 0–8(n2-std-2, Spot — #330/#422) · batch-od 0–2 · ctr-model-retrain 0–2(n2-highmem-4, #330) — *#331 증설 시 이 표와 노드 수 패널 description을 함께 갱신할 것(runbook 참조)*. 리전 quota는 E2 24·N2 200(#404 새 프로젝트 실측) — 상주 E2 풀 최악 16, N2 버스트 최악 24로 양쪽 여유(#422 전환의 근거). NAP 비활성(새 노드풀 자동 생성 없음), HPA 없음(replica 자동 증감 없음 — 노드가 늘어도 파드 수는 그대로)."
       },
       "datasource": {
         "type": "prometheus",
@@ -87,7 +87,7 @@
           }
         }
       ],
-      "description": "max: dev-default 2 / airflow-dev 2 / batch-spot 2 / batch-od 2 / ctr-model-retrain 1 (#331 증설 시 갱신). 선이 max에 붙은 채 unschedulable이 쌓이면 증설 검토, max 미달인데 쌓이면 quota/재고 확인."
+      "description": "max: dev-default 2 / airflow-dev 2 / batch-spot 8(#330/#422) / batch-od 2 / ctr-model-retrain 2(#330) (상한 변경 시 갱신). 선이 max에 붙은 채 unschedulable이 쌓이면 증설 검토, max 미달인데 쌓이면 quota/재고 확인."
     },
     {
       "type": "timeseries",

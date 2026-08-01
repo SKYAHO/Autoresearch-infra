@@ -129,6 +129,20 @@ output "gke_workload_identity_principal" {
   value       = local.gke_workload_identity_principal
 }
 
+output "agent_orchestration_deployment_contract" {
+  description = "Agent Orchestration API/Runner의 Cloud SQL·Secret Manager·Workload Identity 배포 좌표. 비밀번호와 OAuth payload는 output하지 않는다."
+  value = {
+    database_name                      = google_sql_database.agent_orchestration.name
+    database_user                      = google_sql_user.agent_orchestration.name
+    db_password_secret_id              = google_secret_manager_secret.agent_orchestration_db_password.secret_id
+    codex_auth_bootstrap_secret_id     = google_secret_manager_secret.agent_orchestration_codex_auth_bootstrap.secret_id
+    api_gcp_service_account_email      = google_service_account.agent_orchestration_api.email
+    runner_gcp_service_account_email   = google_service_account.agent_orchestration_runner.email
+    api_workload_identity_principal    = local.agent_orchestration_api_workload_identity_principal
+    runner_workload_identity_principal = local.agent_orchestration_runner_workload_identity_principal
+  }
+}
+
 output "airflow_gke_node_pool_name" {
   description = "Airflow Helm component 전용 dev GKE node pool 이름."
   value       = google_container_node_pool.airflow.name
@@ -174,24 +188,29 @@ output "github_actions_airflow_deployer_service_account_email" {
   value       = google_service_account.airflow_deployer.email
 }
 
-output "github_actions_feast_apply_service_account_email" {
-  description = "GitHub Actions (Autoresearch) WIF가 가장하여 feast apply로 GCS registry를 갱신하는 SA email(#332). Autoresearch 저장소 secrets.FEAST_APPLY_SA 값으로 사용."
-  value       = google_service_account.feast_apply.email
+output "github_actions_feast_apply_dev_service_account_email" {
+  description = "GitHub Environment dev가 WIF로 가장하는 Feast apply SA email(#424). vars.FEAST_APPLY_SA 값으로 사용."
+  value       = google_service_account.feast_apply_dev.email
 }
 
-output "feast_apply_k8s_namespace" {
-  description = "feast apply Job이 실행되는 전용 Kubernetes namespace(#346). 앱 저장소 feast-apply.yml과 terraform/admin/autoresearch-k8s가 공유하는 계약 값."
-  value       = var.feast_apply_k8s_namespace
+output "github_actions_feast_apply_prod_service_account_email" {
+  description = "GitHub Environment prod가 WIF로 가장하는 Feast apply SA email(#424). vars.FEAST_APPLY_SA 값으로 사용."
+  value       = google_service_account.feast_apply_prod.email
 }
 
-output "feast_apply_k8s_service_account" {
-  description = "feast apply Job Pod가 사용하는 KSA 이름(#346). Job spec의 serviceAccountName."
-  value       = var.feast_apply_k8s_service_account
+output "feast_apply_dev_wif_provider_name" {
+  description = "GitHub Environment dev가 사용할 github-feast-dev WIF provider 전체 이름(#424)."
+  value       = "${local.github_wif_pool_name}/providers/github-feast-dev"
 }
 
-output "feast_apply_workload_identity_principal" {
-  description = "feast apply KSA가 가장하는 principal 식별자(#346). KSA annotation 검증에 사용."
-  value       = local.feast_apply_workload_identity_principal
+output "feast_apply_prod_wif_provider_name" {
+  description = "GitHub Environment prod가 사용할 github-feast-prod WIF provider 전체 이름(#424)."
+  value       = "${local.github_wif_pool_name}/providers/github-feast-prod"
+}
+
+output "feast_apply_workload_identity_principals" {
+  description = "Task 3의 dev/prod Feast apply KSA가 가장할 Workload Identity principal map."
+  value       = local.feast_apply_workload_identity_principals
 }
 
 output "cloud_build_bucket_name" {
@@ -234,9 +253,37 @@ output "bigquery_dataset_self_link" {
   value       = google_bigquery_dataset.analytics.self_link
 }
 
-output "feast_offline_store_dataset_id" {
-  description = "Feast offline store BigQuery dataset id."
+output "feast_prod_offline_store_dataset_id" {
+  description = "Feast prod offline store BigQuery dataset id(#424)."
   value       = google_bigquery_dataset.feast_offline_store.dataset_id
+}
+
+# #408 피처 스토어 dev 환경 좌표 3종.
+# SKYAHO/Autoresearch의 GitHub Environment `dev`에 등록할 변수 값이다. prod
+# Environment는 기존 repo-level vars 값을 그대로 옮기므로 output이 없다.
+output "feast_dev_offline_store_dataset_id" {
+  description = "피처 스토어 dev 환경 BigQuery offline store dataset id(#408). Autoresearch GitHub Environment dev의 vars.BQ_DATASET 값."
+  value       = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+}
+
+output "feast_dev_registry_path" {
+  description = "피처 스토어 dev 환경 registry 객체 경로(#408). Autoresearch GitHub Environment dev의 vars.GCS_REGISTRY_PATH 값."
+  value       = local.feast_dev_registry_path
+}
+
+output "feast_dev_staging_location" {
+  description = "피처 스토어 dev 환경 staging prefix(#408). Autoresearch GitHub Environment dev의 vars.GCS_STAGING_LOCATION 값."
+  value       = local.feast_dev_staging_location
+}
+
+output "feast_prod_registry_path" {
+  description = "피처 스토어 prod 환경 registry 객체 경로(#424). GitHub Environment prod의 vars.GCS_REGISTRY_PATH 값."
+  value       = local.feast_prod_registry_path
+}
+
+output "feast_prod_staging_location" {
+  description = "피처 스토어 prod 환경 staging 위치(#424). GitHub Environment prod의 vars.GCS_STAGING_LOCATION 값."
+  value       = local.feast_prod_staging_location
 }
 
 # #285 raw 적재 job(Airflow lake_to_bigquery, 앱 load_raw_to_bigquery)이 참조할 dataset
@@ -256,24 +303,34 @@ output "vertex_ai_connection_service_account" {
   value       = google_bigquery_connection.vertex_ai.cloud_resource[0].service_account_id
 }
 
-output "feast_registry_bucket_name" {
-  description = "Feast registry GCS bucket 이름."
+output "feast_prod_registry_bucket_name" {
+  description = "Feast prod registry GCS bucket 이름(#424)."
   value       = google_storage_bucket.feast_registry.name
 }
 
-output "feast_registry_bucket_url" {
-  description = "Feast registry GCS bucket URL."
+output "feast_prod_registry_bucket_url" {
+  description = "Feast prod registry GCS bucket URL(#424)."
   value       = google_storage_bucket.feast_registry.url
 }
 
-output "feast_staging_bucket_name" {
-  description = "Feast staging GCS bucket 이름."
+output "feast_prod_staging_bucket_name" {
+  description = "Feast prod staging GCS bucket 이름(#424)."
   value       = google_storage_bucket.feast_staging.name
 }
 
-output "feast_staging_bucket_url" {
-  description = "Feast staging GCS bucket URL."
+output "feast_prod_staging_bucket_url" {
+  description = "Feast prod staging GCS bucket URL(#424)."
   value       = google_storage_bucket.feast_staging.url
+}
+
+output "feast_dev_registry_bucket_name" {
+  description = "Feast dev registry GCS bucket 이름(#424)."
+  value       = google_storage_bucket.feast_registry_dev.name
+}
+
+output "feast_dev_staging_bucket_name" {
+  description = "Feast dev staging GCS bucket 이름(#424)."
+  value       = google_storage_bucket.feast_staging_dev.name
 }
 
 output "proxy_service_name" {
@@ -371,6 +428,16 @@ output "mlflow_internal_fqdn" {
   value       = trimsuffix(google_dns_record_set.mlflow.name, ".")
 }
 
+output "mlflow_artifacts_bucket_name" {
+  description = "MLflow artifact 및 content-addressed training snapshot GCS bucket 이름(#464)."
+  value       = google_storage_bucket.mlflow_artifacts.name
+}
+
+output "mlflow_training_snapshot_prefix" {
+  description = "Immutable training snapshot canonical object prefix(#464)."
+  value       = local.mlflow_training_snapshot_prefix
+}
+
 output "airflow_oauth_client_id_secret_id" {
   description = "Airflow Google OAuth client ID Secret Manager secret id(#54). Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_oauth_client_id.secret_id
@@ -379,6 +446,16 @@ output "airflow_oauth_client_id_secret_id" {
 output "airflow_oauth_client_secret_secret_id" {
   description = "Airflow Google OAuth client secret Secret Manager secret id(#54). Payload는 Terraform 밖에서 관리."
   value       = google_secret_manager_secret.airflow_oauth_client_secret.secret_id
+}
+
+output "mlflow_oauth_client_id_secret_id" {
+  description = "MLflow OAuth2-proxy Google OAuth client ID Secret Manager secret id(#404). Payload는 Terraform 밖에서 관리."
+  value       = google_secret_manager_secret.mlflow_oauth_client_id.secret_id
+}
+
+output "mlflow_oauth_client_secret_secret_id" {
+  description = "MLflow OAuth2-proxy Google OAuth client secret Secret Manager secret id(#232). Payload는 Terraform 밖에서 관리."
+  value       = google_secret_manager_secret.mlflow_oauth_client_secret.secret_id
 }
 
 output "vault_service_account_email" {

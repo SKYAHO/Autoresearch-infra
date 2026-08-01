@@ -1,6 +1,6 @@
 locals {
   name_prefix       = "autoresearch"
-  state_bucket_name = "${local.name_prefix}-dev-tfstate"
+  state_bucket_name = var.state_bucket_name
   wif_pool_id       = "${local.name_prefix}-github"
   wif_provider_id   = "github"
   ci_sa_id          = "terraform-ci"
@@ -76,6 +76,48 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   }
 
   attribute_condition = "attribute.repository in ${jsonencode(var.allowed_github_repositories)}"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+# Feast apply는 앱 저장소와 GitHub Environment 별 provider로 분리한다.
+# repository, environment, workflow_ref를 provider 조건에서 함께 검증한다.
+# Workload Identity User IAM member는 OR로 결합되므로 workflow_ref를 별도
+# IAM member로 분리하지 않는다(#424).
+resource "google_iam_workload_identity_pool_provider" "github_feast_dev" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-feast-dev"
+  project                            = var.project_id
+
+  attribute_mapping = {
+    "google.subject"         = "assertion.sub"
+    "attribute.repository"   = "assertion.repository"
+    "attribute.environment"  = "assertion.environment"
+    "attribute.workflow_ref" = "assertion.workflow_ref"
+  }
+
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'dev' && assertion.workflow_ref == '${var.feast_apply_workflow_ref}'"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_iam_workload_identity_pool_provider" "github_feast_prod" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-feast-prod"
+  project                            = var.project_id
+
+  attribute_mapping = {
+    "google.subject"         = "assertion.sub"
+    "attribute.repository"   = "assertion.repository"
+    "attribute.environment"  = "assertion.environment"
+    "attribute.workflow_ref" = "assertion.workflow_ref"
+  }
+
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'prod' && assertion.workflow_ref == '${var.feast_apply_workflow_ref}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"

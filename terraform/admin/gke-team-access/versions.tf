@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "gcs" {
-    bucket = "autoresearch-dev-tfstate"
+    bucket = "autoresearch-503903-dev-tfstate"
     prefix = "admin/gke-team-access/"
   }
 }

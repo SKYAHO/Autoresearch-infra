@@ -8,7 +8,16 @@ locals {
   gar_pusher_sa_name         = "${local.resource_prefix}-gar-pusher"
   application_pusher_sa_name = "${local.resource_prefix}-app-pusher"
   airflow_deployer_sa_name   = "${local.resource_prefix}-airflow-cd"
-  feast_apply_sa_name        = "${local.resource_prefix}-feast-apply"
+
+  # GSA account_id는 6~30자다. resource_prefix가 16자(`autoresearch-dev`)라
+  # 접미사 예산은 선행 `-` 포함 14자뿐이어서 `-feast-apply-dev`(16자)는 들어가지
+  # 않는다(#424 최초 구성의 plan 실패, #433에서 수정).
+  # `airflow_deployer_sa_name`이 `-airflow-deployer`를
+  # `-airflow-cd`로 줄인 것과 같은 방식으로 역할어를 생략하고, "Feast apply"
+  # 용도는 display_name/description에 남긴다. 이 제한은 provider가 plan 단계에서
+  # 검증하므로 validate만으로는 걸러지지 않는다.
+  feast_apply_dev_sa_name  = "${local.resource_prefix}-feast-dev"
+  feast_apply_prod_sa_name = "${local.resource_prefix}-feast-prod"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).
@@ -89,24 +98,36 @@ resource "google_project_iam_member" "airflow_deployer_cluster_viewer" {
 }
 
 # #307 admin root CI apply 전용 service account.
-# admin-apply.yml 워크플로우가 WIF로 가장해 terraform/admin/*-k8s를 apply한다.
+# apply.yml 워크플로우가 WIF로 가장해 terraform/admin/*-k8s를 apply한다(#451
+# 단일 진입점으로 이관 — 옛 admin-apply.yml 전용이었다).
 # argocd-k8s는 CRD/ClusterRole/ClusterRoleBinding을 설치하므로 K8s cluster-admin이
 # 불가피하다. GKE는 roles/container.admin에 cluster-admin RBAC를 자동 매핑한다.
-# 광범위한 권한이므로 (1) 전용 SA, (2) admin-apply.yml@main repo@ref 제한,
-# (3) GitHub Environment 승인 게이트 3중으로 사용을 제한한다. clusterViewer +
+# 광범위한 권한이므로 (1) 전용 SA, (2) apply.yml@main repo@ref 제한, (3) GitHub
+# Environment(apply) 승인 게이트 3중으로 사용을 제한한다. clusterViewer +
 # scoped ClusterRoleBinding 하드닝은 후속(#307 참고).
 resource "google_service_account" "admin_apply" {
   account_id   = "${local.resource_prefix}-admin-apply"
   display_name = "Autoresearch dev admin root CI apply SA"
-  description  = "Impersonated by Autoresearch-infra admin-apply.yml via WIF to apply terraform/admin/*-k8s roots."
+  description  = "Impersonated by Autoresearch-infra apply.yml via WIF to apply terraform/admin/*-k8s roots."
 }
 
-# admin-apply.yml@main workflow_ref만 이 SA 가장 허용. 임의 브랜치/다른
-# workflow의 가장을 차단한다(application_pusher와 동일 패턴).
+# apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
+# admin-apply.yml@main 전용 바인딩은 3단계에서 제거됨). 두 workflow_ref
+# 바인딩이 공존하던 시절의 `_unified` 접미사는 #458에서 `moved` 블록으로
+# 제거했다(state 주소만 이동, GCP API 호출 0건).
 resource "google_service_account_iam_member" "admin_apply_wi" {
   service_account_id = google_service_account.admin_apply.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.admin_apply_workflow_ref}"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.apply_workflow_ref}"
+}
+
+# #458: 두 workflow_ref 바인딩이 공존하던 #451 1~2단계의 흔적인 `_unified`
+# 접미사를 제거. state 주소만 옮기고 GCP API는 호출하지 않는다 — moved 없이
+# rename하면 신규 create + 기존 destroy 순서가 보장되지 않아, destroy가 나중에
+# 실행되면 이 워크플로우 자신을 인증하는 바인딩이 apply 도중 사라진다(#456 리뷰).
+moved {
+  from = google_service_account_iam_member.admin_apply_wi_unified
+  to   = google_service_account_iam_member.admin_apply_wi
 }
 
 # GKE 접속 + K8s cluster-admin(자동 매핑). CRD/ClusterRole 설치가 필요한
@@ -119,7 +140,7 @@ resource "google_project_iam_member" "admin_apply_container_admin" {
 
 # Terraform state 읽기/쓰기(apply는 state를 갱신하므로 objectAdmin).
 resource "google_storage_bucket_iam_member" "admin_apply_state" {
-  bucket = "autoresearch-dev-tfstate"
+  bucket = "autoresearch-503903-dev-tfstate"
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.admin_apply.email}"
 }
@@ -135,22 +156,34 @@ resource "google_project_iam_member" "admin_apply_compute_viewer" {
   member  = "serviceAccount:${google_service_account.admin_apply.email}"
 }
 # #341 dev root(terraform/envs/dev) CI apply 전용 service account.
-# dev-apply.yml이 WIF로 가장해 dev root를 plan/apply한다. dev root는 프로젝트
-# IAM·SA·WIF 바인딩까지 관리하므로 이 SA는 사실상 프로젝트 최강 자격증명이다.
-# 통제 3중: (1) 전용 SA, (2) dev-apply.yml@main workflow_ref 제한, (3) GitHub
-# Environment(dev-apply) 승인 게이트. admin-apply와 SA를 분리해 최강 권한의
-# 사용 경로를 이 workflow 하나로 고정한다(설계:
-# docs/superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md).
+# apply.yml이 WIF로 가장해 dev root를 plan/apply한다(#451 단일 진입점으로
+# 이관 — 옛 dev-apply.yml 전용이었다). dev root는 프로젝트 IAM·SA·WIF 바인딩
+# 까지 관리하므로 이 SA는 사실상 프로젝트 최강 자격증명이다. 진입점 단일화
+# 후 통제는 (1) 전용 SA 유지, (2) apply.yml@main ref 제한, (3)
+# Environment(apply) 승인 게이트로 남는다 — 파일 단위 분리(admin-apply와
+# 별개 workflow)가 사라지는 것을 #451에서 명시적으로 수용한 결과다(설계:
+# docs/superpowers/specs/2026-07-24-dev-apply-gated-ci-design.md, #451 결정은
+# docs/CHANGE_HISTORY.md 2026-07-31 항목).
 resource "google_service_account" "dev_apply" {
   account_id   = "${local.resource_prefix}-dev-apply"
   display_name = "Autoresearch dev root CI apply SA"
-  description  = "Impersonated by Autoresearch-infra dev-apply.yml via WIF to apply terraform/envs/dev."
+  description  = "Impersonated by Autoresearch-infra apply.yml via WIF to apply terraform/envs/dev."
 }
 
+# apply.yml@main workflow_ref만 이 SA 가장 허용(#451 단일 진입점 — 옛
+# dev-apply.yml@main 전용 바인딩은 3단계에서 제거됨). 두 workflow_ref
+# 바인딩이 공존하던 시절의 `_unified` 접미사는 #458에서 `moved` 블록으로
+# 제거했다(state 주소만 이동, GCP API 호출 0건).
 resource "google_service_account_iam_member" "dev_apply_wi" {
   service_account_id = google_service_account.dev_apply.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.dev_apply_workflow_ref}"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.apply_workflow_ref}"
+}
+
+# #458: admin_apply_wi와 동일한 사유로 `_unified` 접미사 제거.
+moved {
+  from = google_service_account_iam_member.dev_apply_wi_unified
+  to   = google_service_account_iam_member.dev_apply_wi
 }
 
 # dev root가 관리하는 리소스 타입 전수 스캔 기준 role 열거(#341 spec 표).
@@ -189,73 +222,125 @@ resource "google_project_iam_member" "dev_apply_roles" {
 # break-glass로 유지하고, apply SA는 K8s admin root 범위(container.admin +
 # compute.viewer + state)로만 둔다. (이전 #312의 projectIamAdmin 부여는 회수됨.)
 
-# #332 Autoresearch feast-apply.yml 전용 service account.
-# main merge 시 `feast apply`로 GCS registry를 갱신하는 워크플로우가 WIF로
-# 가장한다. 기존 목적별 SA 관례(code_uploader 등)와 동일하게 전용 SA로 분리한다.
-resource "google_service_account" "feast_apply" {
-  account_id   = local.feast_apply_sa_name
-  display_name = "Autoresearch dev feast apply SA"
-  description  = "Impersonated by Autoresearch GitHub Actions via WIF to run feast apply against the GCS registry."
+# #424 GitHub Environment와 같은 이름의 전용 GSA를 사용한다. dev/prod의
+# registry, offline store, Redis 접근을 서로 섞지 않는다.
+resource "google_service_account" "feast_apply_dev" {
+  account_id   = local.feast_apply_dev_sa_name
+  display_name = "Autoresearch dev Feast apply development SA"
+  description  = "Impersonated from the dev GitHub Environment to run Feast apply against dev-only resources."
 }
 
-# 정확한 feast-apply workflow(main)만 이 SA 가장 허용(#175/#221 관례:
-# repository 단독이 아니라 workflow_ref로 임의 브랜치·워크플로우 가장 차단).
-# push(main)·workflow_dispatch(main) 모두 workflow_ref가 동일해 단일 바인딩으로 충분.
-resource "google_service_account_iam_member" "feast_apply_wi" {
-  service_account_id = google_service_account.feast_apply.name
+resource "google_service_account" "feast_apply_prod" {
+  account_id   = local.feast_apply_prod_sa_name
+  display_name = "Autoresearch dev Feast apply production SA"
+  description  = "Impersonated from the prod GitHub Environment to run Feast apply against production Feast resources."
+}
+
+# provider 조건이 repository, environment, workflow_ref를 함께 강제한다. IAM
+# member는 OR로 평가되므로 workflow_ref principalSet을 별도로 추가하면 안 된다.
+resource "google_service_account_iam_member" "feast_apply_dev_wi" {
+  service_account_id = google_service_account.feast_apply_dev.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.feast_apply_workflow_ref}"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.environment/dev"
 }
 
-# feast apply는 registry blob 전체를 덮어쓰는 방식이라 objects.get/create/delete가
-# 모두 필요해 bucket-level objectAdmin을 부여한다(feast_registry_gke_app_object_user와
-# 동일 role).
-resource "google_storage_bucket_iam_member" "feast_apply_registry_object_admin" {
+resource "google_service_account_iam_member" "feast_apply_prod_wi" {
+  service_account_id = google_service_account.feast_apply_prod.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.environment/prod"
+}
+
+# Feast GCS registry client는 bucket.reload()에 storage.buckets.get이 필요하다.
+# objectAdmin에 없는 이 권한만 legacyBucketReader로 보강한다.
+resource "google_storage_bucket_iam_member" "feast_apply_dev_registry_object_admin" {
+  bucket = google_storage_bucket.feast_registry_dev.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.feast_apply_dev.email}"
+}
+
+resource "google_storage_bucket_iam_member" "feast_apply_dev_registry_bucket_reader" {
+  bucket = google_storage_bucket.feast_registry_dev.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.feast_apply_dev.email}"
+}
+
+resource "google_storage_bucket_iam_member" "feast_apply_dev_staging_object_admin" {
+  bucket = google_storage_bucket.feast_staging_dev.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.feast_apply_dev.email}"
+}
+
+resource "google_storage_bucket_iam_member" "feast_apply_dev_staging_bucket_reader" {
+  bucket = google_storage_bucket.feast_staging_dev.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.feast_apply_dev.email}"
+}
+
+resource "google_storage_bucket_iam_member" "feast_apply_prod_registry_object_admin" {
   bucket = google_storage_bucket.feast_registry.name
   role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.feast_apply.email}"
+  member = "serviceAccount:${google_service_account.feast_apply_prod.email}"
 }
 
-# Feast GCS registry client는 read/write 시 bucket.reload()로 storage.buckets.get을
-# 호출하는데 objectAdmin에는 이 권한이 없다. feast apply도 동일한 Feast SDK
-# GCSRegistryStore 경로로 registry를 read/write하므로 gke_app과 동일하게
-# legacyBucketReader로 그 권한만 보강한다(#204: #203 검증에서 feast registry 접근
-# 403으로 발견된 것과 동일한 요구사항).
-resource "google_storage_bucket_iam_member" "feast_apply_registry_bucket_reader" {
+resource "google_storage_bucket_iam_member" "feast_apply_prod_registry_bucket_reader" {
   bucket = google_storage_bucket.feast_registry.name
   role   = "roles/storage.legacyBucketReader"
-  member = "serviceAccount:${google_service_account.feast_apply.email}"
+  member = "serviceAccount:${google_service_account.feast_apply_prod.email}"
 }
 
-# feast apply의 source validation은 테이블 존재 확인(bigquery.tables.get)만
-# 수행하므로 dataViewer(tables.getData 포함)나 project-level jobUser는 부여하지
-# 않고 dataset-level metadataViewer로 최소화한다.
-resource "google_bigquery_dataset_iam_member" "feast_apply_offline_store_metadata_viewer" {
+resource "google_storage_bucket_iam_member" "feast_apply_prod_staging_object_admin" {
+  bucket = google_storage_bucket.feast_staging.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.feast_apply_prod.email}"
+}
+
+resource "google_storage_bucket_iam_member" "feast_apply_prod_staging_bucket_reader" {
+  bucket = google_storage_bucket.feast_staging.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.feast_apply_prod.email}"
+}
+
+# feast apply source validation에는 tables.get만 필요하므로 각 환경의 dataset에
+# metadataViewer만 부여한다.
+resource "google_bigquery_dataset_iam_member" "feast_apply_dev_offline_store_metadata_viewer" {
+  dataset_id = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+  role       = "roles/bigquery.metadataViewer"
+  member     = "serviceAccount:${google_service_account.feast_apply_dev.email}"
+}
+
+resource "google_bigquery_dataset_iam_member" "feast_apply_prod_offline_store_metadata_viewer" {
   dataset_id = google_bigquery_dataset.feast_offline_store.dataset_id
   role       = "roles/bigquery.metadataViewer"
-  member     = "serviceAccount:${google_service_account.feast_apply.email}"
+  member     = "serviceAccount:${google_service_account.feast_apply_prod.email}"
 }
 
-# #346 feast apply 실행 주체를 GHA 러너에서 VPC 안 GKE Job으로 옮긴다.
-# GHA는 Job을 생성·판정만 하고, 실제 `feast apply`는 전용 namespace의 KSA가
-# Workload Identity로 이 GSA를 가장해 실행한다. 같은 GSA를 GHA(가장)와
-# Pod(WI)가 공유하지만, Job을 만들 수 있는 주체는 어차피 그 KSA로 실행할 수
-# 있으므로 분리해도 실질적 경계가 늘지 않는다.
-# gke_app_wi와 동일하게 cluster의 workload identity pool이 존재한 뒤에만
-# 바인딩이 성립하므로 depends_on이 필요하다.
-resource "google_service_account_iam_member" "feast_apply_ksa_wi" {
-  service_account_id = google_service_account.feast_apply.name
+# Task 3가 만들 dev/prod namespace의 KSA만 같은 환경 GSA를 가장할 수 있다.
+resource "google_service_account_iam_member" "feast_apply_dev_ksa_wi" {
+  service_account_id = google_service_account.feast_apply_dev.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${local.feast_apply_workload_identity_principal}"
+  member             = "serviceAccount:${local.feast_apply_workload_identity_principals.dev}"
 
   depends_on = [google_container_cluster.dev]
 }
 
-# GKE DNS endpoint 접속과 cluster metadata 조회만 GCP IAM으로 허용한다.
-# Job 생성·조회·삭제 권한은 feast-apply namespace의 Kubernetes RoleBinding이
-# 통제한다(airflow_deployer_cluster_viewer와 동일 패턴).
-resource "google_project_iam_member" "feast_apply_cluster_viewer" {
+resource "google_service_account_iam_member" "feast_apply_prod_ksa_wi" {
+  service_account_id = google_service_account.feast_apply_prod.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.feast_apply_workload_identity_principals.prod}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
+# GKE endpoint와 cluster metadata 조회는 두 환경에 필요하다. Job 권한은 Task 3의
+# 환경별 namespace RoleBinding이 별도로 제한한다.
+resource "google_project_iam_member" "feast_apply_dev_cluster_viewer" {
   project = var.project_id
   role    = "roles/container.clusterViewer"
-  member  = "serviceAccount:${google_service_account.feast_apply.email}"
+  member  = "serviceAccount:${google_service_account.feast_apply_dev.email}"
+}
+
+resource "google_project_iam_member" "feast_apply_prod_cluster_viewer" {
+  project = var.project_id
+  role    = "roles/container.clusterViewer"
+  member  = "serviceAccount:${google_service_account.feast_apply_prod.email}"
 }

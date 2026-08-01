@@ -12,6 +12,43 @@ resource "google_storage_bucket" "mlflow_artifacts" {
   public_access_prevention    = "enforced"
   force_destroy               = false
 
+  # canonical training snapshot은 generation과 함께 재현성의 일부이므로
+  # 이전 object generation을 보존한다. snapshot live lifecycle은 기본 0일 때
+  # 비활성이고, 버킷 전체 artifact의 noncurrent 정리는 아래 별도 규칙을 따른다.
+  versioning {
+    enabled = true
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.mlflow_training_snapshot_retention_days > 0 ? [1] : []
+
+    content {
+      action {
+        type = "Delete"
+      }
+
+      condition {
+        age            = var.mlflow_training_snapshot_retention_days
+        matches_prefix = [local.mlflow_training_snapshot_prefix]
+        with_state     = "LIVE"
+      }
+    }
+  }
+
+  # Object Versioning은 버킷 전체에 적용되므로 MLflow artifact의 이전
+  # generation도 무기한 쌓이지 않도록 정리한다. snapshot은 objectCreator로
+  # overwrite하지 않으므로 이 규칙의 대상이 되지 않는 것이 기본 동작이다.
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      with_state                 = "ARCHIVED"
+      days_since_noncurrent_time = var.mlflow_artifact_noncurrent_retention_days
+    }
+  }
+
   # 실수/침해로 artifact 삭제 시 7일 복구 가능(#179 ES snapshot 교훈).
   soft_delete_policy {
     retention_duration_seconds = var.mlflow_artifacts_soft_delete_seconds
@@ -73,5 +110,28 @@ resource "google_secret_manager_secret" "mlflow_oauth_client_secret" {
 
   replication {
     auto {}
+  }
+
+  # operator가 콘솔 발급값을 넣는 payload는 destroy 시 저장소에서 복구할 수 없다.
+  # airflow #54의 두 oauth secret과 같은 보호를 적용한다.
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# #404 client id 컨테이너. client id는 공개값이지만 client secret과 짝이라
+# 같은 위치에서 관리해야 재발급 시 둘이 어긋나지 않는다(프로젝트 이전 때 실제로
+# runbook 하드코딩 값과 클러스터 값이 갈렸다). airflow는 이미 id/secret 두 개를
+# 모두 SM에 두고 있어 그 대칭을 맞춘다. accessor는 client secret과 동일하게
+# 부여하지 않는다(주입은 운영자 자격으로 SM에서 읽음).
+resource "google_secret_manager_secret" "mlflow_oauth_client_id" {
+  secret_id = local.mlflow_oauth_client_id_secret_id
+
+  replication {
+    auto {}
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }

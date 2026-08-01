@@ -1,5 +1,11 @@
 # Vault Kubernetes Admin Root
 
+> ⚠️ **폐기(#412, 2026-07-29 드랍 확정)**: Vault는 dev에서 더 진행하지 않는다.
+> 새 클러스터(#404 이전 후)에는 helm release·`vault` namespace가 존재하지 않고
+> admin-apply ROOTS에서도 제외됐다(#416). 아래 내용은 실행 불가한 **이력 보존용**이며,
+> 실 서비스 secret은 GCP Secret Manager가 담당한다. vault-k8s root 코드·state
+> 삭제는 #412 B~C 단계에서 이 문서 정리와 함께 진행한다.
+
 이 root는 dev GKE의 HashiCorp Vault 설치를 별도 state로 관리한다. GCP 측
 기반(KMS unseal key, GSA, WI 바인딩)은 dev root `vault.tf`(#132)가 담당하고,
 이 root(#134)는 namespace, 네트워크 경계, Helm release를 담당한다.

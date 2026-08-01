@@ -1,0 +1,167 @@
+# The broad autoresearch-egress Terraform policy deliberately excludes pods
+# labelled app.kubernetes.io/part-of=agent-orchestration. These policies are
+# therefore the complete ingress/egress boundary for API and Runner pods.
+# API ingress is default-deny except for node-originated kubelet probes and
+# initial kubectl port-forward. A future in-cluster caller must add a narrowly
+# scoped ingress rule in the same change.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-api-egress
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: api
+      app.kubernetes.io/part-of: agent-orchestration
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # This CIDR must match dev Terraform var.dev_subnet_cidr. Kubelet probes
+    # and kubectl port-forward originate from a node IP, not the caller Pod.
+    - from:
+        - ipBlock:
+            cidr: 10.10.0.0/20
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Calico가 Service 트래픽을 DNAT 이전 ClusterIP로 평가하는 경로에서는
+    # podSelector만으로 Runner Service VIP를 매칭할 수 없다. 이 CIDR은 dev
+    # Terraform var.gke_services_cidr와 반드시 일치해야 한다. Service CIDR의
+    # TCP 8080을 함께 허용하되 다른 Service port는 열지 않는다.
+    - to:
+        - ipBlock:
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: runner
+              app.kubernetes.io/part-of: agent-orchestration
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - ipBlock:
+            # dev Terraform var.private_services_cidr와 반드시 일치한다.
+            cidr: 192.168.0.0/20
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.252/32
+      ports:
+        - protocol: TCP
+          port: 987
+        - protocol: TCP
+          port: 988
+    - to:
+        - ipBlock:
+            # Secret Manager는 dev private Google APIs DNS zone을 통해 이 고정
+            # VIP로 해석된다. API는 Codex/OpenAI 직접 호출이 필요 없다.
+            cidr: 199.36.153.8/30
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-runner
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: runner
+      app.kubernetes.io/part-of: agent-orchestration
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: api
+              app.kubernetes.io/part-of: agent-orchestration
+      ports:
+        - protocol: TCP
+          port: 8080
+    # This CIDR must match dev Terraform var.dev_subnet_cidr. The Runner has
+    # no user port-forward path, but kubelet HTTP probes still originate from
+    # the node subnet.
+    - from:
+        - ipBlock:
+            cidr: 10.10.0.0/20
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.252/32
+      ports:
+        - protocol: TCP
+          port: 987
+        - protocol: TCP
+          port: 988
+    # OAuth bootstrap read and Codex/OpenAI calls both use HTTPS. IAM restricts
+    # this Runner GSA to the one bootstrap secret; it has no Cloud SQL IAM.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

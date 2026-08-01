@@ -287,6 +287,47 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "agent_orchestration_db_name" {
+  description = "Agent Orchestration 전용 Cloud SQL database 이름."
+  type        = string
+  default     = "agent_orchestration"
+}
+
+variable "agent_orchestration_db_user" {
+  description = "Agent Orchestration 전용 Cloud SQL user 이름."
+  type        = string
+  default     = "agent_orchestration_app"
+}
+
+variable "agent_orchestration_runtime_database_role" {
+  description = "Cloud SQL built-in runtime user에만 부여할 사전 생성 PostgreSQL custom role. 이 역할이 있어야 cloudsqlsuperuser 자동 부여를 피할 수 있다."
+  type        = string
+  default     = "agent_orchestration_runtime"
+
+  validation {
+    condition     = can(regex("^[a-z_][a-z0-9_]*$", var.agent_orchestration_runtime_database_role))
+    error_message = "agent_orchestration_runtime_database_role must be a lowercase PostgreSQL role identifier."
+  }
+}
+
+variable "agent_orchestration_k8s_namespace" {
+  description = "Agent Orchestration API와 Runner KSA가 배치되는 Kubernetes namespace."
+  type        = string
+  default     = "autoresearch"
+}
+
+variable "agent_orchestration_api_k8s_service_account" {
+  description = "Agent Orchestration API GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "agent-orchestration-api"
+}
+
+variable "agent_orchestration_runner_k8s_service_account" {
+  description = "Agent Orchestration Codex Runner GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "agent-orchestration-runner"
+}
+
 variable "mlflow_db_name" {
   description = "기존 Cloud SQL 인스턴스 내 MLflow 전용 database 이름(Airflow/앱과 분리)."
   type        = string
@@ -327,6 +368,28 @@ variable "mlflow_artifacts_soft_delete_seconds" {
   description = "MLflow artifact bucket soft delete 보존(초). 기본 7일 복구층(#179 교훈)."
   type        = number
   default     = 604800
+}
+
+variable "mlflow_training_snapshot_retention_days" {
+  description = "training-snapshots/ live object age lifecycle 보존 일수. 0이면 자동 삭제하지 않는다."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.mlflow_training_snapshot_retention_days >= 0 && floor(var.mlflow_training_snapshot_retention_days) == var.mlflow_training_snapshot_retention_days
+    error_message = "mlflow_training_snapshot_retention_days must be an integer greater than or equal to 0."
+  }
+}
+
+variable "mlflow_artifact_noncurrent_retention_days" {
+  description = "MLflow artifact bucket noncurrent generation 보존 일수. 0은 즉시 정리 위험 때문에 허용하지 않으며 기본 30일."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.mlflow_artifact_noncurrent_retention_days > 0 && floor(var.mlflow_artifact_noncurrent_retention_days) == var.mlflow_artifact_noncurrent_retention_days
+    error_message = "mlflow_artifact_noncurrent_retention_days must be an integer greater than 0."
+  }
 }
 
 variable "airflow_k8s_namespace" {
@@ -535,15 +598,15 @@ variable "batch_spot_gke_node_pool_name" {
 }
 
 variable "batch_spot_gke_machine_type" {
-  description = "batch Spot pool 머신 타입(#173). airflow pool과 동일 사양으로 시작."
+  description = "batch Spot pool 머신 타입(#173). #422에서 n2로 전환 — 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot도 E2_CPUS(한도 24)를 소모해 8노드 버스트가 한도 초과. N2_CPUS(한도 200)로 수요를 이전한다."
   type        = string
-  default     = "e2-standard-2"
+  default     = "n2-standard-2"
 }
 
 variable "batch_spot_gke_node_count_max" {
-  description = "batch Spot pool autoscaling 최대 노드 수(#173). min은 0 고정(평시 비용 0)."
+  description = "batch Spot pool autoscaling 최대 노드 수(#173, #330에서 2→8 상향). min은 0 고정(평시 비용 0)이라 상한 확대는 유휴 비용 증가 없음 — 병렬 배치(action-log 샤딩·backfill) 동시성 확보."
   type        = number
-  default     = 2
+  default     = 8
 }
 
 variable "batch_od_gke_node_pool_name" {
@@ -558,6 +621,12 @@ variable "batch_od_gke_machine_type" {
   default     = "e2-standard-2"
 }
 
+variable "ctr_retrain_gke_node_count_max" {
+  description = "CTR 재학습 노드풀 autoscaling 최대 노드 수(#316, #330에서 1→2 상향). min은 0 고정(평시 비용 0) — 병렬 재학습/HPO 대비."
+  type        = number
+  default     = 2
+}
+
 variable "batch_od_gke_node_count_max" {
   description = "batch on-demand pool autoscaling 최대 노드 수(#297). min은 0 고정(평시 비용 0)."
   type        = number
@@ -570,16 +639,15 @@ variable "airflow_deploy_ref" {
   default     = "refs/heads/main"
 }
 
-variable "admin_apply_workflow_ref" {
-  description = "#307 admin root CI apply SA를 가장할 수 있는 정확한 admin-apply.yml workflow_ref. main의 이 workflow만 허용해 임의 브랜치/workflow의 가장을 막는다."
+# #451 단일 진입점. apply SA 2종(dev-apply·admin-apply) 모두 이 workflow_ref
+# 하나만 가장할 수 있다. 옛 admin_apply_workflow_ref·dev_apply_workflow_ref
+# 변수(admin-apply.yml/dev-apply.yml 전용)는 3단계에서 이 변수로 교체돼
+# 제거됐다 — 이관 순서(1단계 바인딩 추가 → 2단계 workflow 교체 → 3단계 옛
+# 바인딩·변수 제거)는 docs/CHANGE_HISTORY.md 2026-07-31 항목 참고.
+variable "apply_workflow_ref" {
+  description = "#451 통합 apply.yml workflow_ref. dev root와 admin root apply SA를 모두 이 workflow가 가장한다(진입점 단일화 — 통제는 SA 분리 + Environment 승인 게이트)."
   type        = string
-  default     = "SKYAHO/Autoresearch-infra/.github/workflows/admin-apply.yml@refs/heads/main"
-}
-
-variable "dev_apply_workflow_ref" {
-  description = "#341 dev root CI apply SA를 가장할 수 있는 정확한 dev-apply.yml workflow_ref. main의 이 workflow만 허용해 임의 브랜치/workflow의 가장을 막는다."
-  type        = string
-  default     = "SKYAHO/Autoresearch-infra/.github/workflows/dev-apply.yml@refs/heads/main"
+  default     = "SKYAHO/Autoresearch-infra/.github/workflows/apply.yml@refs/heads/main"
 }
 
 variable "application_release_workflow_ref" {
@@ -606,29 +674,40 @@ variable "feast_apply_workflow_ref" {
   default     = "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main"
 }
 
-# #346 feast apply를 GKE Job으로 실행하기 위한 전용 namespace/KSA.
-# 앱 namespace(gke_app_k8s_namespace)를 재사용하면 `batch/jobs: create` 보유
-# 주체가 autoresearch-app KSA(= gke_app GSA)로 임의 컨테이너를 실행할 수 있어
-# GSA 분리 의미가 사라진다. 그래서 별도 변수로 전용 경계를 만든다.
-# 실제 namespace/KSA 오브젝트는 terraform/admin/autoresearch-k8s가 생성한다.
-variable "feast_apply_k8s_namespace" {
-  description = "feast apply Job 전용 Kubernetes namespace (#346). terraform/admin/autoresearch-k8s의 feast_apply_k8s_namespace와 같은 값이어야 한다."
-  type        = string
-  default     = "feast-apply"
-
-  validation {
-    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_namespace))
-    error_message = "feast_apply_k8s_namespace must be a valid Kubernetes namespace name."
+# #424 Feast apply GKE Job의 Workload Identity subject는 환경별로 고정한다.
+# 실제 namespace/KSA 오브젝트와 GSA annotation은
+# terraform/admin/autoresearch-k8s가 같은 dev/prod 계약으로 생성한다.
+variable "feast_apply_kubernetes_identities" {
+  description = "Feast apply 환경별 Kubernetes namespace/KSA 계약. Task 2의 Workload Identity subject(feast-apply-dev|prod/feast-apply)와 정확히 같아야 한다."
+  type = map(object({
+    namespace       = string
+    service_account = string
+  }))
+  default = {
+    dev = {
+      namespace       = "feast-apply-dev"
+      service_account = "feast-apply"
+    }
+    prod = {
+      namespace       = "feast-apply-prod"
+      service_account = "feast-apply"
+    }
   }
-}
-
-variable "feast_apply_k8s_service_account" {
-  description = "feast apply GSA에 Workload Identity로 매핑할 Kubernetes service account (#346). terraform/admin/autoresearch-k8s의 feast_apply_k8s_service_account와 같은 값이어야 한다."
-  type        = string
-  default     = "feast-apply"
 
   validation {
-    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.feast_apply_k8s_service_account))
-    error_message = "feast_apply_k8s_service_account must be a valid Kubernetes service account name."
+    condition = (
+      length(var.feast_apply_kubernetes_identities) == 2 &&
+      alltrue([for environment in keys(var.feast_apply_kubernetes_identities) : contains(["dev", "prod"], environment)]) &&
+      alltrue([
+        for identity in values(var.feast_apply_kubernetes_identities) :
+        length(identity.namespace) >= 1 &&
+        length(identity.namespace) <= 63 &&
+        can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.namespace)) &&
+        length(identity.service_account) >= 1 &&
+        length(identity.service_account) <= 63 &&
+        can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", identity.service_account))
+      ])
+    )
+    error_message = "feast_apply_kubernetes_identities must contain exactly dev and prod with valid Kubernetes namespace and service account names."
   }
 }

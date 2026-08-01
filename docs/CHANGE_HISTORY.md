@@ -3,6 +3,210 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-07-31: MLflow content-addressed training snapshot registry (#464)
+
+- 기존 MLflow artifact GCS bucket을 재사용해 `training-snapshots/sha256=<digest>/`
+  canonical prefix를 정의했다. CSV와 `snapshot_manifest.json`은 create-if-absent로
+  게시하고, consumer는 object generation과 SHA-256을 함께 검증한다.
+- bucket Object Versioning과 기존 7일 soft delete를 유지하고, age lifecycle은
+  `mlflow_training_snapshot_retention_days = 0` 기본값으로 비활성화했다. 따라서
+  재현에 필요한 snapshot을 조용히 삭제하지 않으며, 보존 기간을 줄일 때는 참조
+  run/model과 비용을 먼저 검토한다.
+- 버킷 전체 versioning의 noncurrent MLflow artifact generation은 기본 30일
+  lifecycle로 정리하고, snapshot prefix의 live lifecycle은 별도 변수로 제어한다.
+- batch GSA에는 bucket-wide list를 허용하는 `legacyBucketReader`를 부여하지 않고,
+  known snapshot object URI의 직접 GET만 사용하도록 경계를 유지한다. 기존 7일
+  soft delete와 30일 noncurrent version 보존은 서로 다른 복구층으로 의도적으로
+  중첩한다.
+- 기존 `airflow/autoresearch-batch` GSA에 `training-snapshots/` prefix 한정
+  `storage.objectCreator`·`storage.objectViewer`만 추가했다. MLflow proxy 서버의
+  기존 bucket-wide artifact 권한과 service-account key 없는 WI 경계는 유지한다.
+
+## 2026-07-31: apply workflow 단일 진입점 통합 (#451)
+
+- **배경**: #448에서 apply 구현은 `terraform-apply.yml` 한 곳으로 모았지만
+  진입점은 `admin-apply.yml`·`dev-apply.yml` 둘로 남았다. 운영자가 인프라를
+  적용하려면 여전히 워크플로우 2개를 각각 dispatch·승인해야 했다.
+- **결정**: 세 파일(admin-apply.yml, dev-apply.yml, terraform-apply.yml)을
+  `apply.yml` 하나로 합쳤다. 한 번의 dispatch가 dev root + admin root 7개를
+  전부 plan하고, GitHub Environment `apply` 승인 1회로 전부 apply한다(순서:
+  dev root 먼저 — admin root의 K8s namespace/RBAC이 dev root의 GKE 클러스터에
+  의존하므로 #436류 함정을 코드로 방지).
+- **명시적으로 수용한 트레이드오프**: #341이 세운 "최강 자격(dev-apply SA)의
+  사용 경로를 파일 하나로 고정"은 파일 단위 분리에서 **단일 파일 + Environment
+  승인 게이트**로 바뀐다. SA 자체는 계속 분리하고(dev-apply SA / admin-apply
+  SA, 같은 job 안에서 `google-github-actions/auth@v2`를 두 번 호출해 전환),
+  admin allowlist secret은 admin root를 다루는 step의 env에만 선언해 dev
+  apply step의 노출면을 리팩터 전과 동일(0)하게 유지한다. 승인이 하나로
+  합쳐져 plan 요약이 최대 8개 root 분량으로 오므로 #306 교훈(in-place가 접근
+  변경을 숨김)이 더 중요해졌다.
+- **3단계(#456)**: apply SA 2종의 옛 workflow_ref 바인딩
+  (`admin-apply.yml@main`/`dev-apply.yml@main`)과 관련 변수 2종을 제거했다.
+  surviving `_unified` 리소스(`apply.yml@main` 가장)는 값을 건드리지 않고
+  그대로 뒀다 — 원인은 `member` 값 변경(ForceNew)이 아니라 **Terraform
+  state 주소** 자체다. 리소스 라벨을 코드에서 rename하면(`moved` 블록 없이)
+  Terraform은 옛 주소를 "설정에서 사라짐"으로 보아 destroy, 새 주소를
+  "state에 없음"으로 보아 create로 계획한다. 이 destroy와 create의 실행
+  순서가 보장되지 않아, destroy가 나중에 실행되면 이 워크플로우 자신을
+  인증하는 WIF 바인딩이 apply 도중 사라져 CI가 스스로를 복구하지 못하는
+  상태가 될 수 있다(self-lockout, #456 리뷰). 그래서 `_unified` 접미사째
+  남기고, 후속 정리는 `moved` 블록(state 주소만 이동, GCP API 호출 0건)으로
+  넘겼다 — 추적: #458.
+- **범위**: `apply.yml` 신설, 옛 워크플로우 3개 삭제, GitHub Environment
+  `apply` 신설(기존 admin-apply/dev-apply와 동일한 6인 reviewer, API로 사전
+  생성·검증 — Environment 부재 시 GitHub이 보호 규칙 없이 자동 생성해 승인
+  게이트가 조용히 사라지는 위험을 회피). `workflow_dispatch.inputs.scope`
+  (all/dev/admin, 기본 all)를 추가해 두 가지를 지원한다: ① 신선 클러스터
+  부트스트랩(admin root plan은 GKE 클러스터 전제 — `scope: dev`로 먼저 적용)
+  ② plan 신선도 완화(admin root plan은 dev root apply **이전** 시점 상태로
+  계산되므로, 같은 dispatch에서 dev 변경을 admin이 즉시 참조해야 하면
+  `scope: dev` → `scope: admin`으로 분리 — Terraform의 stale-plan 보호는 그
+  root 자신의 state lineage만 검사하고 다른 root의 apply로 바뀐 live 조회
+  값까지는 잡지 못하므로 코드가 아니라 운영 규칙으로 막는다).
+- **최종 검증(2026-07-31, `scope: all` 실apply)**: 1단계에서 만든
+  `apply.yml@main` 바인딩이 실제로 존재함을 라이브 `gcloud
+  iam service-accounts get-iam-policy`로 재확인한 뒤, 새 `apply.yml`을
+  dispatch했다. CI와 같은 버전(1.13.5)으로 8개 root의 plan 원문을 전부 직접
+  확인 — dev root는 정확히 4건(SA description in-place 갱신 2 + 옛
+  workflow_ref 바인딩 삭제 2), admin root 7개는 전부 `No changes`. 승인 후
+  apply job의 두 SA 전환(dev-apply → admin-apply)과 cleanup까지 전 단계
+  success. 적용 후 두 SA 모두 `apply.yml@main` 바인딩 단 하나만 남았고 plan
+  객체 8건은 cleanup으로 정리됨을 확인했다 — 통합 경로(단일 진입점·SA
+  전환·승인 1회·scope 입력) 전체가 실동작함이 실증됐다.
+
+## 2026-07-30: apply workflow 공용 구현 통합 (#448)
+
+- **배경**: `admin-apply.yml`(#307/#312)과 `dev-apply.yml`(#341)이 plan→승인→
+  apply 파이프라인을 각각 복사해 갖고 있어(요약 게시·이메일 마스킹·plan
+  바이너리 GCS 전달·orphan plan 정리) 한쪽만 고쳐지는 드리프트 위험이 있었다.
+- **결정**: 구현을 `terraform-apply.yml`(`workflow_call`) 한 곳으로 모으고 두
+  진입점은 얇은 호출부로 남긴다. **파일 하나로 완전 통합하지 않은 이유가
+  핵심이다** — apply SA 2종의 WIF 가장 조건이 `admin-apply.yml@main` /
+  `dev-apply.yml@main` workflow_ref로 고정돼 있고, GitHub OIDC의 `workflow_ref`
+  claim은 최상위 호출 워크플로우를 가리키므로(재사용 워크플로우는
+  `job_workflow_ref`) 진입점을 유지하면 IAM 변경 없이 SA 분리·경로 고정(#341
+  설계 의도)이 그대로 보존된다. 단일 파일 + target 드롭다운 안은 두 SA를 한
+  파일이 가장할 수 있게 만들고 Terraform 변수·IAM 2단계 이전을 요구해 기각했다.
+- **범위**: Terraform/IAM 변경 0건. target 차이는 호출부 입력(`roots`,
+  `plan_prefix`, `environment`, plan/apply SA, `guard_admin_allowlist`)으로만
+  표현한다. dev의 plan 객체 경로가 admin과 같은 `<root>/<run_id>.tfplan`
+  레이아웃으로 통일됐다(회수 경로·절차는 TERRAFORM_DEV.md에 기록). secret은
+  `inherit` 대신 `workflow_call.secrets` 명시 선언으로 넘겨, dev 호출부의 secret
+  노출면을 리팩터 전(=0)과 동일하게 유지한다(#449 리뷰 반영).
+- **검증**(2026-07-30 머지 후 왕복, 실측): `actionlint` 통과. `dev-apply`
+  (run 30523575159)·`admin-apply`(run 30523669570)를 각각 dispatch해 **plan job이
+  둘 다 success**, apply job은 승인 대기 상태에서 run 취소. 특히 admin-apply의
+  plan job은 workflow_ref로 고정된 `admin-apply` SA로 인증되므로, **재사용
+  워크플로우를 거쳐도 OIDC `workflow_ref`가 호출부를 가리킨다는 이 리팩터의
+  전제가 실측으로 확인**됐다. dev의 apply SA(`dev-apply`) 가장은 apply job에서만
+  일어나 승인 없이는 실증할 수 없으며, 같은 메커니즘의 admin 측 실증으로
+  갈음한다(승인은 곧 실제 apply라 검증 목적으로 수행하지 않음).
+- **plan 객체 실측**: 취소된 run이 남긴 plan은 `dev-apply-plans/dev/<run_id>.tfplan`
+  1건과 `admin-apply-plans/<root 7종>/<run_id>.tfplan`으로, **새 레이아웃대로
+  생성**됐다(이것이 이 실측의 증거). 옛 flat 경로 객체가 남아 있지 않은 것은
+  레이아웃 이전의 증거가 아니다 — 같은 run의 plan job 첫 단계 `Cleanup stale
+  plans`가 `$PLAN_PREFIX/**`로 prefix 전체를 선삭제하므로 항진적으로 성립한다.
+- **orphan plan 처리**: 취소 run은 apply job의 cleanup이 돌지 않아 plan이 남지만
+  영구 잔존은 아니다 — 같은 진입점의 다음 run이 시작될 때 `Cleanup stale plans`가
+  일괄 삭제한다(#342). 따라서 실제 위험은 "다음 dispatch까지 민감 속성값을 담은
+  plan이 버킷에 남는 노출 창"이고, 검증 직후의 수동 `gcloud storage rm` 8건은
+  유일한 정리 수단이 아니라 그 창을 좁히는 방어 심화다(절차는 TERRAFORM_DEV.md).
+
+## 2026-07-29~30: GCP 프로젝트 이전 — dev 전체 재구축 (#404)
+
+- **배경**: dev 인프라 전체를 새 조직의 새 프로젝트 `autoresearch-503903`으로
+  이전하기로 결정했다. GCP는 프로젝트 간 리소스 이동을 지원하지 않으므로 전량
+  IaC 강점을 살려 Terraform 재적용 + 데이터 복사로 재구축했다(조직만 이전하는
+  `projects move` 대안은 새 프로젝트 사용 확정으로 배제).
+- **결정·순서**: bootstrap workspace 분리로 새 state 버킷
+  (`autoresearch-503903-dev-tfstate`)·WIF·CI SA 선구축 → 전 root backend 일괄
+  전환(#405) → dev root 204리소스 → admin 8 root + gke-team-access. CI apply
+  SA는 dev root가 만들므로 첫 apply만 로컬 break-glass. repo variables는 머지
+  직후, airflow repo env 변수는 머지 전(자동배포 트리거) 교체 — "환경 먼저"
+  원칙의 양방향 사례.
+- **데이터**: GCS 8버킷 서버사이드 rsync, BQ 7테이블 cp, Cloud SQL 3개 DB
+  export/import(모델 레지스트리·Airflow 이력 보존), 이미지 7종 digest 보존 복사.
+- **재구축에서 드러난 함정**(상세는 #404 진행 기록): CRD 의존 root의 operator
+  선적용, 신선 클러스터 한정 ns 참조 순서, operator Secret 선주입 없인
+  rollout 대기 실패, 수동 kubectl 오브젝트(batch KSA)의 누락(#427→#428 IaC
+  편입), OAuth client의 프로젝트 종속(5종 재발급·전환).
+- **quota 구조**: 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot이 E2를 소모 —
+  증설 대신 batch-spot을 n2로 전환해 수요를 N2 quota(200)로 이전(#422).
+- **롤백·정리**: 옛 프로젝트는 결제 분리로 정지(재연결 시 복구 가능). OAuth
+  전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·데이터 경로 기준) 확인.
+  코드 잔재는 드랍된 vault 샌드박스의 helm-values 1건뿐이며 #412 B~C(root째
+  삭제)가 정리한다. 삭제 예약은 그 이후.
+
+## 2026-07-30: Feast dev/prod 런타임 IAM 경계 구성 (#424) — 미적용
+
+- 단일 Feast apply GSA와 namespace 대신 dev/prod별 GSA, registry/staging
+  bucket, BigQuery dataset IAM, Kubernetes namespace/KSA/RBAC/NetworkPolicy를
+  구성했다. prod만 Redis 연결·CA 조회와 Redis PSC egress를 가지며, 기존 prod
+  registry 객체 주소는 유지한다.
+- `github-feast-dev`와 `github-feast-prod` WIF provider는
+  `SKYAHO/Autoresearch` repository, 같은 이름의 GitHub Environment, 정확한 main
+  `feast-apply.yml` workflow ref를 함께 검증한다. #332/#346의 단일
+  `autoresearch-dev-feast-apply`·`feast-apply` 설명은 당시 이력이며 현재
+  Terraform 계약은 아니다.
+- **GSA 이름 제약**: GCP `account_id`는 6~30자다. 최초 구성의
+  `autoresearch-dev-feast-apply-{dev,prod}`(32/33자)는 이 한도를 넘어 #431
+  merge 후 dev root plan이 실패했고, #433에서 GSA만
+  `autoresearch-dev-feast-{dev,prod}`로 줄였다.
+  namespace는 `feast-apply-{dev,prod}`를 유지하므로 두 이름은 의도적으로
+  다르다. 이 제한은 provider가 plan에서 검증해 `validate`로는 걸러지지 않는다.
+- 이번 단계는 런타임 GCS/IAM/WIF/Kubernetes 환경 격리 구성까지다. 단일
+  `terraform/envs/dev` root/state는 유지하며, GHA runner와 GKE runtime을
+  분리한 네 개 SA 모델은 후속 하드닝으로 미룬다.
+- 실제 Terraform apply, `SKYAHO/Autoresearch` workflow 또는 GitHub Environment
+  설정 변경, live 인증·접근 검증은 수행하지 않았다. cutover와 rollback 순서는
+  `TERRAFORM_DEV.md`의 #424 절을 따른다.
+
+## 2026-07-29: Alertmanager Slack 전환과 노이즈 제어 (#406)
+
+- **배경**: Kubernetes warning/resolved 이메일이 팀 inbox를 계속 채우고,
+  상태형 OOM 규칙은 과거 OOM 종료 이유가 남아 있는 동안 같은 사실을 반복했다.
+- **결정**: Slack App 하나의 channel-bound Incoming Webhook으로
+  `#alerts-infra`에 전달한다. 단방향 운영 알림만 필요해 메시지 수정·thread·
+  interactive action용 Bot Token은 도입하지 않는다.
+- **노이즈 제어**: workload namespace는
+  `airflow|argo-rollouts|argocd|autoresearch|elastic|mlflow|monitoring|vault`만
+  허용한다. `alertname+namespace`로 group하고 warning은 무멘션 12시간,
+  critical은 firing `@here`·4시간 반복, resolved는 무멘션으로 보낸다. 현재
+  rule에는 같은 key의 warning/critical pair가 없어 inhibit는 두지 않는다.
+- **OOM 의미**: 최근 5분 `restarts_total` 증가와 마지막 종료 이유
+  `OOMKilled`를 결합한 cluster-wide 사건형 rule로 바꿨다.
+  `keep_firing_for: 15m`으로 짧은 간격 재발을 한 사건으로 유지하며 Slack
+  전달 범위는 route에서 제한한다.
+- **보안·롤백**: webhook과 전체 Alertmanager config는 운영자 주입
+  `alertmanager-slack-config`에만 두고 Git·Terraform state·명령행에 넣지
+  않는다. live smoke 전에는 SMTP Secret을 rollback 자산으로 유지하고 dual
+  delivery는 금지한다.
+- **영향**: Terraform, IAM, GCP 리소스, public endpoint와 NetworkPolicy 변경이
+  없어 추가 클라우드 비용이나 권한 확대가 없다.
+
+## 2026-07-28: Kibana 자체 TLS 비활성 — 로그인 경로 첫 e2e 종결 (#394, #329)
+
+- **배경**: 첫 실제 브라우저 e2e에서 로그인 3중 결함 동시 발견 — 허용 이메일
+  누락, client secret 무효(#329 미이행), 그리고 구조 결함: **Kibana 9.x는
+  자신이 TLS로 서빙되면 `secureCookies: false`를 무시하고 secure 세션을
+  강제**(`login_state.requiresSecureConnection=true` 실측)해 http 프록시
+  구간 로그인이 차단된다. #325의 "이중 게이트" 검증이 CLI 배선까지만 본
+  잠복 결함.
+- **결정**: Kibana 자체 TLS 비활성(`http.tls.selfSignedCertificate.disabled`)
+  — 접근 통제는 NetworkPolicy(5601 직접 ingress 미개방) + oauth2-proxy
+  Google 게이트가 담당, 평문 구간은 클러스터 내부 proxy→Kibana뿐(다른 내부
+  UI upstream과 동일 모델). ES·Kibana↔ES TLS 불변. proxy upstream http 전환과
+  **saved-objects 자동 import Job의 --cacert 제거를 한 PR로 동반**(cert
+  secret 소멸 회귀 방지). 되돌릴 때도 셋을 한 apply로.
+- **교훈**: 인증 경로는 실제 브라우저 e2e 전엔 완료가 아니다. 에러 페이지의
+  소속 컴포넌트 식별(Oops=oauth2-proxy 템플릿)이 진단의 첫 갈림길.
+- **롤백**: 세 파일을 한 PR·한 apply로 되돌린다 — ① `kibana.tf`의
+  `http.tls.selfSignedCertificate.disabled` 블록 제거(TLS 재활성) ②
+  `oauth2_proxy.tf` upstream `https://` 복원 + `--ssl-upstream-insecure-skip-verify=true`
+  플래그 재추가 ③ `kibana_saved_objects.tf` `--cacert /certs/ca.crt` 복원 +
+  `kb-certs` volume/volume_mount(`autoresearch-kb-http-certs-public`) 재추가.
+  갈라지면 proxy 502 또는 Job CreateContainerConfigError.
+
 ## 2026-07-27: 관측 스택 구축 — Grafana 대시보드 6장 as-code + 구조화 로깅 파이프라인 (#352~#365)
 
 - **배경**: 14회차 멘토 피드백(K8s 메트릭·서비스 사용량 대시보드, ELK 구조화

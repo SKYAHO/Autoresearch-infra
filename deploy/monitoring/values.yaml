@@ -12,6 +12,14 @@ kube-prometheus-stack:
       nodeSelector:
         cloud.google.com/gke-nodepool: dev-default
       retention: 7d
+      # #459 크기 상한(두 번째 안전벨트): 시간 기준만 있으면 카디널리티 폭증 시
+      # 7일치가 PVC(30Gi)를 넘어 쓰기 실패로 죽는다. retention.size 합산에는
+      # 블록뿐 아니라 WAL·m-mapped head chunk도 포함되므로(공식 문서) 헤드룸은
+      # WAL 몫이 아니라 삭제 지연·컴팩션 일시 초과·FS 오버헤드용이다.
+      # 24GiB = PVC의 80% → 상한 발동 상태에서도 free 20%로, kps 기본 경보
+      # KubePersistentVolumeFillingUp(free 15%)·runbook 85% 기준과 겹치지 않게
+      # 여유를 둔다(실측 2026-07-31: TSDB 0.6GiB/2일 → 7d 만재 ~3GiB).
+      retentionSize: "24GiB"
       # #106 실측(508Mi) 기반 requests — 미설정이면 스케줄러/CA가 이 pod의
       # 비용을 0으로 계산해 배치·증설 판단이 왜곡된다. limit은 retention
       # 축적(7d TSDB) 성장 여유.
@@ -101,11 +109,13 @@ kube-prometheus-stack:
 
   alertmanager:
     enabled: true
-    # SMTP payload와 Alertmanager route는 Git이 아닌 운영자 주입 Secret에 둔다.
-    # Secret이 없으면 sync 전에 먼저 주입해야 하며 ArgoCD는 이를 관리하거나 prune하지 않는다.
+    # Slack webhook과 전체 Alertmanager route는 Git이 아닌 운영자 주입
+    # Secret에 둔다. Secret이 없으면 sync 전에 먼저 주입해야 하며 ArgoCD는
+    # 이를 관리하거나 prune하지 않는다. SMTP Secret은 live smoke 전 rollback
+    # 자산으로만 유지한다.
     alertmanagerSpec:
       useExistingSecret: true
-      configSecret: alertmanager-smtp-config
+      configSecret: alertmanager-slack-config
 
   additionalPrometheusRulesMap:
     container-oom-killed:
@@ -113,12 +123,30 @@ kube-prometheus-stack:
         - name: autoresearch.container-termination
           rules:
             - alert: ContainerOOMKilled
-              expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+              expr: |
+                (
+                  increase(
+                    kube_pod_container_status_restarts_total[5m]
+                  ) > 0
+                )
+                and on (namespace, pod, container)
+                (
+                  kube_pod_container_status_last_terminated_reason{
+                    reason="OOMKilled"
+                  } == 1
+                )
               for: 1m
+              # 10분 안팎으로 반복되는 OOM을 하나의 firing lifecycle로 묶어
+              # Alertmanager repeat_interval이 실제로 노이즈를 억제하게 한다.
+              keep_firing_for: 15m
               labels:
                 severity: warning
               annotations:
-                summary: Container terminated due to OOMKilled
+                summary: Container had a recent OOM restart
+                description: >-
+                  {{ $labels.namespace }}/{{ $labels.pod }}의 컨테이너
+                  {{ $labels.container }}가 최근 5분 내 OOMKilled로
+                  재시작했습니다.
 
   prometheusOperator:
     internalPort: 10250

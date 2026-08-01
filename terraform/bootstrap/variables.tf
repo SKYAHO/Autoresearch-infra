@@ -19,8 +19,25 @@ variable "allowed_github_repositories" {
   ]
 }
 
+variable "feast_apply_github_repository" {
+  description = "GitHub repository allowed to obtain Feast apply WIF tokens (owner/name). Each provider also requires its matching GitHub Environment."
+  type        = string
+  default     = "SKYAHO/Autoresearch"
+}
+
+variable "feast_apply_workflow_ref" {
+  description = "Exact GitHub Actions workflow_ref allowed to obtain Feast apply WIF tokens."
+  type        = string
+  default     = "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main"
+}
+
 variable "region" {
   description = "Location for the Terraform state GCS bucket."
   type        = string
   default     = "asia-northeast3"
+}
+
+variable "state_bucket_name" {
+  description = "Terraform state GCS bucket name. Bucket names are globally unique, so no default can be safe across projects — always pass the value for the project being bootstrapped (#413). Must match the backend bucket in every root's versions.tf."
+  type        = string
 }

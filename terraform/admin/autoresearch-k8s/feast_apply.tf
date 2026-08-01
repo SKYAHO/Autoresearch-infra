@@ -1,44 +1,47 @@
-# #346 feast apply 전용 Kubernetes 경계.
+# #424 Feast apply 전용 Kubernetes 경계.
 #
-# `feast apply`의 online store 고아 키 정리(`full_scan_for_deletion: true`)는
-# Redis(PSC, VPC 내부)에 직접 닿아야 해서 GitHub Actions 러너에서는 불가능하다.
-# 실행 주체만 VPC 안 GKE Job으로 옮기고, GHA는 Job 생성·결과 판정만 한다.
-#
-# 앱 namespace(autoresearch)를 재사용하지 않는 이유: 그 namespace에
-# `batch/jobs: create`를 주면 Job의 serviceAccountName을 `autoresearch-app`으로
-# 지정해 gke_app GSA(DB 비밀번호 secret·Cloud SQL·BQ dataEditor)로 임의 컨테이너를
-# 실행할 수 있다. 또 jobs create 보유 주체는 Pod spec으로 namespace 내 임의 K8s
-# Secret을 마운트할 수 있어 RBAC에서 secrets를 빼는 것만으로는 막히지 않는다.
-# 그래서 전용 namespace를 두고 그 안에 feast-apply KSA 하나만 둔다.
+# GitHub Environment → WIF provider → GSA → namespace → KSA는 하나의 불변 튜플이다.
+# 같은 GSA를 GHA(가장)와 Job Pod(WI)가 공유하되, 각 GSA에는 자기 환경 namespace의
+# RoleBinding만 둬 dev GSA가 prod Job을 만들 수 없게 한다.
 
 resource "kubernetes_namespace_v1" "feast_apply" {
+  for_each = local.feast_apply_identities
+
   metadata {
-    name = var.feast_apply_k8s_namespace
+    name = each.value.namespace
     labels = {
-      "app.kubernetes.io/name" = "feast-apply"
+      "app.kubernetes.io/name"        = "feast-apply"
+      "app.kubernetes.io/environment" = each.key
+      # baseline PSA는 hostNetwork, hostPID, hostIPC를 거부한다. Job 생성 권한을
+      # 가진 GSA가 host network namespace로 NetworkPolicy Redis PSC 경계를 우회하는
+      # 것을 admission 단계에서 막는다.
+      "pod-security.kubernetes.io/enforce" = "baseline"
     }
   }
 }
 
 resource "kubernetes_service_account_v1" "feast_apply" {
+  for_each = local.feast_apply_identities
+
   metadata {
-    name      = var.feast_apply_k8s_service_account
-    namespace = kubernetes_namespace_v1.feast_apply.metadata[0].name
+    name      = each.value.service_account
+    namespace = kubernetes_namespace_v1.feast_apply[each.key].metadata[0].name
     annotations = {
-      "iam.gke.io/gcp-service-account" = local.feast_apply_gcp_service_account_email
+      "iam.gke.io/gcp-service-account" = each.value.gcp_service_account_email
     }
   }
 }
 
-# GitHub Actions(feast_apply GSA)가 이 namespace에서만 Job을 다룰 수 있게 한다.
-# - watch 필수: `kubectl wait`가 list+watch로 동작해 누락 시 403이 된다.
-# - update/patch는 주지 않는다. Job spec은 대부분 immutable이라 `kubectl apply`로
-#   갱신이 안 되고, 워크플로우는 "delete 후 create" 절차를 전제로 한다.
-# - pods/pods-log는 실패 원인 확인용 read만. exec·cluster-admin은 부여하지 않는다.
+# GHA의 각 환경 GSA는 자기 namespace에서만 Job을 다룬다.
+# - watch 필수: kubectl wait가 list+watch로 동작한다.
+# - update/patch는 주지 않는다. 워크플로우는 delete 후 create를 전제로 한다.
+# - pods/pods-log는 실패 원인 확인용 read만. secrets, exec, cluster-wide RBAC는 없다.
 resource "kubernetes_role_v1" "feast_apply_job_runner" {
+  for_each = local.feast_apply_identities
+
   metadata {
-    name      = "feast-apply-job-runner"
-    namespace = kubernetes_namespace_v1.feast_apply.metadata[0].name
+    name      = "feast-apply-${each.key}-job-runner"
+    namespace = kubernetes_namespace_v1.feast_apply[each.key].metadata[0].name
   }
 
   rule {
@@ -58,42 +61,38 @@ resource "kubernetes_role_v1" "feast_apply_job_runner" {
     resources  = ["pods/log"]
     verbs      = ["get"]
   }
-
-  depends_on = [kubernetes_namespace_v1.feast_apply]
 }
 
-# subject는 GHA가 WIF로 가장하는 GSA. GKE는 GSA 이메일을 K8s User로 매핑한다
-# (airflow-k8s의 airflow_deployer_admin과 동일 패턴).
+# subject는 GHA가 WIF로 가장하는 GSA다. GKE는 GSA 이메일을 Kubernetes User로
+# 매핑하므로 annotation의 GSA와 같은 each.value만 사용해야 한다.
 resource "kubernetes_role_binding_v1" "feast_apply_job_runner" {
+  for_each = local.feast_apply_identities
+
   metadata {
-    name      = "feast-apply-job-runner"
-    namespace = kubernetes_namespace_v1.feast_apply.metadata[0].name
+    name      = "feast-apply-${each.key}-job-runner"
+    namespace = kubernetes_namespace_v1.feast_apply[each.key].metadata[0].name
   }
 
   role_ref {
     api_group = "rbac.authorization.k8s.io"
     kind      = "Role"
-    name      = kubernetes_role_v1.feast_apply_job_runner.metadata[0].name
+    name      = kubernetes_role_v1.feast_apply_job_runner[each.key].metadata[0].name
   }
 
   subject {
     api_group = "rbac.authorization.k8s.io"
     kind      = "User"
-    name      = local.feast_apply_gcp_service_account_email
+    name      = each.value.gcp_service_account_email
   }
-
-  depends_on = [kubernetes_namespace_v1.feast_apply]
 }
 
-# feast apply Job은 아무것도 서빙하지 않으므로 ingress를 전면 차단한다.
-# policy_types에 Ingress를 넣고 ingress 규칙을 두지 않으면 deny-all이 된다.
-# 다른 admin namespace(argocd·vault·airflow·elastic·argo-rollouts)와 달리
-# 앱 namespace에는 ingress 정책이 없는데, 그 관행을 전용 namespace로
-# 옮기지 않는다. Job pod는 probe·metrics 수집 대상도 아니라 부작용이 없다.
+# Feast apply Job은 아무것도 서빙하지 않으므로 ingress를 전면 차단한다.
 resource "kubernetes_network_policy_v1" "feast_apply_ingress" {
+  for_each = local.feast_apply_identities
+
   metadata {
-    name      = "feast-apply-ingress"
-    namespace = kubernetes_namespace_v1.feast_apply.metadata[0].name
+    name      = "feast-apply-${each.key}-ingress"
+    namespace = kubernetes_namespace_v1.feast_apply[each.key].metadata[0].name
   }
 
   spec {
@@ -101,18 +100,16 @@ resource "kubernetes_network_policy_v1" "feast_apply_ingress" {
 
     policy_types = ["Ingress"]
   }
-
-  depends_on = [kubernetes_namespace_v1.feast_apply]
 }
 
-# 앱 namespace의 autoresearch-egress는 pod_selector {}로 그 namespace에만
-# 적용되므로 전용 namespace에는 걸리지 않는다. feast apply에 필요한 범위만
-# 이식한다. Cloud SQL(private_services_cidr:5432)은 feast apply가 쓰지 않아
-# 제외한다.
+# 앱 namespace의 autoresearch-egress는 이 namespace에 적용되지 않는다. DNS, GKE
+# metadata, HTTPS만 공통으로 허용하며 Redis PSC topology는 prod Job에만 허용한다.
 resource "kubernetes_network_policy_v1" "feast_apply_egress" {
+  for_each = local.feast_apply_identities
+
   metadata {
-    name      = "feast-apply-egress"
-    namespace = kubernetes_namespace_v1.feast_apply.metadata[0].name
+    name      = "feast-apply-${each.key}-egress"
+    namespace = kubernetes_namespace_v1.feast_apply[each.key].metadata[0].name
   }
 
   spec {
@@ -120,9 +117,8 @@ resource "kubernetes_network_policy_v1" "feast_apply_egress" {
 
     policy_types = ["Egress"]
 
-    # Calico가 service 트래픽을 DNAT 이전에 평가하므로 DNS service VIP는
-    # services CIDR로 열고, DNAT 이후 평가하는 dataplane을 위해 namespace
-    # selector 규칙을 함께 둔다(앱 namespace와 동일한 이중 패턴).
+    # Calico의 DNAT 전/후 DNS 평가 모두를 위해 services CIDR와 kube-system
+    # namespace selector를 함께 둔다.
     egress {
       to {
         ip_block {
@@ -161,25 +157,28 @@ resource "kubernetes_network_policy_v1" "feast_apply_egress" {
       }
     }
 
-    # Redis Cluster PSC discovery endpoint와 data node topology 포트.
-    # 클라이언트가 CLUSTER SLOTS로 받은 노드 주소에 직접 접속하므로 discovery
-    # 포트만으로는 부족하다.
-    egress {
-      to {
-        ip_block {
-          cidr = var.redis_psc_subnet_cidr
+    # Redis Cluster PSC discovery/data-node topology는 prod에만 필요하다. dev
+    # NetworkPolicy에는 redis_psc_subnet_cidr나 Redis port를 렌더하지 않는다.
+    dynamic "egress" {
+      for_each = each.key == "prod" ? [true] : []
+
+      content {
+        to {
+          ip_block {
+            cidr = var.redis_psc_subnet_cidr
+          }
         }
-      }
 
-      ports {
-        protocol = "TCP"
-        port     = tostring(var.redis_discovery_port)
-      }
+        ports {
+          protocol = "TCP"
+          port     = tostring(var.redis_discovery_port)
+        }
 
-      ports {
-        protocol = "TCP"
-        port     = tostring(var.redis_node_port_start)
-        end_port = var.redis_node_port_end
+        ports {
+          protocol = "TCP"
+          port     = tostring(var.redis_node_port_start)
+          end_port = var.redis_node_port_end
+        }
       }
     }
 
@@ -215,7 +214,8 @@ resource "kubernetes_network_policy_v1" "feast_apply_egress" {
       }
     }
 
-    # Secret Manager(Redis CA)·GCS(registry)·BigQuery(source validation) 호출용.
+    # Secret Manager, GCS, BigQuery 등 Google API 호출용이다. dev GSA에는
+    # Redis/CA IAM이 없으므로 HTTPS 허용만으로 Redis 접근은 생기지 않는다.
     egress {
       to {
         ip_block {
@@ -229,6 +229,4 @@ resource "kubernetes_network_policy_v1" "feast_apply_egress" {
       }
     }
   }
-
-  depends_on = [kubernetes_namespace_v1.feast_apply]
 }

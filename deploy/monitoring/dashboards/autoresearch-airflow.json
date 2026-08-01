@@ -243,6 +243,55 @@
         }
       ],
       "description": "cpu(코어)와 mem(GiB)을 같은 축에 겹침 — 추세 대조용."
+    },
+    {
+      "type": "timeseries",
+      "title": "액션로그 KPO 메모리 프로파일 (app#393 감시)",
+      "description": "판독: 선형 단조 증가 = 객체 누적(app#393 실측 — 시간당 +25~30Mi), plateau = 정상. 점선 512Mi = 현재 KPO requests — 지속 초과 시 requests 재지정 대상.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 536870912
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "targets": [
+        {
+          "expr": "max by (pod) (container_memory_working_set_bytes{namespace=\"airflow\", pod=~\"(ensure-action-log|generate-action-log|validate-action-log|shard).*\", container!=\"\"})",
+          "legendFormat": "{{pod}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          }
+        }
+      ]
     }
   ]
 }

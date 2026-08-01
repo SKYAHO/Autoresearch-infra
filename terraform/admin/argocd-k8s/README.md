@@ -12,10 +12,11 @@ AppProject와 샘플 Application을 추가했다.
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
 | AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). 샘플 제거 후 infra repo Application 전용(#183). sourceRepos=infra repo, destinations=`monitoring`·`kube-system`(control-plane exporter)·`argo-rollouts`(#186)·`mlflow`(#94)·`autoresearch`(#302), cluster-wide는 필요한 kind만 |
-| Application `monitoring` | 예 (#183) | infra repo `deploy/monitoring` umbrella chart, manual sync. helm_release에서 이관 |
-| Application `argo-rollouts` | 예 (#186) | infra repo `deploy/argo-rollouts` umbrella chart, manual sync. helm_release에서 이관 |
-| Application `mlflow` | 예 (#94) | infra repo `deploy/mlflow` plain 매니페스트, manual sync. 신규 배포(adopt 아님) |
-| Application `serving` | 예 (#302) | infra repo `deploy/serving`(Deployment/Service/ServiceMonitor) plain 매니페스트, destination `var.app_namespace`(`autoresearch-k8s` 소유), manual sync. 신규 배포(adopt 아님). 이미지 digest는 앱 저장소 `release.yml`이 GAR에 push한 값 |
+| Application `monitoring` | 예 (#183) | infra repo `deploy/monitoring` umbrella chart, automated sync(#460, prune 없음). helm_release에서 이관 |
+| Application `argo-rollouts` | 예 (#186) | infra repo `deploy/argo-rollouts` umbrella chart, automated sync(#460, prune 없음). helm_release에서 이관 |
+| Application `mlflow` | 예 (#94) | infra repo `deploy/mlflow` plain 매니페스트, automated sync(#460, prune 없음). 신규 배포(adopt 아님) |
+| Application `serving` | 예 (#302) | infra repo `deploy/serving`(Deployment/Service/ServiceMonitor) plain 매니페스트, destination `var.app_namespace`(`autoresearch-k8s` 소유), automated sync(#460, prune 없음). 신규 배포(adopt 아님). 이미지 digest는 앱 저장소 `release.yml`이 GAR에 push한 값 |
+| Application `agent-orchestration` | 예 (#453) | infra repo `deploy/agent-orchestration`(API/Runner Deployment·Service·PVC·NetworkPolicy) plain 매니페스트, destination `var.app_namespace`, manual sync. API/Runner image는 앱 release workflow가 검증한 immutable digest만 사용 |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 
 ## 설치 구성 (#84)
@@ -162,8 +163,8 @@ Terraform state, values 파일에 저장하지 않는다. 로컬 `admin` 계정�
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
 # client id/secret을 Secret Manager에 저장해 두고 회수(예시 secret 이름)
-CID="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-id --project ar-infra-501607)"
-CSECRET="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-secret --project ar-infra-501607)"
+CID="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-id --project autoresearch-503903)"
+CSECRET="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-secret --project autoresearch-503903)"
 printf 'clientId=%s\nclientSecret=%s\n' "$CID" "$CSECRET" > "$env_file"; unset CID CSECRET
 kubectl create secret generic argocd-google-oidc -n argocd --from-env-file="$env_file" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -233,7 +234,7 @@ repo Application 전용으로 좁혔다(현재 `monitoring`·`argo-rollouts`).
 
 `application_serving`은 infra repo `deploy/serving`(Deployment/Service/
 ServiceMonitor plain 매니페스트)을 `var.app_namespace`(`autoresearch`,
-`autoresearch-k8s` 소유)에 manual sync로 배포한다. `mlflow`와 마찬가지로 helm
+`autoresearch-k8s` 소유)에 배포한다(sync는 #460부터 automated). `mlflow`와 마찬가지로 helm
 adopt가 아니라 신규 배포이므로 `CreateNamespace=false`다. 이미지는 tag가 아니라
 앱 저장소 `release.yml`이 GAR에 push한 immutable digest로 `deployment.yaml`에
 고정되며, 배포·롤백은 이 digest를 커밋하고 sync하는 것으로 완결된다(digest
@@ -249,6 +250,25 @@ terraform -chdir=terraform/admin/argocd-k8s apply \
 
 pin을 풀고 다시 `main` HEAD를 따라가려면 `-var` 없이(또는 `main` 값으로) 다시
 apply한다.
+
+## Agent Orchestration Application (#453)
+
+`application_agent_orchestration`은 infra repo
+`deploy/agent-orchestration`의 API·Codex Runner plain manifest를
+`var.app_namespace`(`autoresearch`, `autoresearch-k8s` 소유)에 manual sync로
+배포합니다. namespace와 KSA는 먼저 `autoresearch-k8s` root가 만들며,
+`CreateNamespace=false`, auto-sync, prune, self-heal은 추가하지 않습니다.
+
+`agent_orchestration_deployment_enabled=false`가 기본 안전 상태입니다. Application은
+의도적으로 존재하지 않는 `agent-orchestration-disabled` ref를 바라보므로, 수동 sync를
+시도해도 partial resource를 만들 수 없습니다. 앱 release workflow가 출력한 두
+immutable image digest와 dev Terraform output을 별도 배포 커밋에 주입하고 DB runtime
+권한 migration까지 검증한 뒤에만, 해당 병합 commit SHA를
+`agent_orchestration_target_revision`에 넣고
+`agent_orchestration_deployment_enabled=true`로 apply합니다. OAuth·DB password·완성
+DB URL은 Git이나 Application spec에 넣지 않습니다. 자세한 운영 절차는
+[`docs/runbooks/2026-07-30-agent-orchestration-gke.md`](../../../docs/runbooks/2026-07-30-agent-orchestration-gke.md)를
+따릅니다.
 
 ## ⚠️ apply 전 필수 — admin 이메일 변수 (#304)
 
@@ -304,8 +324,8 @@ kubectl -n argocd get cm argocd-rbac-cm -o jsonpath='{.data.policy\.csv}' \
 - `helm_release.argo_cd` 리소스를 제거하고 apply하면 release가 삭제된다.
   namespace는 `prevent_destroy`로 남는다.
 - chart 버전 롤백은 `argo_cd_chart_version`을 이전 버전으로 되돌려 apply한다.
-- **주의**: 이 root는 이제 `application_monitoring`(#183)·`application_argo_rollouts`
-  (#186) 두 Application을 관리한다. ArgoCD를 삭제하면 이 Application들이 관리하는
-  monitoring·argo-rollouts 스택이 sync/self-heal 없이 남으므로, release 삭제 전
-  두 스택의 adopt 상태와 영향 범위를 먼저 확인한다(워크로드 pod 자체는 prune off라
-  즉시 삭제되지 않지만 GitOps 관리가 끊긴다).
+- **주의**: 이 root는 `monitoring`(#183)·`argo-rollouts`(#186)·`mlflow`(#94)·
+  `serving`(#302)·`agent-orchestration`(#453) Application을 관리한다. ArgoCD를
+  삭제하면 이 Application들이 관리하는 스택이 sync/self-heal 없이 남으므로,
+  release 삭제 전 다섯 Application의 live 상태와 영향 범위를 먼저 확인한다
+  (워크로드 pod 자체는 prune off라 즉시 삭제되지 않지만 GitOps 관리가 끊긴다).

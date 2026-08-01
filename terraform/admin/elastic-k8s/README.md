@@ -91,9 +91,14 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 ```bash
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
-read -rs -p 'client-secret: ' CS; echo
-printf '%s' "$CS" > "$d/client-secret"; unset CS
-printf '%s' '<CLIENT_ID>.apps.googleusercontent.com' > "$d/client-id"
+# #439: 정본은 Secret Manager — 발급 직후 id/secret 한 쌍을 먼저 등록
+#   gcloud secrets versions add autoresearch-dev-kibana-oauth-client-{id,secret} --data-file=-
+for k in client-id client-secret; do
+  gcloud secrets versions access latest \
+    --secret "autoresearch-dev-kibana-oauth-$k" --project "$PROJECT_ID" \
+    | tr -d '\n' > "$d/$k"
+  test -s "$d/$k" || { echo "ERROR: $k 정본 비어 있음 — versions add 먼저"; exit 1; }
+done
 printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"   # 정확히 32바이트(oauth2-proxy 요구)
 cat > "$d/authenticated-emails" <<'EMAILS'
 someone@gmail.com
@@ -108,6 +113,8 @@ rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
 ```
+
+반영 검증(값 비노출): `scripts/verify-oauth-clients.sh <k8s-context> <project-id>` — 5종 프리픽스·SM 해시 일괄 대조(#439).
 
 접속:
 
@@ -186,7 +193,7 @@ repository 등록과 SLM policy는 ES 내부 리소스라 운영자 절차로 �
 # 1) repository 등록 + 검증 (verify가 bucket 권한/경로를 end-to-end 확인)
 curl -sk -u "elastic:$PW" -X PUT https://localhost:19200/_snapshot/gcs_snapshots   -H 'Content-Type: application/json' -d '{
   "type": "gcs",
-  "settings": { "bucket": "ar-infra-501607-autoresearch-dev-es-snapshots" }
+  "settings": { "bucket": "autoresearch-503903-autoresearch-dev-es-snapshots" }
 }'
 
 # 2) SLM policy (일 1회 03:30 KST, 7일 보관)

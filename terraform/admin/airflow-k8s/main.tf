@@ -23,6 +23,23 @@ resource "kubernetes_service_account_v1" "airflow" {
   depends_on = [kubernetes_namespace_v1.airflow]
 }
 
+# #427 KPO 배치 파드 KSA. 원래 runbook의 수동 kubectl 오브젝트였는데, 프로젝트
+# 이전(#404) 재구축에서 누락되어 야간 배치 전체가 "serviceaccount not found"로
+# 실패했다(재구축 때마다 빠지는 코드 밖 오브젝트 유형). dev root가 만드는
+# airflow_batch GSA와의 WI 바인딩(principal)은 기존대로 dev root 소유이고,
+# 이 root는 KSA 오브젝트와 annotation만 관리한다.
+resource "kubernetes_service_account_v1" "airflow_batch" {
+  metadata {
+    name      = var.airflow_batch_k8s_service_account
+    namespace = var.airflow_k8s_namespace
+    annotations = {
+      "iam.gke.io/gcp-service-account" = local.airflow_batch_gcp_service_account_email
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.airflow]
+}
+
 resource "kubernetes_role_v1" "airflow_components" {
   metadata {
     name      = "airflow-components"
@@ -46,6 +63,11 @@ resource "kubernetes_role_v1" "airflow_components" {
     resources  = ["jobs", "cronjobs"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
+
+  # #436: ns 의존 간선 — namespace를 var로 참조해 암시 의존이 없어, 신선
+  # 클러스터 apply에서 ns 생성과 레이스가 났다(#404 "namespaces airflow not
+  # found" 실측 원인). 이 root에서 유일하게 누락돼 있던 리소스.
+  depends_on = [kubernetes_namespace_v1.airflow]
 }
 
 resource "kubernetes_role_v1" "airflow_vpa" {

@@ -22,10 +22,10 @@ terraform/
 | admin | `terraform/admin/autoresearch-k8s` | 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress NetworkPolicy |
 | admin | `terraform/admin/airflow-k8s` | Airflow Kubernetes namespace/RBAC/NetworkPolicy |
 | admin | `terraform/admin/monitoring-k8s` | monitoring namespace와 port-forward RBAC 경계(chart는 ArgoCD Application이 관리, #183) |
-| admin | `terraform/admin/argocd-k8s` | ArgoCD namespace와 Helm 설치, AppProject/Application(monitoring·argo-rollouts) |
+| admin | `terraform/admin/argocd-k8s` | ArgoCD namespace와 Helm 설치, AppProject/Application(monitoring·argo-rollouts·mlflow·serving·agent-orchestration) |
 | admin | `terraform/admin/argo-rollouts-k8s` | Argo Rollouts namespace/NetworkPolicy 경계(chart는 ArgoCD Application이 관리, #186) |
 | admin | `terraform/admin/elastic-k8s` | ECK/Elasticsearch namespace와 네트워크 경계 (#97) |
-| admin | `terraform/admin/vault-k8s` | Vault namespace + Helm release + KMS auto-unseal (#134) |
+| admin | `terraform/admin/vault-k8s` | retired: #412 운영 제외, root/state 제거는 #478 |
 
 ## 기본 명령
 
@@ -49,7 +49,7 @@ terraform -chdir=terraform/envs/dev apply
 
 dev root module은 GCS backend를 사용합니다.
 
-- bucket: `autoresearch-dev-tfstate`
+- bucket: `autoresearch-503903-dev-tfstate`
 - prefix: `dev/`
 
 backend bucket과 GitHub Actions plan용 WIF/CI SA는 `terraform/bootstrap`에서 1회성으로 관리합니다. 자세한 내용은 [../docs/TERRAFORM_BOOTSTRAP.md](../docs/TERRAFORM_BOOTSTRAP.md)를 참고합니다.

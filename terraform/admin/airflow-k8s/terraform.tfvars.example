@@ -19,6 +19,14 @@ airflow_deployer_service_account_email = ""
 airflow_k8s_namespace       = "airflow"
 airflow_k8s_service_account = "airflow"
 
+# #427 KPO 배치 KSA. terraform/envs/dev의 동명 변수와 같은 값이어야 한다
+# (불일치 시 plan은 통과하고 배치 런타임 토큰 교환만 403).
+airflow_batch_k8s_service_account = "autoresearch-batch"
+
+# Optional. Empty value derives:
+# autoresearch-dev-airflow-batch@<project_id>.iam.gserviceaccount.com
+airflow_batch_gcp_service_account_email = ""
+
 # Keep real Google accounts in local terraform.tfvars only.
 installer_user_emails = [
   "teammate-1@example.com",

@@ -15,6 +15,17 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Check Agent Orchestration deployment contract
+        run: ruby scripts/check-agent-orchestration-timeout-contract.rb
+
+      - name: Run Agent Orchestration deployment contract self-test
+        run: ruby scripts/test-agent-orchestration-timeout-contract.rb
+
       - name: Run actionlint
         uses: raven-actions/actionlint@v2
         with:
