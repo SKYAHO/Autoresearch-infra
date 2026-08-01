@@ -113,8 +113,10 @@ Terraform apply로 값을 `false`로 되돌립니다. namespace, KSA, 결과 버
 검토하는 별도 이슈가 필요합니다.
 
 초기 dev 상한은 Job·Pod 각각 4개, 총 request 2 vCPU/4 GiB, 총 limit 4 vCPU/8 GiB
-입니다. 컨테이너 기본 request는 250m/256 MiB, 기본 limit은 1 vCPU/2 GiB이고, 단일
-컨테이너는 2 vCPU/4 GiB를 넘을 수 없습니다. 운영 검증 절차와 Job manifest 계약은
+입니다. `count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로,
+실제 제출 병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request는
+250m/256 MiB, 기본 limit은 1 vCPU/2 GiB이고, 단일 컨테이너는 2 vCPU/4 GiB를 넘을 수
+없습니다. 운영 검증 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
 따릅니다.
 

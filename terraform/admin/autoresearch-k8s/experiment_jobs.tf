@@ -102,6 +102,15 @@ resource "kubernetes_role_v1" "experiment_job_observer" {
     resources  = ["pods/log"]
     verbs      = ["get"]
   }
+
+  # ImagePullBackOff·FailedScheduling·Job Pod 생성 quota 초과의 상세 원인은 Event에
+  # 남는다. namespace 범위의 읽기 전용으로만 허용하며, API는 자기 실험 ID의
+  # involvedObject만 사용자 상태에 연결해야 한다.
+  rule {
+    api_groups = ["", "events.k8s.io"]
+    resources  = ["events"]
+    verbs      = ["get", "list", "watch"]
+  }
 }
 
 resource "kubernetes_role_binding_v1" "experiment_job_observer" {

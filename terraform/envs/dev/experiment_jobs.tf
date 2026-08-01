@@ -22,6 +22,8 @@ resource "google_storage_bucket" "experiment_results" {
     }
 
     condition {
+      # live·archived generation 모두 원래 생성 시점에서 30일 후 영구 삭제한다.
+      # 장기 복구용 버전 보관이 아니라 dev 실험 결과의 비용 상한이 목적이다.
       age = var.experiment_results_object_retention_days
     }
   }
@@ -49,8 +51,10 @@ resource "google_service_account_iam_member" "experiment_job_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
-# objectCreator는 새 결과 객체 생성만 허용한다. 재시도는 같은 경로를 덮어쓰지 않고
-# 새 attempt id prefix를 사용해야 하며, Job은 이전 결과를 읽거나 삭제할 수 없다.
+# objectCreator는 storage.objects.delete가 없어 기존 객체를 덮어쓸 수 없다. 버킷
+# versioning 여부와 별개로 실행 Job은 새 객체 생성만 가능하다. 앱은 create-if-absent
+# precondition과 새 attempt id prefix로 논리적 경로 중복도 차단해야 하며, Job은 이전
+# 결과를 읽거나 삭제할 수 없다.
 resource "google_storage_bucket_iam_member" "experiment_job_object_creator" {
   bucket = google_storage_bucket.experiment_results.name
   role   = "roles/storage.objectCreator"

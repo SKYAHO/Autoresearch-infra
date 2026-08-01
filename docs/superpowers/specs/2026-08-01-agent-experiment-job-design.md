@@ -112,7 +112,9 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
 
 - 요청 본문 전체를 환경변수나 로그에 넣지 않는다.
 - 큰 입력은 GCS URI 또는 API가 관리하는 DB 식별자로 전달한다.
-- 결과는 실험 ID가 포함된 GCS prefix에 기록한다.
+- 결과는 실험 ID와 시도 ID가 포함된 GCS prefix에 기록한다. Job GSA의
+  `roles/storage.objectCreator`에는 기존 객체를 덮어쓰는 데 필요한 삭제 권한이 없고,
+  API는 create-if-absent precondition으로 동일 prefix의 논리적 중복도 거부한다.
 - Job은 성공·실패를 Kubernetes Job 상태로 남기고, 애플리케이션 상태 API는
   `Job`/`Pod` 상태와 결과 URI를 결합해 표시한다.
 - 결과 파일에는 metric, 평가 기준, 데이터 버전, 실행 이미지 digest, source
@@ -180,7 +182,10 @@ MVP에서는 API에 Job 삭제 권한을 부여하지 않는다. 종료 Job은 T
 - Job 실패를 무조건 자동 재시도하지 않는다. 재시도 시 비용과 동일 실험 중복
   결과를 고려하고 `backoffLimit`으로 상한을 둔다.
 - 동일 실험 ID의 중복 제출은 API 계층에서 멱등성을 보장한다.
-- 종료 Job과 결과는 즉시 삭제하지 않고 TTL과 보존 정책을 적용한다.
+- 종료 Job은 TTL controller가 삭제할 때까지 `count/jobs.batch` quota를 계속 사용한다.
+  API는 이 기간의 quota 초과를 대기열/재시도 가능 상태로 기록하고, TTL controller가
+  Job 객체를 삭제한 뒤에만 새 Job을 제출한다. 결과 객체는 live·archived generation
+  모두 원래 생성 시점 기준 30일 후 삭제한다.
 - 결과 저장 후 Job을 정리해도 메타데이터와 결과 URI는 API DB에 남긴다.
 - 롤백은 새 Job 생성을 중지하고, 이전 manifest/image digest로 API·실험 실행
   계약을 되돌리는 방식으로 수행한다. 기존 namespace·GSA·버킷을 삭제하는
