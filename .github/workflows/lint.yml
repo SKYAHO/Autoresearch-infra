@@ -26,6 +26,9 @@ jobs:
       - name: Run Agent Orchestration deployment contract self-test
         run: ruby scripts/test-agent-orchestration-timeout-contract.rb
 
+      - name: Check oauth2-proxy email allowlist configuration
+        run: scripts/check-oauth-email-allowlist.sh
+
       - name: Run actionlint
         uses: raven-actions/actionlint@v2
         with:
