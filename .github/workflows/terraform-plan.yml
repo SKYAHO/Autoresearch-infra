@@ -34,12 +34,12 @@ jobs:
           terraform_wrapper: false
 
       # backend 없이 init (fmt/validate 용)
-      - run: terraform -chdir=terraform/envs/dev init -backend=false
+      - run: scripts/terraform-env --environment dev --root terraform/envs/dev init -backend=false
       - run: terraform -chdir=terraform/envs/dev fmt -recursive -check -no-color
-      - run: terraform -chdir=terraform/envs/dev validate -no-color
+      - run: scripts/terraform-env --environment dev --root terraform/envs/dev validate -no-color
 
       # backend 포함 init (plan 용, state 참조)
-      - run: terraform -chdir=terraform/envs/dev init -reconfigure -no-color
+      - run: scripts/terraform-env --environment dev --root terraform/envs/dev init -reconfigure -no-color
 
       - name: terraform plan
         id: plan
@@ -59,7 +59,7 @@ jobs:
         # 요약(속성 diff 라인 제외 = 값 노출 없음)을 추출해 둔다.
         run: |
           set -o pipefail
-          terraform -chdir=terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
+          scripts/terraform-env --environment dev --root terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
           # allowlist: '# <addr> will be/must be/has moved to ...' 리소스
           # 주소 헤더와 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는
           # 포함하지 않는다. 'has moved to'/'(moved from ...)'는 #468에서

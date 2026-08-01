@@ -191,9 +191,9 @@ jobs:
           for d in $ROOTS; do
             root="$(basename "$d")"
             echo "::group::plan $root"
-            terraform -chdir="$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; grep -iE "error" "$d/step.txt" | sed -E "$mask" | head -20; exit 1; }
+            scripts/terraform-env --environment dev --root "$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; grep -iE "error" "$d/step.txt" | sed -E "$mask" | head -20; exit 1; }
             set +e
-            terraform -chdir="$d" plan -input=false -no-color -out=tfplan.bin > "$d/plan.txt" 2>&1
+            scripts/terraform-env --environment dev --root "$d" plan -input=false -no-color -out=tfplan.bin > "$d/plan.txt" 2>&1
             rc=$?
             set -e
             {
@@ -287,9 +287,9 @@ jobs:
           for d in $ROOTS; do
             root="$(basename "$d")"
             echo "::group::plan $root"
-            terraform -chdir="$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; grep -iE "error" "$d/step.txt" | sed -E "$mask" | head -20; exit 1; }
+            scripts/terraform-env --environment dev --root "$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; grep -iE "error" "$d/step.txt" | sed -E "$mask" | head -20; exit 1; }
             set +e
-            terraform -chdir="$d" plan -input=false -no-color -out=tfplan.bin > "$d/plan.txt" 2>&1
+            scripts/terraform-env --environment dev --root "$d" plan -input=false -no-color -out=tfplan.bin > "$d/plan.txt" 2>&1
             rc=$?
             set -e
             {
@@ -340,10 +340,10 @@ jobs:
           for d in $ROOTS; do
             root="$(basename "$d")"
             echo "::group::apply $root"
-            terraform -chdir="$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; exit 1; }
+            scripts/terraform-env --environment dev --root "$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; exit 1; }
             gcloud storage cp "$PLAN_PREFIX/$root/${{ github.run_id }}.tfplan" "$d/tfplan.bin"
             set +e
-            terraform -chdir="$d" apply -input=false -no-color tfplan.bin > "$d/apply.txt" 2>&1
+            scripts/terraform-env --environment dev --root "$d" apply -input=false -no-color tfplan.bin > "$d/apply.txt" 2>&1
             rc=$?
             set -e
             if [ "$rc" -ne 0 ]; then
@@ -374,10 +374,10 @@ jobs:
           for d in $ROOTS; do
             root="$(basename "$d")"
             echo "::group::apply $root"
-            terraform -chdir="$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; exit 1; }
+            scripts/terraform-env --environment dev --root "$d" init -input=false -no-color > "$d/step.txt" 2>&1 || { echo "::error::$root init 실패"; exit 1; }
             gcloud storage cp "$PLAN_PREFIX/$root/${{ github.run_id }}.tfplan" "$d/tfplan.bin"
             set +e
-            terraform -chdir="$d" apply -input=false -no-color tfplan.bin > "$d/apply.txt" 2>&1
+            scripts/terraform-env --environment dev --root "$d" apply -input=false -no-color tfplan.bin > "$d/apply.txt" 2>&1
             rc=$?
             set -e
             if [ "$rc" -ne 0 ]; then

@@ -33,7 +33,7 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - run: terraform -chdir=terraform/envs/dev init -reconfigure -no-color
+      - run: scripts/terraform-env --environment dev --root terraform/envs/dev init -reconfigure -no-color
 
       - name: terraform plan (drift check)
         id: plan
@@ -52,7 +52,7 @@ jobs:
         # 이슈에는 리소스 주소·요약만 올리므로 안전한 요약을 추출해 둔다.
         run: |
           set +e
-          terraform -chdir=terraform/envs/dev plan -no-color -input=false -detailed-exitcode > /tmp/plan.out 2>&1
+          scripts/terraform-env --environment dev --root terraform/envs/dev plan -no-color -input=false -detailed-exitcode > /tmp/plan.out 2>&1
           code=$?
           echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
           # allowlist: '# <addr> will be/must be/has moved to ...' 리소스
