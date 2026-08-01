@@ -4,7 +4,7 @@
 # apply에서 수행한다.
 
 locals {
-  rerank_loadtest_runner_github_gsa_email = var.rerank_loadtest_runner_github_gsa_email != "" ? var.rerank_loadtest_runner_github_gsa_email : "${var.resource_prefix}-rl-runner@${var.project_id}.iam.gserviceaccount.com"
+  rerank_loadtest_runner_github_gsa_email          = var.rerank_loadtest_runner_github_gsa_email != "" ? var.rerank_loadtest_runner_github_gsa_email : "${var.resource_prefix}-rl-runner@${var.project_id}.iam.gserviceaccount.com"
   rerank_loadtest_snapshot_reader_github_gsa_email = var.rerank_loadtest_snapshot_reader_github_gsa_email != "" ? var.rerank_loadtest_snapshot_reader_github_gsa_email : "${var.resource_prefix}-rl-snapshot@${var.project_id}.iam.gserviceaccount.com"
 }
 
@@ -28,8 +28,8 @@ resource "kubernetes_namespace_v1" "rerank_loadtest" {
   metadata {
     name = var.loadtest_namespace
     labels = {
-      "app.kubernetes.io/name"              = "rerank-loadtest"
-      "app.kubernetes.io/part-of"           = "benchmarking"
+      "app.kubernetes.io/name"             = "rerank-loadtest"
+      "app.kubernetes.io/part-of"          = "benchmarking"
       "pod-security.kubernetes.io/enforce" = "baseline"
       "pod-security.kubernetes.io/audit"   = "baseline"
       "pod-security.kubernetes.io/warn"    = "baseline"

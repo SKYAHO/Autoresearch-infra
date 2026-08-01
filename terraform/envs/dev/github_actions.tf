@@ -16,9 +16,9 @@ locals {
   # `-airflow-cd`로 줄인 것과 같은 방식으로 역할어를 생략하고, "Feast apply"
   # 용도는 display_name/description에 남긴다. 이 제한은 provider가 plan 단계에서
   # 검증하므로 validate만으로는 걸러지지 않는다.
-  feast_apply_dev_sa_name  = "${local.resource_prefix}-feast-dev"
-  feast_apply_prod_sa_name = "${local.resource_prefix}-feast-prod"
-  rerank_loadtest_runner_sa_name = "${local.resource_prefix}-rl-runner"
+  feast_apply_dev_sa_name                 = "${local.resource_prefix}-feast-dev"
+  feast_apply_prod_sa_name                = "${local.resource_prefix}-feast-prod"
+  rerank_loadtest_runner_sa_name          = "${local.resource_prefix}-rl-runner"
   rerank_loadtest_snapshot_reader_sa_name = "${local.resource_prefix}-rl-snapshot"
 }
 
