@@ -30,8 +30,8 @@
 |---|---|---|---|---|---|---|
 | ArgoCD | 내장 OIDC + RBAC | `argocd/argocd-google-oidc`: `clientId`, `clientSecret` | `terraform.tfvars`의 admin/readonly 이메일 → Terraform이 `argocd-rbac-cm` policy로 렌더 | `argocd-k8s` 운영자, IAM 승인자 | `https://localhost:8443/auth/callback` / `argocd-server` port-forward | `deployment/argo-cd-argocd-server` rollout |
 | Airflow | Flask-AppBuilder native OAuth | `airflow/airflow-web-oauth`: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_ALLOWED_EMAILS` | 운영자 주입 K8s Secret의 쉼표 구분 목록. webserver 시작 시 빈 목록·형식 오류를 거부 | Airflow 배포 운영자, 인프라 [#475](https://github.com/SKYAHO/Autoresearch-infra/issues/475) 절차. Airflow [#207](https://github.com/SKYAHO/Autoresearch-airflow/issues/207) / [#208](https://github.com/SKYAHO/Autoresearch-airflow/pull/208)에서 적용·검증 완료 | `http://localhost:8080/oauth-authorized/google`, `http://localhost:8080/auth/oauth-authorized/google` / Bastion 터널 | `deployment/airflow-webserver` rollout |
-| MLflow | oauth2-proxy | `mlflow/mlflow-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록 | `mlflow-k8s` 운영자 | `http://localhost:4180/oauth2/callback` / proxy port-forward 또는 내부 LB | `deployment/mlflow-oauth-proxy` rollout |
-| Kibana | oauth2-proxy + Kibana basic 인증(`elastic` 사용자) 이중 로그인 | `elastic/kibana-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록 | `elastic-k8s` 운영자 | `http://localhost:4181/oauth2/callback` / proxy port-forward | `deployment/kibana-oauth-proxy` rollout |
+| MLflow | oauth2-proxy | `mlflow/mlflow-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록. 단, 현재 `--email-domain=*`가 파일 판정을 덮어쓰므로 파일만으로 allowlist가 되지 않음 | `mlflow-k8s` 운영자 | `http://localhost:4180/oauth2/callback` / proxy port-forward 또는 내부 LB | `deployment/mlflow-oauth-proxy` rollout |
+| Kibana | oauth2-proxy + Kibana basic 인증(`elastic` 사용자) 이중 로그인 | `elastic/kibana-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록. 단, 현재 `--email-domain=*`가 파일 판정을 덮어쓰므로 파일만으로 allowlist가 되지 않음 | `elastic-k8s` 운영자 | `http://localhost:4181/oauth2/callback` / proxy port-forward | `deployment/kibana-oauth-proxy` rollout |
 | Grafana | Grafana native OAuth | `monitoring/grafana-google-oauth`: `GF_AUTH_GOOGLE_CLIENT_ID`, `GF_AUTH_GOOGLE_CLIENT_SECRET` | 별도 이메일 파일 없음. `allow_sign_up=false`와 사전 생성 Grafana 계정의 이메일 매칭으로 제한 | 모니터링 운영자, Grafana 관리자 | `http://localhost:3000/login/google` / Grafana port-forward | `deployment/kube-prometheus-stack-grafana` rollout |
 
 세부 주입 명령과 서비스별 소유 root는 다음 문서를 정본으로 참조한다.
@@ -61,6 +61,12 @@
 | Grafana | `autoresearch-dev-grafana-oauth-client-id` / `autoresearch-dev-grafana-oauth-client-secret` |
 | Kibana | `autoresearch-dev-kibana-oauth-client-id` / `autoresearch-dev-kibana-oauth-client-secret` |
 | ArgoCD | `argocd-google-oidc-client-id` / `argocd-google-oidc-client-secret` |
+
+Airflow·MLflow·Grafana·Kibana의 client Secret Manager 정본은 Terraform이
+관리하며 `prevent_destroy = true`가 설정되어 있다. ArgoCD의 두 OAuth secret은
+Terraform 리소스가 없는 운영자 수동 생성 정본이므로 같은 보호 장치가 없다.
+ArgoCD secret을 삭제하거나 이름을 바꾸면 자동 복구되지 않으므로, rotation 전
+백업과 break-glass 경로를 먼저 확인한다.
 
 Secret Manager 자동 동기화(External Secrets Operator/CSI Driver)는 이 런북의
 범위가 아니다. 도입하려면 workload별 IAM, 동기화 지연, rotation trigger, 삭제
@@ -101,10 +107,12 @@ Secret Manager 자동 동기화(External Secrets Operator/CSI Driver)는 이 런
    - 기존 workload: ArgoCD sync, Airflow webserver, MLflow/Kibana proxy,
      Grafana health 확인
 6. [`verify-oauth-clients.sh`](../scripts/verify-oauth-clients.sh)의 결과를 판정한다.
-   `ERR`가 하나라도 있으면 exit 1로 실패이며, `WARN`만 있어 exit 0인 경우도
-   Secret Manager 정본이 없는 상태이므로 이전 client version을 폐기하면 안
-   된다. `WARN` 없이 `결과: 전부 통과`가 나오고 로그인 smoke test까지 통과한
-   경우에만 새 client 세대가 검증된 것으로 본다.
+   이 스크립트는 대상 서비스 하나가 아니라 5개 서비스를 모두 검사한다. 따라서
+   갱신 대상 서비스에 `ERR` 또는 `WARN`이 있으면 해당 rotation은 실패·보류하고,
+   다른 서비스의 `WARN`은 별도 정본 등록 작업으로 추적한다. 스크립트가 `WARN`만
+   출력해도 exit 0일 수 있으므로 exit code만으로 성공 판정하지 않는다. 대상
+   서비스가 `ERR`·`WARN` 없이 `OK`이고 로그인 smoke test까지 통과한 경우에만
+   새 client 세대가 검증된 것으로 본다.
 7. 새 client 세대의 비노출 검증을 마친 뒤에만 이전 version을 폐기한다.
 
 ID만 또는 secret만 갱신하면 `invalid_client`가 발생할 수 있다. 두 version의
@@ -122,9 +130,16 @@ allowlist 변경은 client rotation과 별도 작업으로 취급한다.
 3. 변경 전후 payload를 출력하지 않고 key 존재와 값의 비어 있지 않음을
    비노출 방식으로 확인한다. MLflow/Kibana에서 `authenticated-emails` key가
    누락되면 Secret projected volume을 만들 수 없어 Pod가 정상 기동하지 못하고
-   `FailedMount` 이벤트가 발생한다. key는 있지만 파일이 비어 있으면
-   `--email-domain=*`가 있어도 전체 허용으로 바뀌지 않으며, 허용 이메일이
-   0개인 allowlist로 동작해 정상 계정도 거부된다.
+   `FailedMount` 이벤트가 발생한다. 반대로 v7.7.1의 oauth2-proxy는
+   `--email-domain=*`를 지정하면 `authenticated-emails-file`의 내용과 관계없이
+   이메일 검증을 허용하므로, key가 비어 있거나 값이 채워져 있어도 이 파일만으로
+   접근 제한이 되지 않는다. 따라서 제거 계정이 실제로 거부되는지 반드시 smoke
+   test로 확인하고, 통과하면 안 되는 계정이 통과할 경우 allowlist 변경을 완료로
+   보지 않는다. 이 런북은 해당 런타임 인자 수정까지 포함하지 않으며, 별도 런타임
+   이슈에서 `--email-domain=*` 제거 또는 실제 허용 도메인 설정을 결정해야 한다.
+   이 동작의 근거는 oauth2-proxy v7.7.1의
+   [`validator.go`](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.7.1/validator.go)
+   구현이다.
 4. 해당 서비스만 rollout한다. 다른 서비스의 Secret을 함께 덮어쓰지 않는다.
 5. 허용 계정 로그인과 제거 계정 거부를 확인한다.
 6. 기존 세션은 즉시 폐기되지 않을 수 있음을 기록한다. 즉시 차단이 필요하면
@@ -162,5 +177,5 @@ Secret 변경만으로 Terraform state를 직접 조작하거나 ArgoCD prune을
 - [ ] rollout status가 성공했다.
 - [ ] 허용 계정 로그인과 미허용 계정 거부를 확인했다.
 - [ ] break-glass 계정과 롤백 version을 확인했다.
-- [ ] `verify-oauth-clients.sh`가 WARN 없이 `결과: 전부 통과`를 출력했다.
+- [ ] `verify-oauth-clients.sh` 출력에서 대상 서비스에 `ERR`·`WARN`이 없고, 다른 서비스의 `WARN`은 별도 추적했다.
 - [ ] 변경 대상 서비스 외의 Secret과 workload를 변경하지 않았다.
