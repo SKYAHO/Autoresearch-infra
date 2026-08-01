@@ -43,8 +43,11 @@ rm -f "$env_file"; trap - EXIT
 
 ## operator secret 주입 — mlflow-oauth (#232 UI 인증)
 
-UI 앞단 OAuth2-proxy는 Google OAuth client 자격·cookie 비밀·허용 이메일 목록이
-필요하다. 모두 공개 저장소에 두지 않고 K8s Secret `mlflow-oauth`로 주입한다.
+UI 앞단 OAuth2-proxy는 Google OAuth client 자격·cookie 비밀·`authenticated-emails`
+파일이 필요하다. 모두 공개 저장소에 두지 않고 K8s Secret `mlflow-oauth`로
+주입한다. 현재 `--email-domain=*`가 파일 판정을 덮어쓰므로 이 파일만으로
+접근 제한이 되지 않는 상태는 infra [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)의
+후속 작업으로 수정한다.
 값이 명령행·히스토리에 남지 않도록 파일 기반(`--from-file`)으로 만든다.
 
 선행: GCP 콘솔에서 OAuth client(웹) 생성, redirect URI

@@ -79,7 +79,8 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 
 - 사용자는 Kibana(5601)가 아니라 **oauth2-proxy Service(4180)** 를 로컬 **4181**
   포트로 port-forward 한다(MLflow의 로컬 4180과 충돌 방지). proxy가 Google 로그인 +
-  허용 이메일로 인증한 뒤 Kibana로 프록시하고, **Kibana `/login`에서 다시** `elastic`
+  현재 `--email-domain=*`로 `authenticated-emails` 파일만으로는 제한되지 않는다(#488).
+  **Kibana `/login`에서 다시** `elastic`
   (또는 별도 사용자)로 로그인한다. http port-forward라 세션 쿠키는
   `xpack.security.secureCookies=false`로 둔다.
 - `elastic` 비밀번호는 `autoresearch-es-elastic-user` Secret에서 회수한다(문서/PR/

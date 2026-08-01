@@ -1,5 +1,6 @@
-# #293 Kibana UI 앞단 인증 게이트(oauth2-proxy). Google 로그인 + 허용 이메일
-# 목록으로 접근 제한. 사용자는 Kibana(5601)가 아니라 이 proxy(4180)로
+# #293 Kibana UI 앞단 인증 게이트(oauth2-proxy). Google 로그인 + authenticated-emails
+# 파일 계약. 현재 --email-domain=*가 파일 판정을 덮어써 목록만으로 제한되지 않는다(#488).
+# 사용자는 Kibana(5601)가 아니라 이 proxy(4180)로
 # port-forward 하고, proxy가 인증 후 Kibana로 프록시한다. Kibana는 anonymous
 # access(kibana.tf/elasticsearch.tf)로 재로그인 없이 자동 로그인된다.
 #

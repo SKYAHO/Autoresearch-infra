@@ -22,7 +22,7 @@ resource "kubernetes_manifest" "kibana" {
       # #325 Kibana anonymous access는 폐기했다. Kibana 9.2에서
       # elasticsearch_anonymous_user credential이 deprecated되고 username/password
       # (fileRealm+keystore) 대체도 안정적으로 동작하지 않아(#323 디버깅), 접근 통제는
-      # 앞단 oauth2-proxy(Google 로그인 + 허용 이메일)가 맡고 Kibana는 기본 basic
+      # 앞단 oauth2-proxy(Google 로그인 + authenticated-emails 계약)가 맡고 Kibana는 기본 basic
       # 인증(`elastic` 등 실제 사용자)으로 로그인한다(이중 로그인이나 신뢰도 우선).
       # publicBaseUrl은 proxy 뒤 접근 URL(port-forward라 localhost:4181), http
       # 접속이라 세션 쿠키는 Secure로 만들지 않는다.

@@ -274,8 +274,9 @@ gcloud compute ssh autoresearch-dev-bastion \
 http://localhost:4180
 ```
 
-sign-in 페이지에서 Google 로그인하면 허용 이메일 목록에 있는 계정만 통과한다
-(목록 밖 계정은 거부). redirect URI가 `http://localhost:4180/oauth2/callback`
+sign-in 페이지에서 Google 로그인한다. 현재 `--email-domain=*`가 파일 판정을
+덮어써 allowlist 파일만으로는 목록 밖 계정이 거부되지 않을 수 있다(#488).
+redirect URI가 `http://localhost:4180/oauth2/callback`
 기준이라 로그인은 `localhost:4180` 경로에서만 정상 동작한다. GKE 내부 워크로드
 (모델 학습 등)는 인증 없이 `http://mlflow.mlflow:5000`을 tracking URI로 쓴다.
 
@@ -326,7 +327,8 @@ Kibana도 인터넷에 공개하지 않는다. Airflow/앱 로그 검색이 필�
 kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 ```
 
-브라우저에서 `http://localhost:4181` → Google 로그인(허용 이메일 목록, #294).
+브라우저에서 `http://localhost:4181` → Google 로그인(`authenticated-emails` 계약,
+현재 `--email-domain=*`로 파일만으로는 제한되지 않음, #488).
 이것이 단일 표준 경로다. `svc/autoresearch-kb-http 5601` 직결 + elastic 계정
 로그인은 break-glass(운영자 전용)로만 쓴다(#394부터 Kibana 자체 TLS 비활성 — http).
 검색 방법과 KQL 예시는
