@@ -46,7 +46,7 @@
 
 | 구분 | Secret Manager | Kubernetes Secret | 비고 |
 |---|---|---|---|
-| client ID/secret | 서비스별 `*-oauth-client-id`/`*-oauth-client-secret` payload 정본 | 제품별 key 이름으로 변환한 실행 사본 | Secret Manager metadata와 payload 주입은 Terraform 밖에서 수행 |
+| client ID/secret | 아래 서비스별 표에 명시한 Secret Manager payload 정본 | 제품별 key 이름으로 변환한 실행 사본 | Secret Manager metadata와 payload 주입은 Terraform 밖에서 수행 |
 | oauth2-proxy cookie | 보통 저장하지 않음 | `cookie-secret` | 변경 시 기존 proxy 세션이 무효화될 수 있음 |
 | MLflow/Kibana allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `authenticated-emails` 파일 | 현재 운영 계약 유지. 변경 시 해당 Secret만 갱신 |
 | Airflow allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `GOOGLE_ALLOWED_EMAILS` | #475/#208에서 운영자 주입으로 전환 |
