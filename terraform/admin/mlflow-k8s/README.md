@@ -83,7 +83,8 @@ kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' 2>
   | base64 -d > "$d/cookie-secret" || true
 test -s "$d/cookie-secret" || python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
 
-# 허용 이메일(한 줄에 하나) — 목록 밖 Google 계정은 거부된다
+# 허용 이메일(한 줄에 하나). 주의: 현재 `--email-domain=*` 설정으로 이 파일만으로는
+# 목록 밖 Google 계정이 거부되지 않는다. 인증 제한 수정은 infra #488을 따른다.
 cat > "$d/authenticated-emails" <<'EMAILS'
 someone@example.com
 EMAILS

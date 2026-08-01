@@ -71,8 +71,11 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 
 팀원이 Gmail로 접근을 통제한다. ECK Basic 라이선스라 네이티브 OIDC(Platinum)를
 못 쓰고, Kibana 9.2에서 anonymous 자동 로그인이 안정적으로 동작하지 않아(#323),
-**oauth2-proxy(Google 로그인 + 허용 이메일)로 접근을 통제하고 Kibana는 기본 basic
+**oauth2-proxy(Google 로그인 + `authenticated-emails` 파일)를 앞단에 두고 Kibana는 기본 basic
 인증(`elastic` 등 실제 사용자)으로 로그인**한다(이중 로그인이나 신뢰도 우선).
+단, 현재 `--email-domain=*`가 파일 판정을 덮어써 파일만으로는 접근 제한이 되지
+않는다. 미허용 계정 차단은 infra [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)
+해결 후 검증한다.
 
 - 사용자는 Kibana(5601)가 아니라 **oauth2-proxy Service(4180)** 를 로컬 **4181**
   포트로 port-forward 한다(MLflow의 로컬 4180과 충돌 방지). proxy가 Google 로그인 +

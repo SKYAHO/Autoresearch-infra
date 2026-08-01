@@ -36,6 +36,11 @@
 
 세부 주입 명령과 서비스별 소유 root는 다음 문서를 정본으로 참조한다.
 
+Kibana callback URI는 표의 기본값을 무조건 고정한 값이 아니다. 실제 값은
+`terraform/admin/elastic-k8s/variables.tf`의 `kibana_public_base_url`에서
+파생되며, 로컬 `tfvars`로 덮어쓸 수 있다. Google OAuth 콘솔과 운영 검증에서는
+해당 환경의 변수값에 `/oauth2/callback`을 붙인 값을 사용한다.
+
 - ArgoCD: [`terraform/admin/argocd-k8s/README.md`](../terraform/admin/argocd-k8s/README.md)
 - Airflow: `SKYAHO/Autoresearch-airflow`의 `docs/gke-helm-gitsync.md`
 - MLflow: [`terraform/admin/mlflow-k8s/README.md`](../terraform/admin/mlflow-k8s/README.md)
@@ -48,7 +53,7 @@
 |---|---|---|---|
 | client ID/secret | 아래 서비스별 표에 명시한 Secret Manager payload 정본 | 제품별 key 이름으로 변환한 실행 사본 | Secret Manager metadata와 payload 주입은 Terraform 밖에서 수행 |
 | oauth2-proxy cookie | 보통 저장하지 않음 | `cookie-secret` | 값을 교체하면 기존 proxy session cookie를 복호화할 수 없어 전원 재로그인이 필요함. client만 교체할 때는 기존 값을 보존 |
-| MLflow/Kibana allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `authenticated-emails` 파일 | 현재 운영 계약 유지. 변경 시 해당 Secret만 갱신 |
+| MLflow/Kibana allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `authenticated-emails` 파일 | Secret key 계약은 유지하되, 현재 `--email-domain=*` 동작으로 파일만으로 접근 제한이 되지 않는 결함은 [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)에서 수정 |
 | Airflow allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `GOOGLE_ALLOWED_EMAILS` | 인프라 [#475](https://github.com/SKYAHO/Autoresearch-infra/issues/475) 및 Airflow [#207](https://github.com/SKYAHO/Autoresearch-airflow/issues/207)·[PR #208](https://github.com/SKYAHO/Autoresearch-airflow/pull/208)에서 운영자 주입으로 전환·적용 완료 |
 | ArgoCD/Grafana access control | 각각 Terraform 이메일 또는 Grafana DB 계정 | ConfigMap/DB 기반 | oauth2-proxy allowlist key로 변경하지 않음 |
 
@@ -78,8 +83,10 @@ Secret Manager 자동 동기화(External Secrets Operator/CSI Driver)는 이 런
   oauth2-proxy의 `authenticated-emails` 파일로 대체하지 않는다.
 - Airflow는 Flask-AppBuilder의 user registration·role mapping을 사용하므로
   webserver Python 설정에서 allowlist를 검증한다.
-- MLflow와 Kibana는 내부 서비스 앞단의 oauth2-proxy가 공통 파일 기반
-  allowlist를 이미 지원하므로 현재 Secret 계약을 유지한다.
+- MLflow와 Kibana는 내부 서비스 앞단의 oauth2-proxy Secret key 계약을 유지한다.
+  다만 현재 `--email-domain=*`가 파일 판정을 덮어쓰므로 실제 allowlist 제한은
+  [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488) 해결 전까지
+  성립하지 않는다.
 - Grafana는 `allow_sign_up=false`와 사전 생성 계정의 이메일 매칭을 사용한다.
   별도 allowlist 파일을 추가하면 Grafana DB 계정 정책과 이중 정본이 생긴다.
 
@@ -145,6 +152,10 @@ allowlist 변경은 client rotation과 별도 작업으로 취급한다.
 6. 기존 세션은 즉시 폐기되지 않을 수 있음을 기록한다. 즉시 차단이 필요하면
    서비스별 세션/cookie 무효화 절차를 별도로 수행한다.
 
+현재 MLflow/Kibana의 “제거 계정 거부” 검증은 [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)
+해결 전에는 통과 기준으로 사용할 수 없다. 이 두 서비스의 allowlist 변경은
+`--email-domain=*`가 제거되고 미허용 계정 거부가 확인된 뒤에만 완료로 표시한다.
+
 MLflow와 Grafana는 ArgoCD 자동 sync 대상이지만, 현재 `prune=false`,
 `selfHeal=false`이다. 운영자가 실행한 `kubectl rollout restart`는 자동 sync가
 되었다고 되돌려지지 않는다. 또한 operator가 주입한 live Kubernetes Secret은
@@ -165,13 +176,18 @@ Git 매니페스트의 관리 대상이 아니므로, sync가 Secret 값을 과�
 
 롤백 시에는 이전 client ID/secret의 쌍과 이전 allowlist를 함께 복원한다. OAuth
 Secret 변경만으로 Terraform state를 직접 조작하거나 ArgoCD prune을 실행하지
-않는다.
+않는다. Secret Manager 정본을 이전 값으로 되돌릴 때는 이전 payload를 안전한
+파일에서 `gcloud secrets versions add <secret-id> --data-file=<previous-file>`로
+새 version으로 다시 등록해 `latest`가 이전 세대가 되게 한다. 그 다음 K8s
+Secret을 같은 세대로 복원하고 rollout한 뒤 `verify-oauth-clients.sh`를 실행한다.
+실패한 version은 검증과 복구가 끝난 뒤에만 disable하며, 기존 version을 먼저
+삭제하지 않는다.
 
 ## 검증 체크리스트
 
 - [ ] 실제 payload가 Git, PR, 로그, Terraform state에 포함되지 않았다.
 - [ ] Secret key 이름이 해당 제품의 현재 계약과 일치한다.
-- [ ] allowlist key가 존재하고 비어 있지 않으며, 허용 계정 로그인과 제거 계정 거부를 확인했다. (`verify-oauth-clients.sh`는 allowlist 값의 존재·내용을 검사하지 않음)
+- [ ] allowlist key가 존재하고 비어 있지 않으며, 허용 계정 로그인과 제거 계정 거부를 확인했다. (`verify-oauth-clients.sh`는 allowlist 값의 존재·내용을 검사하지 않음. MLflow/Kibana는 #488 해결 전까지 이 항목을 완료 처리하지 않음)
 - [ ] client ID와 secret이 같은 세대의 쌍이다.
 - [ ] redirect URI와 port-forward/Bastion 경로가 기존 값과 일치한다.
 - [ ] rollout status가 성공했다.

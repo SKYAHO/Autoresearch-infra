@@ -32,7 +32,9 @@ spec:
             # 터널은 DNS:4180으로 연결하고 브라우저 Host는 localhost라 redirect 불변
             # (콘솔 재등록 불필요). Google OAuth callback.
             - --redirect-url=http://localhost:4180/oauth2/callback
-            # 실제 제한은 authenticated-emails-file(허용 목록)로 한다.
+            # 주의: v7.7.1에서는 --email-domain=*가 파일 판정을 덮어쓴다(#488).
+            # authenticated-emails 파일만으로 접근 제한이 되지 않으므로 런타임
+            # 수정 전까지 이 설정을 allowlist로 간주하지 않는다.
             - --email-domain=*
             - --authenticated-emails-file=/etc/oauth2-proxy/authenticated-emails
             # Airflow식 sign-in 페이지를 유지(바로 리다이렉트 안 함).

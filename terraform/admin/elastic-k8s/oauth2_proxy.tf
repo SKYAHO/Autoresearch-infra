@@ -57,7 +57,9 @@ resource "kubernetes_deployment_v1" "kibana_oauth_proxy" {
             "--upstream=http://autoresearch-kb-http.${kubernetes_namespace_v1.elastic.metadata[0].name}.svc:5601",
             # port-forward 시 브라우저는 localhost:4181. Google OAuth callback.
             "--redirect-url=${var.kibana_public_base_url}/oauth2/callback",
-            # 실제 제한은 authenticated-emails-file(허용 목록)로 한다.
+            # 주의: v7.7.1에서는 --email-domain=*가 파일 판정을 덮어쓴다(#488).
+            # authenticated-emails 파일만으로 접근 제한이 되지 않으므로 런타임
+            # 수정 전까지 이 설정을 allowlist로 간주하지 않는다.
             "--email-domain=*",
             "--authenticated-emails-file=/etc/oauth2-proxy/authenticated-emails",
             # sign-in 페이지 유지(바로 리다이렉트 안 함).

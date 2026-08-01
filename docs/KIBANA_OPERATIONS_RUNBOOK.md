@@ -12,7 +12,10 @@ Kibana는 인터넷에 공개하지 않는다. 접근은 kubectl port-forward만
 
 **(A) Google(Gmail) 접근 통제 + Kibana basic 로그인 — 기본(#325).** 앞단
 oauth2-proxy Service(4180)를 로컬 4181로 접속한다(MLflow 로컬 4180과 충돌 방지).
-허용 이메일만 proxy를 통과하고, **Kibana `/login`에서 다시 `elastic`(또는 별도
+`authenticated-emails` 파일을 proxy에 주입하지만, 현재 `--email-domain=*`가
+파일 판정을 덮어써 미허용 Google 계정도 통과할 수 있다. 미허용 계정 차단은
+infra [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488) 해결 후
+검증한다. **Kibana `/login`에서 다시 `elastic`(또는 별도
 사용자)로 로그인**한다. Kibana anonymous 자동 로그인은 9.2 호환성 문제로 폐기했다
 (#323). 로컬 HTTP port-forward라 Kibana secure cookie는 비활성이다. `elastic` 비번은
 `autoresearch-es-elastic-user` Secret에서 회수(문서/PR/채팅 미기재).

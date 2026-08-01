@@ -17,7 +17,7 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 | backend | Cloud SQL `autoresearch-dev-pg`, DB `mlflow`, user `mlflow`(private IP) |
 | artifact | GCS `autoresearch-503903-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
 | Service | `mlflow.mlflow:5000`(ClusterIP, **내부 전용**) |
-| UI 인증(#232) | 앞단 **OAuth2-proxy**(`mlflow-oauth-proxy:4180`), Google 로그인 + 허용 이메일 목록. Secret `mlflow-oauth` |
+| UI 인증(#232) | 앞단 **OAuth2-proxy**(`mlflow-oauth-proxy:4180`), Google 로그인 + `authenticated-emails` 파일. 단, 현재 `--email-domain=*`로 파일만으로는 접근 제한이 되지 않음([#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)). Secret `mlflow-oauth` |
 | 시크릿 | DB 비번=Secret Manager `autoresearch-dev-mlflow-db-password`, pod 주입=K8s Secret `mlflow-db` |
 
 책임 경계: 이미지·런타임은 앱 저장소(`SKYAHO/Autoresearch` `deploy/mlflow`), GCP
@@ -26,8 +26,10 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 ## 접속 (OAuth2-proxy 인증, #232)
 
 UI/API는 ClusterIP라 외부 노출이 없다. 접근은 **OAuth2-proxy(4180)로 port-forward**
-한다. proxy가 Google 로그인 + 허용 이메일 목록으로 인증한 뒤 MLflow로 프록시한다.
-목록 밖 Google 계정은 거부된다("정해진 계정만").
+한다. proxy가 Google 로그인 뒤 MLflow로 프록시한다. 현재 `--email-domain=*`가
+파일 판정을 덮어쓰므로 목록 밖 Google 계정도 통과할 수 있으며, 미허용 계정
+거부 보장은 infra [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)
+해결 전까지 성립하지 않는다.
 
 접속 경로는 두 가지다(둘 다 브라우저는 `http://localhost:4180`).
 
