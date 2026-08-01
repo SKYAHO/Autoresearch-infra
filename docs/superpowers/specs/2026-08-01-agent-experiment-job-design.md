@@ -3,7 +3,7 @@
 ## 상태
 
 - 관련 이슈: [#484](https://github.com/SKYAHO/Autoresearch-infra/issues/484)
-- 상태: 설계 승인 후 구현 계획 작성 전
+- 상태: 보수 검토 완료, Terraform 실행 경계 구현 중
 - 대상 환경: GCP dev / GKE `autoresearch-dev-gke`
 - 작성 언어: 한국어
 

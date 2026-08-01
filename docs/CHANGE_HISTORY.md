@@ -3,6 +3,22 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-01: Auto Research 실험별 Kubernetes Job 실행 경계 (#484)
+
+- 기존 `autoresearch` namespace와 분리한 `autoresearch-experiments` namespace를
+  Terraform으로 정의했다.
+- 실험 Job은 결과 전용 GCS 버킷에 `roles/storage.objectCreator`만 갖는 별도 KSA/GSA
+  Workload Identity를 사용한다. Kubernetes RoleBinding, Secret Manager, Cloud SQL,
+  Redis 권한은 부여하지 않는다.
+- namespace에는 Pod Security `restricted`, ResourceQuota, LimitRange, ingress
+  deny-all과 DNS·GKE metadata·Private Google APIs HTTPS만 허용하는 egress 정책을
+  적용한다. 외부 HTTPS, Cloud SQL, Redis, MLflow는 기본 차단한다.
+- Agent Orchestration API는 기본적으로 Job·Pod·로그 관찰만 가능하다. Job `create`
+  권한은 고정 템플릿·허용 image digest·admission 검증과 별도 승인 전까지
+  `enable_experiment_job_creation=false`로 유지한다.
+- 실제 Terraform apply와 live Job 검증은 아직 수행하지 않았다. 운영 절차는
+  `docs/runbooks/2026-08-01-auto-research-experiment-job.md`를 따른다.
+
 ## 2026-07-31: MLflow content-addressed training snapshot registry (#464)
 
 - 기존 MLflow artifact GCS bucket을 재사용해 `training-snapshots/sha256=<digest>/`
