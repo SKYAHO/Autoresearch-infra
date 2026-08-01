@@ -11,6 +11,16 @@ app_k8s_service_account = "autoresearch-app"
 # autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
 app_gcp_service_account_email = ""
 
+# Paired Feast experiment runtime. 두 GSA 값은 terraform/envs/dev output
+# experiment_runtime_contract와 airflow_gcp_service_account_email을 대조한다.
+experiment_runtime_k8s_namespace       = "experiment-runtime"
+experiment_runtime_k8s_service_account = "experiment-runtime"
+experiment_runtime_gcp_service_account_email = ""
+airflow_gcp_service_account_email            = ""
+
+# dev private.googleapis.com 고정 VIP. 외부 HTTPS CIDR로 바꾸지 않는다.
+private_googleapis_cidr = "199.36.153.8/30"
+
 # Agent Orchestration API와 Runner GSA는 dev root output
 # agent_orchestration_deployment_contract와 대조한다. 빈 값은 아래 기본값을
 # 파생한다: autoresearch-dev-orch-api|runner@<project_id>.iam.gserviceaccount.com

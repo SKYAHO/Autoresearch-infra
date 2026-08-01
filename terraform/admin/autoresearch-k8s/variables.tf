@@ -55,6 +55,67 @@ variable "app_gcp_service_account_email" {
   default     = ""
 }
 
+variable "experiment_runtime_k8s_namespace" {
+  description = "Kubernetes namespace dedicated to paired Feast experiment runtime Jobs."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_namespace) >= 1 && length(var.experiment_runtime_k8s_namespace) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_namespace))
+    error_message = "experiment_runtime_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "experiment_runtime_k8s_service_account" {
+  description = "Kubernetes service account mapped to the experiment runtime GCP service account."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_service_account) >= 1 && length(var.experiment_runtime_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_service_account))
+    error_message = "experiment_runtime_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
+variable "experiment_runtime_gcp_service_account_email" {
+  description = "Experiment runtime GSA email from terraform/envs/dev output. Empty derives the dev default."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.experiment_runtime_gcp_service_account_email) == "" ||
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.experiment_runtime_gcp_service_account_email))
+    )
+    error_message = "experiment_runtime_gcp_service_account_email must be empty or a valid GSA email."
+  }
+}
+
+variable "airflow_gcp_service_account_email" {
+  description = "Airflow GSA email bound to the experiment runtime observer Role. Empty derives the dev default."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.airflow_gcp_service_account_email) == "" ||
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.airflow_gcp_service_account_email))
+    )
+    error_message = "airflow_gcp_service_account_email must be empty or a valid GSA email."
+  }
+}
+
+variable "private_googleapis_cidr" {
+  description = "Private Google APIs VIP CIDR allowed from experiment runtime Jobs."
+  type        = string
+  default     = "199.36.153.8/30"
+
+  validation {
+    condition     = can(cidrhost(var.private_googleapis_cidr, 0)) && var.private_googleapis_cidr == "199.36.153.8/30"
+    error_message = "private_googleapis_cidr must be the canonical Private Google APIs CIDR 199.36.153.8/30."
+  }
+}
+
 variable "agent_orchestration_api_k8s_service_account" {
   description = "Agent Orchestration API의 전용 Kubernetes service account 이름."
   type        = string

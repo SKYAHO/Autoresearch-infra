@@ -9,6 +9,9 @@ Kubernetes 측 경계를 별도 state로 관리합니다.
   NetworkPolicy
 - `feast-apply-dev`, `feast-apply-prod` namespace + 환경별 KSA + GitHub Actions용
   Job RBAC + 전용 egress/ingress NetworkPolicy (#424, `feast_apply.tf`)
+- `experiment-runtime` namespace + Workload Identity KSA + observer-only Airflow RBAC +
+  ResourceQuota/LimitRange + Private Google APIs 전용 NetworkPolicy (#485,
+  `experiment_runtime.tf`)
 - Agent Orchestration API·Codex Runner 전용 KSA. 실제 Deployment/Service/PVC와
   Agent 전용 NetworkPolicy는 `deploy/agent-orchestration/`의 ArgoCD plain manifest가
   소유하며, 이 root의 기존 namespace-wide egress 정책에서는 제외한다.
@@ -92,6 +95,41 @@ MLflow tracking 규칙(#302)은 Inference Server 파드가 `RERANK_MODEL_SOURCE=
 위해 namespace selector 규칙을 함께 둡니다(기존 DNS 규칙과 동일한 이중 패턴).
 모델 artifact는 `mlflow-artifacts:/` 스킴으로 MLflow 서버를 경유하므로 파드가
 GCS에 직접 접근할 필요는 없습니다.
+
+## Paired Feast experiment runtime 경계 (#485)
+
+`experiment-runtime` namespace는 일반 앱, Airflow 일반 배치, Feast apply Job과
+분리됩니다. `experiment-runtime` KSA는 dev root의
+`autoresearch-dev-exp-runtime` GSA에만 연결하며, 기본값을 override하면 두 root의
+output이 같은 email을 가리키는지 plan 전에 대조합니다.
+
+namespace에는 Pod Security Admission `restricted`를 enforce/audit/warn으로 적용하고,
+동시 Job/Pod 4개, requests 4 vCPU/8 GiB, limits 8 vCPU/16 GiB의 ResourceQuota를
+둡니다. 컨테이너 LimitRange는 request 1 vCPU/2 GiB, default/max 2 vCPU/4 GiB입니다.
+이 quota는 namespace 사용량 상한일 뿐 GKE node allocatable capacity나 autoscaler
+확장을 예약·보장하지 않습니다. 실제 Job 활성화 전에는 node pool capacity를 별도로
+확인해야 합니다.
+
+Airflow GSA의 `experiment-runtime-airflow-observer` Role은 Job/Pod get/list/watch와
+Pod log get만 허용합니다. 첫 변경에서는 Airflow GSA와 runtime KSA 모두
+`jobs.create`를 갖지 않으며 output의 `job_creation_enabled`도 `false`입니다. 생성
+Job의 KSA, immutable image digest, deadline/TTL, restricted Pod 사양을 검증하는
+ValidatingAdmissionPolicy가 적용·검증되기 전에는 create 권한을 켜지 않습니다.
+runtime KSA에는 RoleBinding이 없습니다.
+
+ingress는 전면 차단합니다. egress는 kube-dns, GKE metadata
+`169.254.169.254:80`·`169.254.169.252:987/988`, Private Google APIs VIP
+`199.36.153.8/30:443`만 허용합니다. 외부 `0.0.0.0/0:443`, Redis PSC, Cloud SQL,
+MLflow egress와 Secret 접근 경로는 포함하지 않습니다.
+
+적용 전에는 dev/admin output의 identity 계약과 fail-closed 상태를 확인합니다.
+
+```bash
+terraform -chdir=terraform/envs/dev output experiment_runtime_contract
+terraform -chdir=terraform/envs/dev output airflow_gcp_service_account_email
+terraform -chdir=terraform/admin/autoresearch-k8s output \
+  experiment_runtime_kubernetes_contract
+```
 
 ## Cluster 및 hash tag smoke test
 
