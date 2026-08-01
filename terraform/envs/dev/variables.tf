@@ -674,6 +674,17 @@ variable "feast_apply_workflow_ref" {
   default     = "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main"
 }
 
+variable "rerank_loadtest_workflow_ref" {
+  description = "정확한 Autoresearch rerank serving 부하테스트 workflow만 두 전용 GSA를 가장할 수 있는 workflow_ref (#482)."
+  type        = string
+  default     = "SKYAHO/Autoresearch/.github/workflows/rerank-loadtest.yml@refs/heads/main"
+
+  validation {
+    condition     = can(regex("^SKYAHO/Autoresearch/\\.github/workflows/rerank-loadtest\\.yml@refs/heads/main$", var.rerank_loadtest_workflow_ref))
+    error_message = "rerank_loadtest_workflow_ref must point to the main-branch rerank-loadtest.yml workflow."
+  }
+}
+
 # #424 Feast apply GKE Job의 Workload Identity subject는 환경별로 고정한다.
 # 실제 namespace/KSA 오브젝트와 GSA annotation은
 # terraform/admin/autoresearch-k8s가 같은 dev/prod 계약으로 생성한다.
