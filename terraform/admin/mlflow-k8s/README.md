@@ -66,6 +66,7 @@ gcloud secrets versions add autoresearch-dev-mlflow-oauth-client-secret \
 클러스터가 갈리지 않는다.
 
 ```bash
+set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 
@@ -123,6 +124,38 @@ kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
     [ "$a" = "$b" ] && echo "$k OK($a)" || echo "$k 불일치: k8s=$a sm=$b"
   done
   ```
+
+### 긴급 세션 회수
+
+일반 갱신 절차는 전원 재로그인을 막기 위해 **기존 `cookie-secret`을 보존**한다.
+따라서 허용 목록에서 제거한 사용자의 기존 oauth2-proxy 세션을 즉시 무효화해야 하면
+일반 절차를 재실행하지 말고 아래처럼 새 cookie-secret을 생성한다. 기존 client
+자격과 허용 이메일은 값 비노출 파일로 보존하고, 생성 Secret은 `kubectl apply`로
+갱신한다.
+
+```bash
+set -euo pipefail
+umask 077
+d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
+for k in client-id client-secret authenticated-emails; do
+  kubectl -n mlflow get secret mlflow-oauth -o "jsonpath={.data.$k}" \
+    | base64 -d > "$d/$k"
+  test -s "$d/$k" || { echo "ERROR: mlflow-oauth.$k 없음"; exit 1; }
+done
+python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
+  > "$d/cookie-secret"
+kubectl create secret generic mlflow-oauth -n mlflow \
+  --from-file=client-id="$d/client-id" \
+  --from-file=client-secret="$d/client-secret" \
+  --from-file=cookie-secret="$d/cookie-secret" \
+  --from-file=authenticated-emails="$d/authenticated-emails" \
+  --dry-run=client -o yaml | kubectl apply -f -
+rm -rf "$d"; trap - EXIT
+kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
+kubectl rollout status deployment/mlflow-oauth-proxy -n mlflow --timeout=120s
+```
+
+완료된 rollout 뒤에는 기존 cookie가 검증되지 않아 모든 사용자가 다시 로그인해야 한다.
 
 ## Model Training 담당자 port-forward 권한 (#236)
 

@@ -29,9 +29,9 @@ kubectl -n elastic get secret kibana-oauth \
   awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@]+@[^[:space:]@]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
 ```
 
-목록에서 이미 로그인한 사용자를 긴급 회수해야 하면 기존 Secret 회전 절차로
-`cookie-secret`을 회전하고 `kibana-oauth-proxy`를 rollout restart한다. allowlist
-삭제만으로는 기본 cookie 만료 전 기존 세션이 즉시 끊기지 않는다.
+목록에서 이미 로그인한 사용자를 긴급 회수해야 하면 `elastic-k8s` README의
+**긴급 세션 회수** 절차로 새 cookie-secret을 생성·적용하고 rollout 완료를 확인한다.
+allowlist 삭제만으로는 기본 cookie 만료 전 기존 세션이 즉시 끊기지 않는다.
 
 ```bash
 kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180

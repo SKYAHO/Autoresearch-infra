@@ -70,8 +70,8 @@ Kibana oauth2-proxy는 Terraform admin root에서 관리되므로, 두 경로 �
 - 허용 목록에서 제거한 사용자의 기존 cookie 세션은 요청마다 allowlist를
   재검증하지 않으며, 기본 `cookie-refresh=0` 환경에서는 cookie 만료 전까지
   남을 수 있습니다. 따라서 일반 회수는 새 세션부터 적용되고, 긴급 전원
-  회수는 기존 Secret 회전 절차로 cookie-secret을 회전한 뒤 rollout restart를
-  수행해야 합니다.
+  회수는 **기존 cookie-secret을 보존하는 일반 Secret 갱신 절차와 별도로** 새
+  cookie-secret을 생성·적용한 뒤 rollout restart와 상태 확인을 수행해야 합니다.
 - 세션 재검증 시점은 v7.7.1의 [stored session middleware](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.7.1/pkg/middleware/stored_session.go#L107-L239)와
   `cookie-refresh` 설정에 따릅니다. 현재 구성은 refresh를 명시하지 않으므로
   운영 회수 절차에서 cookie-secret 회전을 별도로 요구합니다.

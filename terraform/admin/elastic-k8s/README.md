@@ -91,6 +91,7 @@ oauth2-proxy는 `authenticated-emails` Secret 파일을 유일한 이메일 allo
 `http://localhost:4181/oauth2/callback` 등록.
 
 ```bash
+set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 # #439: 정본은 Secret Manager — 발급 직후 id/secret 한 쌍을 먼저 등록
@@ -127,6 +128,36 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 
 이메일 목록·client secret 변경 시 위를 다시 실행
 (`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+
+### 긴급 세션 회수
+
+허용 목록에서 제거한 사용자의 기존 oauth2-proxy 세션을 즉시 무효화하려면 새
+`cookie-secret`을 만들어야 한다. 아래 명령은 기존 client 자격과 허용 이메일을
+값 비노출 파일로 보존한 채 cookie-secret만 회전하고 rollout 완료까지 확인한다.
+
+```bash
+set -euo pipefail
+umask 077
+d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
+for k in client-id client-secret authenticated-emails; do
+  kubectl -n elastic get secret kibana-oauth -o "jsonpath={.data.$k}" \
+    | base64 -d > "$d/$k"
+  test -s "$d/$k" || { echo "ERROR: kibana-oauth.$k 없음"; exit 1; }
+done
+python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
+  > "$d/cookie-secret"
+kubectl create secret generic kibana-oauth -n elastic \
+  --from-file=client-id="$d/client-id" \
+  --from-file=client-secret="$d/client-secret" \
+  --from-file=cookie-secret="$d/cookie-secret" \
+  --from-file=authenticated-emails="$d/authenticated-emails" \
+  --dry-run=client -o yaml | kubectl apply -f -
+rm -rf "$d"; trap - EXIT
+kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
+kubectl rollout status deployment/kibana-oauth-proxy -n elastic --timeout=120s
+```
+
+완료된 rollout 뒤에는 기존 cookie가 검증되지 않아 모든 사용자가 다시 로그인해야 한다.
 
 **접근 경로·break-glass**: 사람 접근은 proxy(4181로 노출되는 Service 4180)로 강제한다
 — `elastic-ingress`는 노드→5601 직접 경로를 열지 않는다(proxy→Kibana는 same-ns라 정상).
