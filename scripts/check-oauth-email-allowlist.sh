@@ -14,6 +14,7 @@ email_domain_pattern='--email-domain([^[:alnum:]-]|$)'
 check_target() {
   label="$1"
   file="$2"
+  email_file_pattern="$3"
   if [ ! -f "$file" ]; then
     echo "ERR $label: 검사 대상 파일이 없음 ($file)"
     FAIL=1
@@ -24,10 +25,32 @@ check_target() {
     echo "ERR $label: --email-domain 인자가 남아 있음 ($file)"
     FAIL=1
   else
-    echo "OK  $label: --email-domain 인자 없음"
+    grep_status=$?
+    if [ "$grep_status" -eq 1 ]; then
+      echo "OK  $label: --email-domain 인자 없음"
+    else
+      echo "ERR $label: --email-domain 검사 실행 실패 (grep exit=$grep_status)"
+      FAIL=1
+    fi
   fi
 
-  count="$(grep -F -c -- '--authenticated-emails-file=/etc/oauth2-proxy/authenticated-emails' "$file" || true)"
+  if count="$(grep -E -c -- "$email_file_pattern" "$file")"; then
+    grep_status=0
+  else
+    grep_status=$?
+  fi
+  if [ "$grep_status" -ne 0 ] && [ "$grep_status" -ne 1 ]; then
+    echo "ERR $label: authenticated-emails-file 검사 실행 실패 (grep exit=$grep_status)"
+    FAIL=1
+    return
+  fi
+  case "$count" in
+    ''|*[!0-9]*)
+      echo "ERR $label: authenticated-emails-file 검사 결과가 숫자가 아님"
+      FAIL=1
+      return
+      ;;
+  esac
   if [ "$count" -ne 1 ]; then
     echo "ERR $label: authenticated-emails-file 인자 수가 1이 아님 ($count)"
     FAIL=1
@@ -63,8 +86,10 @@ check_no_env_from() {
   fi
 }
 
-check_target "MLflow" "deploy/mlflow/oauth2-proxy.yaml"
-check_target "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf"
+check_target "MLflow" "deploy/mlflow/oauth2-proxy.yaml" \
+  '^[[:space:]]*-[[:space:]]+--authenticated-emails-file=/etc/oauth2-proxy/authenticated-emails[[:space:]]*$'
+check_target "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
+  '^[[:space:]]*"--authenticated-emails-file=/etc/oauth2-proxy/authenticated-emails",[[:space:]]*$'
 check_mapping "MLflow" "deploy/mlflow/oauth2-proxy.yaml" \
   'key:[[:space:]]*authenticated-emails' \
   'path:[[:space:]]*authenticated-emails'
