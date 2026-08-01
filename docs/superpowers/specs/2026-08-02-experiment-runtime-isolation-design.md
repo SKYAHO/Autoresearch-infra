@@ -31,9 +31,9 @@ schema migration, 실제 backfill, production Redis materialize를 수행하지 
 ### 전용 runtime identity와 Kubernetes 경계
 
 `experiment-runtime` namespace, `experiment-runtime` KSA,
-`autoresearch-dev-experiment-runtime` GSA를 새로 정의한다. GSA account ID는 GCP의
-6~30자 제한을 만족하도록 `resource_prefix`에서 파생하고, namespace/KSA/GSA는
-Terraform output 하나에서 함께 공개한다.
+`${resource_prefix}-exp-runtime` GSA를 새로 정의한다. 기본 `resource_prefix`가
+`autoresearch-dev`일 때 account ID는 28자로 GCP의 6~30자 제한을 만족한다.
+namespace/KSA/GSA는 Terraform output 하나에서 함께 공개한다.
 
 namespace에는 `restricted` Pod Security Admission enforce/audit/warn label을 적용한다.
 Airflow의 기존 GSA만 이 namespace에서 `batch/jobs`의 get/list/watch/create/delete 및
@@ -48,8 +48,10 @@ limit 2 vCPU/4 GiB를 기본값 및 상한으로 한다. 각 Job manifest는
 Airflow는 고정 템플릿 외 임의 Pod 사양을 제출하지 않는다.
 
 모든 ingress는 차단한다. egress는 kube-dns, Workload Identity metadata server,
-Private Google APIs HTTPS에만 허용한다. Redis PSC CIDR, Cloud SQL private CIDR,
-MLflow Service, 외부 인터넷 목적지는 허용하지 않는다.
+Private Google APIs VIP `199.36.153.8/30`의 TCP 443에만 허용한다. 이 CIDR은 dev
+root의 private DNS zone이 `*.googleapis.com`을 해당 VIP로 해석하는 기존 계약을
+전제로 한다. Redis PSC CIDR, Cloud SQL private CIDR, MLflow Service, 외부 인터넷
+목적지는 허용하지 않는다.
 
 ### GCS 최소권한과 객체 계약
 
@@ -62,15 +64,17 @@ bucket-level access를 적용하므로, 새 IAM binding은 조건식으로 objec
 | 대상 | 권한 | IAM 조건 |
 | --- | --- | --- |
 | dev registry bucket | object viewer | `experiments/` registry root 아래의 실험 registry 객체만 읽기 |
-| dev staging bucket | object creator/viewer | `experiments/` prefix의 자기 실험 staging 객체만 생성·조회 |
-| code artifacts bucket | object viewer | `code/<source_sha>.tar.gz`만 읽기 |
-| MLflow artifact bucket | object creator/viewer | `experiments/` 결과 prefix만 생성·조회 |
+| dev staging bucket | object creator/viewer | `experiments/` prefix의 객체만 생성·조회 |
+| code artifacts bucket | object viewer | `code/` archive root의 객체만 읽기 |
+| MLflow artifact bucket | object creator/viewer | `experiments/` 결과 root의 객체만 생성·조회 |
 
 GCS IAM Conditions는 comparison ID 또는 source SHA처럼 요청마다 바뀌는 값을 IAM에
-직접 주입할 수 없으므로, 첫 PR에서는 `experiments/` 루트까지를 Terraform 경계로
-강제한다. comparison/condition/source SHA 세분화는 Airflow의 고정 Job 템플릿과
-사전 검증으로 강제하며, 요청 단위 IAM binding 생성은 하지 않는다. 이 제약과 검증
-책임은 runbook에 명시한다.
+직접 주입할 수 없으므로, 첫 PR에서는 `experiments/` 및 `code/` root까지만
+Terraform 경계로 강제한다. IAM만으로는 같은 root 안의 다른 comparison 객체 읽기나
+쓰기를 막을 수 없다. comparison/condition/source SHA 세분화와
+`code/<source_sha>.tar.gz` 일치는 Airflow의 고정 Job 템플릿·입력 검증·audit log로
+강제하며, 요청 단위 IAM binding 생성은 하지 않는다. 이 제약과 검증 책임은 runbook에
+명시한다.
 
 `roles/storage.objectCreator`는 기존 객체 overwrite를 막지만, create precondition을
 대신하지 않는다. application/Airflow는 `ifGenerationMatch=0`을 사용하고 412를
