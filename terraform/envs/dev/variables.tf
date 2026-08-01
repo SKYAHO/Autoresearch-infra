@@ -287,6 +287,28 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "experiment_runtime_k8s_namespace" {
+  description = "Paired Feast experiment runtime GSA에 Workload Identity로 매핑할 Kubernetes namespace."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_namespace) >= 1 && length(var.experiment_runtime_k8s_namespace) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_namespace))
+    error_message = "experiment_runtime_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "experiment_runtime_k8s_service_account" {
+  description = "Paired Feast experiment runtime GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_service_account) >= 1 && length(var.experiment_runtime_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_service_account))
+    error_message = "experiment_runtime_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
 variable "agent_orchestration_db_name" {
   description = "Agent Orchestration 전용 Cloud SQL database 이름."
   type        = string
