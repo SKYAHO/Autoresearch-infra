@@ -9,6 +9,12 @@ FAIL=0
 check_target() {
   label="$1"
   file="$2"
+  if [ ! -f "$file" ]; then
+    echo "ERR $label: 검사 대상 파일이 없음 ($file)"
+    FAIL=1
+    return
+  fi
+
   if grep -Fq -- '--email-domain=*' "$file"; then
     echo "ERR $label: --email-domain=*가 남아 있음 ($file)"
     FAIL=1
@@ -47,6 +53,16 @@ check_mapping "MLflow" "deploy/mlflow/oauth2-proxy.yaml" \
 check_mapping "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
   'key[[:space:]]*=[[:space:]]*"authenticated-emails"' \
   'path[[:space:]]*=[[:space:]]*"authenticated-emails"'
+
+# 대상이 늘어날 때 domain allowlist나 환경변수 기반 우회 설정이 조용히
+# 추가되지 않도록 인프라 설정 전체도 검사한다. 문서/이 스크립트는 제외한다.
+if rg -n --glob '*.yaml' --glob '*.yml' --glob '*.tf' \
+  -- '--email-domain=|OAUTH2_PROXY_EMAIL_DOMAINS' deploy terraform/admin; then
+  echo "ERR 인프라 설정에 email-domain 또는 OAUTH2_PROXY_EMAIL_DOMAINS가 남아 있음"
+  FAIL=1
+else
+  echo "OK  인프라 설정 전체: email-domain 환경설정 없음"
+fi
 
 if [ "$FAIL" -ne 0 ]; then
   echo "결과: oauth2-proxy 이메일 allowlist 검증 실패"

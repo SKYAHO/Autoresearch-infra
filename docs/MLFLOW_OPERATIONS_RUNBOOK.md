@@ -31,6 +31,20 @@ UI/API는 ClusterIP라 외부 노출이 없다. 접근은 **OAuth2-proxy(4180)�
 허용 목록은 `mlflow-oauth` Secret의 `authenticated-emails` 키에서 주입되며,
 MLflow manifest는 이 파일만 이메일 접근 제한으로 사용한다.
 
+ArgoCD sync 전에 Secret 형식과 항목 수만 확인한다(값은 출력하지 않는다). 결과가
+실패하면 sync하지 말고 Secret의 `authenticated-emails`를 실제 팀원 이메일 한 줄씩으로
+수정한 뒤 다시 확인한다.
+
+```bash
+kubectl -n mlflow get secret mlflow-oauth \
+  -o jsonpath='{.data.authenticated-emails}' | base64 -d |
+  awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@]+@[^[:space:]@]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
+```
+
+목록에서 이미 로그인한 사용자를 긴급 회수해야 하면 기존 Secret 회전 절차로
+`cookie-secret`을 회전하고 `mlflow-oauth-proxy`를 rollout restart한다. allowlist
+삭제만으로는 기본 cookie 만료 전 기존 세션이 즉시 끊기지 않는다.
+
 접속 경로는 두 가지다(둘 다 브라우저는 `http://localhost:4180`).
 
 **(A) Bastion 터널 → 내부 ILB (#244, 기본 권장).** Airflow(#48)와 동일 패턴.

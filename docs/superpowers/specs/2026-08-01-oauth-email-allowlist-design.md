@@ -58,9 +58,23 @@ Kibana oauth2-proxy는 Terraform admin root에서 관리되므로, 두 경로 �
   `authenticated-emails` 파일에 있는 이메일만 oauth2-proxy를 통과합니다.
 - MLflow 내부 VIP의 VPC 접근성 자체는 그대로이므로, 네트워크 경계와
   이메일 allowlist가 함께 방어 계층으로 유지됩니다.
-- 허용 목록에서 제거한 사용자의 기존 oauth2-proxy 세션은 cookie 만료 전까지
-  남을 수 있으므로, 운영 smoke test는 새 private window 또는 cookie 삭제
-  후 수행합니다.
+- oauth2-proxy v7.7.1은 `authenticated-emails-file`을 CSV로 읽고 각 행을
+  trim/lowercase한 이메일 문자열로 저장합니다. 파일이 없거나 Secret key가
+  없으면 proxy가 기동에 실패하고, 빈 파일은 기동되지만 모든 이메일이
+  거부됩니다. `@example.com` 같은 도메인 문자열은 이메일 주소와 일치하지
+  않으므로 정상 사용자 인증을 허용하지 않습니다.
+- 위 판정은 v7.7.1의 [validator 구현](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.7.1/validator.go#L46-L101)에
+  근거합니다. `*`는 `allowAll`을 켜서 파일 판정 뒤 최종 결과를 허용하지만,
+  wildcard를 제거하면 도메인 판정 실패 시 파일의 정확한 이메일 일치 결과가
+  사용됩니다.
+- 허용 목록에서 제거한 사용자의 기존 cookie 세션은 요청마다 allowlist를
+  재검증하지 않으며, 기본 `cookie-refresh=0` 환경에서는 cookie 만료 전까지
+  남을 수 있습니다. 따라서 일반 회수는 새 세션부터 적용되고, 긴급 전원
+  회수는 기존 Secret 회전 절차로 cookie-secret을 회전한 뒤 rollout restart를
+  수행해야 합니다.
+- 세션 재검증 시점은 v7.7.1의 [stored session middleware](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.7.1/pkg/middleware/stored_session.go#L107-L239)와
+  `cookie-refresh` 설정에 따릅니다. 현재 구성은 refresh를 명시하지 않으므로
+  운영 회수 절차에서 cookie-secret 회전을 별도로 요구합니다.
 
 ## 롤백
 
