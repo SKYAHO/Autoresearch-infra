@@ -243,3 +243,56 @@ variable "rerank_loadtest_snapshot_reader_github_gsa_email" {
     error_message = "rerank_loadtest_snapshot_reader_github_gsa_email must be a GSA email when set."
   }
 }
+
+variable "experiment_job_namespace" {
+  description = "Auto Research 실험 Job을 기존 앱 namespace와 분리해 실행할 Kubernetes namespace."
+  type        = string
+  default     = "autoresearch-experiments"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_job_namespace))
+    error_message = "experiment_job_namespace은 유효한 Kubernetes namespace 이름이어야 합니다."
+  }
+}
+
+variable "experiment_job_k8s_service_account" {
+  description = "결과 GCS 버킷 Workload Identity에 연결할 실험 Job Kubernetes service account."
+  type        = string
+  default     = "experiment-job"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_job_k8s_service_account))
+    error_message = "experiment_job_k8s_service_account는 유효한 Kubernetes service account 이름이어야 합니다."
+  }
+}
+
+variable "experiment_job_gcp_service_account_email" {
+  description = "실험 Job GSA email. 빈 값이면 resource_prefix/project_id에서 기본값을 파생한다."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.experiment_job_gcp_service_account_email) == "" ||
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.experiment_job_gcp_service_account_email))
+    )
+    error_message = "experiment_job_gcp_service_account_email은 설정 시 유효한 GSA email이어야 합니다."
+  }
+}
+
+variable "enable_experiment_job_creation" {
+  description = "Agent Orchestration API의 실험 Job 생성 권한 활성화 여부. 고정 템플릿·허용 digest·admission 검증 완료 전에는 false를 유지한다."
+  type        = bool
+  default     = false
+}
+
+variable "private_googleapis_cidr" {
+  description = "Private Google Access DNS가 해석하는 Google API VIP CIDR."
+  type        = string
+  default     = "199.36.153.8/30"
+
+  validation {
+    condition     = can(cidrhost(var.private_googleapis_cidr, 0))
+    error_message = "private_googleapis_cidr은 유효한 CIDR이어야 합니다."
+  }
+}
