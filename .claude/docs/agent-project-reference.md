@@ -25,6 +25,7 @@ terraform/
 │   ├── monitoring-k8s/       # monitoring namespace + port-forward RBAC (chart는 ArgoCD Application, #183) (separate state)
 │   ├── argocd-k8s/           # ArgoCD + AppProject/Application(monitoring·argo-rollouts·mlflow·serving·agent-orchestration) (separate state)
 │   ├── argo-rollouts-k8s/    # argo-rollouts namespace/NetworkPolicy (chart는 ArgoCD Application, #186) (separate state)
+│   ├── mlflow-k8s/           # MLflow namespace/KSA(WI)/NetworkPolicy (#94) (separate state)
 │   ├── elastic-k8s/          # ECK operator + ES/Kibana/Filebeat CR (#97) (separate state)
 │   └── vault-k8s/            # retired: #412에서 운영 제외, 완전 제거는 #478 (separate state)
 ├── envs/

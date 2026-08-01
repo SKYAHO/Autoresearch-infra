@@ -696,7 +696,7 @@ release를, #85에서 AppProject(`autoresearch-dev`)와 샘플 Application을 �
 | dex / notifications | disabled | 최소 설치. 사용 시점(후속 이슈)에 활성화 |
 | applicationSet | replicas 0 (중지) | chart 8.0부터 enabled 키 제거(#115). ApplicationSet CR 사용 시 복원 |
 | AppProject | `autoresearch-dev` (#85, #183) | sourceRepos: infra repo, destinations: `monitoring`·`kube-system`·`argo-rollouts`·`mlflow`·`autoresearch`(#303), cluster-wide는 필요한 kind만 허용(CRD/ClusterRole/ClusterRoleBinding/webhook) |
-| Application | `monitoring`(#183), `argo-rollouts`(#186), `mlflow`(#94), `serving`(#302), `agent-orchestration`(#453) | infra repo `deploy/*`, Application별 sync 정책, `ServerSideApply`. 샘플(`sample-guestbook`)은 검증 후 제거 |
+| Application | `monitoring`(#183), `argo-rollouts`(#186), `mlflow`(#94), `serving`(#302), `agent-orchestration`(#453) | infra repo `deploy/*`, automated sync 4종(`monitoring`·`argo-rollouts`·`mlflow`·`serving`, #460; prune·selfHeal 없음) + `agent-orchestration` manual sync. 모두 `ServerSideApply`. 샘플(`sample-guestbook`)은 검증 후 제거 |
 | UI 인증 | Google(Gmail) OIDC(#292) | dex 미사용 직접 OIDC. 이메일 기준 admin/readonly RBAC, `policy.default` 거부. client id/secret은 `argocd-google-oidc` Secret, 로컬 `admin`은 break-glass |
 | Secret payload | Terraform/Git 밖에서 관리 | repo credential, admin password, webhook secret 등 |
 

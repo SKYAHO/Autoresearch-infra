@@ -16,7 +16,7 @@
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
-| Kubernetes admin roots | `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` | `gke-team-access`는 GCP IAM root이며, `vault-k8s`는 #412에서 운영 제외되어 #478에서 제거 예정 |
+| Kubernetes admin roots | `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` (= `apply.yml`의 `ADMIN_ROOTS` 7개). `terraform/admin/gke-team-access`는 GCP IAM root이고 `terraform/admin/vault-k8s`는 #412에서 운영 제외되어 #478에서 제거 예정이며, 둘 다 CI apply 대상에서 제외됩니다. | 별도 state |
 | 일반 애플리케이션 저장소 | `SKYAHO/Autoresearch` |
 | Airflow 저장소 | `SKYAHO/Autoresearch-airflow` |
 
@@ -223,7 +223,7 @@ flowchart TB
 | GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`mlflow`(#94)·`serving`(#302)·`agent-orchestration`(#453) | ArgoCD Application으로 관리. UI는 Google 로그인 + 이메일 RBAC |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, oauth2-proxy Google 로그인 + basic 인증 — anonymous 폐기 #325), Filebeat allowlist 수집(#100, ndjson 구조화 파싱 #359, 자기 로그 관측 #365), ILM(#101)/snapshot(#102)/runbook(#103), saved object 자동 import Job(#365) — `elastic` ns | airflow/autoresearch 로그 검색·분석 + Logs Overview 대시보드. Airflow task 로그 정본은 GCS 원격 로깅(airflow#147) — ELK는 stdout만 |
 | Secret(학습) | Vault 운영 제외(#412) | 실 서비스 secret은 Secret Manager. Vault root·state·잔여 IAM/KMS 참조 정리는 #478 |
-| KMS | legacy Vault auto-unseal key 잔여 가능성 | 사용 여부와 보존·비활성화 범위는 #478에서 확인. Vault workload는 없음 |
+| KMS | `autoresearch-dev-vault` key ring / `vault-unseal` crypto key (#132, `prevent_destroy`) | Vault workload는 없음. 보존·비활성화 범위와 삭제 순서는 #478에서 결정 |
 | DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | VPC의 Google API private routing. Vault 전용 운영 경로는 폐기됨 |
 | CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **단일 진입점 승인 게이트 CI apply**(`apply.yml`, #451 — admin root #307/#312 + dev root #341 통합) | drift 시 [DRIFT] 이슈 자동 생성. dev root + K8s admin root 7개(#412로 `vault-k8s` 제외)를 한 번의 dispatch·승인으로 CI apply(순서: dev root 먼저), 로컬 apply는 break-glass |
 
