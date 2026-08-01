@@ -25,11 +25,11 @@ terraform/
 │   ├── airflow-k8s/      # #32 Airflow Kubernetes namespace/RBAC/NetworkPolicy (separate state)
 │   ├── gke-team-access/  # #34/#46 팀원 GKE container.viewer + bastion 접속 IAM (separate state)
 │   ├── monitoring-k8s/   # #78 Prometheus/Grafana monitoring namespace + Helm values (separate state)
-│   ├── argocd-k8s/       # #83/#84 ArgoCD namespace + Helm release (separate state)
+│   ├── argocd-k8s/       # #83/#84 ArgoCD namespace + Helm release + Applications (separate state)
 │   ├── mlflow-k8s/       # #94 MLflow namespace/KSA(WI)/NetworkPolicy (separate state)
 │   ├── argo-rollouts-k8s/ # #88 Argo Rollouts controller (separate state)
 │   ├── elastic-k8s/      # #97~103 ECK/ES/Kibana/Filebeat/ILM/snapshot + Kibana Google 로그인(#294/#319) (separate state)
-│   └── vault-k8s/        # #134 Vault (separate state) — #412 드랍, B~C에서 root째 삭제 예정
+│   └── vault-k8s/        # retired: #412 운영 제외, #478에서 root/state 제거 예정
 ├── bootstrap/            # #6 1회성: GCS state bucket + WIF + CI SA (local state)
 │   ├── main.tf
 │   ├── outputs.tf
@@ -60,7 +60,7 @@ terraform/
 │       ├── storage.tf        # #18 dev 원본 데이터/Feast GCS bucket
 │       ├── terraform.tfvars.example
 │       ├── variables.tf
-│       ├── vault.tf          # #132 Vault auto-unseal용 KMS key + GSA/WI
+│       ├── vault.tf          # retired: #132 Vault auto-unseal 잔여 구성, #478에서 제거 예정
 │       ├── versions.tf
 │       ├── vertex_ai.tf      # #280 BigQuery ↔ Vertex AI connection + aiplatform IAM
 │       └── vpc.tf          # #2 dev VPC / subnet / 최소 firewall
@@ -683,7 +683,8 @@ ArgoCD는 dev GCP root가 아니라 `terraform/admin/argocd-k8s`에서 별도 st
 관리한다. #83에서 `argocd` namespace와 values 위치를, #84에서 argo-cd Helm
 release를, #85에서 AppProject(`autoresearch-dev`)와 샘플 Application을 추가했다.
 **#183/#186에서 monitoring·argo-rollouts를 이 AppProject의 ArgoCD Application으로
-이관하고, 검증용 샘플(`sample-guestbook`)과 `argocd-sample` namespace는 제거했다.**
+이관하고, #94/#302/#453에서 mlflow·serving·agent-orchestration Application을
+추가했다. 검증용 샘플(`sample-guestbook`)과 `argocd-sample` namespace는 제거했다.**
 
 | 항목 | 값 | 비고 |
 |---|---|---|
@@ -695,7 +696,7 @@ release를, #85에서 AppProject(`autoresearch-dev`)와 샘플 Application을 �
 | dex / notifications | disabled | 최소 설치. 사용 시점(후속 이슈)에 활성화 |
 | applicationSet | replicas 0 (중지) | chart 8.0부터 enabled 키 제거(#115). ApplicationSet CR 사용 시 복원 |
 | AppProject | `autoresearch-dev` (#85, #183) | sourceRepos: infra repo, destinations: `monitoring`·`kube-system`·`argo-rollouts`·`mlflow`·`autoresearch`(#303), cluster-wide는 필요한 kind만 허용(CRD/ClusterRole/ClusterRoleBinding/webhook) |
-| Application | `monitoring`(#183), `argo-rollouts`(#186), `mlflow`(#94), `serving`(Inference Server #303) | infra repo `deploy/*`, manual sync, `ServerSideApply`. 샘플(`sample-guestbook`)은 검증 후 제거 |
+| Application | `monitoring`(#183), `argo-rollouts`(#186), `mlflow`(#94), `serving`(#302), `agent-orchestration`(#453) | infra repo `deploy/*`, Application별 sync 정책, `ServerSideApply`. 샘플(`sample-guestbook`)은 검증 후 제거 |
 | UI 인증 | Google(Gmail) OIDC(#292) | dex 미사용 직접 OIDC. 이메일 기준 admin/readonly RBAC, `policy.default` 거부. client id/secret은 `argocd-google-oidc` Secret, 로컬 `admin`은 break-glass |
 | Secret payload | Terraform/Git 밖에서 관리 | repo credential, admin password, webhook secret 등 |
 
@@ -1622,27 +1623,27 @@ Environment 설정을 대신 수행하지 않습니다.
 namespace를 참조해 인증이나 Job 생성에 실패합니다. 환경별 리소스 삭제는 데이터
 백업과 destroy 항목의 별도 승인을 전제로 하며, state를 직접 조작하지 않습니다.
 
-## Vault auto-unseal 기반 (#132)
+## Vault auto-unseal 기반 — 폐기 이력 (#132, #412, #478)
 
-HashiCorp Vault dev 도입 1단계(설계:
-`docs/superpowers/specs/2026-07-12-vault-dev-design.md`). Vault 설치는
-`terraform/admin/vault-k8s`(2단계 #134, 완료)에서 별도 state로 관리하고, dev
-root는 GCP 측 기반(`vault.tf`)만 담당한다. 다만 실 secret 이관은 하지 않기로
-결정했고(Secret Manager로 충분), **#412에서 Vault 드랍이 확정됐다** — 새
-클러스터(#404)에 Vault는 배포돼 있지 않으며(helm release·`vault` namespace
-삭제, admin-apply ROOTS 제외 #416), 아래 표의 KMS/GSA 코드(`vault.tf`)와
-vault-k8s root는 #412 B~C 단계에서 삭제 예정이다. 이 절은 그때까지의 이력
-참고용이다.
+HashiCorp Vault dev 도입 설계와 과거 구성은
+`docs/superpowers/specs/2026-07-12-vault-dev-design.md`에서 확인할 수 있다.
+실 secret은 이관하지 않고 Secret Manager를 사용하기로 결정했으며, **#412에서
+Vault 운영 경로를 폐기**했다. 새 클러스터(#404)에는 Vault가 배포돼 있지 않고,
+`vault-k8s`는 admin-apply ROOTS에서도 제외되어 있다. 현재 남은
+`vault-k8s` root와 dev root의 `vault.tf`·KMS/GSA/IAM 코드는 완전 제거 이슈
+[#478](https://github.com/SKYAHO/Autoresearch-infra/issues/478)에서 정리한다.
+이 절은 제거 전까지의 이력과 잔여 자산을 설명하는 참고 문서다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
 | KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d, key `prevent_destroy`. keyring은 GCP 특성상 삭제 불가 |
 | GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음 |
-| WI 바인딩 | `vault/vault` KSA | namespace/KSA는 vault-k8s root가 생성 |
+| WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. 잔여 IAM/state 정리는 #478 |
 | KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족 |
 
-주의: unseal key를 제거하면 Vault Raft 데이터 복호화가 불가능해진다. Vault
-release 제거(2단계 롤백) 후에만 key를 정리한다.
+주의: Vault Raft 데이터가 남아 있는지 먼저 확인한다. KMS key ring/crypto key는
+GCP 특성상 삭제가 제한될 수 있으므로, #478에서 사용 여부와 보존·비활성화
+범위를 확인한 뒤 IAM/state/code 순서로 정리한다.
 
 ## 필수 GCP API
 
