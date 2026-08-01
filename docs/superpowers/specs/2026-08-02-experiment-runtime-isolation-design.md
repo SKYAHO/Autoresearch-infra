@@ -36,14 +36,18 @@ schema migration, 실제 backfill, production Redis materialize를 수행하지 
 namespace/KSA/GSA는 Terraform output 하나에서 함께 공개한다.
 
 namespace에는 `restricted` Pod Security Admission enforce/audit/warn label을 적용한다.
-Airflow의 기존 GSA만 이 namespace에서 `batch/jobs`의 get/list/watch/create/delete 및
-실패 분석에 필요한 pod/pod-log read 권한을 갖는다. 실험 KSA에는 Kubernetes RBAC를
-부여하지 않는다. Role은 secrets, exec, attach, port-forward, update, patch 및
-cluster-scoped resource를 포함하지 않는다.
+첫 PR에서 Airflow의 기존 GSA에는 `batch/jobs`와 pod/pod-log의 get/list/watch read
+권한만 부여한다. Job `create` 권한은 기본값 `false`로 비활성화한다. Kubernetes RBAC만으로는
+생성 Job의 KSA·이미지 digest·Pod 보안 사양을 강제할 수 없기 때문이다. 후속 변경에서
+검증된 ValidatingAdmissionPolicy가 이 계약을 강제한 뒤에만 최소 `create` 권한을
+활성화한다. 실험 KSA에는 Kubernetes RBAC를 부여하지 않는다. Role은 secrets, exec,
+attach, port-forward, update, patch 및 cluster-scoped resource를 포함하지 않는다.
 
-ResourceQuota는 Job·Pod 동시 개수를 각각 4개로, 요청 합계를 2 vCPU/4 GiB로,
-limit 합계를 4 vCPU/8 GiB로 제한한다. LimitRange는 컨테이너별 request 250m/512Mi,
-limit 2 vCPU/4 GiB를 기본값 및 상한으로 한다. 각 Job manifest는
+ResourceQuota는 Job·Pod 동시 개수를 각각 4개로, 요청 합계를 4 vCPU/8 GiB로,
+limit 합계를 8 vCPU/16 GiB로 제한한다. 이는 baseline/candidate 두 쌍이 각각
+1 vCPU/2 GiB request 및 2 vCPU/4 GiB limit으로 병렬 실행되는 상한을 수용한다.
+LimitRange는 컨테이너별 request 1 vCPU/2 GiB, limit 2 vCPU/4 GiB를 기본값 및
+상한으로 한다. 각 Job manifest는
 `activeDeadlineSeconds`, `backoffLimit=0`, `ttlSecondsAfterFinished`를 명시해야 하며,
 Airflow는 고정 템플릿 외 임의 Pod 사양을 제출하지 않는다.
 
@@ -98,16 +102,18 @@ dev root output `experiment_runtime_contract`와 admin root output
 `experiment_runtime_kubernetes_contract`를 추가한다. 두 output에는 secret, token,
 state 값 없이 다음 좌표만 담는다.
 
-- namespace, KSA, GSA email 및 Airflow Job runner Role 이름
+- namespace, KSA, GSA email 및 Airflow Job observer Role 이름
 - dev registry/staging/artifact의 `experiments/` root URI
 - code archive object URI 형식 `gs://<bucket>/code/<source_sha>.tar.gz`
 - `feast_offline_store_dev` dataset ID
-- 동시 실행·resource limit과 Job TTL 계약
+- 동시 실행·resource limit과 Job TTL 계약, `job_creation_enabled=false` 상태
 
-Airflow 저장소 #209는 이 output을 승인된 변수로 등록한 뒤에만 해당 KSA로 Job을
-만들어야 한다. runtime Job은 immutable image digest, comparison ID, condition,
-`CODE_ARCHIVE_SHA`, registry URI와 결과 URI를 audit log에 남기되 token·Secret 값은
-남기지 않는다.
+Airflow 저장소 #209는 이 output을 승인된 변수로 등록하고, `job_creation_enabled=true`가
+되는 후속 변경 전에는 Job 생성 시도를 fail-closed로 중단해야 한다. runtime Job은
+immutable image digest, comparison ID, condition, `CODE_ARCHIVE_SHA`, registry URI와
+결과 URI를 audit log에 남기되 token·Secret 값은 남기지 않는다. BigQuery query에는
+승인된 기간·partition filter와 maximum bytes billed를 명시하고, 한도를 초과하면
+실행을 중단해야 한다.
 
 ## 권한 행렬
 
@@ -128,11 +134,15 @@ apply 뒤 승인된 운영자는 다음을 검증한다.
 1. runtime KSA가 dev registry/staging/artifact와 dev PIT query에 성공한다.
 2. runtime GSA로 prod registry, `feast_offline_store`, Redis CA Secret 접근이 403/권한
    거부로 실패한다.
-3. namespace RoleBinding subject가 Airflow GSA 하나이며, runtime KSA에는 Job 생성 권한이
-   없음을 `kubectl auth can-i`로 확인한다.
+3. namespace RoleBinding subject가 Airflow GSA 하나이며, Airflow GSA와 runtime KSA
+   모두 Job 생성 권한이 없음을 `kubectl auth can-i`로 확인한다.
 4. Redis PSC, Cloud SQL, MLflow 목적지 TCP 연결이 NetworkPolicy로 실패한다.
 5. ResourceQuota를 넘는 다섯 번째 Job 또는 LimitRange 상한 초과 Pod가 admission에서
    거부되고, 종료 Job이 TTL 후 정리되는지 확인한다.
+6. GKE node pool의 allocatable CPU·memory 및 autoscaler 상한이 namespace quota 이상인지
+   확인한다. quota는 예약 한계일 뿐 node capacity를 보장하지 않는다.
+7. 같은 `experiments/` root 안의 comparison 간 IAM 격리가 아니라 Airflow 입력 검증이
+   작동함을 확인하고, 이 한계를 운영 문서에 남긴다.
 
 ## 롤백과 비용
 
@@ -140,9 +150,9 @@ apply 전에는 리소스가 없으므로 이 변경의 rollback은 Airflow에�
 승인된 Terraform apply로 새 runtime IAM·namespace·KSA/GSA를 제거하는 것이다. 기존
 Airflow, Feast apply, production registry, BigQuery dataset, Redis는 변경하지 않는다.
 
-새 GSA·IAM·Kubernetes 제어 리소스의 직접 비용은 없다. 실험 Job의 CPU/메모리 및
-BigQuery scan 비용은 quota와 후속 query 비용 상한으로 통제하며, 첫 PR은 실제 Job을
-배포하거나 쿼리를 실행하지 않는다.
+새 GSA·IAM·Kubernetes 제어 리소스의 직접 비용은 없다. 실험 Job의 CPU/메모리는
+namespace quota·deadline·TTL로, BigQuery scan 비용은 Airflow의 query bytes billed
+상한으로 통제한다. 첫 PR은 실제 Job을 배포하거나 쿼리를 실행하지 않는다.
 
 ## 비범위와 후속 분리
 
