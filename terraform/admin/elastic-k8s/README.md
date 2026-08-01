@@ -103,7 +103,11 @@ for k in client-id client-secret; do
     | tr -d '\n' > "$d/$k"
   test -s "$d/$k" || { echo "ERROR: $k 정본 비어 있음 — versions add 먼저"; exit 1; }
 done
-printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"   # 정확히 32바이트(oauth2-proxy 요구)
+# 기존 cookie-secret을 보존해 allowlist/client 갱신 때 전원 재로그인을 막는다.
+# 최초 생성 때만 oauth2-proxy 요구 길이(32바이트)의 새 값을 만든다.
+kubectl -n elastic get secret kibana-oauth -o jsonpath='{.data.cookie-secret}' 2>/dev/null \
+  | base64 -d > "$d/cookie-secret" || true
+test -s "$d/cookie-secret" || printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"
 cat > "$d/authenticated-emails" <<'EMAILS'
 someone@gmail.com
 EMAILS
@@ -130,7 +134,9 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 ```
 
 이메일 목록·client secret 변경 시 위를 다시 실행
-(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`한다.
+위 절차는 기존 `cookie-secret`을 보존하므로, allowlist 갱신만으로 전원 재로그인을
+유발하지 않는다.
 
 허용 목록에서 한 사용자를 제거할 때는 목록을 갱신하고 위 rollout 완료를 확인한다.
 oauth2-proxy는 보호된 요청마다 세션 이메일을 새 allowlist로 재검사하므로, 이 경우

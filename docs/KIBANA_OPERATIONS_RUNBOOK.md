@@ -36,6 +36,18 @@ kubectl -n elastic get secret kibana-oauth \
 cookie-secret 회전이 필요하지 않다. 전체 사용자의 강제 재로그인이나 cookie 유출 대응은
 `elastic-k8s` README의 **전원 세션 무효화** 절차를 따른다.
 
+이 PR의 머지는 Kibana Deployment를 바꾸지 않는다. `elastic-k8s`는 수동 Terraform
+apply 경로이고 dev root drift workflow의 감시 대상도 아니므로, apply 전 live pod는
+기존 `--email-domain=*` 인가 상태로 남는다. CI 정적 검사는 저장소 설정만 보장하며
+클러스터 반영을 증명하지 않는다. operator는 승인된 apply 뒤 `rollout status`와 아래
+명령으로 실제 args에 `--email-domain`이 없는지 확인한 후 허용·미허용 계정 smoke test를
+수행한다(Secret 값은 출력하지 않는다).
+
+```bash
+kubectl -n elastic get deployment kibana-oauth-proxy \
+  -o jsonpath='{.spec.template.spec.containers[0].args}'
+```
+
 ```bash
 kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 # 브라우저: http://localhost:4181 → sign-in → Google 로그인

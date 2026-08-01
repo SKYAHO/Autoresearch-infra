@@ -75,7 +75,9 @@ Kibana oauth2-proxy는 Terraform admin root에서 관리되므로, 두 경로 �
   `secretKeyRef`로 주입하고 `envFrom`을 쓰지 않으므로, operator Secret에 추가한
   임의 키가 `OAUTH2_PROXY_EMAIL_DOMAINS`로 적용될 수 없다. CI는 두 대상의
   `envFrom` 부재도 확인한다. 다만 CI는 runtime Secret payload 자체를 읽지 않으므로
-  허용 이메일 값은 운영 preflight와 live smoke test로 검증한다.
+  허용 이메일 값은 운영 preflight와 live smoke test로 검증한다. 새 oauth2-proxy
+  대상은 세 대상 검사 함수에 명시적으로 등록해야 하며, 전역 검사는 미등록 대상의
+  `envFrom`만으로 주입되는 runtime 환경변수까지 자동 식별하지 않는다.
 - 위 판정은 v7.7.1의 [validator 구현](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.7.1/validator.go#L46-L101)에
   근거합니다. `*`는 `allowAll`을 켜서 파일 판정 뒤 최종 결과를 허용하지만,
   wildcard를 제거하면 도메인 판정 실패 시 파일의 정확한 이메일 일치 결과가

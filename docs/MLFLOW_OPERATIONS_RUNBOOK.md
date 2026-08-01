@@ -49,6 +49,13 @@ kubectl -n mlflow get secret mlflow-oauth \
 cookie-secret 회전이 필요하지 않다. 전체 사용자의 강제 재로그인이나 cookie 유출 대응은
 `mlflow-k8s` README의 **전원 세션 무효화** 절차를 따른다.
 
+ArgoCD 자동 sync와 `/ping` probe·rollout 성공은 Google 계정의 실제 인가 결과를
+검증하지 않는다. 머지 후에는 허용 계정의 로그인 성공과 미허용 계정의 403을 각각
+smoke test로 확인한다. 전원 403을 발견하면 UI로 복구하지 말고, operator가
+`mlflow-k8s` README의 `mlflow-oauth` Secret 갱신 절차로 정확한 목록을 복원한 뒤
+`kubectl rollout restart/status deployment/mlflow-oauth-proxy -n mlflow`를 실행한다.
+Secret은 GitOps 관리 대상이 아니므로 이 복구에 ArgoCD manifest rollback은 필요 없다.
+
 접속 경로는 두 가지다(둘 다 브라우저는 `http://localhost:4180`).
 
 **(A) Bastion 터널 → 내부 ILB (#244, 기본 권장).** Airflow(#48)와 동일 패턴.

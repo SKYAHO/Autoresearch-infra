@@ -78,6 +78,9 @@ check_no_env_from "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
 # 대상이 늘어날 때 domain allowlist나 환경변수 기반 우회 설정이 조용히
 # 추가되지 않도록 저장소의 배포 manifest와 모든 Terraform 설정을 검사한다.
 # 실제 Secret 값은 정적으로 읽을 수 없으므로, 운영 preflight에서 별도로 확인한다.
+# 새 oauth2-proxy 대상은 check_target/check_mapping/check_no_env_from에 명시적으로
+# 등록해야 한다. 전역 검사는 리터럴 domain 설정을 잡지만, 미등록 대상의 envFrom
+# 주입만으로 만들어지는 runtime 환경변수까지 자동으로 식별하지는 않는다.
 # GitHub runner 기본 명령인 grep만 사용하며 문서와 Terraform provider cache는 제외한다.
 if grep -REn --exclude='*.md' \
   --exclude-dir='.terraform' \
