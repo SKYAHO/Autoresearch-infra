@@ -133,10 +133,10 @@ Expected: FAIL, `write_terraform_inputs!` 미정의.
 
 - [ ] **Step 3: 생성기와 래퍼를 구현한다.**
 
-`write_terraform_inputs!`는 root 내부의 gitignored `.environment.auto.tfvars.json`와 `.environment.backend.hcl`만 생성한다. `scripts/terraform-env`는 `--environment`을 `dev`만 허용하고 root가 카탈로그 `state.roots`에 있을 때만 다음 명령을 실행한다.
+`write_terraform_inputs!`는 root 내부의 gitignored `.environment.auto.tfvars.json`와 `.environment.backend.hcl`만 생성한다. `scripts/terraform-env`는 `--environment`을 `dev`만 허용하고 root가 카탈로그 `state.roots`에 있을 때만 backend를 초기화한다. `terraform/bootstrap`은 state bucket을 만들기 전 실행되는 backend 없는 root이므로 var-file만 생성·전달한다. `init -backend=false`가 포함되면 어떤 root에서도 backend 파일과 `-backend-config`를 넘기지 않는다.
 
 ```sh
-terraform -chdir="$ROOT" init -backend-config="$BACKEND_FILE" "$@"
+terraform -chdir="$ROOT" init -backend-config="$BACKEND_FILE" "$@" # backend 사용 root이며 -backend=false가 아닐 때만
 terraform -chdir="$ROOT" "$COMMAND" "$@"
 ```
 
