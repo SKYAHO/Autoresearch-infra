@@ -82,10 +82,18 @@ for k in client-id client-secret; do
   test -s "$d/$k" || { echo "ERROR: $k 정본이 비어 있음 — 'gcloud secrets versions add'로 payload 먼저 등록"; exit 1; }
 done
 
-# cookie 비밀: 기존 K8s Secret에 있으면 보존(전원 재로그인 방지), 최초 생성 때만 랜덤 생성
-kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' 2>/dev/null \
-  | base64 -d > "$d/cookie-secret" || true
-test -s "$d/cookie-secret" || python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+# cookie 비밀: Secret 없음과 인증/연결 실패를 구분한다. 기존 값은 보존하고 최초 생성만 랜덤 생성.
+if kubectl -n mlflow get secret mlflow-oauth --ignore-not-found -o name > "$d/existing-secret"; then
+  if test -s "$d/existing-secret"; then
+    kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' \
+      | base64 -d > "$d/cookie-secret"
+    test -s "$d/cookie-secret" || { echo "ERROR: mlflow-oauth.cookie-secret 없음"; exit 1; }
+  else
+    python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+  fi
+else
+  echo "ERROR: mlflow-oauth 존재 여부를 읽지 못함 — context/인증을 확인"; exit 1
+fi
 
 # 허용 이메일(한 줄에 하나) — 목록 밖 Google 계정은 거부된다
 cat > "$d/authenticated-emails" <<'EMAILS'
@@ -148,7 +156,7 @@ for k in client-id client-secret authenticated-emails; do
     | base64 -d > "$d/$k"
   test -s "$d/$k" || { echo "ERROR: mlflow-oauth.$k 없음"; exit 1; }
 done
-python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
+python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
   > "$d/cookie-secret"
 kubectl create secret generic mlflow-oauth -n mlflow \
   --from-file=client-id="$d/client-id" \

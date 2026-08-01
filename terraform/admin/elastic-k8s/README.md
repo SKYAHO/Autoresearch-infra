@@ -103,11 +103,18 @@ for k in client-id client-secret; do
     | tr -d '\n' > "$d/$k"
   test -s "$d/$k" || { echo "ERROR: $k 정본 비어 있음 — versions add 먼저"; exit 1; }
 done
-# 기존 cookie-secret을 보존해 allowlist/client 갱신 때 전원 재로그인을 막는다.
-# 최초 생성 때만 oauth2-proxy 요구 길이(32바이트)의 새 값을 만든다.
-kubectl -n elastic get secret kibana-oauth -o jsonpath='{.data.cookie-secret}' 2>/dev/null \
-  | base64 -d > "$d/cookie-secret" || true
-test -s "$d/cookie-secret" || printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"
+# Secret 없음과 인증/연결 실패를 구분한다. 기존 cookie-secret은 보존하고 최초 생성만 랜덤 생성.
+if kubectl -n elastic get secret kibana-oauth --ignore-not-found -o name > "$d/existing-secret"; then
+  if test -s "$d/existing-secret"; then
+    kubectl -n elastic get secret kibana-oauth -o jsonpath='{.data.cookie-secret}' \
+      | base64 -d > "$d/cookie-secret"
+    test -s "$d/cookie-secret" || { echo "ERROR: kibana-oauth.cookie-secret 없음"; exit 1; }
+  else
+    printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"
+  fi
+else
+  echo "ERROR: kibana-oauth 존재 여부를 읽지 못함 — context/인증을 확인"; exit 1
+fi
 cat > "$d/authenticated-emails" <<'EMAILS'
 someone@gmail.com
 EMAILS
@@ -159,7 +166,7 @@ for k in client-id client-secret authenticated-emails; do
     | base64 -d > "$d/$k"
   test -s "$d/$k" || { echo "ERROR: kibana-oauth.$k 없음"; exit 1; }
 done
-python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
+python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
   > "$d/cookie-secret"
 kubectl create secret generic kibana-oauth -n elastic \
   --from-file=client-id="$d/client-id" \
