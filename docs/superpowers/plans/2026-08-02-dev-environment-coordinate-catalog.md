@@ -197,7 +197,7 @@ Expected: FAIL, `versions.tf` 또는 admin `variables.tf`의 기존 project/regi
 
 - [ ] **Step 3: root별 입력을 전환한다.**
 
-각 root에서 `project_id`, `region`, `zone`, GKE cluster 이름, 공통 CIDR, 환경 prefix의 실행 기본값을 제거하고 카탈로그 생성 var-file에서 받는다. 비밀값과 사람 이메일 변수의 빈 기본값은 유지한다. bootstrap은 backend 자체를 만들기 전 실행되므로 `scripts/terraform-env bootstrap`이 카탈로그의 project·region·bucket을 `-var`로 전달하게 하고, `state_bucket_name`을 카탈로그와 다른 값으로 넘기면 검증 실패시킨다.
+각 root의 `variables.tf`에서 `project_id`, `region`, `zone`, GKE cluster 이름, 공통 CIDR, 환경 prefix의 실행 기본값을 제거하고 카탈로그 생성 var-file에서 받는다. 검사는 실행 root의 해당 variable default만 대상으로 하며, 리소스 이름 조립식·과거 장애 주석·migration 사실 기록은 변경하지 않는다. 비밀값과 사람 이메일 변수의 빈 기본값은 유지한다. bootstrap은 backend 자체를 만들기 전 실행되므로 `scripts/terraform-env bootstrap`이 카탈로그의 project·region·bucket을 `-var`로 전달하게 하고, `state_bucket_name`을 카탈로그와 다른 값으로 넘기면 검증 실패시킨다.
 
 기존 이름 조립은 `var.name_prefix`, `var.environment`, `data.google_project.current.number`을 유지해 현 dev 카탈로그에서는 plan상 리소스 주소·이름이 바뀌지 않게 한다. defaults 제거가 신규 환경의 값 누락을 조기에 실패시키는지 각 variable validation으로 확인한다.
 

@@ -6,25 +6,21 @@ variable "project_id" {
 variable "region" {
   description = "Default GCP region."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "zone" {
   description = "GKE cluster zone."
   type        = string
-  default     = "asia-northeast3-a"
 }
 
 variable "gke_cluster_name" {
   description = "Existing dev GKE cluster name."
   type        = string
-  default     = "autoresearch-dev-gke"
 }
 
 variable "resource_prefix" {
   description = "Resource prefix used by terraform/envs/dev."
   type        = string
-  default     = "autoresearch-dev"
 }
 
 variable "app_k8s_namespace" {
@@ -128,7 +124,6 @@ variable "private_services_cidr" {
 variable "cluster_services_cidr" {
   description = "GKE services secondary CIDR used to allow service VIP traffic such as kube-dns."
   type        = string
-  default     = "172.16.128.0/24"
 
   validation {
     condition     = can(cidrhost(var.cluster_services_cidr, 0))

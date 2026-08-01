@@ -34,7 +34,6 @@ variable "feast_apply_workflow_ref" {
 variable "region" {
   description = "Location for the Terraform state GCS bucket."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "state_bucket_name" {

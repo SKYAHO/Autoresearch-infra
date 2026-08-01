@@ -28,17 +28,18 @@ class EnvironmentCatalog
 
   ROOT_VARIABLE_KEYS = {
     "terraform/envs/dev" => %w[
-      project_id region zone environment name_prefix dev_subnet_cidr private_services_cidr
+      project_id region zone environment name_prefix dev_subnet_cidr private_services_cidr redis_psc_subnet_cidr
+      gke_master_ipv4_cidr gke_pods_cidr gke_services_cidr
     ],
-    "terraform/admin/airflow-k8s" => %w[project_id region zone private_services_cidr],
-    "terraform/admin/argo-rollouts-k8s" => %w[project_id region zone],
-    "terraform/admin/argocd-k8s" => %w[project_id region zone],
-    "terraform/admin/autoresearch-k8s" => %w[project_id region zone private_services_cidr],
-    "terraform/admin/elastic-k8s" => %w[project_id region zone],
+    "terraform/admin/airflow-k8s" => %w[project_id region zone gke_cluster_name resource_prefix private_services_cidr cluster_services_cidr redis_psc_subnet_cidr],
+    "terraform/admin/argo-rollouts-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr cluster_master_cidr],
+    "terraform/admin/argocd-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr],
+    "terraform/admin/autoresearch-k8s" => %w[project_id region zone gke_cluster_name resource_prefix private_services_cidr cluster_services_cidr redis_psc_subnet_cidr],
+    "terraform/admin/elastic-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr cluster_master_cidr],
     "terraform/admin/gke-team-access" => %w[project_id region name_prefix],
-    "terraform/admin/mlflow-k8s" => %w[project_id region zone private_services_cidr],
-    "terraform/admin/monitoring-k8s" => %w[project_id region zone],
-    "terraform/admin/vault-k8s" => %w[project_id region zone]
+    "terraform/admin/mlflow-k8s" => %w[project_id region zone gke_cluster_name resource_prefix private_services_cidr cluster_services_cidr],
+    "terraform/admin/monitoring-k8s" => %w[project_id region zone gke_cluster_name],
+    "terraform/admin/vault-k8s" => %w[project_id region zone gke_cluster_name ui_ingress_source_cidr cluster_services_cidr cluster_master_cidr]
   }.freeze
 
   attr_reader :data
@@ -77,8 +78,17 @@ class EnvironmentCatalog
       "zone" => gcp.fetch("zone"),
       "environment" => data.fetch("environment"),
       "name_prefix" => gcp.fetch("name_prefix"),
+      "resource_prefix" => gcp.fetch("resource_prefix"),
       "dev_subnet_cidr" => network.fetch("dev_subnet_cidr"),
-      "private_services_cidr" => network.fetch("private_services_cidr")
+      "private_services_cidr" => network.fetch("private_services_cidr"),
+      "redis_psc_subnet_cidr" => network.fetch("redis_psc_subnet_cidr"),
+      "gke_cluster_name" => data.fetch("gke").fetch("cluster_name"),
+      "gke_master_ipv4_cidr" => data.fetch("gke").fetch("master_ipv4_cidr"),
+      "gke_pods_cidr" => data.fetch("gke").fetch("pods_cidr"),
+      "gke_services_cidr" => data.fetch("gke").fetch("services_cidr"),
+      "cluster_master_cidr" => data.fetch("gke").fetch("master_ipv4_cidr"),
+      "cluster_services_cidr" => data.fetch("gke").fetch("services_cidr"),
+      "ui_ingress_source_cidr" => network.fetch("dev_subnet_cidr")
     }
     values.slice(*ROOT_VARIABLE_KEYS.fetch(root))
   end

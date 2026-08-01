@@ -6,10 +6,18 @@ gcp:
   region: asia-northeast3
   zone: asia-northeast3-a
   name_prefix: autoresearch
+  resource_prefix: autoresearch-dev
+
+gke:
+  cluster_name: autoresearch-dev-gke
+  master_ipv4_cidr: 172.16.0.0/28
+  pods_cidr: 172.16.64.0/20
+  services_cidr: 172.16.128.0/24
 
 network:
   dev_subnet_cidr: 10.10.0.0/20
   private_services_cidr: 192.168.0.0/20
+  redis_psc_subnet_cidr: 10.10.16.0/29
 
 state:
   bucket: autoresearch-503903-dev-tfstate
