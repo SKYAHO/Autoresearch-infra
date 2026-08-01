@@ -31,9 +31,10 @@ UI/API는 ClusterIP라 외부 노출이 없다. 접근은 **OAuth2-proxy(4180)�
 허용 목록은 `mlflow-oauth` Secret의 `authenticated-emails` 키에서 주입되며,
 MLflow manifest는 이 파일만 이메일 접근 제한으로 사용한다.
 
-ArgoCD sync 전에 Secret 형식과 항목 수만 확인한다(값은 출력하지 않는다). 결과가
-실패하면 sync하지 말고 Secret의 `authenticated-emails`를 실제 팀원 이메일 한 줄씩으로
-수정한 뒤 다시 확인한다.
+MLflow ArgoCD Application은 main 머지 뒤 자동 sync하므로, **PR 머지 전** operator가
+Secret 형식과 항목 수만 확인한다(값은 출력하지 않는다). 성공한 `entries=N` 결과만 PR에
+기록한다. 실패하면 머지하지 말고 Secret의 `authenticated-emails`를 실제 팀원 이메일
+한 줄씩으로 수정한 뒤 다시 확인한다.
 
 ```bash
 kubectl -n mlflow get secret mlflow-oauth \
@@ -41,10 +42,12 @@ kubectl -n mlflow get secret mlflow-oauth \
   awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@]+@[^[:space:]@]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
 ```
 
-목록에서 이미 로그인한 사용자를 긴급 회수해야 하면 일반 갱신 절차(기존
-cookie-secret 보존)를 쓰지 않는다. `mlflow-k8s` README의 **긴급 세션 회수** 절차로
-새 cookie-secret을 생성·적용하고 rollout 완료를 확인한다. allowlist 삭제만으로는
-기본 cookie 만료 전 기존 세션이 즉시 끊기지 않는다.
+허용 목록에서 사용자를 제거할 때는 `authenticated-emails`를 갱신한 뒤
+`mlflow-oauth-proxy` rollout restart와 완료 확인을 수행한다. oauth2-proxy v7.7.1은
+보호된 요청마다 세션 이메일을 allowlist로 재검사하므로, 제거된 사용자는 새 목록이
+반영된 pod에 다음 요청을 보낼 때 cookie가 삭제되고 403으로 거부된다. 계정 제거에는
+cookie-secret 회전이 필요하지 않다. 전체 사용자의 강제 재로그인이나 cookie 유출 대응은
+`mlflow-k8s` README의 **전원 세션 무효화** 절차를 따른다.
 
 접속 경로는 두 가지다(둘 다 브라우저는 `http://localhost:4180`).
 

@@ -4,7 +4,12 @@
 # authenticated-emails-file만 이메일 제한으로 사용하도록 정적 검사한다.
 set -eu
 
+# 어느 작업 디렉터리에서 실행해도 저장소 기준으로 검사한다.
+repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$repo_root"
+
 FAIL=0
+email_domain_pattern='--email-domain([^[:alnum:]-]|$)'
 
 check_target() {
   label="$1"
@@ -15,7 +20,7 @@ check_target() {
     return
   fi
 
-  if grep -Eq -- '--email-domain([[:space:]]|=|$)' "$file"; then
+  if grep -Eq -- "$email_domain_pattern" "$file"; then
     echo "ERR $label: --email-domain 인자가 남아 있음 ($file)"
     FAIL=1
   else
@@ -45,6 +50,19 @@ check_mapping() {
   fi
 }
 
+check_no_env_from() {
+  label="$1"
+  file="$2"
+  pattern="$3"
+
+  if grep -Eq "$pattern" "$file"; then
+    echo "ERR $label: envFrom 기반 Secret 전체 주입은 허용하지 않음 ($file)"
+    FAIL=1
+  else
+    echo "OK  $label: 명시적 Secret key 주입만 사용"
+  fi
+}
+
 check_target "MLflow" "deploy/mlflow/oauth2-proxy.yaml"
 check_target "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf"
 check_mapping "MLflow" "deploy/mlflow/oauth2-proxy.yaml" \
@@ -53,19 +71,23 @@ check_mapping "MLflow" "deploy/mlflow/oauth2-proxy.yaml" \
 check_mapping "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
   'key[[:space:]]*=[[:space:]]*"authenticated-emails"' \
   'path[[:space:]]*=[[:space:]]*"authenticated-emails"'
+check_no_env_from "MLflow" "deploy/mlflow/oauth2-proxy.yaml" '^[[:space:]]*envFrom:'
+check_no_env_from "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
+  '^[[:space:]]*env_from[[:space:]]*\{'
 
 # 대상이 늘어날 때 domain allowlist나 환경변수 기반 우회 설정이 조용히
-# 추가되지 않도록 인프라 설정 전체를 검사한다. GitHub runner 기본 명령인 grep만
-# 사용하며, 문서·이 스크립트·Terraform provider cache는 제외한다.
-if grep -REn --exclude='*.md' --exclude='check-oauth-email-allowlist.sh' \
+# 추가되지 않도록 저장소의 배포 manifest와 모든 Terraform 설정을 검사한다.
+# 실제 Secret 값은 정적으로 읽을 수 없으므로, 운영 preflight에서 별도로 확인한다.
+# GitHub runner 기본 명령인 grep만 사용하며 문서와 Terraform provider cache는 제외한다.
+if grep -REn --exclude='*.md' \
   --exclude-dir='.terraform' \
-  -- '--email-domain([[:space:]]|=|$)|OAUTH2_PROXY_EMAIL_DOMAINS' deploy terraform/admin; then
-  echo "ERR 인프라 설정에 email-domain 또는 OAUTH2_PROXY_EMAIL_DOMAINS가 남아 있음"
+  -- "$email_domain_pattern|OAUTH2_PROXY_EMAIL_DOMAINS" deploy terraform; then
+  echo "ERR 저장소 manifest/Terraform 설정에 email-domain 또는 OAUTH2_PROXY_EMAIL_DOMAINS가 남아 있음"
   FAIL=1
 else
   grep_status=$?
   if [ "$grep_status" -eq 1 ]; then
-    echo "OK  인프라 설정 전체: email-domain 환경설정 없음"
+    echo "OK  저장소 manifest/Terraform 설정: email-domain 환경설정 없음"
   else
     echo "ERR email-domain 회귀 검사 실행 실패 (grep exit=$grep_status)"
     FAIL=1

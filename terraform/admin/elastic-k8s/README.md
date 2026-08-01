@@ -91,6 +91,7 @@ oauth2-proxy는 `authenticated-emails` Secret 파일을 유일한 이메일 allo
 `http://localhost:4181/oauth2/callback` 등록.
 
 ```bash
+(
 set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
@@ -115,6 +116,8 @@ kubectl create secret generic kibana-oauth -n elastic \
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
+kubectl rollout status deployment/kibana-oauth-proxy -n elastic --timeout=120s
+)
 ```
 
 반영 검증(값 비노출): `scripts/verify-oauth-clients.sh <k8s-context> <project-id>` — 5종 프리픽스·SM 해시 일괄 대조(#439).
@@ -129,13 +132,19 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 이메일 목록·client secret 변경 시 위를 다시 실행
 (`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
 
-### 긴급 세션 회수
+허용 목록에서 한 사용자를 제거할 때는 목록을 갱신하고 위 rollout 완료를 확인한다.
+oauth2-proxy는 보호된 요청마다 세션 이메일을 새 allowlist로 재검사하므로, 이 경우
+cookie-secret을 바꿔 전원 재로그인을 시킬 필요가 없다.
 
-허용 목록에서 제거한 사용자의 기존 oauth2-proxy 세션을 즉시 무효화하려면 새
-`cookie-secret`을 만들어야 한다. 아래 명령은 기존 client 자격과 허용 이메일을
-값 비노출 파일로 보존한 채 cookie-secret만 회전하고 rollout 완료까지 확인한다.
+### 전원 세션 무효화 (cookie-secret 회전)
+
+cookie-secret 유출 의심이나 전원 강제 로그아웃이 필요한 경우에만 아래 절차를 쓴다.
+기존 client 자격과 허용 이메일은 값 비노출 파일로 보존한 채 cookie-secret만
+회전하고 rollout 완료까지 확인한다. 대화형 셸 자체가 종료되지 않도록 명령 전체는
+subshell에서 실행된다.
 
 ```bash
+(
 set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
@@ -155,6 +164,7 @@ kubectl create secret generic kibana-oauth -n elastic \
 rm -rf "$d"; trap - EXIT
 kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
 kubectl rollout status deployment/kibana-oauth-proxy -n elastic --timeout=120s
+)
 ```
 
 완료된 rollout 뒤에는 기존 cookie가 검증되지 않아 모든 사용자가 다시 로그인해야 한다.

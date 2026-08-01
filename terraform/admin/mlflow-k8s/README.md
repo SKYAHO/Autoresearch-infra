@@ -66,6 +66,7 @@ gcloud secrets versions add autoresearch-dev-mlflow-oauth-client-secret \
 클러스터가 갈리지 않는다.
 
 ```bash
+(
 set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
@@ -99,6 +100,8 @@ kubectl create secret generic mlflow-oauth -n mlflow \
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
+kubectl rollout status deployment/mlflow-oauth-proxy -n mlflow --timeout=120s
+)
 ```
 
 이메일 목록·client 자격 변경 시 위를 다시 실행(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
@@ -125,15 +128,18 @@ kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
   done
   ```
 
-### 긴급 세션 회수
+허용 목록에서 한 사용자를 제거할 때는 목록을 갱신하고 위 rollout 완료를 확인한다.
+oauth2-proxy는 보호된 요청마다 세션 이메일을 새 allowlist로 재검사하므로, 이 경우
+cookie-secret을 바꿔 전원 재로그인을 시킬 필요가 없다.
 
-일반 갱신 절차는 전원 재로그인을 막기 위해 **기존 `cookie-secret`을 보존**한다.
-따라서 허용 목록에서 제거한 사용자의 기존 oauth2-proxy 세션을 즉시 무효화해야 하면
-일반 절차를 재실행하지 말고 아래처럼 새 cookie-secret을 생성한다. 기존 client
-자격과 허용 이메일은 값 비노출 파일로 보존하고, 생성 Secret은 `kubectl apply`로
-갱신한다.
+### 전원 세션 무효화 (cookie-secret 회전)
+
+cookie-secret 유출 의심이나 전원 강제 로그아웃이 필요한 경우에만 아래 절차를 쓴다.
+기존 client 자격과 허용 이메일은 값 비노출 파일로 보존하고, 새 cookie-secret으로
+갱신한다. 대화형 셸 자체가 종료되지 않도록 명령 전체는 subshell에서 실행된다.
 
 ```bash
+(
 set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
@@ -153,6 +159,7 @@ kubectl create secret generic mlflow-oauth -n mlflow \
 rm -rf "$d"; trap - EXIT
 kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
 kubectl rollout status deployment/mlflow-oauth-proxy -n mlflow --timeout=120s
+)
 ```
 
 완료된 rollout 뒤에는 기존 cookie가 검증되지 않아 모든 사용자가 다시 로그인해야 한다.

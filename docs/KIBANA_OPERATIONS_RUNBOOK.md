@@ -29,9 +29,12 @@ kubectl -n elastic get secret kibana-oauth \
   awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@]+@[^[:space:]@]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
 ```
 
-목록에서 이미 로그인한 사용자를 긴급 회수해야 하면 `elastic-k8s` README의
-**긴급 세션 회수** 절차로 새 cookie-secret을 생성·적용하고 rollout 완료를 확인한다.
-allowlist 삭제만으로는 기본 cookie 만료 전 기존 세션이 즉시 끊기지 않는다.
+허용 목록에서 사용자를 제거할 때는 `authenticated-emails`를 갱신한 뒤
+`kibana-oauth-proxy` rollout restart와 완료 확인을 수행한다. oauth2-proxy v7.7.1은
+보호된 요청마다 세션 이메일을 allowlist로 재검사하므로, 제거된 사용자는 새 목록이
+반영된 pod에 다음 요청을 보낼 때 cookie가 삭제되고 403으로 거부된다. 계정 제거에는
+cookie-secret 회전이 필요하지 않다. 전체 사용자의 강제 재로그인이나 cookie 유출 대응은
+`elastic-k8s` README의 **전원 세션 무효화** 절차를 따른다.
 
 ```bash
 kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
