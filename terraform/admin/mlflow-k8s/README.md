@@ -82,12 +82,16 @@ for k in client-id client-secret; do
   test -s "$d/$k" || { echo "ERROR: $k 정본이 비어 있음 — 'gcloud secrets versions add'로 payload 먼저 등록"; exit 1; }
 done
 
-# cookie 비밀: Secret 없음과 인증/연결 실패를 구분한다. 기존 값은 보존하고 최초 생성만 랜덤 생성.
+# cookie 비밀과 allowlist: Secret 없음과 인증/연결 실패를 구분한다.
+# 기존 Secret을 재실행할 때는 두 값을 보존한다. 최초 생성 또는 의도적 allowlist 변경만
+# ALLOWLIST_FILE에 실제 승인 이메일 파일(한 줄에 하나, 로컬 0600)을 지정한다.
 if kubectl -n mlflow get secret mlflow-oauth --ignore-not-found -o name > "$d/existing-secret"; then
   if test -s "$d/existing-secret"; then
-    kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' \
-      | base64 -d > "$d/cookie-secret"
-    test -s "$d/cookie-secret" || { echo "ERROR: mlflow-oauth.cookie-secret 없음"; exit 1; }
+    for k in cookie-secret authenticated-emails; do
+      kubectl -n mlflow get secret mlflow-oauth -o "jsonpath={.data.$k}" \
+        | base64 -d > "$d/$k"
+      test -s "$d/$k" || { echo "ERROR: mlflow-oauth.$k 없음"; exit 1; }
+    done
   else
     python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
   fi
@@ -95,16 +99,23 @@ else
   echo "ERROR: mlflow-oauth 존재 여부를 읽지 못함 — context/인증을 확인"; exit 1
 fi
 
-# 허용 이메일(한 줄에 하나) — 목록 밖 Google 계정은 거부된다
-cat > "$d/authenticated-emails" <<'EMAILS'
-someone@example.com
-EMAILS
+# ALLOWLIST_FILE이 지정되면 기존 목록 대신 그 파일을 사용한다. 지정하지 않은
+# 재실행은 기존 목록을 보존하며, Secret이 없으면 명시적 파일 없이는 생성하지 않는다.
+if test -n "${ALLOWLIST_FILE:-}"; then
+  test -f "$ALLOWLIST_FILE" || { echo "ERROR: ALLOWLIST_FILE을 읽을 수 없음"; exit 1; }
+  cp "$ALLOWLIST_FILE" "$d/authenticated-emails"
+elif ! test -s "$d/existing-secret"; then
+  echo "ERROR: 최초 생성에는 ALLOWLIST_FILE=/안전한/경로/approved-emails 지정 필요"; exit 1
+fi
+awk 'NF == 0 { next } /^[^[:space:]@]+@[^[:space:]@]+$/ { n++; next } { bad=1 } END { if (bad || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }' "$d/authenticated-emails" \
+  || { echo "ERROR: ALLOWLIST_FILE은 빈 줄 외에 한 줄당 이메일 하나여야 함"; exit 1; }
 
 kubectl create secret generic mlflow-oauth -n mlflow \
   --from-file=client-id="$d/client-id" \
   --from-file=client-secret="$d/client-secret" \
   --from-file=cookie-secret="$d/cookie-secret" \
-  --from-file=authenticated-emails="$d/authenticated-emails"
+  --from-file=authenticated-emails="$d/authenticated-emails" \
+  --dry-run=client -o yaml | kubectl apply -f -
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
@@ -112,7 +123,11 @@ kubectl rollout status deployment/mlflow-oauth-proxy -n mlflow --timeout=120s
 )
 ```
 
-이메일 목록·client 자격 변경 시 위를 다시 실행(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+client 자격만 갱신할 때는 `ALLOWLIST_FILE` 없이 위 블록을 다시 실행한다. 기존
+`authenticated-emails`와 `cookie-secret`이 모두 보존된다. 최초 생성 또는 이메일 목록을
+의도적으로 바꿀 때만 승인 이메일만 담은 로컬 비추적 파일을 준비해
+`ALLOWLIST_FILE=/안전한/경로/approved-emails`로 지정한 뒤 위 블록을 실행하고
+`rollout restart`한다. 파일은 저장소·채팅·명령행 인자에 넣지 않는다.
 
 갱신 시 주의:
 
