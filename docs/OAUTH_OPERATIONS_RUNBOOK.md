@@ -29,9 +29,9 @@
 | 서비스 | 인증 구현 | K8s Secret / key | allowlist 정본·방식 | 변경 주체 | redirect URI / 접근 | 갱신 후 조치 |
 |---|---|---|---|---|---|---|
 | ArgoCD | 내장 OIDC + RBAC | `argocd/argocd-google-oidc`: `clientId`, `clientSecret` | `terraform.tfvars`의 admin/readonly 이메일 → Terraform이 `argocd-rbac-cm` policy로 렌더 | `argocd-k8s` 운영자, IAM 승인자 | `https://localhost:8443/auth/callback` / `argocd-server` port-forward | `deployment/argo-cd-argocd-server` rollout |
-| Airflow | Flask-AppBuilder native OAuth | `airflow/airflow-web-oauth`: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_ALLOWED_EMAILS` | 운영자 주입 K8s Secret의 쉼표 구분 목록. webserver 시작 시 빈 목록·형식 오류를 거부 | Airflow 배포 운영자, #475 절차 | `http://localhost:8080/oauth-authorized/google`, `http://localhost:8080/auth/oauth-authorized/google` / Bastion 터널 | `deployment/airflow-webserver` rollout |
+| Airflow | Flask-AppBuilder native OAuth | `airflow/airflow-web-oauth`: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_ALLOWED_EMAILS` | 운영자 주입 K8s Secret의 쉼표 구분 목록. webserver 시작 시 빈 목록·형식 오류를 거부 | Airflow 배포 운영자, 인프라 [#475](https://github.com/SKYAHO/Autoresearch-infra/issues/475) 절차. Airflow [#207](https://github.com/SKYAHO/Autoresearch-airflow/issues/207) / [#208](https://github.com/SKYAHO/Autoresearch-airflow/pull/208)에서 적용·검증 완료 | `http://localhost:8080/oauth-authorized/google`, `http://localhost:8080/auth/oauth-authorized/google` / Bastion 터널 | `deployment/airflow-webserver` rollout |
 | MLflow | oauth2-proxy | `mlflow/mlflow-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록 | `mlflow-k8s` 운영자 | `http://localhost:4180/oauth2/callback` / proxy port-forward 또는 내부 LB | `deployment/mlflow-oauth-proxy` rollout |
-| Kibana | oauth2-proxy + Kibana basic/anonymous 내부 연동 | `elastic/kibana-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록 | `elastic-k8s` 운영자 | `http://localhost:4181/oauth2/callback` / proxy port-forward | `deployment/kibana-oauth-proxy` rollout |
+| Kibana | oauth2-proxy + Kibana basic 인증(`elastic` 사용자) 이중 로그인 | `elastic/kibana-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록 | `elastic-k8s` 운영자 | `http://localhost:4181/oauth2/callback` / proxy port-forward | `deployment/kibana-oauth-proxy` rollout |
 | Grafana | Grafana native OAuth | `monitoring/grafana-google-oauth`: `GF_AUTH_GOOGLE_CLIENT_ID`, `GF_AUTH_GOOGLE_CLIENT_SECRET` | 별도 이메일 파일 없음. `allow_sign_up=false`와 사전 생성 Grafana 계정의 이메일 매칭으로 제한 | 모니터링 운영자, Grafana 관리자 | `http://localhost:3000/login/google` / Grafana port-forward | `deployment/kube-prometheus-stack-grafana` rollout |
 
 세부 주입 명령과 서비스별 소유 root는 다음 문서를 정본으로 참조한다.
@@ -47,9 +47,9 @@
 | 구분 | Secret Manager | Kubernetes Secret | 비고 |
 |---|---|---|---|
 | client ID/secret | 아래 서비스별 표에 명시한 Secret Manager payload 정본 | 제품별 key 이름으로 변환한 실행 사본 | Secret Manager metadata와 payload 주입은 Terraform 밖에서 수행 |
-| oauth2-proxy cookie | 보통 저장하지 않음 | `cookie-secret` | 변경 시 기존 proxy 세션이 무효화될 수 있음 |
+| oauth2-proxy cookie | 보통 저장하지 않음 | `cookie-secret` | 값을 교체하면 기존 proxy session cookie를 복호화할 수 없어 전원 재로그인이 필요함. client만 교체할 때는 기존 값을 보존 |
 | MLflow/Kibana allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `authenticated-emails` 파일 | 현재 운영 계약 유지. 변경 시 해당 Secret만 갱신 |
-| Airflow allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `GOOGLE_ALLOWED_EMAILS` | #475/#208에서 운영자 주입으로 전환 |
+| Airflow allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `GOOGLE_ALLOWED_EMAILS` | 인프라 [#475](https://github.com/SKYAHO/Autoresearch-infra/issues/475) 및 Airflow [#207](https://github.com/SKYAHO/Autoresearch-airflow/issues/207)·[PR #208](https://github.com/SKYAHO/Autoresearch-airflow/pull/208)에서 운영자 주입으로 전환·적용 완료 |
 | ArgoCD/Grafana access control | 각각 Terraform 이메일 또는 Grafana DB 계정 | ConfigMap/DB 기반 | oauth2-proxy allowlist key로 변경하지 않음 |
 
 현재 Secret Manager 이름은 패턴으로 추론하지 않고 아래 값을 그대로 사용한다.
@@ -100,7 +100,12 @@ Secret Manager 자동 동기화(External Secrets Operator/CSI Driver)는 이 런
    - 미허용 계정: 거부 확인
    - 기존 workload: ArgoCD sync, Airflow webserver, MLflow/Kibana proxy,
      Grafana health 확인
-6. 새 client 세대의 비노출 검증을 마친 뒤에만 이전 version을 폐기한다.
+6. [`verify-oauth-clients.sh`](../scripts/verify-oauth-clients.sh)의 결과를 판정한다.
+   `ERR`가 하나라도 있으면 exit 1로 실패이며, `WARN`만 있어 exit 0인 경우도
+   Secret Manager 정본이 없는 상태이므로 이전 client version을 폐기하면 안
+   된다. `WARN` 없이 `결과: 전부 통과`가 나오고 로그인 smoke test까지 통과한
+   경우에만 새 client 세대가 검증된 것으로 본다.
+7. 새 client 세대의 비노출 검증을 마친 뒤에만 이전 version을 폐기한다.
 
 ID만 또는 secret만 갱신하면 `invalid_client`가 발생할 수 있다. 두 version의
 내용을 채팅·로그에 출력하지 말고, 저장소의
@@ -114,11 +119,25 @@ allowlist 변경은 client rotation과 별도 작업으로 취급한다.
 
 1. 변경 대상 서비스와 승인된 계정 변경 내역을 확인한다.
 2. 서비스별 key/파일 형식을 유지해 Secret 또는 Terraform 입력을 갱신한다.
-3. 변경 전후 payload를 출력하지 않고 key 존재만 확인한다.
+3. 변경 전후 payload를 출력하지 않고 key 존재와 값의 비어 있지 않음을
+   비노출 방식으로 확인한다. MLflow/Kibana에서 `authenticated-emails` key가
+   누락되면 Secret projected volume을 만들 수 없어 Pod가 정상 기동하지 못하고
+   `FailedMount` 이벤트가 발생한다. key는 있지만 파일이 비어 있으면
+   `--email-domain=*`가 있어도 전체 허용으로 바뀌지 않으며, 허용 이메일이
+   0개인 allowlist로 동작해 정상 계정도 거부된다.
 4. 해당 서비스만 rollout한다. 다른 서비스의 Secret을 함께 덮어쓰지 않는다.
 5. 허용 계정 로그인과 제거 계정 거부를 확인한다.
 6. 기존 세션은 즉시 폐기되지 않을 수 있음을 기록한다. 즉시 차단이 필요하면
    서비스별 세션/cookie 무효화 절차를 별도로 수행한다.
+
+MLflow와 Grafana는 ArgoCD 자동 sync 대상이지만, 현재 `prune=false`,
+`selfHeal=false`이다. 운영자가 실행한 `kubectl rollout restart`는 자동 sync가
+되었다고 되돌려지지 않는다. 또한 operator가 주입한 live Kubernetes Secret은
+Git 매니페스트의 관리 대상이 아니므로, sync가 Secret 값을 과거 값으로
+덮어쓰지 않는다. 재시작으로 생성된 Pod는 그 시점의 live Secret을 읽고,
+이후 매니페스트 변경으로 다시 생성되는 Pod도 같은 live Secret을 읽는다.
+따라서 Secret 갱신 후에는 해당 서비스만 명시적으로 재시작하고, ArgoCD sync
+상태와 로그인 smoke test를 함께 확인한다.
 
 ## 롤백과 break-glass
 
@@ -137,9 +156,11 @@ Secret 변경만으로 Terraform state를 직접 조작하거나 ArgoCD prune을
 
 - [ ] 실제 payload가 Git, PR, 로그, Terraform state에 포함되지 않았다.
 - [ ] Secret key 이름이 해당 제품의 현재 계약과 일치한다.
+- [ ] allowlist key가 존재하고 비어 있지 않으며, 허용 계정 로그인과 제거 계정 거부를 확인했다. (`verify-oauth-clients.sh`는 allowlist 값의 존재·내용을 검사하지 않음)
 - [ ] client ID와 secret이 같은 세대의 쌍이다.
 - [ ] redirect URI와 port-forward/Bastion 경로가 기존 값과 일치한다.
 - [ ] rollout status가 성공했다.
 - [ ] 허용 계정 로그인과 미허용 계정 거부를 확인했다.
 - [ ] break-glass 계정과 롤백 version을 확인했다.
+- [ ] `verify-oauth-clients.sh`가 WARN 없이 `결과: 전부 통과`를 출력했다.
 - [ ] 변경 대상 서비스 외의 Secret과 workload를 변경하지 않았다.
