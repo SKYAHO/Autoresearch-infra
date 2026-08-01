@@ -18,6 +18,8 @@ locals {
   # 검증하므로 validate만으로는 걸러지지 않는다.
   feast_apply_dev_sa_name  = "${local.resource_prefix}-feast-dev"
   feast_apply_prod_sa_name = "${local.resource_prefix}-feast-prod"
+  rerank_loadtest_runner_sa_name = "${local.resource_prefix}-rl-runner"
+  rerank_loadtest_snapshot_reader_sa_name = "${local.resource_prefix}-rl-snapshot"
 }
 
 # GitHub Actions 가 WIF 경유로 가장하는 service account (이미지 push 전용).
@@ -95,6 +97,47 @@ resource "google_project_iam_member" "airflow_deployer_cluster_viewer" {
   project = var.project_id
   role    = "roles/container.clusterViewer"
   member  = "serviceAccount:${google_service_account.airflow_deployer.email}"
+}
+
+# #482 리랭킹 부하테스트 workflow 전용 GSA. 두 계정은 동일 workflow ref에서만
+# WIF로 가장할 수 있고, GCP에서는 GKE endpoint/metadata 조회만 수행한다.
+resource "google_service_account" "rerank_loadtest_runner" {
+  account_id   = local.rerank_loadtest_runner_sa_name
+  display_name = "Autoresearch dev rerank load-test runner"
+  description  = "GitHub Actions GSA for creating isolated rerank k6 Jobs in the loadtest namespace."
+}
+
+resource "google_service_account" "rerank_loadtest_snapshot_reader" {
+  account_id   = local.rerank_loadtest_snapshot_reader_sa_name
+  display_name = "Autoresearch dev rerank Prometheus snapshot reader"
+  description  = "GitHub Actions GSA for read-only Prometheus service proxy access during rerank load tests."
+}
+
+resource "google_service_account_iam_member" "rerank_loadtest_runner_wi" {
+  service_account_id = google_service_account.rerank_loadtest_runner.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.rerank_loadtest_workflow_ref}"
+}
+
+resource "google_service_account_iam_member" "rerank_loadtest_snapshot_reader_wi" {
+  service_account_id = google_service_account.rerank_loadtest_snapshot_reader.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${local.github_wif_pool_name}/attribute.workflow_ref/${var.rerank_loadtest_workflow_ref}"
+}
+
+# get-gke-credentials가 DNS endpoint와 클러스터 메타데이터를 조회하는 데 필요한
+# 읽기 권한이다. Kubernetes object 권한은 admin root의 namespace RoleBinding으로
+# 따로 제한한다.
+resource "google_project_iam_member" "rerank_loadtest_runner_cluster_viewer" {
+  project = var.project_id
+  role    = "roles/container.clusterViewer"
+  member  = "serviceAccount:${google_service_account.rerank_loadtest_runner.email}"
+}
+
+resource "google_project_iam_member" "rerank_loadtest_snapshot_reader_cluster_viewer" {
+  project = var.project_id
+  role    = "roles/container.clusterViewer"
+  member  = "serviceAccount:${google_service_account.rerank_loadtest_snapshot_reader.email}"
 }
 
 # #307 admin root CI apply 전용 service account.

@@ -45,3 +45,19 @@ output "autoresearch_viewer_user_emails" {
   description = "Google accounts granted namespace-scoped view + pods/portforward on the autoresearch namespace (#252)."
   value       = sort(tolist(var.autoresearch_viewer_user_emails))
 }
+
+output "rerank_loadtest_contract" {
+  description = "Rerank serving load-test namespace, KSA, GSA subjects, RBAC, and NetworkPolicy contract (#482)."
+  value = {
+    namespace                    = kubernetes_namespace_v1.rerank_loadtest.metadata[0].name
+    service_account              = kubernetes_service_account_v1.rerank_loadtest.metadata[0].name
+    runner_github_gsa            = local.rerank_loadtest_runner_github_gsa_email
+    snapshot_reader_github_gsa   = local.rerank_loadtest_snapshot_reader_github_gsa_email
+    runner_role                  = kubernetes_role_v1.rerank_loadtest_runner.metadata[0].name
+    snapshot_reader_role         = kubernetes_role_v1.rerank_loadtest_prometheus_snapshot_reader.metadata[0].name
+    ingress_network_policy       = kubernetes_network_policy_v1.rerank_loadtest_ingress.metadata[0].name
+    egress_network_policy        = kubernetes_network_policy_v1.rerank_loadtest_egress.metadata[0].name
+    resource_quota               = kubernetes_resource_quota_v1.rerank_loadtest.metadata[0].name
+    limit_range                  = kubernetes_limit_range_v1.rerank_loadtest.metadata[0].name
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "title": "AutoResearch / Rerank load test",
+  "uid": "ar-rerank-loadtest",
+  "tags": [
+    "autoresearch",
+    "rerank",
+    "loadtest",
+    "as-code"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-2h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "단계별 처리 지연 p50 / p95",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, phase) (rate(rerank_phase_duration_seconds_bucket{namespace=\"autoresearch\"}[5m])))",
+          "legendFormat": "{{phase}} p50",
+          "datasource": { "type": "prometheus", "uid": "${ds}" }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, phase) (rate(rerank_phase_duration_seconds_bucket{namespace=\"autoresearch\"}[5m])))",
+          "legendFormat": "{{phase}} p95",
+          "datasource": { "type": "prometheus", "uid": "${ds}" }
+        }
+      ],
+      "description": "피처 조회·카테고리 선호도 조회·모델 추론 등 phase label별 지연을 비교합니다."
+    },
+    {
+      "type": "timeseries",
+      "title": "결과 상태별 처리율",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(rerank_outcomes_total{namespace=\"autoresearch\"}[5m]))",
+          "legendFormat": "{{outcome}}",
+          "datasource": { "type": "prometheus", "uid": "${ds}" }
+        }
+      ],
+      "description": "성공·실패 outcome의 비율을 비교합니다. 실행 메타데이터의 실패율 gate와 함께 확인합니다."
+    },
+    {
+      "type": "timeseries",
+      "title": "동시 처리 중인 요청",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "targets": [
+        {
+          "expr": "max(rerank_in_flight{namespace=\"autoresearch\"})",
+          "legendFormat": "in-flight max",
+          "datasource": { "type": "prometheus", "uid": "${ds}" }
+        }
+      ],
+      "description": "VU 단계가 올라갈 때 서버 내부 동시 처리량이 어떻게 변하는지 확인합니다."
+    },
+    {
+      "type": "timeseries",
+      "title": "serving CPU / CFS throttling",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 9 },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"autoresearch\",pod=~\"autoresearch-serving-.*\",container!=\"\",container!=\"POD\"}[5m]))",
+          "legendFormat": "CPU seconds/s",
+          "datasource": { "type": "prometheus", "uid": "${ds}" }
+        },
+        {
+          "expr": "sum(rate(container_cpu_cfs_throttled_seconds_total{namespace=\"autoresearch\",pod=~\"autoresearch-serving-.*\",container!=\"\",container!=\"POD\"}[5m]))",
+          "legendFormat": "CFS throttled seconds/s",
+          "datasource": { "type": "prometheus", "uid": "${ds}" }
+        }
+      ],
+      "description": "CPU limit 포화가 단계별 latency 상승과 함께 발생하는지 확인합니다."
+    },
+    {
+      "type": "timeseries",
+      "title": "serving RSS",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" },
+        "overrides": []
+      },
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "targets": [
+        {
+          "expr": "sum(container_memory_rss{namespace=\"autoresearch\",pod=~\"autoresearch-serving-.*\",container!=\"\",container!=\"POD\"})",
+          "legendFormat": "RSS",
+          "datasource": { "type": "prometheus", "uid": "${ds}" }
+        }
+      ],
+      "description": "부하 단계별 resident memory 증가와 OOM 위험을 확인합니다."
+    }
+  ]
+}
