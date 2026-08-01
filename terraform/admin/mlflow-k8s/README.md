@@ -46,6 +46,8 @@ rm -f "$env_file"; trap - EXIT
 UI 앞단 OAuth2-proxy는 Google OAuth client 자격·cookie 비밀·허용 이메일 목록이
 필요하다. 모두 공개 저장소에 두지 않고 K8s Secret `mlflow-oauth`로 주입한다.
 값이 명령행·히스토리에 남지 않도록 파일 기반(`--from-file`)으로 만든다.
+배포 manifest는 `--authenticated-emails-file`만 이메일 접근 제한으로 사용하며,
+목록 밖 Google 계정은 proxy에서 거부된다.
 
 선행: GCP 콘솔에서 OAuth client(웹) 생성, redirect URI
 `http://localhost:4180/oauth2/callback` 등록. **발급 직후 client id와 client secret을

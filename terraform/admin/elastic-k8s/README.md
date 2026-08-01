@@ -73,6 +73,8 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 못 쓰고, Kibana 9.2에서 anonymous 자동 로그인이 안정적으로 동작하지 않아(#323),
 **oauth2-proxy(Google 로그인 + 허용 이메일)로 접근을 통제하고 Kibana는 기본 basic
 인증(`elastic` 등 실제 사용자)으로 로그인**한다(이중 로그인이나 신뢰도 우선).
+oauth2-proxy는 `authenticated-emails` Secret 파일을 유일한 이메일 allowlist로
+사용하며, `email-domain=*`와 조합하지 않는다.
 
 - 사용자는 Kibana(5601)가 아니라 **oauth2-proxy Service(4180)** 를 로컬 **4181**
   포트로 port-forward 한다(MLflow의 로컬 4180과 충돌 방지). proxy가 Google 로그인 +

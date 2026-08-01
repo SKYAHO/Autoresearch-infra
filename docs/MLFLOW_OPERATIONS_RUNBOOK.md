@@ -28,6 +28,8 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 UI/API는 ClusterIP라 외부 노출이 없다. 접근은 **OAuth2-proxy(4180)로 port-forward**
 한다. proxy가 Google 로그인 + 허용 이메일 목록으로 인증한 뒤 MLflow로 프록시한다.
 목록 밖 Google 계정은 거부된다("정해진 계정만").
+허용 목록은 `mlflow-oauth` Secret의 `authenticated-emails` 키에서 주입되며,
+MLflow manifest는 이 파일만 이메일 접근 제한으로 사용한다.
 
 접속 경로는 두 가지다(둘 다 브라우저는 `http://localhost:4180`).
 

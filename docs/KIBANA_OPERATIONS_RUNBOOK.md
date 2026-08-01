@@ -16,6 +16,8 @@ oauth2-proxy Service(4180)를 로컬 4181로 접속한다(MLflow 로컬 4180과 
 사용자)로 로그인**한다. Kibana anonymous 자동 로그인은 9.2 호환성 문제로 폐기했다
 (#323). 로컬 HTTP port-forward라 Kibana secure cookie는 비활성이다. `elastic` 비번은
 `autoresearch-es-elastic-user` Secret에서 회수(문서/PR/채팅 미기재).
+허용 목록은 `kibana-oauth` Secret의 `authenticated-emails` 키에서 주입되며,
+oauth2-proxy는 이 파일만 이메일 접근 제한으로 사용한다.
 
 ```bash
 kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
