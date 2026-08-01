@@ -45,7 +45,10 @@ API는 사용자가 보낸 임의 manifest를 Kubernetes API로 전달해서는 
 - image는 registry path와 `@sha256:` digest를 포함하며 mutable tag를 허용하지 않는다.
 - `serviceAccountName: experiment-job`, `restartPolicy: Never`, `backoffLimit: 0`을 쓴다.
 - `activeDeadlineSeconds`는 3,600초 이하, `ttlSecondsAfterFinished`는 86,400초 이하로 제한한다.
-- 모든 컨테이너에 CPU·메모리 request/limit을 명시하고 namespace의 단일 컨테이너 최대 2 vCPU/4 GiB를 넘기지 않는다.
+- 모든 컨테이너에 CPU·메모리 request/limit을 명시하고 namespace의 단일 컨테이너 최대 1 vCPU/2 GiB를 넘기지 않는다.
+- `nodeSelector`는 `cloud.google.com/gke-nodepool: batch-od`, toleration은
+  `workload=batch-od:NoSchedule`만 사용한다. 일반 앱 pool에는 스케줄하지 않으며,
+  admission 검증은 이 두 값을 변경·누락한 Job을 거부해야 한다.
 - `hostNetwork`, `hostPID`, `hostIPC`, privileged, hostPath, 추가 Linux capability, root 실행을 사용하지 않는다. Pod Security `restricted` 요구를 충족하는 `runAsNonRoot`, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault`, capability drop `ALL`을 설정한다.
 - 요청 원문과 credential을 환경변수·label·annotation·로그에 넣지 않는다.
 - `autoresearch.io/experiment-id`, source revision, image digest, result URI는 검증된 값만 기록한다.
@@ -59,6 +62,24 @@ API는 사용자가 보낸 임의 manifest를 Kubernetes API로 전달해서는 
 모두 원래 생성 시점 기준 30일 후 영구 삭제한다. versioning은 이 보존 기간 안의
 운영자 복구용이며 장기 보존 수단이 아니므로, 장기 보관이 필요한 결과는 별도 승인된
 경로로 이관한다.
+
+GKE Workload Identity에서 컨테이너의 ADC/GCS client는 GKE metadata server에 token을
+요청한다. metadata server는 Pod의 KSA projected token, `experiment-job` KSA annotation,
+GSA의 `roles/iam.workloadIdentityUser` binding을 검증해 결과 버킷 쓰기용 GCP access
+token을 발급한다. 이 KSA의 token mount를 명시적으로 `true`로 둔 이유는 GCS 인증이
+필수이기 때문이다. 다른 KSA가 provider 기본값을 따르는 것과 달리 이 Job 계약은
+기본값 변경에도 의존하지 않는다.
+
+마운트된 KSA token은 Kubernetes API에 대한 인증 소재일 수 있지만, Job KSA에는
+RoleBinding이 없고 NetworkPolicy도 Kubernetes API HTTPS를 허용하지 않는다. 따라서
+저신뢰 에이전트는 Kubernetes 리소스 조회·수정, Secret 조회, exec, cluster 권한 상승을
+할 수 없다. GCP 측에서도 결과 버킷 새 객체 생성 외 권한은 없다.
+
+`roles/storage.objectCreator`만 가진 Job은 업로드한 객체를 다시 GET/list하거나
+무결성 검증을 위해 읽을 수 없다. 업로드 요청은 `ifGenerationMatch=0` precondition과
+응답의 generation/checksum으로 성공 여부를 확인하고, API DB에는 결과 URI와 요약
+metric만 기록한다. 결과 객체의 사용자 다운로드/상세 조회는 이번 PR 범위에 없으며,
+별도 인증·감사 가능한 read 경로를 설계할 때까지 제공하지 않는다.
 
 ## 적용 후 권한 검증
 
@@ -146,10 +167,16 @@ Artifact Registry 접근은 Job 제출 전에 검증한다.
 3. 권한 또는 Job 명세 취약점이 의심되면 `enable_experiment_job_creation`을 `false`로 되돌리는 Terraform 변경을 검토하고, 승인된 apply로 반영한다.
 4. 결과 버킷, namespace, KSA, GSA를 삭제하지 않는다. 삭제는 감사·재현·다른 실행의 복구를 훼손할 수 있으므로 별도 변경과 승인 절차가 필요하다.
 5. 수정된 템플릿과 digest로 새 시도 ID의 Job을 만든다. 같은 prefix를 재사용하지 않는다.
-   단, 완료 Job도 `count/jobs.batch=4` quota를 TTL controller가 삭제할 때까지 점유한다.
-   네 개의 완료 Job이 남은 상태에서는 다섯 번째 create가 `Forbidden` quota 초과로
+   단, 완료 Job도 `count/jobs.batch=2` quota를 TTL controller가 삭제할 때까지 점유한다.
+   두 개의 완료 Job이 남은 상태에서는 세 번째 create가 `Forbidden` quota 초과로
    거부되며, API는 재시도 가능 상태로 기록해 TTL 정리 후 제출한다. terminal Pod는
-   `pods=4` 계산에서 제외될 수 있으므로 운영 병목은 Job 객체 quota다.
+   `pods=2` 계산에서 제외될 수 있으므로 운영 병목은 Job 객체 quota다.
+
+`ttlSecondsAfterFinished` 누락 또는 TTL controller 장애로 quota가 회수되지 않으면
+API는 새 제출을 차단하고 운영자에게 escalate한다. API는 delete 권한이 없으므로,
+운영자는 결과 URI·Job 상태·감사 메타데이터를 확인한 뒤 별도 승인된 Job 삭제 권한으로
+명시적으로 회수한다. `enable_experiment_job_creation=false` 적용은 새 Job 제출만
+막으며, 이미 실행 중인 Job을 취소·중지하지 않는다.
 
 비용 경보나 quota 초과가 발생하면 API 동시 제출 제한을 먼저 낮춘다. namespace quota
 상향은 node 여유, 예상 최대 실행 시간, 비용 상한을 문서화한 별도 이슈에서 검토한다.

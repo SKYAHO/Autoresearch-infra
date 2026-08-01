@@ -8,8 +8,12 @@ resource "kubernetes_namespace_v1" "experiment_jobs" {
       "app.kubernetes.io/name"             = "autoresearch-experiments"
       "app.kubernetes.io/part-of"          = "auto-research"
       "pod-security.kubernetes.io/enforce" = "restricted"
-      "pod-security.kubernetes.io/audit"   = "restricted"
-      "pod-security.kubernetes.io/warn"    = "restricted"
+      # 현재 live GKE control plane v1.35를 기준으로 고정한다. 다음 마이너
+      # 업그레이드 전에는 runbook의 PSA dry-run과 Job image 호환성을 확인한 뒤
+      # 의도적으로 이 값을 올린다.
+      "pod-security.kubernetes.io/enforce-version" = "v1.35"
+      "pod-security.kubernetes.io/audit"           = "restricted"
+      "pod-security.kubernetes.io/warn"            = "restricted"
     }
   }
 }
@@ -28,8 +32,10 @@ resource "kubernetes_service_account_v1" "experiment_job" {
   automount_service_account_token = true
 }
 
-# 초기 MVP는 동시 네 개 이하의 단기 Job만 허용한다. 완료 Job도 TTL 전에는 quota에
-# 포함되므로 무한 재시도·대량 제출로 dev node 비용이 늘어나는 경로를 차단한다.
+# 실험은 일반 앱 pool이 아니라 batch-od 전용 pool에 고정한다. 이 quota는 pool의
+# e2-standard-2 두 노드(min 0/max 2)에서 각각 한 Job이 안정적으로 실행되는
+# 보수적 상한이다. 완료 Job도 TTL 전에는 quota에 포함되므로 무한 재시도·대량 제출로
+# batch 비용이 늘어나는 경로를 차단한다.
 resource "kubernetes_resource_quota_v1" "experiment_jobs" {
   metadata {
     name      = "experiment-jobs-quota"
@@ -38,12 +44,12 @@ resource "kubernetes_resource_quota_v1" "experiment_jobs" {
 
   spec {
     hard = {
-      "count/jobs.batch" = "4"
-      "pods"             = "4"
+      "count/jobs.batch" = "2"
+      "pods"             = "2"
       "requests.cpu"     = "2"
       "requests.memory"  = "4Gi"
-      "limits.cpu"       = "4"
-      "limits.memory"    = "8Gi"
+      "limits.cpu"       = "2"
+      "limits.memory"    = "4Gi"
     }
   }
 
@@ -60,16 +66,16 @@ resource "kubernetes_limit_range_v1" "experiment_jobs" {
     limit {
       type = "Container"
       default = {
-        cpu    = "1"
-        memory = "2Gi"
+        cpu    = "500m"
+        memory = "1Gi"
       }
       default_request = {
-        cpu    = "250m"
-        memory = "256Mi"
+        cpu    = "500m"
+        memory = "1Gi"
       }
       max = {
-        cpu    = "2"
-        memory = "4Gi"
+        cpu    = "1"
+        memory = "2Gi"
       }
     }
   }

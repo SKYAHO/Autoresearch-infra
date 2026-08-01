@@ -78,7 +78,7 @@ Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정
 | namespace | `autoresearch-experiments` | 실험 Pod와 기존 앱을 분리 |
 | Job KSA | `experiment-job` | 결과 버킷 쓰기 전용 Workload Identity |
 | API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태만 기본 조회 |
-| Pod Security | `restricted` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
+| Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
 | 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
 
 `experiment-job` KSA에는 Kubernetes RoleBinding을 만들지 않습니다. Workload
@@ -97,7 +97,7 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
 3. Job 이름·label·결과 GCS prefix·CPU/메모리·deadline·TTL·`backoffLimit: 0`을 서버가
    강제한다.
 4. admission 검증이 위험한 volume, privileged, host namespace, ServiceAccount 변경,
-   허용되지 않은 image를 거부한다.
+   허용되지 않은 image와 `batch-od` scheduling 계약 위반을 거부한다.
 5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
    수행한다.
 
@@ -112,11 +112,14 @@ Terraform apply로 값을 `false`로 되돌립니다. namespace, KSA, 결과 버
 새 목적지가 필요하면 목적지 CIDR/selector, 포트, GSA IAM, 데이터 분류를 함께
 검토하는 별도 이슈가 필요합니다.
 
-초기 dev 상한은 Job·Pod 각각 4개, 총 request 2 vCPU/4 GiB, 총 limit 4 vCPU/8 GiB
-입니다. `count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로,
-실제 제출 병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request는
-250m/256 MiB, 기본 limit은 1 vCPU/2 GiB이고, 단일 컨테이너는 2 vCPU/4 GiB를 넘을 수
-없습니다. 운영 검증 절차와 Job manifest 계약은
+초기 dev 상한은 Job·Pod 각각 2개, 총 request/limit 2 vCPU/4 GiB입니다.
+`count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로, 실제 제출
+병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request/limit은
+500m/1 GiB이고, 단일 컨테이너는 1 vCPU/2 GiB를 넘을 수 없습니다. Job 템플릿과
+admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` toleration을
+강제해야 합니다. `batch-od`는 min 0/max 2 전용 on-demand pool이므로 일반 앱 pool
+압박은 막지만, 실험 실행 시 최대 두 노드의 비용과 해당 pool의 다른 batch 작업 경합은
+여전히 관측해야 합니다. 운영 검증 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
 따릅니다.
 

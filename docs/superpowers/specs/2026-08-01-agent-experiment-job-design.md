@@ -62,7 +62,7 @@ autoresearch-experiments
         └── 주 에이전트 컨테이너 1개
 ```
 
-API는 `autoresearch-experiments` namespace에서 Job의 생성·조회·삭제·상태 확인만
+API는 `autoresearch-experiments` namespace에서 Job의 생성·조회·상태 확인만
 수행한다. Job Pod는 API와 다른 KSA를 사용하며, 결과 저장에 필요한 GCS 객체 생성
 권한만 갖는다. API에는 실험 결과 버킷 쓰기 권한을 부여하지 않는다.
 
@@ -74,7 +74,9 @@ Kubernetes RBAC는 Pod 사양의 image·env·volume 내용을 검증하지 않�
 - ResourceQuota와 LimitRange
 - Job 생성 주체의 namespace-scoped 권한
 - Job Pod의 별도 KSA. Workload Identity로 GCS에 접근해야 하므로 서비스 계정 토큰
-  자동 마운트는 켜되, 해당 KSA에는 Kubernetes API 권한을 부여하지 않는다.
+  자동 마운트는 켜되, 해당 KSA에는 Kubernetes API 권한을 부여하지 않는다. GKE
+  metadata server는 KSA projected token, KSA annotation, GSA의 Workload Identity
+  member binding을 대조해 GCP access token을 발급한다.
 - Secret 접근 권한 미부여
 - default-deny NetworkPolicy 후 필요한 목적지만 허용
 - Job 템플릿은 앱 저장소의 고정 계약으로 관리하며 임의 사용자 manifest를 그대로
@@ -102,7 +104,9 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
   시도 ID를 가진 별도 Job으로 생성
 - `activeDeadlineSeconds`: 무제한 실행 금지
 - `ttlSecondsAfterFinished`: 종료 Job 자동 정리 기간 설정
-- CPU·메모리 requests/limits 필수
+- CPU·메모리 requests/limits 필수. 초기 단일 컨테이너 상한은 1 vCPU/2 GiB
+- `batch-od` nodeSelector 및 `workload=batch-od:NoSchedule` toleration 필수. 일반
+  앱 pool과 컴퓨트 경계를 분리하며, admission 검증이 이를 강제한다.
 - namespace ResourceQuota로 동시 실행 수·총 CPU·총 메모리 상한 설정
 
 정확한 숫자는 실제 dev GKE quota와 예상 실험 소요량을 확인한 뒤 plan 문서에서
@@ -116,7 +120,9 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
   `roles/storage.objectCreator`에는 기존 객체를 덮어쓰는 데 필요한 삭제 권한이 없고,
   API는 create-if-absent precondition으로 동일 prefix의 논리적 중복도 거부한다.
 - Job은 성공·실패를 Kubernetes Job 상태로 남기고, 애플리케이션 상태 API는
-  `Job`/`Pod` 상태와 결과 URI를 결합해 표시한다.
+  `Job`/`Pod` 상태와 결과 URI 및 API DB의 요약 metric을 결합해 표시한다. API에는
+  결과 객체 내용 읽기 권한을 부여하지 않는다. 결과 다운로드/상세 조회가 필요하면
+  사용자 인증·prefix 조건·감사 로그를 갖춘 별도 read 경로를 설계한다.
 - 결과 파일에는 metric, 평가 기준, 데이터 버전, 실행 이미지 digest, source
   revision을 포함한다.
 
@@ -131,6 +137,7 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
 - `jobs`: `get`, `list`, `watch`, `create` (`create`는 검증 조건 충족 후에만)
 - `pods`: `get`, `list`, `watch`
 - `pods/log`: `get`
+- `events`: `get`, `list`, `watch` (해당 Job/Pod involvedObject만 상태 원인으로 사용)
 
 다음 권한은 부여하지 않는다.
 
@@ -142,9 +149,13 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
 - ClusterRole·ClusterRoleBinding 생성
 - 다른 namespace 접근
 
-MVP에서는 API에 Job 삭제 권한을 부여하지 않는다. 종료 Job은 TTL 정책으로 정리하고,
-취소·재시도는 별도 설계에서 권한과 상태 전이를 함께 검토한다. API가 사용자 입력을
-그대로 Job 명세로 전달하지 않도록 앱 저장소 구현에서 허용 필드를 고정한다.
+MVP에서는 API에 Job 삭제 권한을 부여하지 않는다. `ttlSecondsAfterFinished` 누락이나
+TTL controller 장애로 quota가 회수되지 않으면 API는 새 제출을 중지하고 운영자에게
+escalate한다. 운영자는 결과·감사 메타데이터를 확인한 뒤 별도 승인된 namespace Job
+삭제 권한으로 회수한다. `enable_experiment_job_creation=false`는 새 Job 제출만
+차단하며 이미 실행 중인 Job은 중단하지 않는다. 취소·재시도는 별도 설계에서 권한과
+상태 전이를 함께 검토한다. API가 사용자 입력을 그대로 Job 명세로 전달하지 않도록
+앱 저장소 구현에서 허용 필드를 고정한다.
 
 ### 실험 Job KSA/GSA
 

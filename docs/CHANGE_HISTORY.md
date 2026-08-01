@@ -16,6 +16,10 @@
 - Agent Orchestration API는 기본적으로 Job·Pod·로그 관찰만 가능하다. Job `create`
   권한은 고정 템플릿·허용 image digest·admission 검증과 별도 승인 전까지
   `enable_experiment_job_creation=false`로 유지한다.
+- 2차 리뷰에서 Pod Security `enforce-version`을 live GKE 기준 `v1.35`로 고정했고,
+  Job 템플릿·admission이 `batch-od` 전용 nodeSelector/toleration을 강제하도록
+  계약을 보완했다. 일반 앱 pool 경합을 막기 위해 동시 Job·Pod 상한은 2개,
+  컨테이너 최대는 1 vCPU/2 GiB로 낮췄다.
 - 실제 Terraform apply와 live Job 검증은 아직 수행하지 않았다. 운영 절차는
   `docs/runbooks/2026-08-01-auto-research-experiment-job.md`를 따른다.
 
