@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-01T06:26:11Z",
+  "generated_at": "2026-08-01T06:47:41Z",
   "reports": [
+    {
+      "number": 481,
+      "title": "docs: admin 구조와 폐기 구성 문서 최신화",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-01T06:47:28Z",
+      "summary_ko": [
+        "terraform/admin 구조와 ArgoCD 관리 애플리케이션 목록, Vault 폐기 상태를 현재 코드 현황에 맞춰 문서화하였습니다.",
+        "ArgoCD 관리 애플리케이션 5종 및 gke-team-access 루트의 역할을 명확히 설명하도록 최신화하였습니다.",
+        "운영에서 제외된 Vault의 상태를 명시하고, 잔여 리소스 및 루트 제거 작업 이슈(#478)를 명확히 연결하였습니다."
+      ],
+      "report_url": "pr/481/"
+    },
     {
       "number": 471,
       "title": "feat: Agent Runner 모델을 GPT-5.6 Luna로 전환",
