@@ -84,10 +84,10 @@ variable "experiment_runtime_gcp_service_account_email" {
 
   validation {
     condition = (
-      trimspace(var.experiment_runtime_gcp_service_account_email) == "" ||
-      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.experiment_runtime_gcp_service_account_email))
+      var.experiment_runtime_gcp_service_account_email == "" ||
+      can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\\.iam\\.gserviceaccount\\.com$", var.experiment_runtime_gcp_service_account_email))
     )
-    error_message = "experiment_runtime_gcp_service_account_email must be empty or a valid GSA email."
+    error_message = "experiment_runtime_gcp_service_account_email must be empty or use 6-30 character lowercase account/project IDs that start with a letter, contain only letters, digits, or hyphens, and end with a letter or digit."
   }
 }
 
@@ -98,10 +98,10 @@ variable "airflow_gcp_service_account_email" {
 
   validation {
     condition = (
-      trimspace(var.airflow_gcp_service_account_email) == "" ||
-      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.airflow_gcp_service_account_email))
+      var.airflow_gcp_service_account_email == "" ||
+      can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\\.iam\\.gserviceaccount\\.com$", var.airflow_gcp_service_account_email))
     )
-    error_message = "airflow_gcp_service_account_email must be empty or a valid GSA email."
+    error_message = "airflow_gcp_service_account_email must be empty or use 6-30 character lowercase account/project IDs that start with a letter, contain only letters, digits, or hyphens, and end with a letter or digit."
   }
 }
 
