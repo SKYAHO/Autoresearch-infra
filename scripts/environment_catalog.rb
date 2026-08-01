@@ -2,12 +2,16 @@
 # frozen_string_literal: true
 
 require "ipaddr"
+require "fileutils"
+require "json"
+require "optparse"
 require "yaml"
 
 class EnvironmentCatalog
   class CatalogError < StandardError; end
 
-  ROOTS = %w[
+  TERRAFORM_ROOTS = %w[
+    terraform/bootstrap
     terraform/envs/dev
     terraform/admin/airflow-k8s
     terraform/admin/argo-rollouts-k8s
@@ -19,6 +23,23 @@ class EnvironmentCatalog
     terraform/admin/monitoring-k8s
     terraform/admin/vault-k8s
   ].freeze
+
+  BACKEND_ROOTS = TERRAFORM_ROOTS - ["terraform/bootstrap"]
+
+  ROOT_VARIABLE_KEYS = {
+    "terraform/envs/dev" => %w[
+      project_id region zone environment name_prefix dev_subnet_cidr private_services_cidr
+    ],
+    "terraform/admin/airflow-k8s" => %w[project_id region zone private_services_cidr],
+    "terraform/admin/argo-rollouts-k8s" => %w[project_id region zone],
+    "terraform/admin/argocd-k8s" => %w[project_id region zone],
+    "terraform/admin/autoresearch-k8s" => %w[project_id region zone private_services_cidr],
+    "terraform/admin/elastic-k8s" => %w[project_id region zone],
+    "terraform/admin/gke-team-access" => %w[project_id region name_prefix],
+    "terraform/admin/mlflow-k8s" => %w[project_id region zone private_services_cidr],
+    "terraform/admin/monitoring-k8s" => %w[project_id region zone],
+    "terraform/admin/vault-k8s" => %w[project_id region zone]
+  }.freeze
 
   attr_reader :data
 
@@ -48,7 +69,9 @@ class EnvironmentCatalog
     validate!
     ensure_known_root!(root)
 
-    {
+    return bootstrap_variables if root == "terraform/bootstrap"
+
+    values = {
       "project_id" => gcp.fetch("project_id"),
       "region" => gcp.fetch("region"),
       "zone" => gcp.fetch("zone"),
@@ -57,16 +80,38 @@ class EnvironmentCatalog
       "dev_subnet_cidr" => network.fetch("dev_subnet_cidr"),
       "private_services_cidr" => network.fetch("private_services_cidr")
     }
+    values.slice(*ROOT_VARIABLE_KEYS.fetch(root))
   end
 
   def backend_config(root)
     validate!
-    ensure_known_root!(root)
+    raise CatalogError, "backend가 없는 Terraform root입니다: #{root}" unless BACKEND_ROOTS.include?(root)
 
     {
       "bucket" => state.fetch("bucket"),
       "prefix" => state.fetch("roots").fetch(root)
     }
+  end
+
+  def write_terraform_inputs!(root:, output_root:)
+    variables = terraform_variables(root)
+    backend = backend_config(root) if BACKEND_ROOTS.include?(root)
+    target_directory = File.join(output_root, root)
+    FileUtils.mkdir_p(target_directory)
+
+    var_file = File.join(target_directory, ".environment.auto.tfvars.json")
+    File.write(var_file, JSON.pretty_generate(variables) + "\n")
+    backend_file = nil
+    if backend
+      backend_file = File.join(target_directory, ".environment.backend.hcl")
+      File.write(
+        backend_file,
+        "bucket = #{backend.fetch("bucket").inspect}\n" +
+        "prefix = #{backend.fetch("prefix").inspect}\n"
+      )
+    end
+
+    { var_file: var_file, backend_file: backend_file }
   end
 
   private
@@ -122,14 +167,22 @@ class EnvironmentCatalog
     roots = state.fetch("roots") { raise CatalogError, "state.roots mapping이 필요합니다" }
     raise CatalogError, "state.roots는 mapping이어야 합니다" unless roots.is_a?(Hash)
 
-    ROOTS.each do |root|
+    BACKEND_ROOTS.each do |root|
       prefix = roots[root]
       raise CatalogError, "#{root}의 state prefix가 필요합니다" unless prefix.is_a?(String) && prefix.match?(%r{\A(?:[a-z0-9-]+/)+\z})
     end
   end
 
   def ensure_known_root!(root)
-    raise CatalogError, "지원하지 않는 Terraform root입니다: #{root}" unless ROOTS.include?(root)
+    raise CatalogError, "지원하지 않는 Terraform root입니다: #{root}" unless TERRAFORM_ROOTS.include?(root)
+  end
+
+  def bootstrap_variables
+    {
+      "project_id" => gcp.fetch("project_id"),
+      "region" => gcp.fetch("region"),
+      "state_bucket_name" => state.fetch("bucket")
+    }
   end
 
   def required_string(mapping, key)
@@ -137,5 +190,29 @@ class EnvironmentCatalog
     raise CatalogError, "#{key}는 비어 있지 않은 문자열이어야 합니다" unless value.is_a?(String) && !value.empty?
 
     value
+  end
+end
+
+if $PROGRAM_NAME == __FILE__
+  begin
+    options = {}
+    OptionParser.new do |parser|
+      parser.on("--catalog PATH") { |value| options[:catalog] = value }
+      parser.on("--root PATH") { |value| options[:root] = value }
+      parser.on("--output-root PATH") { |value| options[:output_root] = value }
+    end.parse!
+
+    %i[catalog root output_root].each do |key|
+      abort("#{key} 인수가 필요합니다") unless options[key]
+    end
+
+    generated = EnvironmentCatalog.load(options[:catalog]).write_terraform_inputs!(
+      root: options[:root],
+      output_root: options[:output_root]
+    )
+    puts JSON.generate(generated)
+  rescue EnvironmentCatalog::CatalogError => error
+    warn "환경 카탈로그 오류: #{error.message}"
+    exit 1
   end
 end

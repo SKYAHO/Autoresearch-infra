@@ -1,0 +1,43 @@
+#!/bin/sh
+# dev 환경 카탈로그를 검증하고 Terraform root별 입력·backend를 전달한다.
+set -eu
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+environment=""
+root=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --environment)
+      environment=${2:?--environment 값이 필요합니다}
+      shift 2
+      ;;
+    --root)
+      root=${2:?--root 값이 필요합니다}
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+[ "$environment" = "dev" ] || { echo "지원하지 않는 환경입니다: $environment" >&2; exit 2; }
+[ -n "$root" ] || { echo "--root 값이 필요합니다" >&2; exit 2; }
+[ "$#" -gt 0 ] || { echo "Terraform 명령이 필요합니다" >&2; exit 2; }
+
+command=$1
+shift
+catalog="$repository_root/config/environments/$environment/environment.yaml"
+generated=$(ruby "$repository_root/scripts/environment_catalog.rb" --catalog "$catalog" --root "$root" --output-root "$repository_root")
+backend_file=$(printf '%s' "$generated" | ruby -rjson -e 'value = JSON.parse(STDIN.read); print(value["backend_file"] || "")')
+
+if [ "$command" = "init" ]; then
+  for argument in "$@"; do
+    [ "$argument" = "-backend=false" ] && exec terraform -chdir="$root" init "$@"
+  done
+  [ -z "$backend_file" ] && exec terraform -chdir="$root" init "$@"
+  exec terraform -chdir="$root" init -backend-config="$backend_file" "$@"
+fi
+
+exec terraform -chdir="$root" "$command" "$@"
