@@ -43,9 +43,9 @@
 - Job GSA에는 버킷 수준 `roles/storage.objectCreator`만 부여합니다. objectViewer, objectAdmin, bucket IAM 권한은 부여하지 않습니다.
 - Job KSA→GSA Workload Identity binding은 `roles/iam.workloadIdentityUser`로만 연결합니다.
 
-- [ ] **1단계: 실패하는 Terraform 정적 검증 조건을 먼저 정의합니다.**
+- [ ] **1단계: Terraform 입력 검증 조건을 먼저 정의합니다.**
 
-  `terraform/envs/dev/variables.tf`에 버킷 이름과 보존 기간 validation을 추가하고 `terraform -chdir=terraform/envs/dev validate`로 검증합니다.
+  `terraform/envs/dev/variables.tf`에 `experiment_results_object_retention_days`를 추가하고, 값이 1 이상의 정수인지 validation으로 제한합니다. 버킷 이름은 입력으로 받지 않고 `locals.tf`에서 project id와 resource prefix로 파생합니다.
 
 - [ ] **2단계: 버킷·GSA·IAM·Workload Identity 리소스를 추가합니다.**
 
@@ -87,12 +87,12 @@
 - Job KSA 기본값은 `experiment-job`입니다.
 - namespace에는 `app.kubernetes.io/part-of=auto-research`와 Pod Security `restricted` enforce/audit/warn 라벨을 모두 설정합니다.
 - Job KSA는 `automount_service_account_token=true`로 설정해 GKE metadata server 기반 Workload Identity를 사용합니다. Kubernetes RoleBinding은 만들지 않습니다.
-- namespace ResourceQuota 기본값은 `count/jobs.batch=16`, `count/pods=16`, `requests.cpu=4`, `requests.memory=4Gi`, `limits.cpu=16`, `limits.memory=16Gi`입니다.
+- namespace ResourceQuota 기본값은 `count/jobs.batch=4`, `count/pods=4`, `requests.cpu=2`, `requests.memory=4Gi`, `limits.cpu=4`, `limits.memory=8Gi`입니다.
 - LimitRange 기본값은 container request `250m/256Mi`, default limit `1 CPU/2Gi`, max `2 CPU/4Gi`로 고정합니다.
 
 - [ ] **1단계: namespace·KSA·quota·limitrange 리소스를 추가합니다.**
 
-  `experiment_jobs.tf`에 `kubernetes_namespace_v1.experiment_jobs`, `kubernetes_service_account_v1.experiment_job`, `kubernetes_resource_quota_v1.experiment_jobs`, `kubernetes_limit_range_v1.experiment_jobs`를 추가합니다. KSA annotation은 작업 1의 GSA email local에서 가져오며, 실제 email은 tfvars에 넣지 않습니다.
+  `experiment_jobs.tf`에 `kubernetes_namespace_v1.experiment_jobs`, `kubernetes_service_account_v1.experiment_job`, `kubernetes_resource_quota_v1.experiment_jobs`, `kubernetes_limit_range_v1.experiment_jobs`를 추가합니다. admin root는 dev state를 직접 읽지 않으므로 KSA annotation은 `${var.resource_prefix}-exp-job@${var.project_id}.iam.gserviceaccount.com` 기본값을 locals에서 파생하며, 필요하면 검증된 GSA email만 변수 override로 받습니다.
 
 - [ ] **2단계: namespace 출력과 운영 문서를 추가합니다.**
 
