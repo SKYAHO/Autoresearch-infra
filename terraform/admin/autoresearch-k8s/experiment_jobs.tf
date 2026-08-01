@@ -13,13 +13,16 @@ resource "kubernetes_namespace_v1" "experiment_jobs" {
       # 의도적으로 이 값을 올린다.
       "pod-security.kubernetes.io/enforce-version" = "v1.35"
       "pod-security.kubernetes.io/audit"           = "restricted"
+      "pod-security.kubernetes.io/audit-version"   = "latest"
       "pod-security.kubernetes.io/warn"            = "restricted"
+      "pod-security.kubernetes.io/warn-version"    = "latest"
     }
   }
 }
 
-# Workload Identity 토큰은 결과 버킷 쓰기에 필요하다. 이 KSA에는 Kubernetes
-# RoleBinding을 만들지 않으므로 token 자동 마운트가 Kubernetes API 권한을 주지 않는다.
+# GKE metadata server는 source Pod identity와 KSA annotation으로 Workload Identity를
+# 교환하므로 Kubernetes API token을 컨테이너에 마운트할 필요가 없다. 저신뢰 에이전트에
+# 불필요한 Kubernetes 자격 증명을 노출하지 않기 위해 명시적으로 비활성화한다.
 resource "kubernetes_service_account_v1" "experiment_job" {
   metadata {
     name      = var.experiment_job_k8s_service_account
@@ -29,7 +32,7 @@ resource "kubernetes_service_account_v1" "experiment_job" {
     }
   }
 
-  automount_service_account_token = true
+  automount_service_account_token = false
 }
 
 # 실험은 일반 앱 pool이 아니라 batch-od 전용 pool에 고정한다. 이 quota는 pool의

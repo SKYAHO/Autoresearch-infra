@@ -22,9 +22,11 @@ resource "google_storage_bucket" "experiment_results" {
     }
 
     condition {
-      # live·archived generation 모두 원래 생성 시점에서 30일 후 영구 삭제한다.
-      # 장기 복구용 버전 보관이 아니라 dev 실험 결과의 비용 상한이 목적이다.
-      age = var.experiment_results_object_retention_days
+      # live·archived generation 모두 삭제 대상으로 명시한다. versioning bucket에서
+      # live generation은 30일 후 archive되고, 다음 lifecycle 평가에서 archived
+      # generation이 영구 삭제된다. 장기 복구용 보관이 아닌 dev 비용 상한이 목적이다.
+      with_state = "ANY"
+      age        = var.experiment_results_object_retention_days
     }
   }
 

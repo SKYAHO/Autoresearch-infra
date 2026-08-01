@@ -85,10 +85,10 @@
 
 - namespace 기본값은 `autoresearch-experiments`입니다.
 - Job KSA 기본값은 `experiment-job`입니다.
-- namespace에는 `app.kubernetes.io/part-of=auto-research`와 Pod Security `restricted` enforce/audit/warn 라벨을 모두 설정합니다.
-- Job KSA는 `automount_service_account_token=true`로 설정해 GKE metadata server 기반 Workload Identity를 사용합니다. Kubernetes RoleBinding은 만들지 않습니다.
-- namespace ResourceQuota 기본값은 `count/jobs.batch=4`, `count/pods=4`, `requests.cpu=2`, `requests.memory=4Gi`, `limits.cpu=4`, `limits.memory=8Gi`입니다.
-- LimitRange 기본값은 container request `250m/256Mi`, default limit `1 CPU/2Gi`, max `2 CPU/4Gi`로 고정합니다.
+- namespace에는 `app.kubernetes.io/part-of=auto-research`와 Pod Security `restricted` enforce/audit/warn 라벨을 모두 설정합니다. enforce는 live GKE 기준 `v1.35`로 고정하고 audit/warn은 `latest`로 다음 정책 변화를 관측합니다.
+- Job KSA는 `automount_service_account_token=false`로 설정합니다. GKE metadata server 기반 Workload Identity는 Pod source identity와 KSA annotation을 사용하므로 컨테이너 Kubernetes API token이 필요하지 않습니다. Kubernetes RoleBinding은 만들지 않습니다.
+- namespace ResourceQuota 기본값은 `count/jobs.batch=2`, `pods=2`, `requests.cpu=2`, `requests.memory=4Gi`, `limits.cpu=2`, `limits.memory=4Gi`입니다. `batch-od` 전용 node pool의 min 0/max 2에 맞춘 상한입니다.
+- LimitRange 기본값은 container request/default limit `500m/1Gi`, max `1 CPU/2Gi`로 고정합니다.
 
 - [ ] **1단계: namespace·KSA·quota·limitrange 리소스를 추가합니다.**
 
@@ -184,7 +184,7 @@
 
 - [ ] **2단계: restricted 음성 테스트 manifest와 Job 계약을 문서화합니다.**
 
-  runbook에 `hostNetwork: true`, `hostPath`, `runAsUser: 0`, `privileged: true`, `capabilities.add`를 포함한 server-side dry-run 음성 검증을 추가합니다. 정상 Job 계약에는 `backoffLimit: 0`, `activeDeadlineSeconds: 3600`, `ttlSecondsAfterFinished: 86400`, 고정 digest, `experiment-id`·`source-revision`·`result-uri` metadata, 명시적 requests/limits를 기록합니다.
+  runbook에 `hostNetwork: true`, `hostPath`, `runAsUser: 0`, `privileged: true`, `capabilities.add`를 포함한 server-side dry-run 음성 검증을 추가합니다. 정상 Job 계약에는 `backoffLimit: 0`, `activeDeadlineSeconds: 3600`, `ttlSecondsAfterFinished: 3600`, 고정 digest, `experiment-id`·`source-revision`·`result-uri` metadata, 명시적 requests/limits를 기록합니다.
 
 - [ ] **3단계: 운영 문서를 갱신합니다.**
 
