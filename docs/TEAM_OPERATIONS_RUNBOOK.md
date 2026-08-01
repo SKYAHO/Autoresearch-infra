@@ -443,6 +443,8 @@ kubectl get namespace loadtest \
 kubectl -n kube-system get pods -l k8s-app=kube-dns
 kubectl -n loadtest get resourcequota rerank-loadtest-quota
 kubectl -n loadtest get limitrange rerank-loadtest-limits
+kubectl -n loadtest get resourcequota rerank-loadtest-quota \
+  -o jsonpath='{.status.hard.count\/configmaps}{" / "}{.status.used.count\/configmaps}{" ConfigMaps\n"}'
 ```
 
 Service proxy와 RBAC의 최소 권한은 Terraform output을 직접 읽어 확인한다. 실제
@@ -469,7 +471,8 @@ Workflow는 VU `1 → 2 → 4 → 8`을 순차 실행한다. 각 k6 Job은
 `activeDeadlineSeconds=600`, `backoffLimit=0`, `ttlSecondsAfterFinished=86400`을
 사용한다. 설정 ConfigMap은 실행 Job UID를 ownerReference로 가지므로 Job TTL
 회수 시 함께 정리된다. namespace quota는 Job/Pod 보존 수를 16개(candidate 24/200
-× baseline/optimized 전체 비교), 기본 container를
+× baseline/optimized 전체 비교), ConfigMap을 20개(공유 script 1개 + VU 설정
+최대 16개와 여유분), 기본 container를
 250m/256Mi request와 500m/512Mi limit, 최대 container를 1 CPU/1Gi로 제한한다.
 이 quota/limit은 namespace에서 실제로 강제된다. 반면 deadline/TTL 값 자체는
 현재 ValidatingAdmissionPolicy가 아니라 정확한 workflow manifest의 계약이므로,
@@ -504,6 +507,72 @@ TTL과 ownerReference 회수를 우선 기다린다. 권한이나 네트워크 �
 
 실제 GKE 적용은 이 문서의 명령을 복사해 실행하기 전에 해당 Infra PR의 별도
 승인을 받아야 한다.
+
+### 적용과 네 번의 비교 실행 재현 명령
+
+PR이 `main`에 merge된 뒤에는 `apply` Environment 승인 게이트를 통과한
+Terraform workflow를 dev → admin 순서로 별도 dispatch한다. `admin` root의
+serving/kube-dns Service data source와 dev root의 GSA output이 최신 상태를
+참조해야 하므로 두 범위를 한 dispatch에 섞지 않는다.
+
+```bash
+gh workflow run apply.yml --repo SKYAHO/Autoresearch-infra --ref main -f scope=dev
+gh run list --repo SKYAHO/Autoresearch-infra --workflow apply.yml --limit 5
+# dev run 성공과 apply Environment 승인을 확인한 뒤
+gh workflow run apply.yml --repo SKYAHO/Autoresearch-infra --ref main -f scope=admin
+gh run list --repo SKYAHO/Autoresearch-infra --workflow apply.yml --limit 5
+```
+
+각 dispatch의 승인·성공을 확인한 뒤, 앱 저장소의 fixture/materialize 절차가
+완료된 동일한 `main`에서 다음 네 조합을 순서대로 실행한다. 아래 값은 실제로
+배포된 immutable serving image와 40자리 Git SHA로 교체하며, 빈 값이면 dispatch를
+중단한다. workflow 자체의 `rerank-loadtest` concurrency가 실행을 직렬화한다.
+
+```bash
+: "${SERVING_IMAGE_REF:?image@sha256:<64자리 digest>를 설정하세요}"
+: "${SERVING_GIT_SHA:?소문자 40자리 serving Git SHA를 설정하세요}"
+```
+
+각 블록을 실행한 뒤 `gh run list`에서 생성된 run ID를 확인하고
+`gh run watch <RUN_ID> --repo SKYAHO/Autoresearch --exit-status`로 성공과 artifact 저장을
+확인한 다음 다음 블록으로 넘어간다.
+
+```bash
+# 1) candidate 24 / baseline
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=24 -f benchmark_label=baseline \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+
+# 2) candidate 24 / optimized
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=24 -f benchmark_label=optimized \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+
+# 3) candidate 200 / baseline
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=200 -f benchmark_label=baseline \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+
+# 4) candidate 200 / optimized
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=200 -f benchmark_label=optimized \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+```
+
+한 run이 실패하면 다음 조합으로 진행하지 말고 해당 run의 Job/Pod describe, log,
+ConfigMap metadata와 Prometheus raw snapshot을 먼저 보존한다.
 
 ## SOCKS 프록시 보조 경로
 

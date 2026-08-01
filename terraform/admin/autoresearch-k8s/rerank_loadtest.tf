@@ -51,7 +51,10 @@ resource "kubernetes_service_account_v1" "rerank_loadtest" {
 # 한 workflow는 최대 네 Job을 순차 실행하고, candidate 24/200 × baseline/optimized
 # 비교 매트릭스의 네 workflow 실행을 같은 보존 기간 안에 기록할 수 있도록 16개까지
 # 보관한다. 완료 Job/Pod도 TTL 전에는
-# quota에 포함되므로 임의 Job의 수·자원 사용량을 namespace에서 제한한다. Job
+# quota에 포함되므로 임의 Job의 수·자원 사용량을 namespace에서 제한한다. 설정
+# ConfigMap은 workflow마다 하나의 공유 script와 네 개의 VU 설정을 만들며, 네
+# workflow 비교 매트릭스에는 최대 17개가 동시에 남는다. 20개 quota로 이 보존
+# 범위를 허용하되, 실수로 ConfigMap을 무한 생성하는 경로는 차단한다. Job
 # deadline/TTL 자체는 앱 workflow manifest 계약이며 별도 admission policy 대상이다.
 resource "kubernetes_resource_quota_v1" "rerank_loadtest" {
   metadata {
@@ -61,6 +64,7 @@ resource "kubernetes_resource_quota_v1" "rerank_loadtest" {
 
   spec {
     hard = {
+      "count/configmaps" = "20"
       "count/jobs.batch" = "16"
       "pods"             = "16"
       "requests.cpu"     = "4"

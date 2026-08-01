@@ -57,8 +57,10 @@ dev GKE에서 실행할 수 있도록 전용 Kubernetes 경계와 GitHub Actions
   추가하지 않는다.
 - Job 실행 상한은 `activeDeadlineSeconds = 600`, 완료 후 `ttlSecondsAfterFinished = 86400`이다.
   결과 ConfigMap은 실행 Job UID를 ownerReference로 가져 하루 후 함께 회수한다.
-- namespace에는 `count/jobs.batch=16`, `pods=16`, CPU·메모리 ResourceQuota와
-  Container LimitRange를 둔다. 기본 container는 `250m/256Mi` request,
+- namespace에는 `count/configmaps=20`, `count/jobs.batch=16`, `pods=16`, CPU·메모리
+  ResourceQuota와 Container LimitRange를 둔다. workflow마다 공유 script 1개와
+  VU 설정 4개를 만들므로 네 workflow 매트릭스의 최대 17개를 보존하면서 여유분을
+  둔다. 기본 container는 `250m/256Mi` request,
   `500m/512Mi` limit을 받고 최대 `1 CPU/1Gi`를 넘을 수 없다. 이 quota는
   candidate 24/200 × baseline/optimized 네 workflow의 4 VU Job을 보존 기간 안에
   기록할 수 있으면서
@@ -104,8 +106,8 @@ dev GKE에서 실행할 수 있도록 전용 Kubernetes 경계와 GitHub Actions
 3. runner용 Role은 ConfigMap `get/create/update/patch`, Job `get/list/watch/create`,
    Pod `get/list/watch`, Pod log `get`, 진단용 Event `get/list`만 포함한다. 결과
    writer와 snapshot reader의 RoleBinding을 서로 섞지 않는다.
-4. `ResourceQuota`와 `LimitRange`로 Job/pod 수와 container CPU·메모리 상한을
-   namespace에서 강제한다.
+4. `ResourceQuota`와 `LimitRange`로 ConfigMap/Job/pod 수와 container
+   CPU·메모리 상한을 namespace에서 강제한다.
 5. `kubectl auth can-i` 음성 검증 명령을 README/runbook에 추가한다.
 
 ### Task 3: GitHub Actions WIF와 GCP IAM
