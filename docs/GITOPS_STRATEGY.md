@@ -1,8 +1,8 @@
 # ArgoCD GitOps 운영 전략
 
 이 문서는 Issue #82에서 시작한 ArgoCD 운영 설계·책임 경계를 정리한다. ArgoCD는
-이미 설치(#84)됐고 monitoring(#183)·argo-rollouts(#186) 이관에 더해 mlflow(#94)·serving(#302)
-신규 배포까지 Application 4종을 ArgoCD로 운영 중이다. 이 문서는 그 책임 경계("Terraform=플랫폼 경계, ArgoCD=앱")와
+이미 설치(#84)됐고 monitoring(#183)·argo-rollouts(#186) 이관에 더해 mlflow(#94)·serving(#302)·agent-orchestration(#453)
+신규 배포까지 Application 5종을 ArgoCD로 운영 중이다. 이 문서는 그 책임 경계("Terraform=플랫폼 경계, ArgoCD=앱")와
 Terraform→ArgoCD 이관 전략의 단일 기준이다.
 
 ## 목적
@@ -28,7 +28,7 @@ Terraform은 "ArgoCD가 올라갈 길"을 만들고, ArgoCD는 "애플리케이�
 
 | 저장소 | ArgoCD 관리 여부 | 범위 |
 |---|---|---|
-| `SKYAHO/Autoresearch-infra` | 관리 | ArgoCD 설치 기반, AppProject + Application 4종(monitoring·argo-rollouts umbrella chart #183/#186, mlflow·serving plain 매니페스트 #94/#302) — `deploy/*` |
+| `SKYAHO/Autoresearch-infra` | 관리 | ArgoCD 설치 기반, AppProject + Application 5종(monitoring·argo-rollouts umbrella chart #183/#186, mlflow·serving·agent-orchestration plain 매니페스트 #94/#302/#453) — `deploy/*` |
 | `SKYAHO/Autoresearch-airflow` | 보류(2026-07-14 결정 보류) | Airflow Helm values, DAG/image 배포 경계 — 이관은 #189 방향과 상충해 보류 |
 | `SKYAHO/Autoresearch` | 후속 관리 대상 | 앱/collector/batch Kubernetes manifest 또는 Helm chart |
 
@@ -135,8 +135,9 @@ ArgoCD=앱" 책임 분리를 실제로 구현한다. **monitoring을 첫 파일�
 | monitoring (#183) | ✅ 완료 | 첫 파일럿. PVC adopt, kube-system exporter destination, ServerSideApply |
 | argo-rollouts (#186) | ✅ 완료 | 무상태 컨트롤러. PVC/webhook/kube-system 불필요, 실행 중 Rollout CR 0개 |
 | airflow (#17) | 보류 | 2026-07-14 결정 보류 — #189(현행 CI 배포)와 방향 상충 |
-| mlflow (#91~#95) | ✅ 완료(운영 중) | 신규 배포(adopt 아님). `deploy/mlflow` **plain 매니페스트**(Deployment/Service/oauth2-proxy/PodMonitor) + `mlflow-k8s` root(ns/KSA/NP), ArgoCD Application manual sync. 이미지=앱 Dockerfile을 인프라 Cloud Build로 GAR 빌드. DB host/비번은 operator 주입 Secret |
-| serving (#302) | ✅ 완료(운영 중) | 신규 배포(adopt 아님). `deploy/serving` **plain 매니페스트**(Deployment/Service/ServiceMonitor) + `autoresearch-k8s` root(ns/KSA/NP), ArgoCD Application manual sync. 이미지=앱 저장소 release.yml이 GAR에 push한 digest. Redis endpoint는 operator 주입 Secret |
+| mlflow (#91~#95) | ✅ 완료(운영 중) | 신규 배포(adopt 아님). `deploy/mlflow` **plain 매니페스트**(Deployment/Service/oauth2-proxy/PodMonitor) + `mlflow-k8s` root(ns/KSA/NP), ArgoCD Application automated sync(#460, prune·selfHeal 없음). 이미지=앱 Dockerfile을 인프라 Cloud Build로 GAR 빌드. DB host/비번은 operator 주입 Secret |
+| serving (#302) | ✅ 완료(운영 중) | 신규 배포(adopt 아님). `deploy/serving` **plain 매니페스트**(Deployment/Service/ServiceMonitor) + `autoresearch-k8s` root(ns/KSA/NP), ArgoCD Application automated sync(#460, prune·selfHeal 없음). 이미지=앱 저장소 release.yml이 GAR에 push한 digest. Redis endpoint는 operator 주입 Secret |
+| agent-orchestration (#453) | ✅ 배포 준비(수동 sync) | `deploy/agent-orchestration` 매니페스트 + `autoresearch-k8s` root(ns/KSA/NP). digest·DB 권한 검증 전까지 manual sync와 비활성 ref를 유지한다. |
 | vault | 드랍(#412) | 2026-07 Secret Manager로 충분 판단 — ArgoCD 이관 대상 아님 |
 | argocd 자체 | 보류 | 부트스트랩(설치)은 Terraform 유지가 표준 |
 

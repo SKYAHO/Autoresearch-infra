@@ -31,7 +31,7 @@
 - IAP 전용 bastion host(`bastion.tf`, 외부 IP 없음) (#47/#50)
 - Airflow internal ILB 예약 내부 IP(`terraform output airflow_ilb_ip`)와 private DNS zone `dev.autoresearch.internal`(`dns.tf`) (#48/#51)
 - Airflow Google OAuth client 자격증명용 Secret Manager secret metadata (#54/#55)
-- Vault dev auto-unseal 1단계 GCP 기반(`vault.tf`): Cloud KMS unseal key ring/key, Vault GSA + Workload Identity, unseal 전용 custom role (#132)
+- Vault dev auto-unseal 잔여 구성(`vault.tf`, #132): 운영 경로는 #412에서 폐기됐고 코드·state·IAM 정리는 #478에서 진행
 - Elasticsearch GCS snapshot 기반(`elastic.tf`): snapshot bucket, snapshot GSA + Workload Identity, bucket IAM (#102)
 - GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer
   (#121/#157/#187), 환경별 Feast apply SA(#424)

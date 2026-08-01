@@ -16,7 +16,7 @@
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
-| Kubernetes admin roots | `terraform/admin/gke-team-access`, `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/vault-k8s`(#412 드랍 — B~C에서 정리 예정), `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` |
+| Kubernetes admin roots | `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` (= `apply.yml`의 `ADMIN_ROOTS` 7개). `terraform/admin/gke-team-access`는 GCP IAM root이고 `terraform/admin/vault-k8s`는 #412에서 운영 제외되어 #478에서 제거 예정이며, 둘 다 CI apply 대상에서 제외됩니다. | 별도 state |
 | 일반 애플리케이션 저장소 | `SKYAHO/Autoresearch` |
 | Airflow 저장소 | `SKYAHO/Autoresearch-airflow` |
 
@@ -218,13 +218,13 @@ flowchart TB
 | Vertex AI | BigQuery↔Vertex `CLOUD_RESOURCE` connection(#281) | BigQuery ML `ML.GENERATE_EMBEDDING` 다국어 임베딩 호출 |
 | MLflow | `mlflow` ns — tracking server(#94), 전용 Cloud SQL DB/user + Secret(#93), artifact GCS bucket + 전용 GSA(#92), OAuth2-proxy + 내부 ILB(#232/#244) | 실험 추적 UI. 내부 ILB + Google OAuth |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata, MLflow DB secret | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), Vault SA(#132, #412 정리 예정), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity. Vault 잔여 IAM은 #478에서 제거 예정 |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155). 커스텀 대시보드 6장 as-code(#355~#358: K8s 리소스·네트워크·스케일 판단·MLflow·Airflow·Serving), 수집: serving ServiceMonitor(#302)·mlflow oauth2-proxy PodMonitor(#357)·airflow statsd ServiceMonitor+ingress 9102(#358) | 운영 관측 dashboard. 접근은 port-forward. 대시보드는 `deploy/monitoring/dashboards/*.json`이 정본 |
-| GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85, `autoresearch` destination #303). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`serving`(Inference Server #303) | ArgoCD Application으로 관리(manual sync). UI는 Google 로그인 + 이메일 RBAC |
+| GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`mlflow`(#94)·`serving`(#302)·`agent-orchestration`(#453) | ArgoCD Application으로 관리. UI는 Google 로그인 + 이메일 RBAC |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, oauth2-proxy Google 로그인 + basic 인증 — anonymous 폐기 #325), Filebeat allowlist 수집(#100, ndjson 구조화 파싱 #359, 자기 로그 관측 #365), ILM(#101)/snapshot(#102)/runbook(#103), saved object 자동 import Job(#365) — `elastic` ns | airflow/autoresearch 로그 검색·분석 + Logs Overview 대시보드. Airflow task 로그 정본은 GCS 원격 로깅(airflow#147) — ELK는 stdout만 |
-| Secret(학습) | ~~Vault~~ 드랍(#412) — helm release·namespace 삭제됨, dev root KMS/GSA 코드·state 정리는 #412 B~C 예정. 실 서비스 secret은 Secret Manager |
-| KMS | `autoresearch-dev-vault`/`vault-unseal` key (#132) | Vault auto-unseal. key 삭제 금지(데이터 복호화 불능) |
-| DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | Google API 고정 VIP 유도 — vault egress 443 축소 기반 |
+| Secret(학습) | Vault 운영 제외(#412) | 실 서비스 secret은 Secret Manager. Vault root·state·잔여 IAM/KMS 참조 정리는 #478 |
+| KMS | `autoresearch-dev-vault` key ring / `vault-unseal` crypto key (#132, `prevent_destroy`) | Vault workload는 없음. 보존·비활성화 범위와 삭제 순서는 #478에서 결정 |
+| DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | VPC의 Google API private routing. Vault 전용 운영 경로는 폐기됨 |
 | CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **단일 진입점 승인 게이트 CI apply**(`apply.yml`, #451 — admin root #307/#312 + dev root #341 통합) | drift 시 [DRIFT] 이슈 자동 생성. dev root + K8s admin root 7개(#412로 `vault-k8s` 제외)를 한 번의 dispatch·승인으로 CI apply(순서: dev root 먼저), 로컬 apply는 break-glass |
 
 ## 인프라별 상세 구조

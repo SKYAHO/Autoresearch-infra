@@ -35,7 +35,7 @@ GCP project (dev, asia-northeast3)
 │       ├── monitoring (kube-prometheus-stack) ── ArgoCD Application deploy/monitoring (#183)
 │       ├── argo-rollouts ── ArgoCD Application deploy/argo-rollouts (#186)
 │       ├── ELK/ECK ── elastic-k8s, GCS snapshot (#97/#102)
-│       └── Vault ── vault-k8s, KMS auto-unseal (#134, 샌드박스)
+│       └── Vault ── retired (#412, 완전 제거 추적 #478; Secret Manager로 대체)
 ├── Cloud SQL (PostgreSQL 15, private IP only) ◀── GKE에서 접속
 ├── Memorystore for Redis Cluster (single-zone 2 shard, PSC, IAM auth/TLS) ◀── GKE에서 접속 (#129, apply·검증 완료)
 ├── Artifact Registry (autoresearch-dev-docker) ◀── 이미지 push/pull
