@@ -487,3 +487,12 @@ output "cloud_build_builder_service_account_email" {
   description = "Dedicated Cloud Build runtime service account (#269). Use with `gcloud builds submit --service-account`."
   value       = google_service_account.cloud_build_builder.email
 }
+
+output "rerank_loadtest_github_actions_identities" {
+  description = "GitHub Actions GSA emails for the isolated rerank load-test runner and Prometheus snapshot reader (#482)."
+  value = {
+    runner          = google_service_account.rerank_loadtest_runner.email
+    snapshot_reader = google_service_account.rerank_loadtest_snapshot_reader.email
+    workflow_ref    = var.rerank_loadtest_workflow_ref
+  }
+}

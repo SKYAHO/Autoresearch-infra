@@ -22,12 +22,14 @@ Terraform 코드 스타일, 파일 구성, 검증 규칙을 다루는 문서입�
 - `<리소스종류>.tf` — `vpc.tf`, `nat.tf`, `cloud_sql.tf`, `redis.tf`, `gke.tf`,
   `artifact_registry.tf`, `storage.tf`, `bigquery.tf`, `cloud_run.tf`,
   `airflow.tf`, `cloud_build.tf`, `secret_manager.tf`, `bastion.tf`,
-  `dns.tf`, `vault.tf`, `elastic.tf`, `github_actions.tf` 처럼 종류별 분리
+  `dns.tf`, `elastic.tf`, `github_actions.tf` 처럼 종류별 분리
 - GKE API 접근이 필요한 Kubernetes 리소스는 dev root가 아니라
   `terraform/admin/autoresearch-k8s/`, `terraform/admin/airflow-k8s/`,
   `terraform/admin/monitoring-k8s/`, `terraform/admin/argocd-k8s/`,
-  `terraform/admin/argo-rollouts-k8s/`, `terraform/admin/elastic-k8s/`,
+  `terraform/admin/argo-rollouts-k8s/`, `terraform/admin/mlflow-k8s/`,
+  `terraform/admin/elastic-k8s/`,
   `terraform/admin/vault-k8s/` 같은 admin root에서 별도 state로 관리합니다.
+  단, `vault-k8s`는 #412에서 운영 제외됐고 #478에서 root/state 제거를 진행합니다.
 - 사람 계정 IAM처럼 PR plan 댓글에 개인 정보가 노출될 수 있는 리소스는
   `terraform/admin/gke-team-access/`처럼 분리된 admin root에서 관리합니다.
 

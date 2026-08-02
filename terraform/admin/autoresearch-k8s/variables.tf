@@ -193,3 +193,53 @@ variable "autoresearch_viewer_user_emails" {
     error_message = "Each item must be an email without a user: prefix."
   }
 }
+
+variable "loadtest_namespace" {
+  description = "Kubernetes namespace dedicated to the rerank serving load test."
+  type        = string
+  default     = "loadtest"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.loadtest_namespace))
+    error_message = "loadtest_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "rerank_loadtest_service_account" {
+  description = "Kubernetes service account used by the k6 Job."
+  type        = string
+  default     = "rerank-loadtest"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.rerank_loadtest_service_account))
+    error_message = "rerank_loadtest_service_account must be a valid Kubernetes service account name."
+  }
+}
+
+variable "rerank_loadtest_runner_github_gsa_email" {
+  description = "GSA email used by the GitHub Actions runner and bound to the loadtest namespace Role. Empty derives the dev default."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.rerank_loadtest_runner_github_gsa_email) == "" ||
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.rerank_loadtest_runner_github_gsa_email))
+    )
+    error_message = "rerank_loadtest_runner_github_gsa_email must be a GSA email when set."
+  }
+}
+
+variable "rerank_loadtest_snapshot_reader_github_gsa_email" {
+  description = "GSA email used by the GitHub Actions Prometheus snapshot reader and bound to the monitoring Service proxy Role. Empty derives the dev default."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.rerank_loadtest_snapshot_reader_github_gsa_email) == "" ||
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.rerank_loadtest_snapshot_reader_github_gsa_email))
+    )
+    error_message = "rerank_loadtest_snapshot_reader_github_gsa_email must be a GSA email when set."
+  }
+}
