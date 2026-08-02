@@ -134,8 +134,9 @@ apply 뒤 승인된 운영자는 다음을 검증한다.
 1. runtime KSA가 dev registry/staging/artifact와 dev PIT query에 성공한다.
 2. runtime GSA로 prod registry, `feast_offline_store`, Redis CA Secret 접근이 403/권한
    거부로 실패한다.
-3. namespace RoleBinding subject가 Airflow GSA 하나이며, Airflow GSA와 runtime KSA
-   모두 Job 생성 권한이 없음을 `kubectl auth can-i`로 확인한다.
+3. namespace RoleBinding subject가 `airflow/airflow` Kubernetes 서비스 계정 하나이며,
+   해당 서비스 계정과 runtime KSA 모두 Job 생성 권한이 없음을 `kubectl auth can-i`로
+   확인한다.
 4. Redis PSC, Cloud SQL, MLflow 목적지 TCP 연결이 NetworkPolicy로 실패한다.
 5. ResourceQuota를 넘는 다섯 번째 Job 또는 LimitRange 상한 초과 Pod가 admission에서
    거부되고, 종료 Job이 TTL 후 정리되는지 확인한다.
