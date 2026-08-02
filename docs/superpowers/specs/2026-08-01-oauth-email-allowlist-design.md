@@ -93,12 +93,38 @@ Kibana oauth2-proxy는 Terraform admin root에서 관리되므로, 두 경로 �
 
 ## 롤백
 
-1. 변경된 manifest/Terraform 파일을 직전 승인 커밋으로 되돌립니다.
-2. MLflow는 ArgoCD에서 되돌린 manifest를 sync하고 Deployment rollout을
-   확인합니다.
-3. Kibana는 Terraform plan으로 변경 범위를 확인한 뒤 승인된 apply를
-   수행하고 Deployment rollout을 확인합니다.
-4. 롤백 시에도 Secret 값이나 state를 출력하지 않습니다.
+**증상별로 조치가 다르므로 먼저 원인을 구분합니다.** 두 경우를 섞으면 사고
+상황에서 잘못된 절차를 밟게 됩니다.
+
+### 경우 A — Secret 값 오류 (전원 403). 대부분 이쪽입니다
+
+목록에 현직 팀원이 없거나 예시 주소만 남은 경우입니다. proxy는 정상 기동하고
+`/ping` probe·ArgoCD Health도 초록이며, 로그인만 403이 됩니다.
+
+**정본 절차는 Secret 갱신입니다** — `terraform/admin/mlflow-k8s/README.md`의
+`ALLOWLIST_FILE` 경로로 목록을 넣고 `rollout restart`/`rollout status`를 확인합니다
+(Kibana는 `terraform/admin/elastic-k8s/README.md`). `authenticated-emails`는 GitOps
+관리 대상이 아니므로 ArgoCD나 Terraform을 거치지 않습니다. 운영 문서
+(`docs/MLFLOW_OPERATIONS_RUNBOOK.md`, `docs/KIBANA_OPERATIONS_RUNBOOK.md`)가
+지시하는 것과 같은 절차이며, 이 경우 **manifest 되돌리기는 해답이 아닙니다.**
+
+### 경우 B — 설정 회귀 (이 변경 자체가 잘못된 경우)
+
+manifest/Terraform 변경이 의도치 않은 부작용을 만든 경우에만 파일을 직전 승인
+커밋으로 되돌립니다. MLflow는 ArgoCD sync, Kibana는 승인된 Terraform apply로
+반영하고 각각 rollout을 확인합니다.
+
+**단, `--email-domain=*`를 되살리는 형태의 되돌리기는 성립하지 않습니다.**
+이 PR이 `scripts/check-oauth-email-allowlist.sh`를 `lint` job에 연결했고
+`branch_ruleset_main.json`에서 `lint`는 required status check이므로, 해당 인자를
+복원하는 revert PR은 check 실패로 **main에 머지되지 않습니다.** 이는 의도된
+설계입니다 — 접근 통제 붕괴를 "복구 수단"으로 되돌리지 못하게 막습니다. 긴급히
+전면 개방이 필요하다면 revert가 아니라 별도 승인 아래 가드 자체를 다루는 변경이
+필요하며, 그 판단은 보안 검토 대상입니다.
+
+### 공통
+
+롤백 시에도 Secret 값이나 state를 출력하지 않습니다.
 
 ## 검증 기준
 
