@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T13:19:35Z",
+  "generated_at": "2026-08-02T14:47:55Z",
   "reports": [
+    {
+      "number": 508,
+      "title": "fix: optimized serving digest 승격",
+      "author": "bbungjun",
+      "merged_at": "2026-08-02T14:47:38Z",
+      "summary_ko": [
+        "dev GKE 환경의 서빙 Deployment 이미지 다이제스트를 최신 optimized 빌드로 승격했습니다.",
+        "앱 release workflow(source SHA: 8ea99fe)에서 검증된 불변 이미지를 반영했습니다.",
+        "ArgoCD 동기화 후 파드의 정상 기동을 확인하고 optimized 부하테스트를 진행할 예정입니다."
+      ],
+      "report_url": "pr/508/"
+    },
     {
       "number": 510,
       "title": "feat: Experiment API migration 배포 추가",
