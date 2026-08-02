@@ -347,7 +347,7 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
    plugin 등 별도 설계 필요) output "참조"로의 전환은 미완의 후속
    과제고, 다음 이전에서도 이 파일의 IP 갱신은 **사람이 체크리스트로
    챙겨야 하는 수동 단계**다(아래 Phase 6 절차의 "ILB
-   `loadBalancerIP` 재지정" 항목이 그 방어선). 뼈아픈 점은 해당 라인
+   내부 UI FQDN 터널 접속 확인" 항목이 그 방어선). 뼈아픈 점은 해당 라인
    바로 옆 주석에 "`terraform output mlflow_ilb_ip`를 참조하라"고
    이미 적혀 있었다는 것 — 주석은 옳았지만 값이 복사본인 이상 이전을
    막지 못했다. 수정이 배포되기 전까지 팀 접속은 FQDN 대신 실제
@@ -759,8 +759,16 @@ done
    `DELETE_REQUESTED`, `gcloud projects undelete`로 유예 내 **프로젝트 복원**
    가능 — 리소스·데이터 복구는 보장되지 않으므로 실질 롤백은 IaC 재적용 +
    백업 복원으로 계획한다).
-   **정리 전 옛 프로젝트 소속 OAuth client 의존이 0인지 재확인**이 유일한
-   하드 게이트.
+   정리 전 하드 게이트는 **세 가지**다(이번 이전 실측 기준).
+   - **OAuth client 의존 0** 재확인(`scripts/verify-oauth-clients.sh`).
+   - **주기 워크로드가 최소 1회 자연 실행되어 성공**했는지. 이번 이전에서
+     batch KSA 부재(#427)는 수동 스모크가 아니라 **야간 스케줄이 자연 실행될
+     때에야** 드러났다. 즉 "수동 트리거 성공"은 이 게이트를 대신하지 못한다.
+   - **옛 좌표를 바라보는 도구가 필요한 미완 진단이 없는지**. 결제를 분리하면
+     옛 프로젝트 state 접근이 `UserProjectAccountProblem`으로 막혀, 그 시점
+     이후의 진단은 `kubectl` 실환경 조회와 정적 코드 검색만으로 해야 한다
+     (#427 진단이 실제로 그랬다). 결제 분리는 되돌릴 수 있지만 재연결에
+     시간이 걸리므로, 미해결 조사 항목이 있으면 분리를 미룬다.
 5. 다른 클론·워크트리의 stale backend 캐시는 `git pull` +
    `terraform init -reconfigure` — 옛 버킷 403("billing account absent")이
    보이면 이 케이스다.
@@ -774,4 +782,9 @@ helm Secret 입양, quota 비대칭(PREEMPTIBLE 0), cloudbuild 버킷 부재, Cl
 API 누락, "재발급 ≠ 반영"(#439), 코드 밖 수동 오브젝트 누락(batch KSA — #427로
 IaC 편입 완료, 재발 시 같은 원칙 적용), 내부 UI `loadBalancerIP` 하드코딩과
 DNS 예약 IP 불일치(#425→#426 — 리터럴 값 갱신으로 해소, output 자동 참조는
-미완이라 다음 이전에서도 수동 갱신 필요).
+미완이라 다음 이전에서도 수동 갱신 필요), Secret Manager 컨테이너의 IaC 누락
+(argocd-google-oidc-client-{id,secret}은 라이브에만 있고 Terraform에 정의가
+없어 재구축에서 빠진다 — #494. 다른 4개 서비스는 코드화돼 있고 이름 프리픽스도
+달라 육안으로 구분된다), 옛 프로젝트 참조 잔재(vault helm-values 2곳·
+gke_ctr_retrain.tf import 지시 주석 — 실행 지시라 다음 재구축에서 삭제 요청된
+프로젝트를 대상으로 삼게 된다).
