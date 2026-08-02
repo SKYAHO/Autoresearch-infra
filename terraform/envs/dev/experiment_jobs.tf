@@ -64,10 +64,17 @@ resource "google_service_account_iam_member" "experiment_job_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
-# objectCreator는 storage.objects.delete가 없어 기존 객체를 덮어쓸 수 없다. 버킷
-# versioning 여부와 별개로 실행 Job은 새 객체 생성만 가능하다. 앱은 create-if-absent
-# precondition과 새 attempt id prefix로 논리적 경로 중복도 차단해야 하며, Job은 이전
-# 결과를 읽거나 삭제할 수 없다.
+# objectCreator는 storage.objects.create만 준다. 다만 **이 버킷은 versioning이
+# 켜져 있어 IAM만으로 overwrite가 막히지는 않는다** — GCS에서 delete 권한이
+# 필요한 것은 versioning이 꺼진 버킷의 덮어쓰기뿐이고, versioning이 켜져 있으면
+# 같은 경로 업로드가 새 generation을 만들고 이전 generation은 noncurrent로
+# 남는다(삭제가 아니므로 create만으로 성립).
+#
+# 따라서 경로 재사용을 실제로 막는 것은 IAM이 아니라 앱의 create-if-absent
+# precondition(`ifGenerationMatch=0`, 기존 live 객체가 있으면 HTTP 412)과 새
+# attempt id prefix다. IAM이 보장하는 것은 "Job이 이전 결과를 읽거나 삭제할 수
+# 없다"는 것(objectViewer·objectAdmin 미부여)이고, 감사 관점에서는 versioning이
+# 이전 generation을 보존해 덮어쓰기가 발생해도 원본이 남는다.
 resource "google_storage_bucket_iam_member" "experiment_job_object_creator" {
   bucket = google_storage_bucket.experiment_results.name
   role   = "roles/storage.objectCreator"

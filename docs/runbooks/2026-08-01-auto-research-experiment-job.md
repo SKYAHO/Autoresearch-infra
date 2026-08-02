@@ -56,10 +56,14 @@ API는 사용자가 보낸 임의 manifest를 Kubernetes API로 전달해서는 
 - `hostNetwork`, `hostPID`, `hostIPC`, privileged, hostPath, 추가 Linux capability, root 실행을 사용하지 않는다. Pod Security `restricted` 요구를 충족하는 `runAsNonRoot`, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault`, capability drop `ALL`을 설정한다.
 - 요청 원문과 credential을 환경변수·label·annotation·로그에 넣지 않는다.
 - `autoresearch.io/experiment-id`, source revision, image digest, result URI는 검증된 값만 기록한다.
-- 결과는 `gs://<결과-버킷>/experiments/<실험ID>/<시도ID>/` 아래에만 저장한다. Job
-  GSA에는 기존 객체 overwrite에 필요한 `storage.objects.delete`가 없으므로 IAM이
-  overwrite를 거부한다. 앱은 별도로 새 시도 ID와 create-if-absent precondition을
-  사용해 논리적 경로 재사용도 거부한다.
+- 결과는 `gs://<결과-버킷>/experiments/<실험ID>/<시도ID>/` 아래에만 저장한다.
+  **경로 재사용을 막는 것은 IAM이 아니라 앱의 precondition이다** — 이 버킷은
+  versioning이 켜져 있어 `storage.objects.create`만으로도 같은 경로에 새
+  generation을 만들 수 있다(GCS에서 delete 권한이 필요한 overwrite는 versioning이
+  꺼진 버킷에 한한다). 따라서 앱이 `ifGenerationMatch=0`(create-if-absent)과 새
+  시도 ID prefix로 경로 재사용을 거부해야 하며, IAM이 보장하는 것은 Job이 이전
+  결과를 읽거나 삭제할 수 없다는 점이다. 덮어쓰기가 일어나도 이전 generation은
+  noncurrent로 보존돼 감사 흔적이 남는다.
 
 결과 메타데이터에는 metric, 평가 기준, 데이터 버전, source revision, image digest,
 시작·종료 시각, Job UID를 기록한다. lifecycle은 live object가 90일 후 archive되고,
