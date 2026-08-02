@@ -12,6 +12,8 @@ Kubernetes 측 경계를 별도 state로 관리합니다.
 - Agent Orchestration API·Codex Runner 전용 KSA. 실제 Deployment/Service/PVC와
   Agent 전용 NetworkPolicy는 `deploy/agent-orchestration/`의 ArgoCD plain manifest가
   소유하며, 이 root의 기존 namespace-wide egress 정책에서는 제외한다.
+- `autoresearch-experiments` namespace, 실험 Job 전용 KSA, 제한된 API 관찰 RBAC,
+  Pod Security `restricted`, quota·LimitRange, 기본 차단 NetworkPolicy (#484)
 
 GCP Redis Cluster, PSC subnet/policy, TLS CA Secret Manager, app GSA와 Workload
 Identity IAM member는 `terraform/envs/dev`에서 관리합니다. 애플리케이션
@@ -63,6 +65,77 @@ terraform -chdir=terraform/admin/autoresearch-k8s plan \
 
 `apply`는 dev Redis Cluster apply 완료, live namespace import 여부, NetworkPolicy
 영향과 사용자 승인을 확인한 뒤에만 수행합니다.
+
+## Auto Research 실험 Job 경계 (#484)
+
+실험마다 별도 Kubernetes Job을 만들되, 일반 앱 namespace와 실행 신원을 공유하지
+않습니다. 이 root는 Kubernetes 경계만, `terraform/envs/dev`는 결과 버킷과 GCP
+Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정 Job 템플릿·허용
+이미지 digest 검증·상태 watcher를 담당합니다.
+
+| 구분 | 값 | 의도 |
+|---|---|---|
+| namespace | `autoresearch-experiments` | 실험 Pod와 기존 앱을 분리 |
+| Job KSA | `experiment-job` | 결과 버킷 쓰기 전용 Workload Identity |
+| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용. 이 RBAC를 실제로 쓰려면 API Pod의 egress에 Kubernetes API 경로가 있어야 한다 — 해당 정책은 이 root가 아니라 `deploy/agent-orchestration/network-policy.yaml`이 소유한다(#484에서 services CIDR·control plane CIDR TCP 443 추가) |
+| Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
+| 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
+
+`experiment-job` KSA에는 Kubernetes RoleBinding을 만들지 않고, Kubernetes API 토큰
+자동 마운트(`automount_service_account_token`)도 `false`로 둡니다. Workload Identity의
+GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부에 Kubernetes 토큰이
+필요하지 않습니다.
+
+### Job 생성 권한 활성화 조건
+
+`enable_experiment_job_creation` 기본값은 `false`입니다. 이 상태에서 API KSA는 Job,
+Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수 없습니다. 아래 조건을
+모두 충족하고 별도 보안 검토·승인을 받은 경우에만 local `terraform.tfvars`에서
+`true`로 변경합니다.
+
+1. API가 사용자 입력을 Job manifest로 그대로 전달하지 않고 고정 템플릿만 사용한다.
+2. 이미지가 mutable tag가 아닌 허용 목록의 digest인지 검증한다.
+3. Job 이름·label·결과 GCS prefix·CPU/메모리·`backoffLimit: 0`은 API의 고정 템플릿이
+   강제하고, `activeDeadlineSeconds`·TTL은 아래 4번 정책이 서버 측에서 강제한다.
+   CPU/메모리는 namespace ResourceQuota·LimitRange가 함께 상한을 건다.
+4. 이 root의 `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy가
+   ServiceAccount 변경, digest 없는 image(`initContainers` 포함), `batch-od`
+   nodeSelector/toleration 계약 위반(빈 목록 포함), 승인된 Artifact Registry 밖
+   이미지, `automountServiceAccountToken: true`, `activeDeadlineSeconds`·
+   `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. 두 시간
+   필드를 정책에 둔 것은 완료 Job이 quota를 무기한 점유하는 경로를 막기 위해서다
+   (API KSA에 `delete`가 없어 회수 수단이 TTL뿐이다). Pod Security `restricted`는
+   privileged·host namespace 등 별도 위험 필드를 거부한다.
+5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
+   수행한다.
+6. `batch-od`는 #297의 재시도 내성이 없는 Action Log shard KPO와 공유하므로, 전용
+   실험 node pool을 만들거나 해당 KPO와의 capacity·우선순위 경합 계획을 승인한다.
+
+권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
+Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
+중인 Job·Pod·GCS 업로드를 중단하지 않습니다. 취소는 API에 `delete` 권한을 추가하지
+않은 현재 MVP에서는 제공하지 않으며, 종료·quota 회수는 `activeDeadlineSeconds`와 TTL
+controller에 의존합니다. namespace, KSA, 결과 버킷을 롤백 수단으로 삭제하지 않습니다.
+
+### 네트워크와 용량 상한
+
+실험 namespace는 외부 HTTPS, Cloud SQL, Redis, MLflow를 기본 허용하지 않습니다.
+결과 업로드는 Private Google APIs VIP `199.36.153.8/30`의 TCP 443만 사용합니다.
+새 목적지가 필요하면 목적지 CIDR/selector, 포트, GSA IAM, 데이터 분류를 함께
+검토하는 별도 이슈가 필요합니다.
+
+초기 dev 상한은 Job·Pod 각각 2개, 총 request/limit 2 vCPU/4 GiB입니다.
+`count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로, 실제 제출
+병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request/limit은
+500m/1 GiB이고, 단일 컨테이너는 1 vCPU/2 GiB를 넘을 수 없습니다. Job 템플릿과
+admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` toleration을
+강제해야 합니다. `batch-od`는 #297 Action Log shard KPO와 공유하는 min 0/max 2
+on-demand pool이므로 일반 앱 pool 압박은 막지만, 실험 실행 시 해당 KPO가 Pending이
+될 수 있습니다. Job 생성 권한을 활성화하기 전에는 전용 실험 pool 또는 capacity·우선순위
+계획을 별도로 승인하고, batch-od node/pod Pending·autoscaler·CPU/memory를 관측해야
+합니다. 운영 검증 절차와 Job manifest 계약은
+[`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
+따릅니다.
 
 ## NetworkPolicy
 

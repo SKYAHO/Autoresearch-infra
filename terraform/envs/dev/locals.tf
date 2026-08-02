@@ -61,6 +61,10 @@ locals {
   # Kubernetes 이름 대신 짧은 orch-api/orch-runner 식별자를 사용한다.
   agent_orchestration_api_sa_name    = "${local.resource_prefix}-orch-api"
   agent_orchestration_runner_sa_name = "${local.resource_prefix}-orch-runner"
+  # 실험 Job은 API·Codex Runner와 다른 GSA를 사용한다. 결과 버킷 object 생성만
+  # 허용하고 Secret Manager·Cloud SQL·Kubernetes API 권한은 부여하지 않는다.
+  experiment_job_sa_name         = "${local.resource_prefix}-exp-job"
+  experiment_results_bucket_name = "${var.project_id}-${local.resource_prefix}-experiment-results"
   # #226: 앱팀이 수동 생성한 기존 버킷명(${project_id}-${name_prefix}-mlflow-artifacts)을
   # 그대로 adopt한다. feast 버킷과 동일하게 project_id를 포함해 전역 유일성 확보.
   mlflow_artifacts_bucket                            = "${var.project_id}-${var.name_prefix}-mlflow-artifacts"
@@ -114,6 +118,7 @@ locals {
 
   agent_orchestration_api_workload_identity_principal    = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_api_k8s_service_account}]"
   agent_orchestration_runner_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_runner_k8s_service_account}]"
+  experiment_job_workload_identity_principal             = "${var.project_id}.svc.id.goog[${var.experiment_job_k8s_namespace}/${var.experiment_job_k8s_service_account}]"
 
   mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
 
