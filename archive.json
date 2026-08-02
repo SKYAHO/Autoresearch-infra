@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T04:38:54Z",
+  "generated_at": "2026-08-02T05:00:16Z",
   "reports": [
+    {
+      "number": 498,
+      "title": "docs: agent-orchestration ArgoCD 핀 갱신 절차와 egress 선행 조건 명문화",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-02T05:00:06Z",
+      "summary_ko": [
+        "인프라 권한 설정과 네트워크 정책 간 배포 경로 차이로 발생할 수 있는 운영상 공백을 방지하도록 런북을 보완하였습니다.",
+        "머지 커밋 갱신, 권한 적용, 네트워크 정책 동기화, 실제 연결 검증으로 이어지는 절차 순서를 명확히 정의하였습니다.",
+        "실험 작업 생성 기능을 활성화하기 전에 네트워크 출입 규칙이 반영되었는지 미리 검증할 수 있는 점검 수단을 추가하였습니다."
+      ],
+      "report_url": "pr/498/"
+    },
     {
       "number": 483,
       "title": "docs: Google OAuth 운영 규약 통합",
