@@ -262,6 +262,15 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "!has(object.spec.template.spec.automountServiceAccountToken) || object.spec.template.spec.automountServiceAccountToken == false"
           message    = "실험 Job은 ServiceAccount token을 mount할 수 없습니다."
         },
+        # suspend: true로 제출된 Job은 Pod를 만들지 않고 activeDeadlineSeconds
+        # 타이머도 돌지 않는다(suspend 시 status.startTime이 리셋된다). TTL은
+        # Complete/Failed Job에만 적용되므로, 아래 두 시간 검증을 모두 만족하면서도
+        # count/jobs.batch 슬롯을 무기한 점유하는 Job이 만들어진다. 손상된 API를
+        # 가정하는 이 정책의 위협 모델에서는 Job 2개만으로 실험 실행이 영구 정지된다.
+        {
+          expression = "!has(object.spec.suspend) || object.spec.suspend == false"
+          message    = "실험 Job은 suspend 상태로 제출할 수 없습니다."
+        },
         {
           expression = "has(object.spec.activeDeadlineSeconds) && object.spec.activeDeadlineSeconds > 0 && object.spec.activeDeadlineSeconds <= 3600"
           message    = "실험 Job은 activeDeadlineSeconds를 1~3600초로 명시해야 합니다."

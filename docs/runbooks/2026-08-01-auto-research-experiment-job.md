@@ -47,8 +47,14 @@ API는 사용자가 보낸 임의 manifest를 Kubernetes API로 전달해서는 
 - image는 registry path와 `@sha256:` digest를 포함하며 mutable tag를 허용하지 않는다.
 - `serviceAccountName: experiment-job`, `restartPolicy: Never`, `backoffLimit: 0`을 쓴다.
 - `activeDeadlineSeconds`와 `ttlSecondsAfterFinished`는 각각 3,600초 이하로 제한한다.
-  `count/jobs.batch=2`와 결합해 완료 Job이 최대 1시간만 quota를 점유하도록 하며,
-  정상 처리량은 최대 시간당 2개 시도다.
+  두 값이 **각각** 상한이므로 한 Job이 슬롯을 잡는 최악 시간은 실행 최대 1시간 +
+  완료 후 TTL 최대 1시간 = **최대 2시간**이다. `count/jobs.batch=2`와 결합하면
+  최악의 경우 처리량은 2시간당 2개다. 상한이 아니라 실제 처리량을 높이려면 API
+  고정 템플릿이 TTL을 짧게(예: 300초) 넣어야 하며, 그 값이 실질 회수 주기를
+  결정한다.
+- `suspend: true`로 제출하지 않는다. suspend 상태 Job은 Pod를 만들지 않고
+  `activeDeadlineSeconds` 타이머도 돌지 않으며 TTL도 적용되지 않아 quota를
+  무기한 점유한다. admission 정책이 이를 거부한다.
 - 모든 컨테이너에 CPU·메모리 request/limit을 명시하고 namespace의 단일 컨테이너 최대 1 vCPU/2 GiB를 넘기지 않는다.
 - `nodeSelector`는 `cloud.google.com/gke-nodepool: batch-od`, toleration은
   `workload=batch-od:NoSchedule`만 사용한다. 일반 앱 pool에는 스케줄하지 않으며,
@@ -177,6 +183,7 @@ EOF
 | 허용 Artifact Registry 밖 이미지(digest는 고정) | 승인된 저장소에서만 pull |
 | `activeDeadlineSeconds`/`ttlSecondsAfterFinished` 미지정 또는 3600 초과 | 각 필드 범위 |
 | `automountServiceAccountToken: true` | ServiceAccount token mount 금지 |
+| `suspend: true` | suspend 상태 제출 금지 |
 
 ```bash
 kubectl -n autoresearch-experiments create --dry-run=server -f - <<'EOF'
