@@ -26,6 +26,20 @@ jobs:
       - name: Run Agent Orchestration deployment contract self-test
         run: ruby scripts/test-agent-orchestration-timeout-contract.rb
 
+      # #485 저장소 첫 .tftest.hcl. CI 실행 경로가 없으면 계약 테스트가 로컬 수동
+      # 실행에만 의존해 회귀를 잡지 못한다. mock provider 기반이라 클라우드 자격이
+      # 필요 없고 backend도 쓰지 않는다.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+
+      - name: Run admin root contract tests
+        run: |
+          set -euo pipefail
+          terraform -chdir=terraform/admin/autoresearch-k8s init -backend=false -input=false
+          terraform -chdir=terraform/admin/autoresearch-k8s test
+
       - name: Run actionlint
         uses: raven-actions/actionlint@v2
         with:

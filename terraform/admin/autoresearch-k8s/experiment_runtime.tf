@@ -30,6 +30,16 @@ resource "kubernetes_service_account_v1" "experiment_runtime" {
       "iam.gke.io/gcp-service-account" = local.experiment_runtime_gcp_service_account_email
     }
   }
+
+  # 이 KSA에는 RoleBinding이 없어 Kubernetes API 주체가 될 필요가 없다. Workload
+  # Identity의 GCP 토큰 교환은 GKE metadata server 경로라 default token volume이
+  # 필요하지 않으므로, 명시적으로 꺼서 "runtime KSA는 K8s API 주체가 아니다"를
+  # 코드로 강제한다(같은 root의 rerank_loadtest.tf와 동일 기준).
+  #
+  # 주의: 이 값은 Pod spec이 되돌릴 수 있는 기본값이다. Job 생성이 활성화되는
+  # 후속 변경에서는 #484처럼 admission 정책으로 automountServiceAccountToken을
+  # 함께 막아야 경계가 실제로 강제된다.
+  automount_service_account_token = false
 }
 
 # baseline/candidate 두 쌍을 동시에 수용하되 namespace 전체 사용량은 네 Job/Pod와
