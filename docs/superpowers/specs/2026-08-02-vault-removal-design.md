@@ -765,6 +765,29 @@ role이 없다). 실제 방어는 코드 쪽 2겹뿐이다: ①이 2개 리소�
 grep 정규식 설명 코멘트에서도 회차 인용을 제거하고 실질 이유(정규식이
 왜 필요한지)만 남겼다.
 
+## claude-review 11차 지적 (2026-08-02, PR #500)
+
+라운드 10 수정 후 재요청한 리뷰에서 6건이 지적됐다. 모두 `CLAUDE.md`와
+`.claude/docs/agent-project-reference.md`/`agent-terraform-reference.md`의
+문서 일관성 문제였다 — 저장소 실 트리(`kms_vault_orphan.tf`는 남아
+있고 `vault.tf`/`terraform/admin/vault-k8s`는 삭제됨)와 이 3개 문서의
+서술이 어긋난 부분을 지적했다. 검증 결과 6건 중 4건은 실제로 반영이
+필요했고, 2건(`agent-terraform-reference.md`의 admin root 목록,
+`agent-project-reference.md`의 `VAULT_OPERATIONS_RUNBOOK.md` 이슈 번호
+서술)은 이미 이전 라운드에서 정정돼 있어 추가 조치가 필요 없었다(리뷰
+comment의 diff position이 가리키는 스냅샷과 최신 커밋 사이에 차이가
+있었던 것으로 보인다 — 반영 전 실제 파일 내용을 grep으로 재확인한 뒤
+적용했다).
+
+반영한 4건: `CLAUDE.md`의 dev root 파일 목록에 `kms_vault_orphan.tf`
+누락, admin root 목록에 `mlflow-k8s` 누락(이 PR 이전부터 있던 별개
+gap이나 같은 줄을 손대는 김에 함께 반영) — 2건 모두 추가.
+`agent-project-reference.md`의 dev root 트리 다이어그램에도 같은
+`kms_vault_orphan.tf` 항목 추가. 두 문서 모두 `vault-k8s`가 #412
+운영 제외 → #478 root 삭제(원격 state 잔여 4개만 승인 대기) 상태임을
+트리 밖 각주로 명시(트리 안에 다시 넣지 않음 — 존재하지 않는 디렉터리를
+트리에 넣으면 오히려 오해를 유발한다는 라운드 10 이전 판단 유지).
+
 ## 완료 조건
 
 - [ ] `terraform/envs/dev/vault.tf` 삭제

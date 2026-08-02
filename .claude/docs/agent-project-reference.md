@@ -47,6 +47,7 @@ terraform/
 │       ├── secret_manager.tf     # Secret Manager
 │       ├── bastion.tf       # IAP 전용 bastion host (#47)
 │       ├── dns.tf           # Airflow ILB 고정 IP + private DNS zone (#48)
+│       ├── kms_vault_orphan.tf   # Vault 폐기 후 잔존 KMS key ring/crypto key (#478, prevent_destroy)
 │       ├── elastic.tf       # Elasticsearch GCS snapshot bucket/GSA (#102)
 │       ├── github_actions.tf     # WIF pusher SA (GAR/app image/Airflow deployer)
 │       ├── code_artifacts.tf     # 코드 아카이브 GCS bucket + 업로더 SA/WIF + 파드 read IAM (#238)
@@ -94,6 +95,10 @@ docs/
 CONTRIBUTING.md              # 사람용 협업 규칙 (워크플로우 전체)
 branch_ruleset_main.json     # main branch ruleset 정의
 ```
+
+`vault-k8s`는 #412에서 운영 제외됐고 #478에서 root 디렉터리가 삭제됐다
+(원격 state 잔여 4개 정리만 승인 대기 —
+`docs/superpowers/specs/2026-08-02-vault-removal-design.md` 참조).
 
 로컬 전용(커밋하지 않음): `agent.local.md`, `docs/NOTION_PROGRESS_TIMELINE.md`,
 `.claude/settings.local.json`
