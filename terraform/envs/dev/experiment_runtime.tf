@@ -17,6 +17,25 @@ resource "google_service_account_iam_member" "experiment_runtime_wi" {
 
 # GCS IAM condition은 request별 comparison ID/source SHA까지 표현할 수 없으므로
 # experiments/와 code/ root까지만 Terraform에서 강제한다.
+# #204/#205 실측 교훈: Feast GCS registry client는 bucket.reload()에
+# storage.buckets.get을 요구하는데 objectViewer/objectAdmin 어디에도 없다.
+# feast_apply_dev도 같은 이유로 legacyBucketReader를 함께 받는다
+# (github_actions.tf의 feast_apply_dev_registry_bucket_reader). 이 보강이 없으면
+# plan/validate는 통과하고 실제 Job 실행에서만 403이 난다.
+#
+# 주의(권한 확대): legacyBucketReader는 **버킷 수준** 역할이라 object prefix
+# 조건을 걸 수 없다. 따라서 이 grant는 buckets.get과 함께 registry 버킷 전체의
+# object LIST를 허용한다 — 아래 objectViewer의 experiments/ prefix 조건은
+# 개별 객체 READ에만 적용된다(objects.list는 bucket resource에 대해 평가되므로
+# prefix 조건으로는 애초에 LIST가 성립하지 않는다). dev registry 한정이고
+# 객체 내용 읽기는 여전히 prefix로 묶이지만, "prefix 밖은 목록조차 안 보인다"는
+# 보장은 하지 않는다는 점을 runbook에도 명시했다.
+resource "google_storage_bucket_iam_member" "experiment_runtime_registry_bucket_reader" {
+  bucket = google_storage_bucket.feast_registry_dev.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.experiment_runtime.email}"
+}
+
 resource "google_storage_bucket_iam_member" "experiment_runtime_registry_viewer" {
   bucket = google_storage_bucket.feast_registry_dev.name
   role   = "roles/storage.objectViewer"

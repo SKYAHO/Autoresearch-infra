@@ -26,6 +26,21 @@
 | code archive | `CODE_ARCHIVE_SHA`를 검증한 뒤 `code/<CODE_ARCHIVE_SHA>.tar.gz`만 사용. 즉 output `code_archive_uri` 아래의 `gs://<bucket>/code/<sha>.tar.gz` 형식 |
 | BigQuery | dev `feast_offline_store_dev` dataset만 PIT read. dataset ID는 output `feast_offline_store_dataset`에서 읽음 |
 
+**prefix 조건은 object READ에만 적용되고 LIST에는 적용되지 않습니다.**
+`storage.objects.list`는 개별 object가 아니라 **bucket** resource에 대해 평가되므로,
+`resource.name.startsWith('.../objects/<prefix>')` 조건이 붙은 `objectViewer`로는
+해당 prefix 하위 LIST도 성립하지 않습니다. 이는 `code/`뿐 아니라
+registry·staging·artifact 경로 모두에 동일하게 적용됩니다.
+
+또한 dev Feast registry 버킷에는 `roles/storage.legacyBucketReader`를 별도로
+부여합니다. Feast GCS registry client가 `bucket.reload()`에서 요구하는
+`storage.buckets.get`이 `objectViewer`·`objectAdmin` 어디에도 없어, 없으면
+plan/validate는 통과하고 **실제 Job 실행에서만 403**이 나기 때문입니다(#204/#205
+실측, `feast_apply_dev`도 같은 이유로 동일 보강을 받습니다). 이 역할은 버킷 수준이라
+prefix 조건을 걸 수 없으므로, **registry 버킷 전체의 object LIST가 허용됩니다** —
+객체 내용 READ는 여전히 `experiments/` prefix로 묶이지만 "prefix 밖은 목록조차
+보이지 않는다"는 보장은 하지 않습니다.
+
 `code/` prefix의 조건부 `objectViewer`는 정확한 object name을 아는 GET에는 사용할 수
 있지만, 조건 때문에 bucket-wide object LIST를 실행 경로로 가정해서는 안 됩니다.
 Airflow는 `CODE_ARCHIVE_SHA`에서 결정한 정확한 `code/<sha>.tar.gz`만 GET하고 목록으로
