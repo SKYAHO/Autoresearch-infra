@@ -688,7 +688,7 @@ done
 | airflow | `airflow-web-oauth`, `airflow-email-alerts`, `airflow-fernet-key`, `airflow-webserver-secret-key`, `autoresearch-airflow-env` | airflow repo 문서 | verbatim 복사 |
 | airflow | `airflow-metadata-db`, `airflow-broker-url` | airflow repo `docs/cloud-sql-metadata.md` | **환경 재구성** — 새 SQL IP + SM app 비번(URL-quote) |
 | autoresearch | `autoresearch-serving-redis` | TEAM runbook | **환경 재구성** — 새 Redis discovery endpoint |
-| argocd | `argocd-google-oidc` | argocd-k8s README | verbatim 복사(#404에서 누락됐던 항목) — README가 전제하는 Secret Manager 정본 `argocd-google-oidc-client-{id,secret}`이 실제로는 빈 채로 남아 있던 것을 뒤늦게 발견해, 클러스터에 이미 들어가 있던 실값을 SM으로 역주입해 문서-실제 정합을 맞췄다(PR #429). **단 채운 것은 값(version)뿐이고 SM secret 리소스 자체는 아직 Terraform 밖이다** — `terraform/envs/dev` 어디에도 정의가 없고 이름도 `autoresearch-dev-` 프리픽스를 따르지 않아(`argocd-google-oidc-client-{id,secret}`) 수동 생성분임이 드러난다. 다음 재구축에서 이 컨테이너 2종이 생성되지 않으며 `prevent_destroy` 보호도 없다. 이 런북이 바로 위에서 교훈으로 적은 batch KSA와 동일한 구조이므로 IaC 편입이 필요하다(#494) |
+| argocd | `argocd-google-oidc` | argocd-k8s README | verbatim 복사(#404에서 누락됐던 항목) — README가 전제하는 Secret Manager 정본 `argocd-google-oidc-client-{id,secret}`이 실제로는 빈 채로 남아 있던 것을 뒤늦게 발견해, 클러스터에 이미 들어가 있던 실값을 SM으로 역주입해 문서-실제 정합을 맞췄다(PR #429). SM secret 리소스 자체는 `terraform/envs/dev`의 `google_secret_manager_secret.argocd_google_oidc_client`로 편입돼 `prevent_destroy` 보호를 받는다(#494) — 다음 재구축에서 dev root apply만으로 이 컨테이너 2종이 생성된다. 이름은 `autoresearch-dev-` 프리픽스 규칙의 의도적 예외(라이브 이름 유지, import 단순화)로 남는다. 값(version)은 여전히 Terraform 밖이라 이 표의 절차대로 채운다 |
 
 - airflow 첫 helm 설치 시, 복사해 둔 chart-관리 Secret(fernet-key·
   webserver-secret-key 등)은 **helm 소유권 입양**이 필요하다:
@@ -787,8 +787,8 @@ API 누락, "재발급 ≠ 반영"(#439), 코드 밖 수동 오브젝트 누락(
 IaC 편입 완료, 재발 시 같은 원칙 적용), 내부 UI `loadBalancerIP` 하드코딩과
 DNS 예약 IP 불일치(#425→#426 — 리터럴 값 갱신으로 해소, output 자동 참조는
 미완이라 다음 이전에서도 수동 갱신 필요), Secret Manager 컨테이너의 IaC 누락
-(argocd-google-oidc-client-{id,secret}은 라이브에만 있고 Terraform에 정의가
-없어 재구축에서 빠진다 — #494. 다른 4개 서비스는 코드화돼 있고 이름 프리픽스도
-달라 육안으로 구분된다), 옛 프로젝트 참조 잔재(vault helm-values 2곳·
+(`argocd-google-oidc-client-{id,secret}`이 라이브에만 있고 Terraform에 정의가
+없어 재구축에서 빠지던 문제 — 이름 프리픽스가 다른 4개 서비스와 달라 육안으로
+구분됐다. `terraform/envs/dev`에 편입해 해소(#494)), 옛 프로젝트 참조 잔재(vault helm-values 2곳·
 gke_ctr_retrain.tf import 지시 주석 — 실행 지시라 다음 재구축에서 삭제 요청된
 프로젝트를 대상으로 삼게 된다).

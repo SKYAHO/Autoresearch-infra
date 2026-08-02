@@ -159,10 +159,15 @@ Terraform state, values 파일에 저장하지 않는다. 로컬 `admin` 계정�
 이 Secret에만 있다. label `app.kubernetes.io/part-of=argocd`가 있어야 ArgoCD가
 `$` 참조로 읽는다. 시크릿을 명령행에 노출하지 않도록 `--from-env-file`을 쓴다(#213).
 
+Secret Manager의 `argocd-google-oidc-client-id` / `-secret` **컨테이너**는
+`terraform/envs/dev`가 소유한다(`google_secret_manager_secret.argocd_google_oidc_client`,
+#494). 재구축 시 dev root apply만으로 이 컨테이너가 생성된다. 값(version)은
+Terraform이 관리하지 않으므로 재구축 뒤에도 아래 절차로 운영자가 직접 채운다.
+
 ```bash
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
-# client id/secret을 Secret Manager에 저장해 두고 회수(예시 secret 이름)
+# client id/secret을 Secret Manager에 저장해 두고 회수
 CID="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-id --project autoresearch-503903)"
 CSECRET="$(gcloud secrets versions access latest --secret argocd-google-oidc-client-secret --project autoresearch-503903)"
 printf 'clientId=%s\nclientSecret=%s\n' "$CID" "$CSECRET" > "$env_file"; unset CID CSECRET
