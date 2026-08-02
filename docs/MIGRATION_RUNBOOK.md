@@ -173,13 +173,16 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
 **Phase 3 — admin roots 순차 apply (2026-07-29)**
 
 1. GKE 클러스터가 준비된 뒤, Kubernetes 리소스를 관리하는 별도
-   Terraform state 단위인 **admin root** 7개를 `airflow-k8s` →
-   `argocd-k8s` → `monitoring-k8s` → `elastic-k8s` →
-   `autoresearch-k8s` → `argo-rollouts-k8s` → `gke-team-access` 순서로
-   apply했다(`gke-team-access`는 IAM 성격이라 로컬에서 71개 IAM
-   리소스를 apply). `vault-k8s`는 이미 드랍이 결정된 샌드박스라
-   대상에서 제외했다 — `admin-apply` 워크플로우의 ROOTS 목록에서도
-   빼도록 PR
+   Terraform state 단위인 **admin root** 7개를 워크플로우의
+   `ADMIN_ROOTS` 순서 — `autoresearch-k8s` → `airflow-k8s` →
+   `monitoring-k8s` → `elastic-k8s` → `mlflow-k8s` →
+   `argo-rollouts-k8s` → `argocd-k8s`(namespace 소유 root 먼저,
+   다른 namespace를 참조하는 argocd는 마지막) — 로 apply했다.
+   `gke-team-access`는 `ADMIN_ROOTS`에서 명시적으로 제외된
+   root라(#314 — apply SA 권한 비대 방지, 사람 IAM은 로컬
+   break-glass 유지) 별도로 로컬에서 71개 IAM 리소스를 apply했다.
+   `vault-k8s`도 이미 드랍이 결정된 샌드박스라 대상에서 제외했다 —
+   `admin-apply` 워크플로우의 ROOTS 목록에서도 빼도록 PR
    [#416](https://github.com/SKYAHO/autoresearch-infra/pull/416)으로
    반영(#412 A단계).
 2. 신선 클러스터에서만 드러나는 함정 3종을 이 단계에서 실측했다(상세는
@@ -187,22 +190,31 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
    Definition)가 클러스터에 아직 없는 상태에서는 그 CRD를 쓰는 root의
    `terraform plan` 자체가 실패하므로, CRD를 설치하는 operator root만
    먼저 `-target`으로 선적용한 뒤 나머지 root를 순서대로 apply했다.
-   ② root 간 **namespace** 참조 순서 — 실제로 걸린 조합은
-   `autoresearch-k8s`가 `airflow-k8s`가 만드는 airflow ns의 batch RBAC
-   등을 참조하는데, 최초 apply 순서표에서 `autoresearch-k8s`가 앞에 와
-   실패했다(위 순서 목록은 이 사고 이후 교정된 최종 순서). ③
+   ② 신선 클러스터에서 `namespaces "airflow" not found` 오류 — 당시
+   이슈·PR 본문에는 "root 간 apply 순서 문제"로 기록됐지만, 사후
+   조사(#436 → PR #442의 머지된 diff)에서 **오진으로 확정**됐다:
+   cross-root 참조는 실측상 없었고, 진짜 원인은 airflow-k8s **root
+   내부**에서 `airflow_components` Role이 namespace를 변수
+   문자열로만 참조해 Terraform 그래프에 암시 의존이 잡히지 않았고,
+   신선 클러스터에서 ns 생성과 Role 생성이 레이스를 일으킨 것이었다.
+   기존 클러스터에서는 ns가 항상 먼저 존재해 드러나지 않았다. 해결은
+   해당 Role에 `depends_on = [kubernetes_namespace_v1.airflow]` 한
+   줄 보강 — 이 root에서 유일하게 누락돼 있던 의존 간선이었다.
+   (문서화 교훈: 이슈/PR 본문은 작성 시점의 추정을 담을 수 있으므로,
+   사후 기록은 머지된 diff·코드 주석 같은 최종 소스와 대조해야
+   한다 — 이 항목 자체가 그 오진을 한 번 그대로 옮겨 적었다가 정정된
+   사례다.) ③
    **oauth-proxy rollout**이 계속 대기(pending) 상태에 머문 원인은
    oauth-proxy Deployment가 참조하는 OAuth client Secret이 아직
    주입되지 않아서였다 — Secret을 먼저 주입해야 rollout이 진행되므로,
    apply 순서를 "리소스 생성 → Secret 선주입 → rollout 완료 확인"으로
    맞췄다(Secret 자체는 아래 Phase 4에서 재주입). 이 3종 함정의
-   재발 방지 1단계로 admin-apply 워크플로우의 `ROOTS` 순서 자체를
-   `airflow-k8s`가 `autoresearch-k8s`보다 앞서도록 교정하고, "CRD
-   operator `-target` 선적용"·"operator Secret 선주입" 두 신선 클러스터
-   전용 단계를 워크플로우 주석에 명문화했다(#436 → PR
-   [#442](https://github.com/SKYAHO/autoresearch-infra/pull/442)).
-   기존 클러스터에는 순서 변경이 무해함을 머지 후 admin-apply 1회
-   왕복에서 전 root "No changes"로 검증했다.
+   재발 방지로 PR
+   [#442](https://github.com/SKYAHO/autoresearch-infra/pull/442)(#436)가
+   ② 항목의 `depends_on` 간선을 보강하고(ROOTS 순서는 cross-root
+   참조가 없음이 확인돼 현행 유지), "CRD operator `-target`
+   선적용"·"operator Secret 선주입" 두 신선 클러스터 전용 단계를
+   워크플로우 주석에 명문화했다.
 
 **Phase 4 — Secret 재주입·환경 재구성 (2026-07-29)**
 
@@ -305,31 +317,37 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
    예약 IP `10.10.0.2`(예약 이름 `autoresearch-dev-mlflow-ilb`)를
    가리키고 있어 둘이 어긋났다(#425 → PR #426, Airflow 쪽은 DNS
    `10.10.0.3` ↔ Service `10.10.0.12`로 IP 자체는 다르지만 동일한
-   패턴). 증상은 "connection refused"가 아니라 **SSH 리스너는 정상
+   패턴. 이 항목의 구체 IP는 모두 당시 실측값 — 다음 이전에서는
+   달라지며 정본은 terraform output이다). 증상은 "connection
+   refused"가 아니라 **SSH 리스너는 정상
    기동했는데 그 뒤로 0바이트 무응답인 채 10초 타임아웃**이라
    원인 특정에 시간이 걸렸다 — bastion까지는 SSH가 붙지만
    bastion→ILB 구간이 죽어 있다는 신호인데, 파드·endpoint 자체는
-   멀쩡했기 때문에(진단 당시 `airflow-webserver` endpoint 2개
-   `172.16.66.2:8080`·`172.16.66.6:8080` 모두 Ready) 워크로드
-   쪽부터 의심하면 시간을 버린다. 판별은 다음 3개를 대조해서 했다:
+   멀쩡했기 때문에(진단 당시 `airflow-webserver` endpoint 2개 모두
+   Ready) 워크로드 쪽부터 의심하면 시간을 버린다. 판별은 다음 3개를
+   대조해서 했다:
    ```bash
    kubectl -n mlflow get svc mlflow-oauth-proxy \
-     -o jsonpath='{.status.loadBalancer.ingress[0].ip}'   # → 10.10.0.2 여야 정상
+     -o jsonpath='{.status.loadBalancer.ingress[0].ip}'   # → terraform output mlflow_ilb_ip와 일치해야 정상
    gcloud compute addresses list --filter="name~mlflow-ilb" \
      --format="value(status)"                              # → IN_USE 여야 정상
    gcloud dns record-sets list --zone=<zone> \
      --filter="name~mlflow"                                # rrdatas가 예약 IP와 일치해야 정상
    ```
-   해결은 매니페스트의 `loadBalancerIP`를 terraform output(`mlflow_ilb_
-   ip`) 참조로 바꾼 것이었다 — Terraform은 애초에 이 output을 노출하고
-   있었지만, 매니페스트가 값을 **복사해서 리터럴로 박아 둔 형태**라
-   프로젝트 이전을 따라오지 못했던 것이 근본 원인이다. 뼈아픈 점은
-   해당 라인(`deploy/mlflow/oauth2-proxy.yaml:116`) **바로 옆 주석에
-   "`terraform output mlflow_ilb_ip`를 참조하라"고 이미 적혀
-   있었다**는 것 — 주석은 옳았지만 값이 복사본인 이상 이전을 막지
-   못했다(참조 절차를 주석이 아니라 이전 체크리스트의 실행 항목으로
-   승격한 이유). 수정이 배포되기 전까지 팀 접속은 FQDN 대신 실제
-   ILB IP(`-L 8080:10.10.0.12:8080` 등)로 직접 터널을 열거나
+   해결은 매니페스트의 `loadBalancerIP` **리터럴 값을 새 프로젝트
+   예약 IP로 갱신**하고, 주석에 "예약 IP가 재생성되면 반드시
+   `terraform output mlflow_ilb_ip` 값으로 다시 맞춘다"는 경고를
+   보강한 것이다. 주의할 점: **"값이 복사본이라 이전을 따라오지
+   못한다"는 구조 자체는 해소되지 않았다** — 플레인 YAML 매니페스트라
+   terraform output을 자동 주입할 경로가 없어(kustomize/ArgoCD
+   plugin 등 별도 설계 필요) output "참조"로의 전환은 미완의 후속
+   과제고, 다음 이전에서도 이 파일의 IP 갱신은 **사람이 체크리스트로
+   챙겨야 하는 수동 단계**다(아래 Phase 6 절차의 "ILB
+   `loadBalancerIP` 재지정" 항목이 그 방어선). 뼈아픈 점은 해당 라인
+   바로 옆 주석에 "`terraform output mlflow_ilb_ip`를 참조하라"고
+   이미 적혀 있었다는 것 — 주석은 옳았지만 값이 복사본인 이상 이전을
+   막지 못했다. 수정이 배포되기 전까지 팀 접속은 FQDN 대신 실제
+   ILB IP(위 판별 ①에서 얻은 Service IP)로 직접 터널을 열거나
    `kubectl port-forward`로 우회해 차단을 피했다. IAP 터널로
    접속하는 브라우저는 `localhost:4180`을 보므로 OAuth client의
    redirect URI는 다시 등록할 필요가 없었다(#244 설계 그대로). 검증은
@@ -453,11 +471,14 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
   `terraform plan` 자체가 안 됐다. → operator(CRD를 설치하는 Helm
   릴리스)만 `-target` 옵션으로 먼저 적용한 뒤 CR을 적용하는 순서로
   우회했다.
-- **namespace 참조 순서**: `autoresearch-k8s` root가 `airflow-k8s`
-  root가 만드는 **namespace**(쿠버네티스에서 리소스를 논리적으로 격리하는
-  구역)를 참조하는데, 신선 클러스터에는 그 namespace가 아직 없어 순서
-  오류가 났다. → namespace를 만드는 root를 먼저 apply하는 순서로
-  고쳤다.
+- **namespace 생성 레이스**: 신선 클러스터 apply에서 `namespaces
+  "airflow" not found` 오류가 났다. 당시엔 root 간 apply 순서 문제로
+  기록됐지만 사후 조사(#436 → PR #442)에서 오진으로 확정 — 진짜
+  원인은 airflow-k8s root **내부**에서 Role 리소스가
+  **namespace**(쿠버네티스에서 리소스를 논리적으로 격리하는 구역)를
+  변수 문자열로만 참조해 Terraform이 의존 관계를 모르는 채 ns 생성과
+  레이스를 일으킨 것이었다(기존 클러스터에선 ns가 늘 먼저 있어 잠복).
+  → 해당 리소스에 `depends_on` 명시 한 줄로 해결.
 - **Secret 부재로 rollout 대기 실패**: oauth2-proxy 같은
   **Deployment**(쿠버네티스에서 파드 개수·버전을 관리하는 오브젝트)는
   필요한 Secret이 미리 주입돼 있지 않으면 **rollout**(새 버전 배포가
@@ -498,8 +519,10 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
   Terraform이 관리하는 private DNS zone)는 새 프로젝트의 예약 IP를
   가리키면서 두 값이 서로 어긋나, 내부 UI 접속용 SSH 터널이 전면 불가능
   해졌다. 증상이 "접속 거부"가 아니라 "10초간 무응답"이라 원인 특정에도
-  시간이 걸렸다. → 매니페스트의 하드코딩된 IP를 terraform output(코드가
-  계산해 내보내는 값) 참조로 교체했다.
+  시간이 걸렸다. → 매니페스트의 리터럴 IP를 새 프로젝트 예약
+  IP(terraform output 값)로 갱신하고 갱신 의무를 주석·체크리스트로
+  명문화했다. 단 플레인 YAML이라 output을 자동 주입할 경로가 없어
+  값은 여전히 복사본이며, output 참조 자동화는 미완 후속 과제다.
 - **Cloud SQL import 충돌**: 애플리케이션(MLflow)이 먼저 기동해 스키마를
   자동 생성해 버린 상태에서 옛 데이터베이스를 import하려다 "relation
   already exists" 충돌이 났다. → 데이터베이스를 완전히 재생성한 뒤
@@ -607,7 +630,8 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
 ## Phase 3 — admin roots apply
 
 ROOTS 순서는 `apply.yml`의 `ADMIN_ROOTS`가 정본(#451 — 옛 `admin-apply.yml`
-정의를 이관, #436 — ns 소유 root 선행). Phase 2(dev root apply)가 CI로
+정의를 이관. 순서 원칙은 namespace 소유 root 먼저·argocd 마지막이며, #436은
+순서가 아니라 root 내부 `depends_on` 간선 보강이었다). Phase 2(dev root apply)가 CI로
 전환된 뒤에는 `apply.yml`을 `scope: admin`으로 dispatch한다 — admin root는
 Phase 2가 만든 GKE 클러스터가 이미 있어야 plan이 되므로, `scope: all`로
 같이 돌리면 admin root plan 실패가 (이미 끝난) dev root apply까지 막지
@@ -710,8 +734,12 @@ done
    ① `kubectl get svc -o jsonpath='{.spec.loadBalancerIP}'`
    ② `gcloud dns record-sets list` rrdatas
    ③ `gcloud compute addresses list` status(`RESERVED`=미사용,
-   `IN_USE`=정상). 해결은 매니페스트의 IP를 terraform output 참조로
-   교체(숫자를 다시 적어 두면 다음 이전 때 같은 방식으로 또 낡는다).
+   `IN_USE`=정상). 해결은 매니페스트의 리터럴 IP를 새 예약
+   IP(`terraform output mlflow_ilb_ip`/`airflow_ilb_ip` 값)로 갱신.
+   **주의: 플레인 YAML이라 output 자동 주입 경로가 없어 값은 여전히
+   복사본이다** — 다음 이전에서도 이 갱신은 체크리스트로 챙겨야 하는
+   수동 단계다(output 참조 자동화는 kustomize/ArgoCD plugin 등 별도
+   설계가 필요한 미완 후속 과제).
 3. OAuth 반영 검증: 5종 K8s Secret의 client id 프로젝트 번호 프리픽스가 새
    프로젝트인지 확인(#439 스크립트).
 4. 옛 프로젝트 정리: 결제 분리(사실상 정지, 재연결로 롤백 가능) → 관찰 기간 →
@@ -725,10 +753,11 @@ done
 
 ## 알려진 함정 압축 목록 (#404 실측)
 
-닭-달걀(첫 apply 로컬), plan 플랫폼 종속, CRD 선적용, ns 소유 순서(#436),
+닭-달걀(첫 apply 로컬), plan 플랫폼 종속, CRD 선적용, ns 의존 간선 누락(#436),
 Secret 선주입, 수기 인벤토리 누락(argocd), URL-인코딩 비번(#438), SQL 선기동
 충돌, airflow env 변수 선교체(자동배포), 첫 helm 설치 CI 부재(airflow#196),
 helm Secret 입양, quota 비대칭(PREEMPTIBLE 0), cloudbuild 버킷 부재, Cloud Run
 API 누락, "재발급 ≠ 반영"(#439), 코드 밖 수동 오브젝트 누락(batch KSA — #427로
 IaC 편입 완료, 재발 시 같은 원칙 적용), 내부 UI `loadBalancerIP` 하드코딩과
-DNS 예약 IP 불일치(#425→#426, output 참조로 전환).
+DNS 예약 IP 불일치(#425→#426 — 리터럴 값 갱신으로 해소, output 자동 참조는
+미완이라 다음 이전에서도 수동 갱신 필요).
