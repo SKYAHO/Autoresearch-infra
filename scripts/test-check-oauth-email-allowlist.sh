@@ -35,11 +35,12 @@ assert_grep_error_fails() {
 assert_grep_error_fails count 'OK  MLflow: authenticated-emails-file 유지'
 assert_grep_error_fails env-from 'OK  MLflow: 명시적 Secret key 주입만 사용'
 
-if ! "$real_grep" -Fq 'run: scripts/test-check-oauth-email-allowlist.sh' \
-  "$repo_root/.github/workflows/lint.yml"; then
-  echo "FAIL: oauth2-proxy allowlist self-test가 lint workflow에 연결되지 않음" >&2
-  exit 1
-fi
+for step in check-oauth-email-allowlist.sh test-check-oauth-email-allowlist.sh; do
+  if ! "$real_grep" -Fq "run: scripts/$step" "$repo_root/.github/workflows/lint.yml"; then
+    echo "FAIL: scripts/$step가 lint workflow에 연결되지 않음" >&2
+    exit 1
+  fi
+done
 
 fixture="$test_dir/repo"
 mkdir -p "$fixture/deploy/mlflow" "$fixture/terraform/admin/elastic-k8s"
