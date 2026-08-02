@@ -12,6 +12,16 @@ scripts/terraform-env --environment dev --root terraform/envs/dev init -reconfig
 
 래퍼는 카탈로그를 검증하고 root별 gitignored 입력·backend 파일을 생성합니다. bootstrap root는 state bucket 생성 전 실행되므로 backend 없이 카탈로그 var-file만 사용합니다.
 
+다른 저장소의 CI는 검증된 필드만 읽을 수 있습니다.
+
+```bash
+ruby scripts/environment_catalog.rb \
+  --catalog config/environments/dev/environment.yaml \
+  --field gcp.project_id
+```
+
+필드 경로가 없거나 카탈로그가 유효하지 않으면 값을 출력하지 않고 실패합니다.
+
 ## 정본 경계
 
 - 카탈로그: project ID, region, zone, 이름 prefix, GKE cluster, CIDR, state bucket/prefix
