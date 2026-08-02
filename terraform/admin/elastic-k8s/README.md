@@ -108,7 +108,10 @@ done
 # ALLOWLIST_FILE에 실제 승인 이메일 파일(한 줄에 하나, 로컬 0600)을 지정한다.
 if kubectl -n elastic get secret kibana-oauth --ignore-not-found -o name > "$d/existing-secret"; then
   if test -s "$d/existing-secret"; then
-    for k in cookie-secret authenticated-emails; do
+    # authenticated-emails는 여기서 읽지 않는다. 목록이 비어 전원 403이 된
+    # 상황이 바로 이 절차로 복구해야 하는 경우인데, 무조건 읽고 test -s로
+    # 막으면 ALLOWLIST_FILE 분기에 닿기도 전에 죽어 복구가 불가능해진다.
+    for k in cookie-secret; do
       kubectl -n elastic get secret kibana-oauth -o "jsonpath={.data.$k}" \
         | base64 -d > "$d/$k"
       test -s "$d/$k" || { echo "ERROR: kibana-oauth.$k 없음"; exit 1; }
@@ -125,8 +128,13 @@ fi
 if test -n "${ALLOWLIST_FILE:-}"; then
   test -f "$ALLOWLIST_FILE" || { echo "ERROR: ALLOWLIST_FILE을 읽을 수 없음"; exit 1; }
   cp "$ALLOWLIST_FILE" "$d/authenticated-emails"
-elif ! test -s "$d/existing-secret"; then
-  echo "ERROR: 최초 생성에는 ALLOWLIST_FILE=/안전한/경로/approved-emails 지정 필요"; exit 1
+else
+  test -s "$d/existing-secret" \
+    || { echo "ERROR: 최초 생성에는 ALLOWLIST_FILE=/안전한/경로/approved-emails 지정 필요"; exit 1; }
+  kubectl -n elastic get secret kibana-oauth -o 'jsonpath={.data.authenticated-emails}' \
+    | base64 -d > "$d/authenticated-emails"
+  test -s "$d/authenticated-emails" \
+    || { echo "ERROR: 기존 authenticated-emails가 비어 있음 — ALLOWLIST_FILE로 명시 지정 필요"; exit 1; }
 fi
 awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }' "$d/authenticated-emails" \
   || { echo "ERROR: authenticated-emails는 빈 줄·# 주석 외에 한 줄당 이메일 하나여야 함"; exit 1; }
@@ -136,7 +144,7 @@ kubectl create secret generic kibana-oauth -n elastic \
   --from-file=client-secret="$d/client-secret" \
   --from-file=cookie-secret="$d/cookie-secret" \
   --from-file=authenticated-emails="$d/authenticated-emails" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
@@ -188,7 +196,7 @@ kubectl create secret generic kibana-oauth -n elastic \
   --from-file=client-secret="$d/client-secret" \
   --from-file=cookie-secret="$d/cookie-secret" \
   --from-file=authenticated-emails="$d/authenticated-emails" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
 rm -rf "$d"; trap - EXIT
 kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
 kubectl rollout status deployment/kibana-oauth-proxy -n elastic --timeout=120s

@@ -82,12 +82,19 @@ for k in client-id client-secret; do
   test -s "$d/$k" || { echo "ERROR: $k 정본이 비어 있음 — 'gcloud secrets versions add'로 payload 먼저 등록"; exit 1; }
 done
 
+# Secret 갱신은 server-side apply를 쓴다. client-side apply는 전체 payload를
+# kubectl.kubernetes.io/last-applied-configuration 어노테이션에 그대로 복제해
+# 시크릿 사본이 하나 더 생기고 옛 값이 남는다(현재 두 Secret에는 이 어노테이션이
+# 없음을 실측 확인).
 # cookie 비밀과 allowlist: Secret 없음과 인증/연결 실패를 구분한다.
 # 기존 Secret을 재실행할 때는 두 값을 보존한다. 최초 생성 또는 의도적 allowlist 변경만
 # ALLOWLIST_FILE에 실제 승인 이메일 파일(한 줄에 하나, 로컬 0600)을 지정한다.
 if kubectl -n mlflow get secret mlflow-oauth --ignore-not-found -o name > "$d/existing-secret"; then
   if test -s "$d/existing-secret"; then
-    for k in cookie-secret authenticated-emails; do
+    # authenticated-emails는 여기서 읽지 않는다. 목록이 비어 전원 403이 된
+    # 상황이 바로 이 절차로 복구해야 하는 경우인데, 무조건 읽고 test -s로
+    # 막으면 ALLOWLIST_FILE 분기에 닿기도 전에 죽어 복구가 불가능해진다.
+    for k in cookie-secret; do
       kubectl -n mlflow get secret mlflow-oauth -o "jsonpath={.data.$k}" \
         | base64 -d > "$d/$k"
       test -s "$d/$k" || { echo "ERROR: mlflow-oauth.$k 없음"; exit 1; }
@@ -104,8 +111,13 @@ fi
 if test -n "${ALLOWLIST_FILE:-}"; then
   test -f "$ALLOWLIST_FILE" || { echo "ERROR: ALLOWLIST_FILE을 읽을 수 없음"; exit 1; }
   cp "$ALLOWLIST_FILE" "$d/authenticated-emails"
-elif ! test -s "$d/existing-secret"; then
-  echo "ERROR: 최초 생성에는 ALLOWLIST_FILE=/안전한/경로/approved-emails 지정 필요"; exit 1
+else
+  test -s "$d/existing-secret" \
+    || { echo "ERROR: 최초 생성에는 ALLOWLIST_FILE=/안전한/경로/approved-emails 지정 필요"; exit 1; }
+  kubectl -n mlflow get secret mlflow-oauth -o 'jsonpath={.data.authenticated-emails}' \
+    | base64 -d > "$d/authenticated-emails"
+  test -s "$d/authenticated-emails" \
+    || { echo "ERROR: 기존 authenticated-emails가 비어 있음 — ALLOWLIST_FILE로 명시 지정 필요"; exit 1; }
 fi
 awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }' "$d/authenticated-emails" \
   || { echo "ERROR: authenticated-emails는 빈 줄·# 주석 외에 한 줄당 이메일 하나여야 함"; exit 1; }
@@ -115,7 +127,7 @@ kubectl create secret generic mlflow-oauth -n mlflow \
   --from-file=client-secret="$d/client-secret" \
   --from-file=cookie-secret="$d/cookie-secret" \
   --from-file=authenticated-emails="$d/authenticated-emails" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
@@ -178,7 +190,7 @@ kubectl create secret generic mlflow-oauth -n mlflow \
   --from-file=client-secret="$d/client-secret" \
   --from-file=cookie-secret="$d/cookie-secret" \
   --from-file=authenticated-emails="$d/authenticated-emails" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
 rm -rf "$d"; trap - EXIT
 kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
 kubectl rollout status deployment/mlflow-oauth-proxy -n mlflow --timeout=120s
