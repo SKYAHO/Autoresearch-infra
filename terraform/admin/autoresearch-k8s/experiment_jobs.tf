@@ -217,6 +217,14 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "object.spec.template.spec.containers.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$')) && (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$')))"
           message    = "실험 Job의 모든 컨테이너(initContainers 포함) 이미지는 sha256 digest로 고정해야 합니다."
         },
+        # digest 고정은 불변성만 보장한다. 출처까지 막지 않으면
+        # docker.io/library/x@sha256:... 같은 임의 외부 이미지가 통과하고, pull은
+        # kubelet이 노드에서 하므로 pod egress NetworkPolicy로도 차단되지 않는다
+        # (batch-od 노드는 Cloud NAT로 외부 registry 도달 가능).
+        {
+          expression = "object.spec.template.spec.containers.all(c, ${jsonencode(local.experiment_job_allowed_image_prefixes)}.exists(p, c.image.startsWith(p))) && (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, ${jsonencode(local.experiment_job_allowed_image_prefixes)}.exists(p, c.image.startsWith(p))))"
+          message    = "실험 Job 이미지는 승인된 Artifact Registry 저장소에서만 가져올 수 있습니다."
+        },
         # 필드를 아예 빼고 제출한 Job도 거부되어야 한다. 가드 없이 인덱싱하면
         # 거부는 되지만 "CEL 런타임 오류 → failurePolicy Fail"이라는 우회적 경로라
         # 의도한 동작인지 코드에서 드러나지 않는다. has()/in으로 명시해 누락 거부를
@@ -225,13 +233,15 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "has(object.spec.template.spec.nodeSelector) && 'cloud.google.com/gke-nodepool' in object.spec.template.spec.nodeSelector && object.spec.template.spec.nodeSelector['cloud.google.com/gke-nodepool'] == 'batch-od'"
           message    = "실험 Job은 nodeSelector로 batch-od node pool을 명시해야 합니다."
         },
-        # exists는 승인된 toleration의 "포함"만 보장한다. nodeSelector가 batch-od로
-        # 고정돼 있어 추가 toleration이 다른 pool 스케줄로 이어지지는 않지만,
-        # runbook의 "이 두 값만 사용한다"와 강제 범위가 다르므로 여기서 개수까지
-        # 제한해 문서와 실제 강제를 일치시킨다.
+        # all()만으로는 빈 목록(tolerations: [])이 통과한다 — CEL에서 빈 list의
+        # all()은 true다. 그 Job은 batch-od taint를 못 넘어 Pending으로 남았다가
+        # activeDeadlineSeconds로만 정리돼 최대 (deadline+TTL)만큼 quota를 잡는다.
+        # size()==1로 "승인된 toleration 정확히 하나"를 강제해 runbook 서술과 맞춘다.
+        # Job 오브젝트는 Pod가 아니라 DefaultTolerationSeconds admission의 대상이
+        # 아니므로, 제출한 template이 그대로 평가된다.
         {
-          expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.all(t, t.key == 'workload' && t.operator == 'Equal' && t.value == 'batch-od' && t.effect == 'NoSchedule')"
-          message    = "실험 Job은 batch-od toleration만 사용해야 합니다."
+          expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.size() == 1 && object.spec.template.spec.tolerations.all(t, t.key == 'workload' && t.operator == 'Equal' && t.value == 'batch-od' && t.effect == 'NoSchedule')"
+          message    = "실험 Job은 batch-od toleration 하나만 사용해야 합니다."
         },
         # quota 회수의 서버 측 강제. 이 root는 API KSA에 delete를 주지 않고
         # enable_experiment_job_creation=false 롤백도 실행 중 Job을 멈추지 않으므로,

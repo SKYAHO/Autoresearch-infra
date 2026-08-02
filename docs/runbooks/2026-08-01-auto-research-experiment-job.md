@@ -168,8 +168,10 @@ EOF
 |---|---|
 | `initContainers`에 mutable tag 이미지 | 모든 컨테이너(initContainers 포함) digest 고정 |
 | `nodeSelector` 미지정 | nodeSelector로 batch-od 명시 |
-| `tolerations`에 batch-od 외 항목 추가 | batch-od toleration만 사용 |
+| `tolerations`에 batch-od 외 항목 추가, 또는 `tolerations: []` | batch-od toleration 하나만 사용 |
+| 허용 Artifact Registry 밖 이미지(digest는 고정) | 승인된 저장소에서만 pull |
 | `activeDeadlineSeconds`/`ttlSecondsAfterFinished` 미지정 또는 3600 초과 | 각 필드 범위 |
+| `automountServiceAccountToken: true` | ServiceAccount token mount 금지 |
 
 ```bash
 kubectl -n autoresearch-experiments create --dry-run=server -f - <<'EOF'

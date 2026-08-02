@@ -100,7 +100,8 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    CPU/메모리는 namespace ResourceQuota·LimitRange가 함께 상한을 건다.
 4. 이 root의 `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy가
    ServiceAccount 변경, digest 없는 image(`initContainers` 포함), `batch-od`
-   nodeSelector/toleration 계약 위반, `activeDeadlineSeconds`·
+   nodeSelector/toleration 계약 위반(빈 목록 포함), 승인된 Artifact Registry 밖
+   이미지, `automountServiceAccountToken: true`, `activeDeadlineSeconds`·
    `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. 두 시간
    필드를 정책에 둔 것은 완료 Job이 quota를 무기한 점유하는 경로를 막기 위해서다
    (API KSA에 `delete`가 없어 회수 수단이 TTL뿐이다). Pod Security `restricted`는

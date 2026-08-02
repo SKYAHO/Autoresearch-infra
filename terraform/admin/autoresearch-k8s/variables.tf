@@ -245,13 +245,29 @@ variable "rerank_loadtest_snapshot_reader_github_gsa_email" {
 }
 
 variable "experiment_job_namespace" {
-  description = "Auto Research 실험 Job을 기존 앱 namespace와 분리해 실행할 Kubernetes namespace."
+  description = "Auto Research 실험 Job을 기존 앱 namespace와 분리해 실행할 Kubernetes namespace. terraform/envs/dev의 experiment_job_k8s_namespace와 반드시 같은 값이어야 한다 — 불일치는 두 root의 plan/apply를 모두 통과한 뒤 Workload Identity principal(svc.id.goog[ns/ksa])이 어긋나 Job의 GCS 업로드 403으로만 드러난다."
   type        = string
   default     = "autoresearch-experiments"
 
   validation {
     condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_job_namespace))
     error_message = "experiment_job_namespace은 유효한 Kubernetes namespace 이름이어야 합니다."
+  }
+}
+
+# digest 고정만으로는 이미지의 "불변성"만 보장되고 "출처"는 보장되지 않는다.
+# 이미지 pull은 kubelet이 노드에서 수행하므로 namespace egress NetworkPolicy가
+# 적용되지 않고, batch-od 노드는 Cloud NAT로 외부 registry에 도달할 수 있다.
+# 따라서 허용 registry/repository prefix를 함께 강제해야 "허용된 이미지인가"까지
+# 계약대로 막힌다.
+variable "experiment_job_allowed_image_prefixes" {
+  description = "실험 Job 컨테이너 이미지에 허용할 registry/repository prefix 목록. 기본값은 이 프로젝트의 Artifact Registry Docker 저장소다."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.experiment_job_allowed_image_prefixes == null || length(coalesce(var.experiment_job_allowed_image_prefixes, [])) > 0
+    error_message = "experiment_job_allowed_image_prefixes를 지정하면 최소 한 개의 prefix가 필요합니다(빈 목록은 모든 이미지를 거부해 Job이 전부 실패한다)."
   }
 }
 
