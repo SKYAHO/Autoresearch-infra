@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T09:36:12Z",
+  "generated_at": "2026-08-02T09:44:26Z",
   "reports": [
+    {
+      "number": 500,
+      "title": "chore: 사용하지 않는 Vault 구성 완전 제거",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-02T09:44:14Z",
+      "summary_ko": [
+        "시크릿 관리가 Secret Manager로 대체됨에 따라 더 이상 사용하지 않는 Vault 관련 Terraform 코드와 admin root를 완전히 제거하였습니다.",
+        "GCP 특성상 삭제가 불가능한 KMS Key Ring 및 Crypto Key는 별도 파일로 분리하여 삭제 방지 속성과 함께 영구 관리하도록 구성하였습니다.",
+        "CI 워크플로우의 plan 요약 추출 정규식을 통일하고 워크플로우 간 불일치를 검증하는 일관성 체크 스크립트를 추가하였습니다."
+      ],
+      "report_url": "pr/500/"
+    },
     {
       "number": 506,
       "title": "fix: Prometheus proxy resource name 수정",
