@@ -59,7 +59,26 @@ archive를 탐색하거나 이를 위해 bucket-wide list 권한을 추가하지
    로드가 "권한"이 아니라 "객체 없음"으로 실패합니다. 공유
    `gs://<bucket>/registry.db`(버킷 루트)는 IAM 조건 밖이라 대안이 되지 않습니다
    — 이는 의도된 격리이지 누락이 아닙니다.
-2. **BigQuery PIT 조회가 entity DataFrame 경로면 현재 권한으로 완주하지 못합니다.**
+2. **같은 경로 재업로드는 staging 버킷에서만 실패합니다(버킷별로 다름).**
+   `roles/storage.objectCreator`는 `storage.objects.create`만 줍니다. GCS에서
+   기존 객체 덮어쓰기에 `storage.objects.delete`가 필요한 것은 **versioning이
+   꺼진 버킷**에 한하며, versioning이 켜져 있으면 같은 경로 업로드가 새
+   generation을 만들어 create만으로 성립합니다. 실측 결과 세 버킷의 상태가
+   갈립니다.
+
+   | 버킷 | versioning | 같은 경로 재업로드 |
+   |---|---|---|
+   | `…-feast-registry-dev` | 켜짐 | 성공(새 generation) |
+   | `…-autoresearch-mlflow-artifacts` | 켜짐 | 성공(새 generation) |
+   | `…-feast-staging-dev` | **꺼짐** | **403 실패** |
+
+   따라서 동일 comparison ID 재실행이나 재시도로 staging 경로에 두 번째 쓰기가
+   발생하면 그 순간 실패합니다. 해소 방향은 ① 시도 ID를 포함한 유일 경로를
+   강제해 재사용 자체를 없애거나 ② staging 버킷에 versioning을 켜거나
+   ③ 해당 버킷에만 덮어쓰기 권한을 추가하는 것이며, ①이 감사 관점에서 가장
+   깔끔합니다.
+
+3. **BigQuery PIT 조회가 entity DataFrame 경로면 현재 권한으로 완주하지 못합니다.**
    `feast_offline_store_dev`에 `roles/bigquery.dataViewer`만 부여해
    `bigquery.tables.create`가 없습니다. Feast BigQuery offline store는 entity
    DataFrame을 임시 테이블로 업로드한 뒤 조인하므로, 이 경로를 쓰면 테이블 생성
