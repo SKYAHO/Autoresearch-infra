@@ -265,6 +265,27 @@ binding)에 대한 **config 자체 부재**(= 실제 destroy 대상)가 함께
   두면, 두 작업은 Terraform 리소스 그래프상 서로 의존관계가 없는
   독립 노드라 **병렬 실행 순서가 보장되지 않는다** — 회수가 먼저
   처리되면 destroy 호출이 403으로 실패할 수 있다.
+  - **그래프 독립 근거**: `google_project_iam_member.dev_apply_roles
+    ["roles/cloudkms.admin"]`와 `google_kms_crypto_key_iam_member.
+    vault_unseal`은 서로의 속성값을 참조하지 않는다 — 전자는
+    `dev_apply` SA의 email과 role 문자열만, 후자는 crypto key
+    주소와 GSA 문자열만 쓴다. Terraform은 리소스 간 의존 관계를
+    config의 참조식(하나가 다른 하나의 output/attribute를 쓰는지)과
+    명시적 `depends_on`으로만 만든다 — 값이 겹치지 않고 `depends_on`도
+    없으므로 그래프 상 두 노드를 잇는 edge가 아예 존재하지 않고,
+    Terraform은 기본적으로 독립 노드를 병렬로 처리한다(worker pool
+    동시 실행, 기본 동시성 10).
+  - **실행 주체 자신이 잃는 권한이라는 점의 영향**: 이 apply를 수행하는
+    `dev_apply` SA 자체가 `cloudkms.admin` 회수 대상이다. WIF 인증은
+    job 시작 시 `google-github-actions/auth@v2`로 **한 번** 단기
+    OAuth 토큰을 발급받지만, GCP IAM 권한 검사는 토큰 발급 시점에
+    캐시된 권한이 아니라 **API 호출 시점의 현재 IAM 정책을 그때그때
+    조회**해 판정한다(IAM 변경 전파는 보통 초 단위~수십 초, 최대
+    수 분). 즉 같은 apply 안에서 role 회수 API 호출이 먼저 성공해
+    전파까지 끝난 뒤 KMS IAM member destroy 호출이 나중에 나가면,
+    토큰 자체는 여전히 유효해도 그 시점의 IAM 정책에는 이미
+    `cloudkms.admin`이 없어 403을 받는다 — "토큰이 살아있으니
+    안전하다"는 보호는 없다.
 - **결정**: `roles/cloudkms.admin`은 이번 PR에서 유지하고(코드에 남겨
   둠, `github_actions.tf`에 사유 주석 추가), 승인된 apply로 4개
   리소스 destroy + 2개 forget이 실제로 반영된 뒤 이 role이 더 이상
@@ -358,6 +379,17 @@ binding)에 대한 **config 자체 부재**(= 실제 destroy 대상)가 함께
   택하는 경향이 있지만, 이는 안전을 더 강화하는 부수 효과일 뿐 이
   케이스의 정합성이 그 순서에 의존하지는 않는다 — 반대 순서였어도
   결과는 같다.
+- **apply 후 검증 방법**: `scripts/terraform-env --environment dev
+  --root terraform/envs/dev state list | grep vault`로 확인한다 —
+  성공한 apply라면 이 grep은 빈 결과여야 한다(key ring/crypto key
+  2개는 forget으로 state에서 빠지고, `google_kms_crypto_key_iam_
+  member.vault_unseal`을 포함한 나머지 4개는 destroy로 state에서
+  빠지므로). `terraform apply`는 애초에 `Apply complete!` 뒤에
+  added/changed/destroyed 개수를 출력하고 하나라도 실패하면 0이 아닌
+  종료 코드로 끝나 `apply.yml`의 "Apply dev root" 스텝이 그 자리에서
+  실패를 잡아낸다(comment 9 (c) 참조) — 즉 apply 자체가 성공 종료했다면
+  이 순서 문제로 인한 부분 실패는 이미 없었다는 뜻이고, `state list`는
+  그 결과를 사후에 다시 확인하는 용도다.
 
 **이해도 확인 답변 (comment 7 — 잔여 3개 destroy의 권한 커버리지와 custom
 role 재생성, `github_actions.tf:255`)**:
@@ -495,9 +527,13 @@ comment 4는 forget apply 성공을 `terraform state list`로 확인한 뒤 이
 - [ ] `fmt -check`, `validate`, `git diff --check` 통과
 - [ ] plan에 의도하지 않은 리소스 삭제가 없는지 검토(dev root에서 key
       ring/crypto key 2개는 forget으로만 나오고 destroy 0, 나머지
-      GSA/WI 바인딩/custom role/key IAM binding 4개는 실제 destroy —
-      `roles/cloudkms.admin`은 이번 PR에서 회수하지 않으므로 IAM
-      바인딩 destroy는 이번 plan에 나타나지 않음)
+      `google_service_account.vault`(GSA)·`google_service_account_iam_
+      member.vault_wi`(WI 바인딩)·`google_project_iam_custom_role.
+      vault_unseal`(custom role)·`google_kms_crypto_key_iam_member.
+      vault_unseal`(key-level IAM 바인딩) 4개는 실제 destroy로 나타남 —
+      이 4개와 별개로 `google_project_iam_member.dev_apply_roles
+      ["roles/cloudkms.admin"]`(apply SA의 project-level role)은 이번
+      PR에서 회수하지 않으므로 이번 plan에 나타나지 않음)
 - [ ] KMS crypto key destroy가 CryptoKeyVersion 파기를 실제로 예약한다는
       사실과, `removed` 블록으로 그 위험을 없앤 이유를 문서에 기록
 - [ ] 머지 직후 `terraform-drift.yml`이 4개 리소스 destroy 대상 때문에
