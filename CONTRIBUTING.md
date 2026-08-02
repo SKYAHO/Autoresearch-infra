@@ -163,9 +163,9 @@ Terraform 변경 PR의 로컬 검증:
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -check -recursive
-terraform -chdir=terraform/envs/dev init -backend=false
-terraform -chdir=terraform/envs/dev validate
-terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
+scripts/terraform-env --environment dev --root terraform/envs/dev init -backend=false
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev plan -var-file=terraform.tfvars
 ```
 
 `terraform plan`은 실제 GCP project id와 인증이 준비된 뒤 실행합니다. 로컬 `terraform.tfvars`와 state/plan 파일은 커밋하지 않습니다.

@@ -92,6 +92,28 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    # #484 실험 Job 상태 조회. API는 autoresearch-experiments namespace의
+    # jobs/pods/pods-log/events를 읽는 RoleBinding을 갖지만(admin root의
+    # experiment-job-observer), 이 정책에 Kubernetes API 경로가 없으면 RBAC가
+    # 있어도 런타임에 호출할 수 없다. service VIP를 DNAT 이전에 평가하는
+    # dataplane을 위해 services CIDR을, DNAT 이후를 평가하는 dataplane을 위해
+    # control plane CIDR을 함께 연다(vault-k8s·elastic-k8s와 같은 이중 패턴).
+    # 두 CIDR은 dev Terraform의 gke_services_cidr·gke_master_ipv4_cidr와
+    # 반드시 일치해야 한다.
+    - to:
+        # kubernetes.default.svc ClusterIP 한 개만 연다. services CIDR 전체를
+        # 443으로 열면 이 Pod가 클러스터 내 모든 ClusterIP Service의 443
+        # (ArgoCD server, Kibana oauth2-proxy, Elasticsearch, MLflow 등)에
+        # 도달하게 되어, 이 경계가 전제하는 "손상된 API" 위협 모델과 어긋난다.
+        # 이 주소는 services CIDR의 첫 IP로 결정되므로(현 dev: 172.16.128.0/24
+        # → 172.16.128.1) 대역이 바뀌면 함께 갱신해야 한다.
+        - ipBlock:
+            cidr: 172.16.128.1/32
+        - ipBlock:
+            cidr: 172.16.0.0/28
+      ports:
+        - protocol: TCP
+          port: 443
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

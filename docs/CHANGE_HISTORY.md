@@ -3,6 +3,43 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-02: paired Feast experiment runtime dev 격리 계약 (#485) — 미적용
+
+- paired Feast 실험을 기존 Airflow batch·Feast apply와 분리하기 위해 dev 전용
+  `experiment-runtime` namespace/KSA/GSA, `experiments/`·`code/` prefix 한정 GCS
+  IAM, dev `feast_offline_store_dev` 읽기 권한, default-deny NetworkPolicy와
+  ResourceQuota/LimitRange를 정의했다.
+- Job 생성은 `job_creation_enabled=false` 및 observer-only RBAC로 fail-closed다.
+  ValidatingAdmissionPolicy, immutable image digest, TTL/deadline, GKE capacity와
+  BigQuery 비용 gate가 승인된 후속 변경 전에는 Airflow가 Job 생성 시도를 중단한다.
+- production registry/BigQuery/Redis CA 권한, Redis·Cloud SQL·MLflow 및 public
+  external HTTPS egress를 의도적으로 부여하지 않았다. 실제 apply와 live 검증은
+  수행하지 않았다.
+
+## 2026-08-01: Auto Research 실험별 Kubernetes Job 실행 경계 (#484)
+
+- 기존 `autoresearch` namespace와 분리한 `autoresearch-experiments` namespace를
+  Terraform으로 정의했다.
+- 실험 Job은 결과 전용 GCS 버킷에 `roles/storage.objectCreator`만 갖는 별도 KSA/GSA
+  Workload Identity를 사용한다. Kubernetes RoleBinding, Secret Manager, Cloud SQL,
+  Redis 권한은 부여하지 않는다.
+- namespace에는 Pod Security `restricted`, ResourceQuota, LimitRange, ingress
+  deny-all과 DNS·GKE metadata·Private Google APIs HTTPS만 허용하는 egress 정책을
+  적용한다. 외부 HTTPS, Cloud SQL, Redis, MLflow는 기본 차단한다.
+- Agent Orchestration API는 기본적으로 Job·Pod·로그 관찰만 가능하다. Job `create`
+  권한은 고정 템플릿·허용 image digest·admission 검증과 별도 승인 전까지
+  `enable_experiment_job_creation=false`로 유지한다.
+- 2차 리뷰에서 Pod Security `enforce-version`을 live GKE 기준 `v1.35`로 고정했고,
+  Job 템플릿·admission이 `batch-od` 전용 nodeSelector/toleration을 강제하도록
+  계약을 보완했다. 일반 앱 pool 경합을 막기 위해 동시 Job·Pod 상한은 2개,
+  컨테이너 최대는 1 vCPU/2 GiB로 낮췄다.
+- 후속 보안 리뷰에서 실험과 무관한 클러스터 전역 NodeLocal DNSCache 변경은 PR에서
+  제외했다. 결과 버킷은 live 90일·archived 30일의 복구 창을 두고, 실행 Job에는
+  객체 생성만, 상태 API에는 인증·감사 응답을 위한 객체 읽기만 각각 최소 권한으로
+  부여했다. API의 Job 삭제 권한은 계속 부여하지 않는다.
+- 실제 Terraform apply와 live Job 검증은 아직 수행하지 않았다. 운영 절차는
+  `docs/runbooks/2026-08-01-auto-research-experiment-job.md`를 따른다.
+
 ## 2026-07-31: MLflow content-addressed training snapshot registry (#464)
 
 - 기존 MLflow artifact GCS bucket을 재사용해 `training-snapshots/sha256=<digest>/`
@@ -126,16 +163,29 @@
   원칙의 양방향 사례.
 - **데이터**: GCS 8버킷 서버사이드 rsync, BQ 7테이블 cp, Cloud SQL 3개 DB
   export/import(모델 레지스트리·Airflow 이력 보존), 이미지 7종 digest 보존 복사.
-- **재구축에서 드러난 함정**(상세는 #404 진행 기록): CRD 의존 root의 operator
-  선적용, 신선 클러스터 한정 ns 참조 순서, operator Secret 선주입 없인
+- **재구축에서 드러난 함정**(Phase별 재사용 절차로 상세 정리는
+  `docs/MIGRATION_RUNBOOK.md`): CRD 의존 root의 operator 선적용, 신선
+  클러스터 한정 ns 생성 레이스(root 내부 `depends_on` 누락 — #436→#442로
+  확정·해결, 초기 "root 간 순서" 진단은 오진), operator Secret 선주입 없인
   rollout 대기 실패, 수동 kubectl 오브젝트(batch KSA)의 누락(#427→#428 IaC
-  편입), OAuth client의 프로젝트 종속(5종 재발급·전환).
+  편입), OAuth client의 프로젝트 종속(5종 재발급·전환), 내부 UI
+  `loadBalancerIP` 하드코딩과 DNS 예약 IP 불일치(#425→#426 — 리터럴 값 갱신,
+  output 자동 참조는 미완).
 - **quota 구조**: 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot이 E2를 소모 —
   증설 대신 batch-spot을 n2로 전환해 수요를 N2 quota(200)로 이전(#422).
-- **롤백·정리**: 옛 프로젝트는 결제 분리로 정지(재연결 시 복구 가능). OAuth
-  전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·데이터 경로 기준) 확인.
-  코드 잔재는 드랍된 vault 샌드박스의 helm-values 1건뿐이며 #412 B~C(root째
-  삭제)가 정리한다. 삭제 예약은 그 이후.
+- **롤백·정리**: OAuth 전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·
+  데이터 경로 기준) 확인 후, 2026-07-31 옛 프로젝트 `ar-infra-501607`을
+  `gcloud projects delete`로 `DELETE_REQUESTED` 전환(30일 내
+  `gcloud projects undelete`로 프로젝트 ID 복원 가능 — 리소스·데이터 복구는
+  보장되지 않아 실질 롤백은 IaC 재적용 + 백업 복원이다). 코드 잔재는 2건 — ① 드랍된
+  vault 샌드박스의 helm-values(#412 B~C가 root째 삭제로 정리),
+  ② `terraform/envs/dev/gke_ctr_retrain.tf` 상단의 옛 프로젝트 대상
+  `terraform import` 지시 주석(#316 당시 절차 — 옛 프로젝트가
+  `DELETE_REQUESTED`인 지금은 실행 불가·불필요한 낡은 지시라 후속 정리
+  대상).
+- **재사용 가능한 실행 절차**(Phase별 진행상황·마주친 이슈·해결 방법)는
+  `docs/MIGRATION_RUNBOOK.md`(#437)에 정리했다. 설계 당시 결정 근거는
+  `docs/superpowers/specs/2026-07-29-project-migration-design.md`를 본다.
 
 ## 2026-07-30: Feast dev/prod 런타임 IAM 경계 구성 (#424) — 미적용
 

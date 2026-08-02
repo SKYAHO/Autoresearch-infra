@@ -1,6 +1,12 @@
 # GCP 프로젝트 이전 재구축 설계 (ar-infra-501607 → autoresearch-503903)
 
-> Status: Draft | Created: 2026-07-29
+> Status: Completed | Created: 2026-07-29 | Completed: 2026-07-31
+
+이 문서는 착수 시점의 설계(1~6절)만 보존한다. Phase별 실행 기록·마주친
+이슈·해결 방법(재사용 가능한 절차로 정리)은
+`docs/MIGRATION_RUNBOOK.md`(#437)를, 결정 요약은 `docs/CHANGE_HISTORY.md`를
+본다. 상위 추적 이슈는
+[#404](https://github.com/SKYAHO/autoresearch-infra/issues/404).
 
 ## 1. 목표와 방식 결정
 

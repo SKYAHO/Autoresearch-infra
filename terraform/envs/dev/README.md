@@ -38,22 +38,24 @@
 - 코드 아카이브 배포 GCS 버킷 + 업로더 SA/WIF + 파드 read IAM(`code_artifacts.tf`, #238)
 - MLflow artifact GCS 버킷의 immutable content-addressed training snapshot registry
   (`mlflow.tf`, `training-snapshots/`, #464)
+- Auto Research 실험 결과 전용 GCS 버킷과 실험 Job Workload Identity
+  (`experiment_jobs.tf`, 객체 생성 전용 권한)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 
 ## 로컬 실행
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init
-terraform -chdir=terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev init
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
 ```
 
 plan/apply를 실행할 때는 로컬 전용 변수 파일을 만듭니다.
 
 ```bash
 cp terraform/envs/dev/terraform.tfvars.example terraform/envs/dev/terraform.tfvars
-terraform -chdir=terraform/envs/dev plan
-terraform -chdir=terraform/envs/dev apply
+scripts/terraform-env --environment dev --root terraform/envs/dev plan
+scripts/terraform-env --environment dev --root terraform/envs/dev apply
 ```
 
 `terraform.tfvars`에는 실제 GCP project id가 들어갈 수 있으므로 커밋하지 않습니다.
@@ -69,14 +71,14 @@ apply 경계는 코드에 구성되었지만 이 변경에서 실제 GCP/Kuberne
 | Network | `autoresearch-dev-vpc`, `autoresearch-dev-subnet`, `autoresearch-dev-router`, `autoresearch-dev-nat` |
 | Artifact Registry | `autoresearch-dev-docker` |
 | Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, user `app`, private IP `192.168.0.3` |
-| GCS | raw data, prod Feast registry/staging, dev Feast registry/staging(`-dev`), Airflow DAG/log, `code-artifacts`, MLflow artifact/training snapshot bucket |
+| GCS | raw data, prod Feast registry/staging, dev Feast registry/staging(`-dev`), Airflow DAG/log, `code-artifacts`, MLflow artifact/training snapshot, Auto Research 실험 결과 전용 bucket |
 | BigQuery | `autoresearch_dev_analytics`, `feast_offline_store`, `feast_offline_store_dev` |
 | BigQuery connection | `autoresearch-dev-vertex-ai` (`CLOUD_RESOURCE`, `asia-northeast3`, #280) |
 | Secret Manager | `autoresearch-dev-db-password`, `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key`, `autoresearch-dev-airflow-oauth-client-id`, `autoresearch-dev-airflow-oauth-client-secret` |
 | GKE | `autoresearch-dev-gke`, node pools `dev-default`, `airflow-dev`, 컨트롤 플레인 DNS 엔드포인트(#45/#46) |
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
 | DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
-| IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
+| IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, 실험 Job SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
 | KMS/Vault | key ring `vault`, crypto key `vault_unseal`, Vault GSA + unseal custom role (#132) |
 | Elastic snapshot | ES snapshot GCS bucket, snapshot GSA + Workload Identity (#102) |
 | CI pusher | GAR pusher SA, app image pusher SA, Airflow deployer SA, 코드 아카이브 업로더 SA, dev/prod Feast apply SA(WIF, #121/#157/#187/#238/#424) |

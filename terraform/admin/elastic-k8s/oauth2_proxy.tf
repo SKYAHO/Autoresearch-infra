@@ -1,8 +1,7 @@
-# #293 Kibana UI 앞단 인증 게이트(oauth2-proxy). Google 로그인 + authenticated-emails
-# 파일 계약. 현재 --email-domain=*가 파일 판정을 덮어써 목록만으로 제한되지 않는다(#488).
-# 사용자는 Kibana(5601)가 아니라 이 proxy(4180)로
-# port-forward 하고, proxy가 인증 후 Kibana로 프록시한다. Kibana는 anonymous
-# access(kibana.tf/elasticsearch.tf)로 재로그인 없이 자동 로그인된다.
+# #293 Kibana UI 앞단 인증 게이트(oauth2-proxy). Google 로그인 + 허용 이메일
+# 목록으로 접근 제한. 사용자는 Kibana(5601)가 아니라 이 proxy(4180)로
+# port-forward 하고, proxy가 인증 후 Kibana로 프록시한다. Kibana는 기본 basic
+# 인증을 사용하므로 proxy 통과 후 Kibana에서도 사용자 로그인이 필요하다.
 #
 # client id/secret·cookie-secret·허용 이메일은 공개 저장소에 두지 않고 operator
 # 주입 Secret `kibana-oauth`에서 받는다(README 절차). MLflow(#232)와 동일 패턴.
@@ -58,10 +57,7 @@ resource "kubernetes_deployment_v1" "kibana_oauth_proxy" {
             "--upstream=http://autoresearch-kb-http.${kubernetes_namespace_v1.elastic.metadata[0].name}.svc:5601",
             # port-forward 시 브라우저는 localhost:4181. Google OAuth callback.
             "--redirect-url=${var.kibana_public_base_url}/oauth2/callback",
-            # 주의: v7.7.1에서는 --email-domain=*가 파일 판정을 덮어쓴다(#488).
-            # authenticated-emails 파일만으로 접근 제한이 되지 않으므로 런타임
-            # 수정 전까지 이 설정을 allowlist로 간주하지 않는다.
-            "--email-domain=*",
+            # 이메일 접근 제한은 authenticated-emails-file(허용 목록)만 사용한다.
             "--authenticated-emails-file=/etc/oauth2-proxy/authenticated-emails",
             # sign-in 페이지 유지(바로 리다이렉트 안 함).
             "--skip-provider-button=false",

@@ -143,6 +143,19 @@ output "agent_orchestration_deployment_contract" {
   }
 }
 
+output "experiment_job_execution_contract" {
+  description = "Auto Research 실험 Job의 결과 저장 버킷과 Workload Identity 좌표. 토큰과 Secret payload는 포함하지 않는다."
+  value = {
+    results_bucket_name         = google_storage_bucket.experiment_results.name
+    results_bucket_url          = google_storage_bucket.experiment_results.url
+    gcp_service_account_email   = google_service_account.experiment_job.email
+    workload_identity_principal = local.experiment_job_workload_identity_principal
+    kubernetes_namespace        = var.experiment_job_k8s_namespace
+    kubernetes_service_account  = var.experiment_job_k8s_service_account
+    object_retention_days       = var.experiment_results_object_retention_days
+  }
+}
+
 output "airflow_gke_node_pool_name" {
   description = "Airflow Helm component 전용 dev GKE node pool 이름."
   value       = google_container_node_pool.airflow.name
@@ -181,6 +194,20 @@ output "code_artifacts_bucket_name" {
 output "code_uploader_service_account_email" {
   description = "GitHub Actions (Autoresearch) WIF가 가장하여 코드 아카이브를 GCS에 업로드하는 SA email(#238). 앱 리포 secret GCS_CODE_UPLOADER_SA 값으로 사용."
   value       = google_service_account.code_uploader.email
+}
+
+output "experiment_runtime_contract" {
+  description = "Paired Feast experiment runtime이 소비할 비시크릿 dev IAM 좌표와 fail-closed Job 생성 계약."
+  value = {
+    service_account_email       = google_service_account.experiment_runtime.email
+    workload_identity_principal = local.experiment_runtime_workload_identity_principal
+    registry_experiments_uri    = "gs://${google_storage_bucket.feast_registry_dev.name}/${local.experiment_runtime_experiments_prefix}"
+    staging_experiments_uri     = "gs://${google_storage_bucket.feast_staging_dev.name}/${local.experiment_runtime_experiments_prefix}"
+    artifact_experiments_uri    = "gs://${google_storage_bucket.mlflow_artifacts.name}/${local.experiment_runtime_experiments_prefix}"
+    code_archive_uri            = "gs://${google_storage_bucket.code_artifacts.name}/${local.experiment_runtime_code_prefix}"
+    feast_offline_store_dataset = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+    job_creation_enabled        = false
+  }
 }
 
 output "github_actions_airflow_deployer_service_account_email" {
@@ -486,4 +513,13 @@ output "es_snapshot_service_account_email" {
 output "cloud_build_builder_service_account_email" {
   description = "Dedicated Cloud Build runtime service account (#269). Use with `gcloud builds submit --service-account`."
   value       = google_service_account.cloud_build_builder.email
+}
+
+output "rerank_loadtest_github_actions_identities" {
+  description = "GitHub Actions GSA emails for the isolated rerank load-test runner and Prometheus snapshot reader (#482)."
+  value = {
+    runner          = google_service_account.rerank_loadtest_runner.email
+    snapshot_reader = google_service_account.rerank_loadtest_snapshot_reader.email
+    workflow_ref    = var.rerank_loadtest_workflow_ref
+  }
 }

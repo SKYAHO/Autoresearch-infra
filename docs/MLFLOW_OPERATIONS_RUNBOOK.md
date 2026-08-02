@@ -17,7 +17,7 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 | backend | Cloud SQL `autoresearch-dev-pg`, DB `mlflow`, user `mlflow`(private IP) |
 | artifact | GCS `autoresearch-503903-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
 | Service | `mlflow.mlflow:5000`(ClusterIP, **내부 전용**) |
-| UI 인증(#232) | 앞단 **OAuth2-proxy**(`mlflow-oauth-proxy:4180`), Google 로그인 + `authenticated-emails` 파일. 단, 현재 `--email-domain=*`로 파일만으로는 접근 제한이 되지 않음([#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)). Secret `mlflow-oauth` |
+| UI 인증(#232) | 앞단 **OAuth2-proxy**(`mlflow-oauth-proxy:4180`), Google 로그인 + 허용 이메일 목록. Secret `mlflow-oauth` |
 | 시크릿 | DB 비번=Secret Manager `autoresearch-dev-mlflow-db-password`, pod 주입=K8s Secret `mlflow-db` |
 
 책임 경계: 이미지·런타임은 앱 저장소(`SKYAHO/Autoresearch` `deploy/mlflow`), GCP
@@ -26,10 +26,48 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 ## 접속 (OAuth2-proxy 인증, #232)
 
 UI/API는 ClusterIP라 외부 노출이 없다. 접근은 **OAuth2-proxy(4180)로 port-forward**
-한다. proxy가 Google 로그인 뒤 MLflow로 프록시한다. 현재 `--email-domain=*`가
-파일 판정을 덮어쓰므로 목록 밖 Google 계정도 통과할 수 있으며, 미허용 계정
-거부 보장은 infra [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)
-해결 전까지 성립하지 않는다.
+한다. proxy가 Google 로그인 + 허용 이메일 목록으로 인증한 뒤 MLflow로 프록시한다.
+목록 밖 Google 계정은 거부된다("정해진 계정만").
+허용 목록은 `mlflow-oauth` Secret의 `authenticated-emails` 키에서 주입되며,
+MLflow manifest는 이 파일만 이메일 접근 제한으로 사용한다.
+
+MLflow ArgoCD Application은 main 머지 뒤 자동 sync하므로, **PR 머지 전** operator가
+Secret 형식과 항목 수만 확인한다(값은 출력하지 않는다). 성공한 `entries=N` 결과만 PR에
+기록한다. 실패하면 머지하지 말고 Secret의 `authenticated-emails`를 실제 팀원 이메일
+한 줄씩으로 수정한 뒤 다시 확인한다.
+
+```bash
+kubectl -n mlflow get secret mlflow-oauth \
+  -o jsonpath='{.data.authenticated-emails}' | base64 -d |
+  awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
+```
+
+이 preflight는 **형식과 항목 수만** 보장한다. 목록이 현재 팀 구성과 일치하는지,
+초기 예시 주소(`someone@example.com` 등)가 남아 있지 않은지는 검사하지 않는다.
+`--email-domain=*` 제거 이후 이 목록이 유일한 접근 경계이므로, 목록에서 빠진 팀원은
+로그인이 막히고 남아 있는 옛 주소는 계속 허용된다. `entries=N`이 예상 인원과 다르면
+값을 출력하지 말고 인원수로 대조한 뒤 진행한다. 예시 주소 잔존은 값 노출 없이 아래로
+확인한다(`placeholder_like=0`이어야 한다).
+
+```bash
+kubectl -n mlflow get secret mlflow-oauth \
+  -o jsonpath='{.data.authenticated-emails}' | base64 -d |
+  awk 'BEGIN{ph=0;other=0} { sub(/\r$/,""); if($0==""||$0~/^#/) next; if ($0 ~ /@example\.(com|org|net)$/ || $0 ~ /^(someone|user|admin)@/) ph++; else other++ } END{ print "placeholder_like=" ph "  other=" other }'
+```
+
+허용 목록에서 사용자를 제거할 때는 `authenticated-emails`를 갱신한 뒤
+`mlflow-oauth-proxy` rollout restart와 완료 확인을 수행한다. oauth2-proxy v7.7.1은
+보호된 요청마다 세션 이메일을 allowlist로 재검사하므로, 제거된 사용자는 새 목록이
+반영된 pod에 다음 요청을 보낼 때 cookie가 삭제되고 403으로 거부된다. 계정 제거에는
+cookie-secret 회전이 필요하지 않다. 전체 사용자의 강제 재로그인이나 cookie 유출 대응은
+`mlflow-k8s` README의 **전원 세션 무효화** 절차를 따른다.
+
+ArgoCD 자동 sync와 `/ping` probe·rollout 성공은 Google 계정의 실제 인가 결과를
+검증하지 않는다. 머지 후에는 허용 계정의 로그인 성공과 미허용 계정의 403을 각각
+smoke test로 확인한다. 전원 403을 발견하면 UI로 복구하지 말고, operator가
+`mlflow-k8s` README의 `mlflow-oauth` Secret 갱신 절차로 정확한 목록을 복원한 뒤
+`kubectl rollout restart/status deployment/mlflow-oauth-proxy -n mlflow`를 실행한다.
+Secret은 GitOps 관리 대상이 아니므로 이 복구에 ArgoCD manifest rollback은 필요 없다.
 
 접속 경로는 두 가지다(둘 다 브라우저는 `http://localhost:4180`).
 
@@ -95,7 +133,7 @@ pod는 DB host(private IP)·비번을 K8s Secret `mlflow-db`에서 받는다. �
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
 PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project autoresearch-503903)"
-HOST="$(terraform -chdir=terraform/envs/dev output -raw cloud_sql_private_ip_address)"
+HOST="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw cloud_sql_private_ip_address)"
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_HOST=%s\n' "$PW" "$HOST" > "$env_file"; unset PW
 kubectl create secret generic mlflow-db -n mlflow --from-env-file="$env_file" \
   --dry-run=client -o yaml | kubectl apply -f -

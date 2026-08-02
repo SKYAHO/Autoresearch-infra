@@ -30,8 +30,8 @@
 |---|---|---|---|---|---|---|
 | ArgoCD | 내장 OIDC + RBAC | `argocd/argocd-google-oidc`: `clientId`, `clientSecret` | `terraform.tfvars`의 admin/readonly 이메일 → Terraform이 `argocd-rbac-cm` policy로 렌더 | `argocd-k8s` 운영자, IAM 승인자 | `https://localhost:8443/auth/callback` / `argocd-server` port-forward | `deployment/argo-cd-argocd-server` rollout |
 | Airflow | Flask-AppBuilder native OAuth | `airflow/airflow-web-oauth`: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_ALLOWED_EMAILS` | 운영자 주입 K8s Secret의 쉼표 구분 목록. webserver 시작 시 빈 목록·형식 오류를 거부 | Airflow 배포 운영자, 인프라 [#475](https://github.com/SKYAHO/Autoresearch-infra/issues/475) 절차. Airflow [#207](https://github.com/SKYAHO/Autoresearch-airflow/issues/207) / [#208](https://github.com/SKYAHO/Autoresearch-airflow/pull/208)에서 적용·검증 완료 | `http://localhost:8080/oauth-authorized/google`, `http://localhost:8080/auth/oauth-authorized/google` / Bastion 터널 | `deployment/airflow-webserver` rollout |
-| MLflow | oauth2-proxy | `mlflow/mlflow-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록. 단, 현재 `--email-domain=*`가 파일 판정을 덮어쓰므로 파일만으로 allowlist가 되지 않음 | `mlflow-k8s` 운영자 | `http://localhost:4180/oauth2/callback` / proxy port-forward 또는 내부 LB | `deployment/mlflow-oauth-proxy` rollout |
-| Kibana | oauth2-proxy + Kibana basic 인증(`elastic` 사용자) 이중 로그인 | `elastic/kibana-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록. 단, 현재 `--email-domain=*`가 파일 판정을 덮어쓰므로 파일만으로 allowlist가 되지 않음 | `elastic-k8s` 운영자 | `kibana_public_base_url`(기본 `http://localhost:4181`) + `/oauth2/callback` / proxy port-forward | `deployment/kibana-oauth-proxy` rollout |
+| MLflow | oauth2-proxy | `mlflow/mlflow-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록이 **유일한** 이메일 경계(#488 해소 — `--email-domain` 미사용) | `mlflow-k8s` 운영자 | `http://localhost:4180/oauth2/callback` / proxy port-forward 또는 내부 LB | `deployment/mlflow-oauth-proxy` rollout |
+| Kibana | oauth2-proxy + Kibana basic 인증(`elastic` 사용자) 이중 로그인 | `elastic/kibana-oauth`: `client-id`, `client-secret`, `cookie-secret`, `authenticated-emails` | 운영자 주입 Secret의 파일 목록이 **유일한** 이메일 경계(#488 해소 — `--email-domain` 미사용) | `elastic-k8s` 운영자 | `kibana_public_base_url`(기본 `http://localhost:4181`) + `/oauth2/callback` / proxy port-forward | `deployment/kibana-oauth-proxy` rollout |
 | Grafana | Grafana native OAuth | `monitoring/grafana-google-oauth`: `GF_AUTH_GOOGLE_CLIENT_ID`, `GF_AUTH_GOOGLE_CLIENT_SECRET` | 별도 이메일 파일 없음. `allow_sign_up=false`와 사전 생성 Grafana 계정의 이메일 매칭으로 제한 | 모니터링 운영자, Grafana 관리자 | `http://localhost:3000/login/google` / Grafana port-forward | `deployment/kube-prometheus-stack-grafana` rollout |
 
 세부 주입 명령과 서비스별 소유 root는 다음 문서를 정본으로 참조한다.
@@ -53,7 +53,7 @@ Kibana callback URI는 표의 기본값을 무조건 고정한 값이 아니다.
 |---|---|---|---|
 | client ID/secret | 아래 서비스별 표에 명시한 Secret Manager payload 정본 | 제품별 key 이름으로 변환한 실행 사본 | Secret Manager metadata와 payload 주입은 Terraform 밖에서 수행 |
 | oauth2-proxy cookie | 보통 저장하지 않음 | `cookie-secret` | 값을 교체하면 기존 proxy session cookie를 복호화할 수 없어 전원 재로그인이 필요함. client만 교체할 때는 기존 값을 보존 |
-| MLflow/Kibana allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `authenticated-emails` 파일 | Secret key 계약은 유지하되, 현재 `--email-domain=*` 동작으로 파일만으로 접근 제한이 되지 않는 결함은 [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)에서 수정 |
+| MLflow/Kibana allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `authenticated-emails` 파일 | Secret key 계약 유지. `--email-domain=*` 우회는 [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)에서 제거됐고 CI가 재도입을 차단한다 |
 | Airflow allowlist | 공통 Secret Manager 정본으로 통합하지 않음 | `GOOGLE_ALLOWED_EMAILS` | 인프라 [#475](https://github.com/SKYAHO/Autoresearch-infra/issues/475) 및 Airflow [#207](https://github.com/SKYAHO/Autoresearch-airflow/issues/207)·[PR #208](https://github.com/SKYAHO/Autoresearch-airflow/pull/208)에서 운영자 주입으로 전환·적용 완료 |
 | ArgoCD/Grafana access control | 각각 Terraform 이메일 또는 Grafana DB 계정 | ConfigMap/DB 기반 | oauth2-proxy allowlist key로 변경하지 않음 |
 
@@ -84,9 +84,10 @@ Secret Manager 자동 동기화(External Secrets Operator/CSI Driver)는 이 런
 - Airflow는 Flask-AppBuilder의 user registration·role mapping을 사용하므로
   webserver Python 설정에서 allowlist를 검증한다.
 - MLflow와 Kibana는 내부 서비스 앞단의 oauth2-proxy Secret key 계약을 유지한다.
-  다만 현재 `--email-domain=*`가 파일 판정을 덮어쓰므로 실제 allowlist 제한은
-  [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488) 해결 전까지
-  성립하지 않는다.
+  `authenticated-emails` 파일이 **유일한** 이메일 경계다 — 과거 `--email-domain=*`가
+  파일 판정을 덮어쓰던 우회는 [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)에서
+  제거됐고, `scripts/check-oauth-email-allowlist.sh`가 `lint`(required check)에서
+  재도입을 차단한다.
 - Grafana는 `allow_sign_up=false`와 사전 생성 계정의 이메일 매칭을 사용한다.
   별도 allowlist 파일을 추가하면 Grafana DB 계정 정책과 이중 정본이 생긴다.
 
@@ -137,16 +138,15 @@ allowlist 변경은 client rotation과 별도 작업으로 취급한다.
 3. 변경 전후 payload를 출력하지 않고 key 존재와 값의 비어 있지 않음을
    비노출 방식으로 확인한다. MLflow/Kibana에서 `authenticated-emails` key가
    누락되면 Secret projected volume을 만들 수 없어 Pod가 정상 기동하지 못하고
-   `FailedMount` 이벤트가 발생한다. 반대로 v7.7.1의 oauth2-proxy는
-   `--email-domain=*`를 지정하면 `authenticated-emails-file`의 내용과 관계없이
-   이메일 검증을 허용하므로, key가 비어 있거나 값이 채워져 있어도 이 파일만으로
-   접근 제한이 되지 않는다. (b)의 빈 값 자체는 아래 체크리스트의 “allowlist key가
-   존재하고 비어 있지 않음” 항목으로 잡지만, key가 채워져도 현재 인자 조합은
-   제한을 우회하므로 실제 보장은 제거 계정 거부 smoke test로만 확인한다. 따라서
-   제거 계정이 실제로 거부되는지 반드시 smoke
-   test로 확인하고, 통과하면 안 되는 계정이 통과할 경우 allowlist 변경을 완료로
-   보지 않는다. 이 런북은 해당 런타임 인자 수정까지 포함하지 않으며, 별도 런타임
-   이슈에서 `--email-domain=*` 제거 또는 실제 허용 도메인 설정을 결정해야 한다.
+   `FailedMount` 이벤트가 발생한다. key가 존재하고 값이 채워져 있으면 그 파일이
+   최종 판정 기준이다(#488에서 `--email-domain=*` 제거).
+
+   다만 **형식·개수 검사만으로는 부족하다.** 목록이 현재 팀 구성과 일치하는지,
+   초기 예시 주소가 남아 있지 않은지는 검사되지 않으며, 이 상태는 proxy 기동·
+   `/ping` probe·ArgoCD Health가 모두 초록이라 배포 신호로 감지되지 않는다
+   (전원 403이 정상으로 보인다). 따라서 값 비노출 `entries=N`과 예시 주소 잔존
+   점검(`placeholder_like=0`)을 함께 확인하고, 반영 후에는 허용 계정 로그인과
+   제거 계정 거부를 smoke test로 확인한다.
    이 동작의 근거는 oauth2-proxy v7.7.1의
    [`validator.go`](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.7.1/validator.go)
    구현이다.
@@ -155,21 +155,21 @@ allowlist 변경은 client rotation과 별도 작업으로 취급한다.
 6. 기존 세션은 즉시 폐기되지 않을 수 있음을 기록한다. 즉시 차단이 필요하면
    서비스별 세션/cookie 무효화 절차를 별도로 수행한다.
 
-현재 MLflow/Kibana의 “제거 계정 거부” 검증은 [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)
-해결 전에는 통과 기준으로 사용할 수 없다. 이 두 서비스의 allowlist 변경은
-`--email-domain=*`가 제거되고 미허용 계정 거부가 확인된 뒤에만 완료로 표시한다.
+MLflow/Kibana의 “제거 계정 거부”는 이제 통과 기준으로 사용할 수 있다 —
+`--email-domain=*`가 제거되어(#488) `authenticated-emails` 파일이 최종 판정이다.
+allowlist 변경은 미허용 계정 거부가 확인된 뒤에 완료로 표시한다.
 
-MLflow proxy는 port-forward뿐 아니라 `10.10.0.2` 내부 LoadBalancer를 통해서도
-VPC 내부에 노출된다. 따라서 #488 해결 전에는 해당 VIP에 도달할 수 있는 VM·Pod
-등의 주체가 OAuth proxy까지 접근할 수 있으며, 잘못 통과한 계정은 MLflow가
-제공하는 tracking/model registry/API와 `--serve-artifacts` 경로의 권한 범위에
-노출될 수 있다. 이 문서는 VPC 내 주체 목록을 허용 목록으로 간주하지 않으며,
-allowlist 수정과 미허용 계정 거부 확인 전에는 MLflow UI를 보호된 경로로
-판정하지 않는다.
+MLflow proxy는 port-forward뿐 아니라 내부 LoadBalancer(예약 IP는
+`terraform output mlflow_ilb_ip`)를 통해서도 VPC 내부에 노출된다. 즉 그 VIP에
+도달 가능한 VM·Pod는 proxy까지 접근할 수 있으므로, **네트워크 경계가 아니라
+allowlist가 인가 경계**다. 그래서 이 목록의 정확성이 MLflow tracking/model
+registry/API와 `--serve-artifacts` 경로의 노출 범위를 직접 결정한다.
 
-v7.7.1에서는 `--email-domain=*`를 제거하고 `--authenticated-emails-file`만
-남기면 파일의 이메일 판정이 사용된다. 실제 배포 전에는 이 조합으로 Pod가
-정상 기동하는지와 허용·미허용 계정 smoke test를 확인한다.
+재도입 방지: `--email-domain`(플래그), `OAUTH2_PROXY_EMAIL_DOMAINS`(환경변수),
+`email-domain:`/`email_domains =`(Helm·config 키) 세 표기를 CI가 모두 차단하며,
+oauth2-proxy 이미지를 참조하는 디렉터리에 `--authenticated-emails-file`이 없으면
+실패한다. 이 가드 때문에 `--email-domain=*`를 되살리는 revert PR은 required
+check에 걸려 머지되지 않는다(의도된 설계).
 
 MLflow와 Grafana는 ArgoCD 자동 sync 대상이지만, 현재 `prune=false`,
 `selfHeal=false`이다. 운영자가 실행한 `kubectl rollout restart`는 자동 sync가

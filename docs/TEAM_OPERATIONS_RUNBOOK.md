@@ -274,8 +274,8 @@ gcloud compute ssh autoresearch-dev-bastion \
 http://localhost:4180
 ```
 
-sign-in 페이지에서 Google 로그인한다. 현재 `--email-domain=*`가 파일 판정을
-덮어써 allowlist 파일만으로는 목록 밖 계정이 거부되지 않을 수 있다(#488).
+sign-in 페이지에서 Google 로그인한다. `authenticated-emails` 파일이 유일한 이메일 경계이며 목록 밖 계정은 403으로
+거부된다(#488에서 `--email-domain=*` 제거).
 redirect URI가 `http://localhost:4180/oauth2/callback`
 기준이라 로그인은 `localhost:4180` 경로에서만 정상 동작한다. GKE 내부 워크로드
 (모델 학습 등)는 인증 없이 `http://mlflow.mlflow:5000`을 tracking URI로 쓴다.
@@ -328,7 +328,7 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 ```
 
 브라우저에서 `http://localhost:4181` → Google 로그인(`authenticated-emails` 계약,
-현재 `--email-domain=*`로 파일만으로는 제한되지 않음, #488).
+`authenticated-emails` 파일이 유일한 이메일 경계, #488).
 이것이 단일 표준 경로다. `svc/autoresearch-kb-http 5601` 직결 + elastic 계정
 로그인은 break-glass(운영자 전용)로만 쓴다(#394부터 Kibana 자체 TLS 비활성 — http).
 검색 방법과 KQL 예시는
@@ -352,8 +352,8 @@ Terraform state 어디에도 값이 없음). 값은 dev root output에서 그대
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
 {
-  printf 'REDIS_HOST=%s\n' "$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_address)"
-  printf 'REDIS_PORT=%s\n' "$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_port)"
+  printf 'REDIS_HOST=%s\n' "$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw redis_discovery_address)"
+  printf 'REDIS_PORT=%s\n' "$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw redis_discovery_port)"
 } > "$env_file"
 kubectl -n autoresearch create secret generic autoresearch-serving-redis \
   --from-env-file="$env_file" --dry-run=client -o yaml | kubectl apply -f -
@@ -395,6 +395,186 @@ alias만 재지정한 경우에도 재시작이 없으면 이전 모델이 계�
 |---|---|
 | 배포 | 앱 저장소 `release.yml`이 이미지를 GAR에 push해 digest 확보 → infra repo PR로 `deployment.yaml`의 digest 갱신 → merge → ArgoCD에서 diff 확인 후 manual sync |
 | 롤백 | 이전 digest로 되돌리는 커밋 → merge → ArgoCD manual sync. git 이력이 곧 배포 이력이다 |
+
+## Rerank serving 부하테스트 격리 (#482)
+
+부하테스트는 운영 `autoresearch` 파드와 같은 namespace에서 실행하지 않고
+`loadtest` namespace의 단기 Job으로 실행한다. 앱 저장소의
+`.github/workflows/rerank-loadtest.yml`만 정확히 다음 WIF workflow ref를 통해
+두 GSA를 가장할 수 있다.
+
+```text
+SKYAHO/Autoresearch/.github/workflows/rerank-loadtest.yml@refs/heads/main
+```
+
+runner GSA는 `loadtest` namespace의 RoleBinding으로 ConfigMap·Job·Pod/log와
+진단 Event만 다루며, snapshot-reader GSA는 `monitoring` namespace의
+`kube-prometheus-stack-prometheus` Service proxy `get`만 수행한다. 두 GSA에는
+`roles/container.clusterViewer`만 GCP 프로젝트 권한으로 부여한다. Job KSA는
+`rerank-loadtest`이고 서비스 계정 토큰 자동 마운트를 끈다.
+
+앱 저장소 workflow의 `vars.RERANK_LOADTEST_RUNNER_SA`와
+`vars.RERANK_PROMETHEUS_SNAPSHOT_READER_SA`에는 아래 Terraform output의
+`runner`와 `snapshot_reader` 값을 각각 등록한다. WIF provider ID와 GKE cluster
+변수도 기존 dev 운영 값과 동일하게 유지한다.
+
+### 적용 전 읽기 전용 확인
+
+아래 확인은 현재 kubeconfig가 가리키는 dev 클러스터에서만 실행한다. API가
+`403 Forbidden`이면 apply나 부하테스트를 진행하지 않고 차단 사유로 기록한다.
+
+```bash
+kubectl -n autoresearch get service autoresearch-serving \
+  -o jsonpath='{.spec.type}{" "}{.spec.clusterIP}{" "}{.spec.ports[?(@.port==8000)].port}{"\n"}'
+kubectl -n kube-system get service kube-dns \
+  -o jsonpath='{.spec.type}{" "}{.spec.clusterIP}{"\n"}'
+kubectl -n monitoring get service kube-prometheus-stack-prometheus \
+  -o jsonpath='{.metadata.name}{" "}{.spec.ports[?(@.port==9090)].port}{"\n"}'
+```
+
+serving/kube-dns Service가 모두 `ClusterIP`이고 각각 예상 포트를 반환해야 한다.
+어느 하나라도 없거나 다른 type이면 NetworkPolicy 적용을 중단한다.
+
+### 적용 후 읽기 전용 확인
+
+namespace label과 quota/limit을 적용 후 확인한다.
+
+```bash
+kubectl get namespace loadtest \
+  -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}{"\n"}'
+kubectl -n kube-system get pods -l k8s-app=kube-dns
+kubectl -n loadtest get resourcequota rerank-loadtest-quota
+kubectl -n loadtest get limitrange rerank-loadtest-limits
+kubectl -n loadtest get resourcequota rerank-loadtest-quota \
+  -o jsonpath='{.status.hard.count\/configmaps}{" / "}{.status.used.count\/configmaps}{" ConfigMaps\n"}'
+```
+
+Service proxy와 RBAC의 최소 권한은 Terraform output을 직접 읽어 확인한다. 실제
+GSA email은 토큰 payload가 아니므로 출력해도 되지만, 토큰 자체는 출력하지 않는다.
+
+```bash
+runner_gsa="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -json rerank_loadtest_github_actions_identities | jq -r '.runner')"
+snapshot_gsa="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -json rerank_loadtest_github_actions_identities | jq -r '.snapshot_reader')"
+
+kubectl auth can-i create jobs -n loadtest --as="$runner_gsa"          # yes
+kubectl auth can-i patch configmaps -n loadtest --as="$runner_gsa"     # yes
+kubectl auth can-i get pods/exec -n loadtest --as="$runner_gsa"        # no
+kubectl auth can-i delete jobs -n loadtest --as="$runner_gsa"          # no
+kubectl auth can-i get services --subresource=proxy \
+  --resource-name=kube-prometheus-stack-prometheus \
+  -n monitoring --as="$snapshot_gsa"                                   # yes
+kubectl auth can-i get services --subresource=proxy \
+  --resource-name=other-service -n monitoring --as="$snapshot_gsa"     # no
+```
+
+### 실행과 비용 경계
+
+Workflow는 VU `1 → 2 → 4 → 8`을 순차 실행한다. 각 k6 Job은
+`activeDeadlineSeconds=600`, `backoffLimit=0`, `ttlSecondsAfterFinished=86400`을
+사용한다. 설정 ConfigMap은 실행 Job UID를 ownerReference로 가지므로 Job TTL
+회수 시 함께 정리된다. namespace quota는 Job/Pod 보존 수를 16개(candidate 24/200
+× baseline/optimized 전체 비교), ConfigMap을 20개(공유 script 1개 + VU 설정
+최대 16개와 여유분), 기본 container를
+250m/256Mi request와 500m/512Mi limit, 최대 container를 1 CPU/1Gi로 제한한다.
+이 quota/limit은 namespace에서 실제로 강제된다. 반면 deadline/TTL 값 자체는
+현재 ValidatingAdmissionPolicy가 아니라 정확한 workflow manifest의 계약이므로,
+Job 생성 GSA의 WIF workflow ref를 변경하지 않는 것을 함께 검증한다. 별도 node
+pool, LoadBalancer, Ingress, Redis/Cloud SQL 직접 연결을 만들지 않으므로 신뢰된
+workflow의 비용 상한은 최대 16개 Job의 600초 실행과 기존 dev 노드의 추가
+CPU·메모리 사용량으로 계산한다. deadline을 admission 단계에서 강제해야 하면
+별도 정책 이슈로 다룬다.
+
+실제 처리속도·오류율·비용은 실행 후 artifact와 Prometheus raw snapshot으로만
+기록한다. 다음 패널을 `AutoResearch / Rerank load test` 대시보드에서 같은 시간
+범위로 확인한다.
+
+- `rerank_phase_duration_seconds_bucket`: phase별 p50/p95
+- `rerank_outcomes_total`: 성공/실패 outcome별 처리율
+- `rerank_in_flight`: 최대 동시 처리량
+- serving pod CPU, RSS, CFS throttling
+
+### 실패·회수·롤백
+
+실패 시 workflow를 취소하고 `loadtest` Job/Pod describe와 logs, ConfigMap
+metadata를 artifact에서 확인한다. `kubectl delete`로 결과를 임의 삭제하지 않고
+TTL과 ownerReference 회수를 우선 기다린다. 권한이나 네트워크 경계가 잘못된 경우
+다음 순서로 되돌린다.
+
+1. 부하테스트 workflow 재실행을 중지한다.
+2. Infra PR에서 RoleBinding/NetworkPolicy/WIF 변경을 되돌리는 Terraform plan을
+   검토한다. `terraform destroy`나 운영 serving 파드 강제 종료는 기본 rollback이
+   아니다.
+3. merge 후 ArgoCD 및 Terraform state가 원하는 namespace/RBAC/정책 상태인지
+   읽기 전용 명령으로 확인한다.
+
+실제 GKE 적용은 이 문서의 명령을 복사해 실행하기 전에 해당 Infra PR의 별도
+승인을 받아야 한다.
+
+### 적용과 네 번의 비교 실행 재현 명령
+
+PR이 `main`에 merge된 뒤에는 `apply` Environment 승인 게이트를 통과한
+Terraform workflow를 dev → admin 순서로 별도 dispatch한다. `admin` root의
+serving/kube-dns Service data source와 dev root의 GSA output이 최신 상태를
+참조해야 하므로 두 범위를 한 dispatch에 섞지 않는다.
+
+```bash
+gh workflow run apply.yml --repo SKYAHO/Autoresearch-infra --ref main -f scope=dev
+gh run list --repo SKYAHO/Autoresearch-infra --workflow apply.yml --limit 5
+# dev run 성공과 apply Environment 승인을 확인한 뒤
+gh workflow run apply.yml --repo SKYAHO/Autoresearch-infra --ref main -f scope=admin
+gh run list --repo SKYAHO/Autoresearch-infra --workflow apply.yml --limit 5
+```
+
+각 dispatch의 승인·성공을 확인한 뒤, 앱 저장소의 fixture/materialize 절차가
+완료된 동일한 `main`에서 다음 네 조합을 순서대로 실행한다. 아래 값은 실제로
+배포된 immutable serving image와 40자리 Git SHA로 교체하며, 빈 값이면 dispatch를
+중단한다. workflow 자체의 `rerank-loadtest` concurrency가 실행을 직렬화한다.
+
+```bash
+: "${SERVING_IMAGE_REF:?image@sha256:<64자리 digest>를 설정하세요}"
+: "${SERVING_GIT_SHA:?소문자 40자리 serving Git SHA를 설정하세요}"
+```
+
+각 블록을 실행한 뒤 `gh run list`에서 생성된 run ID를 확인하고
+`gh run watch <RUN_ID> --repo SKYAHO/Autoresearch --exit-status`로 성공과 artifact 저장을
+확인한 다음 다음 블록으로 넘어간다.
+
+```bash
+# 1) candidate 24 / baseline
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=24 -f benchmark_label=baseline \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+
+# 2) candidate 24 / optimized
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=24 -f benchmark_label=optimized \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+
+# 3) candidate 200 / baseline
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=200 -f benchmark_label=baseline \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+
+# 4) candidate 200 / optimized
+gh workflow run rerank-loadtest.yml --repo SKYAHO/Autoresearch --ref main \
+  -f candidate_count=200 -f benchmark_label=optimized \
+  -f fixture_version=rerank-v1 -f serving_image_ref="$SERVING_IMAGE_REF" \
+  -f serving_git_sha="$SERVING_GIT_SHA"
+gh run list --repo SKYAHO/Autoresearch --workflow rerank-loadtest.yml \
+  --branch main --event workflow_dispatch --limit 3
+```
+
+한 run이 실패하면 다음 조합으로 진행하지 말고 해당 run의 Job/Pod describe, log,
+ConfigMap metadata와 Prometheus raw snapshot을 먼저 보존한다.
 
 ## SOCKS 프록시 보조 경로
 
@@ -446,6 +626,7 @@ Airflow 기본 component와 batch pod는 서로 다른 GCP service account를 �
 | `autoresearch/autoresearch-app` | `autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com` | 앱 DB secret과 Redis CA 조회, cluster 한정 IAM 연결 token 발급 (#129, apply·검증 완료) |
 | `airflow/airflow` | `autoresearch-dev-airflow@autoresearch-503903.iam.gserviceaccount.com` | Airflow metadata DB, DAG/log bucket, OAuth secret |
 | `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery, Cloud Run proxy invoker |
+| `autoresearch-experiments/experiment-job` | `autoresearch-dev-exp-job@autoresearch-503903.iam.gserviceaccount.com` | Auto Research 결과 전용 GCS 버킷 객체 생성만; Kubernetes RBAC·Secret·DB·Redis 권한 없음 (#484, apply 전) |
 
 `autoresearch-batch` annotation은 아래 값이어야 한다.
 
