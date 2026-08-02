@@ -46,9 +46,9 @@ dev GKE에서 실행할 수 있도록 전용 Kubernetes 경계와 GitHub Actions
   로그 조회·생성에 한정한다. `delete`, `pods/exec`, `pods/portforward`, Secret,
   Deployment, Service, Prometheus API 접근 권한은 부여하지 않는다.
 - snapshot-reader RBAC는 monitoring namespace의
-  `services/proxy`에 대해 `get`만 허용하고 resource name을
-  `kube-prometheus-stack-prometheus`로 고정한다. 이 Service와 포트 9090이
-  live cluster에 실제로 존재하는지 apply 전 확인한다.
+  `services/proxy`에 대해 `get`만 허용하고 Kubernetes proxy resource name을
+  `http:kube-prometheus-stack-prometheus:9090`으로 고정한다. 이 Service와
+  포트 9090이 live cluster에 실제로 존재하는지 apply 전 확인한다.
 - WIF는 `SKYAHO/Autoresearch/.github/workflows/rerank-loadtest.yml@refs/heads/main`
   workflow ref만 허용한다. 다른 repository, branch, workflow의 토큰은 두 GSA를
   가장할 수 없어야 한다. GitHub Environment 승인 게이트는 앱 저장소 workflow의
