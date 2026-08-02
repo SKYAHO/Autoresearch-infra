@@ -38,6 +38,17 @@ API KSA의 Job 생성 권한은 `enable_experiment_job_creation=false`가 기본
 `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy는 create/modify 요청에서
 Job KSA, sha256 digest image, `batch-od` nodeSelector/toleration을 서버 측으로 강제한다.
 
+`enable_experiment_job_creation`을 활성화하기 전에는 다음도 선행 조건으로 확인한다
+(#497 — RBAC는 admin apply로 반영되지만 상태 조회 egress는 ArgoCD가 관리하는
+`deploy/agent-orchestration/network-policy.yaml`로 별도 sync가 필요해, RBAC만 반영되고
+egress가 반영되지 않으면 "제출은 되지만 상태를 읽지 못하는" 상태가 남는다).
+
+```bash
+kubectl -n autoresearch get networkpolicy agent-orchestration-api-egress \
+  -o jsonpath='{.spec.egress}' | grep -q '172.16.128.1/32' \
+  && echo "K8s API egress 반영됨" || echo "미반영 — ArgoCD sync 선행 필요"
+```
+
 ## Job manifest 계약
 
 API는 사용자가 보낸 임의 manifest를 Kubernetes API로 전달해서는 안 된다. 서버가

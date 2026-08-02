@@ -387,6 +387,34 @@ sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-g
 하며, 실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로 멈춥니다.
 OAuth 장애와 이미지 장애를 같은 롤백으로 처리하지 않습니다.
 
+### Terraform 소유 RBAC와 ArgoCD 소유 manifest가 갈리는 변경
+
+`agent-orchestration-api` KSA의 실험 Job 상태 조회 RBAC(`terraform/admin/autoresearch-k8s`,
+#484)와 그 권한을 실제로 쓰게 하는 egress(`deploy/agent-orchestration/network-policy.yaml`,
+ArgoCD가 관리)처럼, 같은 기능 변경이 서로 다른 두 배포 경로를 탈 때가 있습니다(#497에서
+실측).
+
+- RBAC는 admin apply로 즉시 반영됩니다.
+- `deploy/agent-orchestration/`의 NetworkPolicy 등 manifest는 **ArgoCD Application의 고정
+  `targetRevision`을 갱신하고 manual sync해야만** 반영됩니다. GitHub merge와 Terraform
+  apply만으로는 반영되지 않습니다.
+
+두 변경을 같은 PR·같은 커밋에 묶어도, 머지 뒤 `AGENT_ORCHESTRATION_TARGET_REVISION`을 그
+커밋 SHA로 갱신하고 admin apply·ArgoCD sync를 별도로 밟지 않으면 "권한은 있는데 실제로
+호출할 경로가 없는" 상태가 남습니다. `kubectl auth can-i`는 RBAC만 확인하므로 이 간극을
+드러내지 않습니다 — NetworkPolicy 반영 여부는
+`kubectl -n autoresearch get networkpolicy agent-orchestration-api-egress -o yaml`로 직접
+대조해야 합니다.
+
+RBAC와 NetworkPolicy를 함께 바꾸는 변경은 다음 순서를 지킵니다.
+
+1. RBAC(Terraform)와 NetworkPolicy(manifest) 변경을 같은 PR에 포함해 머지합니다.
+2. 머지 커밋의 정확한 40자리 SHA로 `AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하고
+   admin apply를 실행해 RBAC를 반영합니다.
+3. ArgoCD에서 Application diff를 확인한 뒤 manual sync해 NetworkPolicy를 반영합니다.
+4. live NetworkPolicy와, 권한을 실제로 쓰는 Pod에서의 연결 가능 여부를 함께 확인합니다.
+   권한 확인만으로는 충분하지 않습니다.
+
 ### 이미지 참조 원자성
 
 API digest는 `api` container, API의 `bootstrap-db` init container, Runner의
