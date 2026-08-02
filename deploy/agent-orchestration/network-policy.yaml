@@ -101,8 +101,14 @@ spec:
     # 두 CIDR은 dev Terraform의 gke_services_cidr·gke_master_ipv4_cidr와
     # 반드시 일치해야 한다.
     - to:
+        # kubernetes.default.svc ClusterIP 한 개만 연다. services CIDR 전체를
+        # 443으로 열면 이 Pod가 클러스터 내 모든 ClusterIP Service의 443
+        # (ArgoCD server, Kibana oauth2-proxy, Elasticsearch, MLflow 등)에
+        # 도달하게 되어, 이 경계가 전제하는 "손상된 API" 위협 모델과 어긋난다.
+        # 이 주소는 services CIDR의 첫 IP로 결정되므로(현 dev: 172.16.128.0/24
+        # → 172.16.128.1) 대역이 바뀌면 함께 갱신해야 한다.
         - ipBlock:
-            cidr: 172.16.128.0/24
+            cidr: 172.16.128.1/32
         - ipBlock:
             cidr: 172.16.0.0/28
       ports:

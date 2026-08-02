@@ -233,7 +233,7 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # 의도한 동작인지 코드에서 드러나지 않는다. has()/in으로 명시해 누락 거부를
         # 규칙 자체로 표현하고, 메시지도 정확한 사유를 남기게 한다.
         {
-          expression = "has(object.spec.template.spec.nodeSelector) && 'cloud.google.com/gke-nodepool' in object.spec.template.spec.nodeSelector && object.spec.template.spec.nodeSelector['cloud.google.com/gke-nodepool'] == 'batch-od'"
+          expression = "has(object.spec.template.spec.nodeSelector) && 'cloud.google.com/gke-nodepool' in object.spec.template.spec.nodeSelector && object.spec.template.spec.nodeSelector['cloud.google.com/gke-nodepool'] == '${var.experiment_job_node_pool}'"
           message    = "실험 Job은 nodeSelector로 batch-od node pool을 명시해야 합니다."
         },
         # all()만으로는 빈 목록(tolerations: [])이 통과한다 — CEL에서 빈 list의
@@ -248,7 +248,7 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # 를 operator 없이 쓴 Job이 거부되지 않도록 미설정을 Equal로 취급한다.
         # key/value/effect는 has()로 명시 요구해 누락 사유가 메시지로 드러나게 한다.
         {
-          expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.size() == 1 && object.spec.template.spec.tolerations.all(t, has(t.key) && t.key == 'workload' && (!has(t.operator) || t.operator == 'Equal') && has(t.value) && t.value == 'batch-od' && has(t.effect) && t.effect == 'NoSchedule')"
+          expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.size() == 1 && object.spec.template.spec.tolerations.all(t, has(t.key) && t.key == 'workload' && (!has(t.operator) || t.operator == 'Equal') && has(t.value) && t.value == '${var.experiment_job_node_pool}' && has(t.effect) && t.effect == 'NoSchedule')"
           message    = "실험 Job은 workload=batch-od:NoSchedule toleration 하나만 사용해야 합니다."
         },
         # quota 회수의 서버 측 강제. 이 root는 API KSA에 delete를 주지 않고

@@ -255,6 +255,17 @@ variable "experiment_job_namespace" {
   }
 }
 
+variable "experiment_job_node_pool" {
+  description = "실험 Job을 고정할 GKE node pool 이름. terraform/envs/dev의 batch_od_gke_node_pool_name과 반드시 같은 값이어야 한다 — 불일치는 두 root의 plan/apply를 모두 통과한 뒤, admission이 실제 pool과 다른 이름을 요구해 모든 Job이 거부되는 형태로만 드러난다."
+  type        = string
+  default     = "batch-od"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_job_node_pool))
+    error_message = "experiment_job_node_pool은 유효한 GKE node pool 이름이어야 합니다."
+  }
+}
+
 # digest 고정만으로는 이미지의 "불변성"만 보장되고 "출처"는 보장되지 않는다.
 # 이미지 pull은 kubelet이 노드에서 수행하므로 namespace egress NetworkPolicy가
 # 적용되지 않고, batch-od 노드는 Cloud NAT로 외부 registry에 도달할 수 있다.
