@@ -35,6 +35,8 @@ terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvar
 
 API KSA의 Job 생성 권한은 `enable_experiment_job_creation=false`가 기본이다. 고정
 템플릿, 허용 image digest, admission 검증이 적용되기 전에는 이 값을 변경하지 않는다.
+`autoresearch-experiment-job-contract` ValidatingAdmissionPolicy는 create/modify 요청에서
+Job KSA, sha256 digest image, `batch-od` nodeSelector/toleration을 서버 측으로 강제한다.
 
 ## Job manifest 계약
 
@@ -75,6 +77,11 @@ Job KSA에는 RoleBinding이 없고 NetworkPolicy도 Kubernetes API HTTPS를 허
 않는다. token mount까지 비활성화했으므로 저신뢰 에이전트는 Kubernetes 리소스 조회·수정,
 Secret 조회, exec, cluster 권한 상승을 할 수 없다. GCP 측에서도 결과 버킷 새 객체
 생성 외 권한은 없다.
+
+Job 템플릿이 KSA를 누락하면 Kubernetes의 `default` KSA token mount 기본값을 따를 수
+있지만, 이 namespace에서는 ValidatingAdmissionPolicy가 해당 Job을 admission에서 거부한다.
+또한 default KSA에는 RoleBinding이 없고 namespace egress 정책은 Kubernetes API HTTPS를
+허용하지 않아, RBAC와 NetworkPolicy가 추가 방어층으로 남는다.
 
 `roles/storage.objectCreator`만 가진 Job은 업로드한 객체를 다시 GET/list하거나
 무결성 검증을 위해 읽을 수 없다. 업로드 요청은 `ifGenerationMatch=0` precondition과

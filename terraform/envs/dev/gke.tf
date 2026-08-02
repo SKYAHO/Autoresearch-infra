@@ -120,7 +120,6 @@ resource "google_container_cluster" "dev" {
     network_policy_config {
       disabled = false
     }
-
   }
 
   vertical_pod_autoscaling {

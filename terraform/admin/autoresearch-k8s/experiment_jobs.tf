@@ -182,6 +182,70 @@ resource "kubernetes_role_binding_v1" "experiment_job_creator" {
   }
 }
 
+# API KSA가 손상돼도 Job create 권한만으로 실행 신원·이미지·스케줄 위치를 바꾸지
+# 못하도록 Kubernetes API 서버에서 거부한다. 이 정책은 create 권한을 기본 false로
+# 두는 것과 별개인 방어 심층화이며, 활성화 전제조건의 서버 측 강제 소유자는 이 root다.
+resource "kubernetes_manifest" "experiment_job_admission_policy" {
+  manifest = {
+    apiVersion = "admissionregistration.k8s.io/v1"
+    kind       = "ValidatingAdmissionPolicy"
+    metadata = {
+      name = "autoresearch-experiment-job-contract"
+    }
+    spec = {
+      failurePolicy = "Fail"
+      matchConstraints = {
+        resourceRules = [{
+          apiGroups   = ["batch"]
+          apiVersions = ["v1"]
+          operations  = ["CREATE", "UPDATE"]
+          resources   = ["jobs"]
+          scope       = "Namespaced"
+        }]
+      }
+      validations = [
+        {
+          expression = "object.spec.template.spec.serviceAccountName == '${var.experiment_job_k8s_service_account}'"
+          message    = "실험 Job은 승인된 serviceAccountName만 사용해야 합니다."
+        },
+        {
+          expression = "object.spec.template.spec.containers.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$'))"
+          message    = "실험 Job 컨테이너 이미지는 sha256 digest로 고정해야 합니다."
+        },
+        {
+          expression = "object.spec.template.spec.nodeSelector['cloud.google.com/gke-nodepool'] == 'batch-od'"
+          message    = "실험 Job은 batch-od node pool만 사용해야 합니다."
+        },
+        {
+          expression = "object.spec.template.spec.tolerations.exists(t, t.key == 'workload' && t.operator == 'Equal' && t.value == 'batch-od' && t.effect == 'NoSchedule')"
+          message    = "실험 Job은 승인된 batch-od toleration을 포함해야 합니다."
+        },
+      ]
+    }
+  }
+}
+
+resource "kubernetes_manifest" "experiment_job_admission_policy_binding" {
+  manifest = {
+    apiVersion = "admissionregistration.k8s.io/v1"
+    kind       = "ValidatingAdmissionPolicyBinding"
+    metadata = {
+      name = "autoresearch-experiment-job-contract"
+    }
+    spec = {
+      policyName        = kubernetes_manifest.experiment_job_admission_policy.manifest.metadata.name
+      validationActions = ["Deny"]
+      matchResources = {
+        namespaceSelector = {
+          matchLabels = {
+            "kubernetes.io/metadata.name" = kubernetes_namespace_v1.experiment_jobs.metadata[0].name
+          }
+        }
+      }
+    }
+  }
+}
+
 # 실험 Job에는 inbound traffic이 필요 없다.
 resource "kubernetes_network_policy_v1" "experiment_jobs_ingress" {
   metadata {
@@ -231,6 +295,12 @@ resource "kubernetes_network_policy_v1" "experiment_jobs_egress" {
         namespace_selector {
           match_labels = {
             "kubernetes.io/metadata.name" = "kube-system"
+          }
+        }
+
+        pod_selector {
+          match_labels = {
+            "k8s-app" = "kube-dns"
           }
         }
       }

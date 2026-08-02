@@ -83,9 +83,10 @@ Kubernetes RBAC는 Pod 사양의 image·env·volume 내용을 검증하지 않�
 - Job 템플릿은 앱 저장소의 고정 계약으로 관리하며 임의 사용자 manifest를 그대로
   Kubernetes API에 전달하지 않음
 - API의 Job 생성 권한은 고정된 템플릿 검증과 허용된 이미지 digest 검증이 앱
-  저장소에 구현되고, 클러스터 admission에서 `restricted`·리소스·위험 필드 검증을
-  통과하는 경우에만 활성화한다. 이 조건이 충족되지 않으면 API KSA에는 `create`를
-  부여하지 않고, 승인된 Controller 경로를 별도 이슈로 구현한다.
+  저장소에 구현되고, 이 저장소가 소유하는 ValidatingAdmissionPolicy에서 KSA·digest
+  image·`batch-od` scheduling 계약을 서버 측으로 거부하는 경우에만 활성화한다.
+  Pod Security `restricted`는 privileged·host namespace 등 별도 위험 필드를 검증한다.
+  이 조건이 충족되지 않으면 API KSA에는 `create`를 부여하지 않는다.
 
 ## 4. 실행 계약
 
