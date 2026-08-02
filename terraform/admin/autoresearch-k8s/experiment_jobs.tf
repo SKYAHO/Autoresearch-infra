@@ -237,6 +237,13 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # enable_experiment_job_creation=false 롤백도 실행 중 Job을 멈추지 않으므로,
         # 두 필드가 없으면 count/jobs.batch=2가 영구 점유돼 회수 경로가 break-glass
         # 관리자 권한밖에 남지 않는다. 상한 3600초는 runbook의 Job 계약과 같은 값이다.
+        # KSA의 automount_service_account_token=false는 Pod spec이 되돌릴 수 있는
+        # "기본값"일 뿐이고 Pod Security restricted도 이 필드를 통제하지 않는다.
+        # 손상된 API가 template에서 true로 덮어쓰는 경로를 서버에서 닫는다.
+        {
+          expression = "!has(object.spec.template.spec.automountServiceAccountToken) || object.spec.template.spec.automountServiceAccountToken == false"
+          message    = "실험 Job은 ServiceAccount token을 mount할 수 없습니다."
+        },
         {
           expression = "has(object.spec.activeDeadlineSeconds) && object.spec.activeDeadlineSeconds > 0 && object.spec.activeDeadlineSeconds <= 3600"
           message    = "실험 Job은 activeDeadlineSeconds를 1~3600초로 명시해야 합니다."

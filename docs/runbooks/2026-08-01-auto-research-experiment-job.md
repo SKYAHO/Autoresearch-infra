@@ -73,10 +73,25 @@ GSA의 `roles/iam.workloadIdentityUser` binding을 사용해 결과 버킷 쓰�
 token을 발급한다. Kubernetes API token mount는 이 교환에 필요하지 않으므로 이 KSA는
 명시적으로 `false`다.
 
-Job KSA에는 RoleBinding이 없고 NetworkPolicy도 Kubernetes API HTTPS를 허용하지
-않는다. token mount까지 비활성화했으므로 저신뢰 에이전트는 Kubernetes 리소스 조회·수정,
-Secret 조회, exec, cluster 권한 상승을 할 수 없다. GCP 측에서도 결과 버킷 새 객체
-생성 외 권한은 없다.
+저신뢰 에이전트가 Kubernetes 리소스 조회·수정, Secret 조회, exec, cluster 권한
+상승을 할 수 없는 근거는 서로 독립적인 세 겹이다. KSA에 설정한
+`automountServiceAccountToken: false`는 이 중 **한 겹이 아니라 Pod가 되돌릴 수 있는
+기본값**이라는 점이 중요하다 — Pod spec에서 `true`로 덮어쓸 수 있고 Pod Security
+`restricted`도 이 필드를 통제하지 않는다.
+
+1. **admission**: `autoresearch-experiment-job-contract` 정책이
+   `spec.template.spec.automountServiceAccountToken`을 `false` 또는 미설정으로만
+   허용한다. 손상된 API가 template에서 되돌리는 경로를 서버가 거부한다.
+2. **네트워크**: egress NetworkPolicy는 services CIDR에 UDP/TCP **53만** 허용하므로
+   같은 대역의 `kubernetes.default.svc:443`에 도달할 수 없고, control plane
+   master CIDR도 허용 목록에 없다. token을 손에 넣어도 API를 호출할 경로가 없다.
+3. **RBAC**: `experiment-job` KSA에는 이 namespace에 RoleBinding이 하나도 없다
+   (`experiment-job-observer`는 API KSA에 바인딩된다). 도달하더라도 부여된 권한이
+   없다.
+
+GCP 측에서도 결과 버킷 새 객체 생성 외 권한은 없다. 실제로 열려 있는 자격은
+metadata server(egress 허용 대상)를 통한 GSA token이며, 그 권한 범위가 이 워크로드의
+실질 신뢰 경계다.
 
 Job 템플릿이 KSA를 누락하면 Kubernetes의 `default` KSA token mount 기본값을 따를 수
 있지만, 이 namespace에서는 ValidatingAdmissionPolicy가 해당 Job을 admission에서 거부한다.
