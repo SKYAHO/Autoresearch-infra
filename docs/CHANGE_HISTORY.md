@@ -139,7 +139,8 @@
 - **롤백·정리**: OAuth 전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·
   데이터 경로 기준) 확인 후, 2026-07-31 옛 프로젝트 `ar-infra-501607`을
   `gcloud projects delete`로 `DELETE_REQUESTED` 전환(30일 내
-  `gcloud projects undelete`로 복구 가능). 코드 잔재는 2건 — ① 드랍된
+  `gcloud projects undelete`로 프로젝트 ID 복원 가능 — 리소스·데이터 복구는
+  보장되지 않아 실질 롤백은 IaC 재적용 + 백업 복원이다). 코드 잔재는 2건 — ① 드랍된
   vault 샌드박스의 helm-values(#412 B~C가 root째 삭제로 정리),
   ② `terraform/envs/dev/gke_ctr_retrain.tf` 상단의 옛 프로젝트 대상
   `terraform import` 지시 주석(#316 당시 절차 — 옛 프로젝트가

@@ -238,8 +238,9 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
    Airflow metadata 커넥션 재구성·MLflow Secret 재주입(이번엔
    URL-인코딩 불필요)·관련 rollout restart·로그인 재검증을 한
    절차로 묶어 실행하기로 PR에 명시했다. 이슈 #404의 2026-07-31
-   완결 기록에 "rotate 적용·verify 전부 통과"가 명시돼 있어, 이 rotate도
-   야간 파이프라인 완주 후 실제로 적용까지 끝난 것으로 확인된다.
+   완결 기록에도 "rotate 적용"이 적혀 있다. 다만 이 서술만으로는 요약
+   코멘트에 기댄 추정이므로, rotate 자체의 완료 여부는 apply 이력이나
+   `terraform plan`의 `random_password` 무변경으로 직접 확인해야 한다.
 3. **OAuth client**(구글 로그인 연동 인증 정보) 5종은 프로젝트에
    종속돼 복사가 안 되므로 콘솔에서 새로 발급받았다. MLflow에서 로그인
    실패가 났는데, 원인은 **client id에 정본이 없었던 것**이었다 —
@@ -272,9 +273,12 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
    등록·재검증은 PR에 "머지 후 작업"으로 명시된 조율 단계 — dev-apply로
    SM 컨테이너 4종 생성 후 현행 K8s Secret 값을 `versions add`로
    그대로 옮기고 스크립트를 다시 돌려 WARN이 사라지는지 확인하는
-   순서). 이슈 #404의 2026-07-31 완결 기록에 "verify 전부 통과"가
-   명시돼 있어, 이 payload 등록·재검증 조율 단계도 실제로 끝나 WARN이
-   해소된 것으로 확인된다.
+   순서). 이 payload 등록·재검증 조율 단계는 **완료됐음을 실행으로
+   확인했다** — `scripts/verify-oauth-clients.sh <context> <project>` 재실행
+   결과 5종 client id 프리픽스가 모두 새 프로젝트 번호이고, id/secret
+   10쌍의 K8s↔SM 해시가 전부 일치해 `결과: 전부 통과`가 나온다(grafana·
+   kibana의 payload 미등록 WARN도 해소됨). 요약 코멘트가 아니라 이 스크립트
+   재실행이 이 항목의 정본 확인 수단이다.
 4. ArgoCD 앱을 새 클러스터에 재등록하고, Kibana의 saved objects는
    재구축용 Job(`kibana_saved_objects`)을 재실행해 자동 복원했다.
 
@@ -436,8 +440,8 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
 7. **2026-07-31**: OAuth 전환 완료로 런타임 의존이 0(가동 중
    워크로드·CI·데이터 경로 기준)임을 최종 확인한 뒤, 옛 프로젝트
    `ar-infra-501607`을 `gcloud projects delete`로 삭제 요청 처리했다
-   (`DELETE_REQUESTED` 상태 — 30일 내 `gcloud projects undelete`로
-   복구 가능).
+   (`DELETE_REQUESTED` 상태 — 30일 내 `gcloud projects undelete`로 프로젝트
+   ID 복원은 가능하나 리소스·데이터 복구는 보장되지 않는다).
 8. 마지막으로 `docs/` 전 문서 15종(약 6,900줄)을 코드·라이브 상태와
    전수 대조하는 병렬 감사를 수행해 발견 32건을 심각도별로
    정합했다(#435, `CHANGE_HISTORY.md`처럼 이력 성격 문서와 로컬 전용
@@ -564,7 +568,12 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
   정리했고, 삭제 요청 후에도 30일 유예 기간을 남겨 롤백 가능성을
   확보했다. 옛 프로젝트 `ar-infra-501607`는 2026-07-31에
   **`DELETE_REQUESTED`** 상태로 전환했다 — 이 상태에서는 30일 안에
-  `gcloud projects undelete`로 완전 복구가 가능하다.
+  `gcloud projects undelete`로 **프로젝트 자체**를 되살릴 수 있다. 다만 이것이
+  리소스·데이터의 원상복구를 뜻하지는 않는다 — undelete가 보장하는 것은 프로젝트
+  ID와 리소스 네임스페이스이고, 유예 기간 중 개별 리소스는 영구 삭제될 수 있다.
+  이 이전에서는 결제 분리가 선행돼 Cloud SQL 인스턴스·GKE 노드가 이미 정지된
+  상태였으므로 더욱 그렇다. **실질 롤백 경로는 undelete가 아니라 "옛 좌표로
+  repo variables·backend를 되돌린 뒤 IaC 재적용 + 데이터 백업 복원"이다.**
 - 이슈 #404는 2026-07-31에 "Phase 0~6 전부 종료(야간 파이프라인
   e2e success·rotate 적용·verify 전부 통과 포함)"로 완결 기록되고
   닫혔다. 이전 자체에서 파생된 재발 방지 조치 7건(plan 파일 재사용
@@ -675,7 +684,7 @@ done
 | airflow | `airflow-web-oauth`, `airflow-email-alerts`, `airflow-fernet-key`, `airflow-webserver-secret-key`, `autoresearch-airflow-env` | airflow repo 문서 | verbatim 복사 |
 | airflow | `airflow-metadata-db`, `airflow-broker-url` | airflow repo `docs/cloud-sql-metadata.md` | **환경 재구성** — 새 SQL IP + SM app 비번(URL-quote) |
 | autoresearch | `autoresearch-serving-redis` | TEAM runbook | **환경 재구성** — 새 Redis discovery endpoint |
-| argocd | `argocd-google-oidc` | argocd-k8s README | verbatim 복사(#404에서 누락됐던 항목) — README가 전제하는 Secret Manager 정본 `argocd-google-oidc-client-{id,secret}`이 실제로는 빈 채로 남아 있던 것을 뒤늦게 발견해, 클러스터에 이미 들어가 있던 실값을 SM으로 역주입해 문서-실제 정합을 맞췄다(PR #429) |
+| argocd | `argocd-google-oidc` | argocd-k8s README | verbatim 복사(#404에서 누락됐던 항목) — README가 전제하는 Secret Manager 정본 `argocd-google-oidc-client-{id,secret}`이 실제로는 빈 채로 남아 있던 것을 뒤늦게 발견해, 클러스터에 이미 들어가 있던 실값을 SM으로 역주입해 문서-실제 정합을 맞췄다(PR #429). **단 채운 것은 값(version)뿐이고 SM secret 리소스 자체는 아직 Terraform 밖이다** — `terraform/envs/dev` 어디에도 정의가 없고 이름도 `autoresearch-dev-` 프리픽스를 따르지 않아(`argocd-google-oidc-client-{id,secret}`) 수동 생성분임이 드러난다. 다음 재구축에서 이 컨테이너 2종이 생성되지 않으며 `prevent_destroy` 보호도 없다. 이 런북이 바로 위에서 교훈으로 적은 batch KSA와 동일한 구조이므로 IaC 편입이 필요하다(#494) |
 
 - airflow 첫 helm 설치 시, 복사해 둔 chart-관리 Secret(fernet-key·
   webserver-secret-key 등)은 **helm 소유권 입양**이 필요하다:
@@ -731,7 +740,10 @@ done
    터널이 전면 불가해진다(#404에서 Airflow·MLflow 둘 다 발생, #425/#426).
    증상은 connection refused가 아니라 **10초 무응답**(bastion→대상 구간이
    죽은 것)이라 워크로드부터 보면 시간을 버린다. 판별 3종을 같이 대조:
-   ① `kubectl get svc -o jsonpath='{.spec.loadBalancerIP}'`
+   ① `kubectl get svc -o jsonpath='{.spec.loadBalancerIP}'`(매니페스트가 **요청한**
+   IP)와 `{.status.loadBalancer.ingress[0].ip}`(실제 **할당된** IP)를 함께 본다.
+   두 값이 다르면 요청이 반영되지 않은 것이고, 같더라도 DNS·예약 IP와 어긋날 수
+   있으므로 아래 ②③과 대조해야 한다
    ② `gcloud dns record-sets list` rrdatas
    ③ `gcloud compute addresses list` status(`RESERVED`=미사용,
    `IN_USE`=정상). 해결은 매니페스트의 리터럴 IP를 새 예약
@@ -744,7 +756,9 @@ done
    프로젝트인지 확인(#439 스크립트).
 4. 옛 프로젝트 정리: 결제 분리(사실상 정지, 재연결로 롤백 가능) → 관찰 기간 →
    shutdown(30일 유예 — `gcloud projects delete` 직후 상태는
-   `DELETE_REQUESTED`, `gcloud projects undelete`로 유예 내 복구 가능).
+   `DELETE_REQUESTED`, `gcloud projects undelete`로 유예 내 **프로젝트 복원**
+   가능 — 리소스·데이터 복구는 보장되지 않으므로 실질 롤백은 IaC 재적용 +
+   백업 복원으로 계획한다).
    **정리 전 옛 프로젝트 소속 OAuth client 의존이 0인지 재확인**이 유일한
    하드 게이트.
 5. 다른 클론·워크트리의 stale backend 캐시는 `git pull` +
