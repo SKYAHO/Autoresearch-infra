@@ -1061,41 +1061,64 @@ resolve 처리한다. 라운드 16을 트리거해 계속 진행하되, 만약 �
 전부 이 패턴(실제로는 이미 고쳐진 지적 재상정)이면 그 시점부터는 수렴
 신호로 간주한다 — 실제 코드/문서 결함이 더 없다는 뜻이기 때문이다.
 
+## claude-review 16차 지적 (2026-08-02, PR #500)
+
+라운드 15 검증 커밋(`8980666`, spec 문서만 변경) 푸시 후 재요청한
+리뷰에서 다시 5건이 지적됐다 — 대상 파일·줄 번호·지적 내용이 라운드
+15와 **완전히 동일**하다(`CLAUDE.md:56`/`:66`,
+`agent-project-reference.md:30`/`:51`, `agent-terraform-reference.md:32`).
+`8980666`은 이 5개 파일 중 어느 것도 건드리지 않았으므로(`git diff
+fb47430 8980666 --stat` 확인, spec 문서 1개만 변경) HEAD 내용은 라운드
+15 검증 시점과 완전히 동일하고, 재확인 결과도 동일하다 — 5건 모두
+suggestion과 현재 파일 내용이 이미 일치한다.
+
+라운드 15 절에서 세운 기준대로: 이 5건은 라운드 11에서 이미 반영된
+동일 지적의 3번째 재상정이며, 코드/문서를 두 번 연속 변경 없이도 같은
+5건만 나온다는 것은 claude-review 쪽의 스냅샷 캐싱 문제이지 이
+저장소의 실제 결함이 아니다. 이 시점부터 **수렴으로 간주**하고 새
+커밋·라운드 트리거를 중단한다. 남은 절차는 완료 조건 체크 후 전체
+리뷰 스레드 resolve와 머지로 진행한다.
+
 ## 완료 조건
 
-- [ ] `terraform/envs/dev/vault.tf` 삭제
-- [ ] `variables.tf`/`locals.tf`/`outputs.tf`의 Vault 전용 항목 제거
-- [ ] `github_actions.tf`의 `roles/cloudkms.admin`은 **영구 유지**한다
+라운드 16(수렴 판단) 직후 20개 항목 전체를 실 저장소 상태(grep/파일
+확인)와 PR #500의 CI plan 코멘트(`google_kms_crypto_key.vault_unseal`
+in-place update 1건 + destroy 4건, vault 무관 리소스 제외)로 재검증하고
+모두 체크했다.
+
+- [x] `terraform/envs/dev/vault.tf` 삭제
+- [x] `variables.tf`/`locals.tf`/`outputs.tf`의 Vault 전용 항목 제거
+- [x] `github_actions.tf`의 `roles/cloudkms.admin`은 **영구 유지**한다
       (`kms_vault_orphan.tf`가 남기는 key ring/crypto key 2개의 상시
       관리에 필요 — comment 3 3차 정정 참조). 별도 회수 후속 PR은
       계획하지 않는다
-- [ ] `versions.tf`의 `required_version`은 `>= 1.6.0`을 유지한다(`removed`
+- [x] `versions.tf`의 `required_version`은 `>= 1.6.0`을 유지한다(`removed`
       블록을 쓰지 않으므로 `>= 1.7.0` 상향 불필요 — 3차 정정)
-- [ ] `kms_vault_orphan.tf`에 key ring/crypto key 2개를 일반 `resource`
+- [x] `kms_vault_orphan.tf`에 key ring/crypto key 2개를 일반 `resource`
       블록으로 남기고 `rotation_period`만 제거, `lifecycle { prevent_destroy
       = true }` 적용. GSA/WI 바인딩/custom role/key IAM binding 4개는
       이 파일에 포함하지 않고 일반 destroy 대상으로 남긴다(comment 1
       3차 정정 반영)
-- [ ] `dns.tf`/`elastic.tf`의 vault 참조 주석 정리
-- [ ] `terraform/admin/vault-k8s/` 디렉터리 삭제
-- [ ] `CLAUDE.md`(및 symlink `AGENTS.md`), `.claude/docs/agent-project-reference.md`,
+- [x] `dns.tf`/`elastic.tf`의 vault 참조 주석 정리
+- [x] `terraform/admin/vault-k8s/` 디렉터리 삭제
+- [x] `CLAUDE.md`(및 symlink `AGENTS.md`), `.claude/docs/agent-project-reference.md`,
       `.claude/docs/agent-terraform-reference.md`, `.claude/docs/architecture-overview.md`
       갱신
-- [ ] `docs/TERRAFORM_DEV.md` "Vault auto-unseal 기반 — 폐기 이력" 절을
+- [x] `docs/TERRAFORM_DEV.md` "Vault auto-unseal 기반 — 폐기 이력" 절을
       "rotation 제거 update 1건(key ring/crypto key는 config에 영구 유지) +
       destroy 4건"으로 정정(claude-review 3차 지적 반영 — 이전 리비전들의
       "forget" 서술 제거), 및 이를 참조하던 나머지 문서
       (`terraform/envs/dev/README.md`, `terraform/README.md`,
       `docs/INFRASTRUCTURE_SUMMARY.md`, `.github/pr-report/pipeline-nodes.json`)의
       stale 참조 정리
-- [ ] `docs/TERRAFORM_DEV.md`의 비용 서술 정정 — key rotation `90d` 제거는
+- [x] `docs/TERRAFORM_DEV.md`의 비용 서술 정정 — key rotation `90d` 제거는
       승인 apply의 in-place update 1회로 자동 처리되며(수동 gcloud 절차
       불필요), 그 즉시 신규 CryptoKeyVersion 생성·과금이 멈추고 이후에도
       `kms_vault_orphan.tf`가 config에 남아 있는 한 drift 감지 대상임을
       명시(claude-review 3차 지적 반영)
-- [ ] `docs/VAULT_OPERATIONS_RUNBOOK.md` 배너 갱신(코드 제거 완료, state
+- [x] `docs/VAULT_OPERATIONS_RUNBOOK.md` 배너 갱신(코드 제거 완료, state
       정리는 승인 대기로 정정)
-- [ ] `will no longer be managed by Terraform` allowlist 패턴은
+- [x] `will no longer be managed by Terraform` allowlist 패턴은
       `terraform-drift.yml`/`terraform-plan.yml`/`apply.yml`(dev-root +
       admin-root 스텝) 4곳 모두에 둔다 — dev root에는 지금 `removed` 블록이
       없어 이 alternative가 오늘은 매치되지 않지만, 빠져 있으면 미래에
@@ -1104,10 +1127,10 @@ resolve 처리한다. 라운드 16을 트리거해 계속 진행하되, 만약 �
       뺐다가 8차 지적으로 재추가). admin-root 스텝은
       `monitoring-k8s`/`argo-rollouts-k8s`의 기존 `removed` 블록(helm_release
       forget)으로 매치 동작 자체가 실제 검증돼 있다
-- [ ] `scripts/environment_catalog.rb`/`config/environments/dev/environment.yaml`의
+- [x] `scripts/environment_catalog.rb`/`config/environments/dev/environment.yaml`의
       `vault-k8s` 카탈로그 항목 유지 사유 주석 추가
-- [ ] `fmt -check`, `validate`, `git diff --check` 통과
-- [ ] plan에 의도하지 않은 리소스 삭제가 없는지 검토(dev root에서 key
+- [x] `fmt -check`, `validate`, `git diff --check` 통과
+- [x] plan에 의도하지 않은 리소스 삭제가 없는지 검토(dev root에서 key
       ring/crypto key 2개는 rotation 제거로 인한 in-place update 1건만
       나오고 destroy 0, 나머지 `google_service_account.vault`(GSA)·
       `google_service_account_iam_member.vault_wi`(WI 바인딩)·
@@ -1117,27 +1140,27 @@ resolve 처리한다. 라운드 16을 트리거해 계속 진행하되, 만약 �
       `google_project_iam_member.dev_apply_roles["roles/cloudkms.admin"]`
       (apply SA의 project-level role)은 영구 유지이므로 이번 plan에
       나타나지 않음)
-- [ ] KMS crypto key destroy가 CryptoKeyVersion 파기를 실제로 예약한다는
+- [x] KMS crypto key destroy가 CryptoKeyVersion 파기를 실제로 예약한다는
       사실과, config 유지 + `prevent_destroy`로 그 위험을 없앤 이유를
       문서에 기록
-- [ ] 머지 직후 `terraform-drift.yml`이 4개 리소스 destroy 대상 때문에
+- [x] 머지 직후 `terraform-drift.yml`이 4개 리소스 destroy 대상 때문에
       매일 job 실패 + `[DRIFT]` 이슈 생성(첫날)/코멘트(이후 매일)를
       반복함을 `docs/VAULT_OPERATIONS_RUNBOOK.md`의 "머지~승인 apply
       사이 예상 drift" 절에 기록하고, 진짜 새 drift와 구분하는 기준
       (예상 4개 주소 + `4 to destroy`와 정확히 일치하는지)을 명시한다
       (claude-review 9차 지적)
-- [ ] `rotation_period` 제거는 provider 스키마상 `ForceNew`가 아니므로
+- [x] `rotation_period` 제거는 provider 스키마상 `ForceNew`가 아니므로
       이번 apply의 plan은 항상 in-place update이며 replace를 계획하지
       않는다는 사실을, `prevent_destroy` 하에서 replace가 발생하면
       `terraform plan` 자체가(apply 이전 단계에서) 즉시 실패한다는
       로컬 재현 결과와 함께 `kms_vault_orphan.tf` 주석에 기록한다
       (claude-review 9차 지적)
-- [ ] destroy 대상 4개 중 참조 관계가 있는 2쌍(key IAM binding→custom
+- [x] destroy 대상 4개 중 참조 관계가 있는 2쌍(key IAM binding→custom
       role, WI 바인딩→GSA)은 Terraform의 의존성 역순 destroy 덕분에
       부분 실패 시에도 "참조되는 쪽만 먼저 사라지는" 비대칭 상태가
       발생하지 않고 재실행만으로 수렴함을 `kms_vault_orphan.tf` 주석에
       기록한다(claude-review 9차 지적)
-- [ ] 롤백 절에 custom role `vaultUnsealKmsAccess`의 GCP soft delete
+- [x] 롤백 절에 custom role `vaultUnsealKmsAccess`의 GCP soft delete
       7일 보존 사실과, 그 기간 내 롤백 시 `gcloud iam roles undelete` +
       `terraform import`가 필요하다는 절차 정정 반영(claude-review 3차
       지적, comment 7 참조). 7일 경과 후에도 같은 `role_id` 재사용이
