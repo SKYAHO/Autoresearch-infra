@@ -93,7 +93,7 @@ pod는 DB host(private IP)·비번을 K8s Secret `mlflow-db`에서 받는다. �
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
 PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project autoresearch-503903)"
-HOST="$(terraform -chdir=terraform/envs/dev output -raw cloud_sql_private_ip_address)"
+HOST="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw cloud_sql_private_ip_address)"
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_HOST=%s\n' "$PW" "$HOST" > "$env_file"; unset PW
 kubectl create secret generic mlflow-db -n mlflow --from-env-file="$env_file" \
   --dry-run=client -o yaml | kubectl apply -f -

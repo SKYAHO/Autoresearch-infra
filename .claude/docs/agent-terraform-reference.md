@@ -64,14 +64,14 @@ Terraform 코드 스타일, 파일 구성, 검증 규칙을 다루는 문서입�
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -check -recursive
-terraform -chdir=terraform/envs/dev init -backend=false
-terraform -chdir=terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev init -backend=false
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
 ```
 
 리소스 변경 PR은 추가로:
 
 ```bash
-terraform -chdir=terraform/envs/dev plan -var-file=terraform.tfvars
+scripts/terraform-env --environment dev --root terraform/envs/dev plan -var-file=terraform.tfvars
 ```
 
 - `plan`은 실제 GCP project id와 인증이 준비된 뒤 실행하고, 결과 요약

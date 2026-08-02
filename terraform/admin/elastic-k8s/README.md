@@ -297,8 +297,8 @@ Kibana saved object(data view·저장 검색·Logs Overview 대시보드)는 `.k
 
 ```bash
 terraform -chdir=terraform/admin/elastic-k8s fmt -check -recursive
-terraform -chdir=terraform/admin/elastic-k8s init -backend=false
-terraform -chdir=terraform/admin/elastic-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/elastic-k8s init -backend=false
+scripts/terraform-env --environment dev --root terraform/admin/elastic-k8s validate
 ```
 
 ## 설치 후 확인

@@ -64,7 +64,7 @@ elastic-k8s README 복구 절 참조). **#365부터 자동 import** —
 
 ```bash
 # break-glass 로컬 apply 경로 — 표준 admin-apply CI는 저장 plan 적용이라 -replace 미지원
-terraform -chdir=terraform/admin/elastic-k8s apply \
+scripts/terraform-env --environment dev --root terraform/admin/elastic-k8s apply \
   -replace=kubernetes_job_v1.kibana_saved_objects_import
 ```
 

@@ -112,8 +112,8 @@
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init -backend=false
-terraform -chdir=terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev init -backend=false
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
 ```
 
 - `terraform plan`은 실제 GCP project id와 인증(`terraform.tfvars`)이 준비된
@@ -148,7 +148,7 @@ workflow 권한 변경, 대규모 다중 파일 수정)은 구현 전에 계획�
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -check -recursive
-terraform -chdir=terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
 git diff --check
 ```
 

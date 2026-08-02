@@ -471,15 +471,15 @@ output에서 가져옵니다.
 ```bash
 terraform -chdir=terraform/bootstrap output -raw feast_dev_wif_provider_name
 terraform -chdir=terraform/bootstrap output -raw feast_prod_wif_provider_name
-terraform -chdir=terraform/envs/dev output -raw github_actions_feast_apply_dev_service_account_email
-terraform -chdir=terraform/envs/dev output -raw github_actions_feast_apply_prod_service_account_email
-terraform -chdir=terraform/envs/dev output -raw feast_dev_offline_store_dataset_id
-terraform -chdir=terraform/envs/dev output -raw feast_dev_registry_path
-terraform -chdir=terraform/envs/dev output -raw feast_dev_staging_location
-terraform -chdir=terraform/envs/dev output -raw feast_prod_offline_store_dataset_id
-terraform -chdir=terraform/envs/dev output -raw feast_prod_registry_path
-terraform -chdir=terraform/envs/dev output -raw feast_prod_staging_location
-terraform -chdir=terraform/admin/autoresearch-k8s output -json feast_apply_environments
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw github_actions_feast_apply_dev_service_account_email
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw github_actions_feast_apply_prod_service_account_email
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw feast_dev_offline_store_dataset_id
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw feast_dev_registry_path
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw feast_dev_staging_location
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw feast_prod_offline_store_dataset_id
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw feast_prod_registry_path
+scripts/terraform-env --environment dev --root terraform/envs/dev output -raw feast_prod_staging_location
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s output -json feast_apply_environments
 ```
 
 | 계약 항목 | `dev` Environment | `prod` Environment | Terraform output |
@@ -774,7 +774,7 @@ Cloud Run 서비스 단위 `roles/run.invoker`만 부여한다. 프로젝트 전
 ```bash
 # invoker 권한이 있는 SA의 ID token으로 호출
 curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
-  "$(terraform -chdir=terraform/envs/dev output -raw proxy_service_uri)/health"
+  "$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw proxy_service_uri)/health"
 ```
 
 ### 비용/롤백
@@ -1180,7 +1180,7 @@ GCS output 생성을 확인한다.
 resource 추가 후 state import를 수행했다.
 
 ```bash
-terraform -chdir=terraform/envs/dev import \
+scripts/terraform-env --environment dev --root terraform/envs/dev import \
   google_container_node_pool.airflow \
   projects/autoresearch-503903/locations/asia-northeast3-a/clusters/autoresearch-dev-gke/nodePools/airflow-dev
 ```
@@ -1380,7 +1380,7 @@ repository variable이 설정된 뒤에만 Airflow 수동 배포 workflow로 현
 검증한다. apply 전에는 자동 배포 workflow 실행을 기대하지 않는다.
 
 2026-07-08 최초 apply 때 `airflow` namespace는 클러스터에 이미 존재했다. 삭제/재생성하지 않고
-`terraform -chdir=terraform/admin/airflow-k8s import kubernetes_namespace_v1.airflow airflow`
+`scripts/terraform-env --environment dev --root terraform/admin/airflow-k8s import kubernetes_namespace_v1.airflow airflow`
 로 state에 편입한 뒤 나머지 RBAC/ResourceQuota/LimitRange/NetworkPolicy를 적용했다.
 
 ### 비용/롤백
@@ -1686,7 +1686,7 @@ root module에 넣으면 "API가 켜져야 생성 가능한 리소스"와 순환
 
 ```bash
 # required_services output 전체를 한 번에 활성화
-terraform -chdir=terraform/envs/dev output -json required_services \
+scripts/terraform-env --environment dev --root terraform/envs/dev output -json required_services \
   | jq -r '.[]' | xargs gcloud services enable --project=autoresearch-503903
 ```
 
@@ -1698,13 +1698,13 @@ terraform -chdir=terraform/envs/dev output -json required_services \
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init
-terraform -chdir=terraform/envs/dev validate
-terraform -chdir=terraform/envs/dev plan -detailed-exitcode
+scripts/terraform-env --environment dev --root terraform/envs/dev init
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev plan -detailed-exitcode
 git diff --check
 ```
 
-`terraform init`은 provider plugin과 GCS backend 접근이 필요하므로 네트워크와 GCP 인증이 필요합니다. 순수 문법 검증만 할 때는 `terraform -chdir=terraform/envs/dev init -backend=false`를 사용할 수 있습니다.
+`terraform init`은 provider plugin과 GCS backend 접근이 필요하므로 네트워크와 GCP 인증이 필요합니다. 순수 문법 검증만 할 때는 `scripts/terraform-env --environment dev --root terraform/envs/dev init -backend=false`를 사용할 수 있습니다.
 
 ## CI 자동 검증 (#6)
 
