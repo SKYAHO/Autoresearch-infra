@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T03:28:31Z",
+  "generated_at": "2026-08-02T03:34:05Z",
   "reports": [
+    {
+      "number": 490,
+      "title": "feat: 실험별 Kubernetes Job 실행 기반 추가",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-02T03:33:54Z",
+      "summary_ko": [
+        "Auto Research 실험 요청을 독립된 Kubernetes Job 단위로 격리 실행하기 위한 GCP 및 Kubernetes 인프라 경계를 구성하였습니다.",
+        "실험 결과 전용 GCS 버킷, 최소 권한 Workload Identity, restricted 보안 수준 및 Egress 차단 정책을 적용했습니다.",
+        "Agent Orchestration API에 실험 관찰 전용 RBAC를 부여하고, 미검증 Job 생성을 막고자 생성 권한은 기본 비활성화 처리했습니다."
+      ],
+      "report_url": "pr/490/"
+    },
     {
       "number": 489,
       "title": "fix: oauth2-proxy 이메일 allowlist 우회 제거 (#488)",
