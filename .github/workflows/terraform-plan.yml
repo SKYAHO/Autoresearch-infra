@@ -23,6 +23,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 인증 전에 카탈로그와 GitHub 변수를 대조한다. 카탈로그가 만드는
+      # .environment.auto.tfvars.json이 TF_VAR_보다 우선하므로, 불일치를 명시적으로
+      # 잡지 않으면 인증 대상과 대상 프로젝트가 갈린 채 조용히 진행된다.
+      - name: dev 카탈로그와 bootstrap anchor 대조
+        env:
+          CONFIGURED_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          catalog_project="$(ruby scripts/environment_catalog.rb \
+            --catalog config/environments/dev/environment.yaml \
+            --field gcp.project_id)"
+          if [ -z "$CONFIGURED_PROJECT_ID" ] || [ "$CONFIGURED_PROJECT_ID" != "$catalog_project" ]; then
+            echo "::error::GCP_PROJECT_ID가 dev 환경 카탈로그와 일치하지 않습니다"
+            exit 1
+          fi
+          echo "카탈로그 project_id 일치 확인"
+
       - id: auth
         uses: google-github-actions/auth@v2
         with:
