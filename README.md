@@ -68,14 +68,24 @@ dev 환경 Terraform root module은 [terraform/envs/dev](terraform/envs/dev)에 
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init -backend=false
-terraform -chdir=terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev init -backend=false
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
 ```
 
 운영 문서 목록은 [docs/README.md](docs/README.md)에서 시작합니다. 현재 Terraform
 구성과 필요한 GCP API는 [docs/TERRAFORM_DEV.md](docs/TERRAFORM_DEV.md), 팀원 GKE /
 Bastion / Airflow UI 접근 절차는
 [docs/TEAM_OPERATIONS_RUNBOOK.md](docs/TEAM_OPERATIONS_RUNBOOK.md)를 참고합니다.
+
+### Paired Feast experiment runtime
+
+`experiment_runtime_contract` output은 paired Feast 실험 runtime의 비시크릿 dev
+좌표만 제공합니다. 이 identity는 dev registry/staging 및 MLflow artifact의
+`experiments/` prefix와 code archive의 `code/` prefix에만 접근하며, prefix 내부의
+comparison ID·condition·source SHA 경계는 후속 Airflow Job 템플릿 계약으로 검증해야
+합니다. production Feast, Redis, Secret Manager에는 이 변경으로 권한을 부여하지
+않습니다. `job_creation_enabled=false`이므로 후속 승인 전에는 어떤 시스템도 이
+output을 근거로 Kubernetes Job 생성을 시도해서는 안 됩니다.
 
 ## 필수 Check
 

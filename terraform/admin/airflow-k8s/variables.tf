@@ -6,25 +6,21 @@ variable "project_id" {
 variable "region" {
   description = "Default GCP region."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "zone" {
   description = "GKE cluster zone."
   type        = string
-  default     = "asia-northeast3-a"
 }
 
 variable "gke_cluster_name" {
   description = "Existing dev GKE cluster name."
   type        = string
-  default     = "autoresearch-dev-gke"
 }
 
 variable "resource_prefix" {
   description = "Resource prefix used by terraform/envs/dev."
   type        = string
-  default     = "autoresearch-dev"
 }
 
 variable "airflow_k8s_namespace" {
@@ -54,7 +50,6 @@ variable "airflow_deployer_service_account_email" {
 variable "private_services_cidr" {
   description = "Cloud SQL private IP가 속한 PSA 대역(autoresearch-dev-private-sql-range). dev root·mlflow-k8s와 반드시 일치해야 하며, 불일치 시 egress NetworkPolicy가 5432를 차단해 Airflow가 DB에 접속하지 못한다(#253). default는 현재 PSA 대역."
   type        = string
-  default     = "192.168.0.0/20"
 
   validation {
     condition     = can(cidrhost(var.private_services_cidr, 0))
@@ -79,7 +74,6 @@ variable "installer_user_emails" {
 variable "cluster_services_cidr" {
   description = "GKE services 2차 대역 (#122). service VIP 경유 egress(DNS/in-cluster PostgreSQL)를 ipBlock으로 허용하는 데 사용. dev root의 gke_services_cidr와 일치해야 한다."
   type        = string
-  default     = "172.16.128.0/24"
 
   validation {
     condition     = can(cidrhost(var.cluster_services_cidr, 0))
@@ -90,7 +84,6 @@ variable "cluster_services_cidr" {
 variable "redis_psc_subnet_cidr" {
   description = "Redis Cluster PSC subnet CIDR from terraform/envs/dev redis_psc_subnet_cidr output."
   type        = string
-  default     = "10.10.16.0/29"
 
   validation {
     condition     = can(cidrhost(var.redis_psc_subnet_cidr, 0)) && can(regex("/29$", var.redis_psc_subnet_cidr))

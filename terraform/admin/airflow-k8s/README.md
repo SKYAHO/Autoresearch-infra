@@ -72,12 +72,12 @@ link-local `/32`와 필요한 TCP 포트만 허용하며 IAM 권한 자체를 �
 
 ```bash
 terraform -chdir=terraform/admin/airflow-k8s fmt -check
-terraform -chdir=terraform/admin/airflow-k8s init -backend=false
-terraform -chdir=terraform/admin/airflow-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/airflow-k8s init -backend=false
+scripts/terraform-env --environment dev --root terraform/admin/airflow-k8s validate
 
 # 실제 backend와 관리자 인증이 준비된 환경에서만 실행합니다.
-terraform -chdir=terraform/admin/airflow-k8s init -reconfigure
-terraform -chdir=terraform/admin/airflow-k8s plan -lock=false \
+scripts/terraform-env --environment dev --root terraform/admin/airflow-k8s init -reconfigure
+scripts/terraform-env --environment dev --root terraform/admin/airflow-k8s plan -lock=false \
   -var-file=terraform.tfvars
 ```
 

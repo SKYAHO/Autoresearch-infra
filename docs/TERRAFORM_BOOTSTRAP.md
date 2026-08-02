@@ -115,14 +115,14 @@ GitHub → Settings → Secrets and variables → Actions → **Variables** 에 
 ## 4. dev 루트 backend 마이그레이션
 
 ```bash
-terraform -chdir=terraform/envs/dev init -migrate-state
+scripts/terraform-env --environment dev --root terraform/envs/dev init -migrate-state
 ```
 
 현재 dev 루트는 GCS backend(`autoresearch-503903-dev-tfstate`, prefix `dev/`)를 사용한다. 새 환경에서 local state로 먼저 apply했다면 이 단계에서 state가 GCS로 이동한다.
 
 ## 롤백
 
-- backend 되돌리기: `terraform/envs/dev/versions.tf` 에서 backend 블록 제거 → `terraform -chdir=terraform/envs/dev init -migrate-state`
+- backend 되돌리기: `terraform/envs/dev/versions.tf` 에서 backend 블록 제거 → `scripts/terraform-env --environment dev --root terraform/envs/dev init -migrate-state`
 - bootstrap 제거: state 버킷은 `prevent_destroy=true`로 보호되므로 일반 `terraform destroy`로 삭제되지 않는다. 삭제가 필요하면 state 백업 후 lifecycle을 명시적으로 해제한다.
 - 앱 이미지 배포 허용 철회: Autoresearch release workflow를 먼저 비활성화하고 dev root에서 `application_pusher` 리소스를 제거한 뒤, bootstrap 로컬 tfvars의 `SKYAHO/Autoresearch` 항목을 제거한다.
 - Airflow GKE 자동 배포 허용 철회: Airflow 배포 workflow를 먼저 비활성화하고

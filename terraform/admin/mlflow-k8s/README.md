@@ -12,8 +12,8 @@ chart/앱(MLflow Deployment)은 이 root가 아니라 **ArgoCD Application(`depl
 ## apply
 
 ```bash
-terraform -chdir=terraform/admin/mlflow-k8s init
-terraform -chdir=terraform/admin/mlflow-k8s apply \
+scripts/terraform-env --environment dev --root terraform/admin/mlflow-k8s init
+scripts/terraform-env --environment dev --root terraform/admin/mlflow-k8s apply \
   -var project_id=<PROJECT_ID> -var private_services_cidr=<PSA_CIDR>
 ```
 
@@ -31,7 +31,7 @@ env_file="$(mktemp)"
 trap 'rm -f "$env_file"' EXIT
 
 PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project <PROJECT_ID>)"
-HOST="$(terraform -chdir=terraform/envs/dev output -raw cloud_sql_private_ip_address)"
+HOST="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw cloud_sql_private_ip_address)"
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_HOST=%s\n' "$PW" "$HOST" > "$env_file"
 unset PW
 
@@ -46,6 +46,8 @@ rm -f "$env_file"; trap - EXIT
 UI 앞단 OAuth2-proxy는 Google OAuth client 자격·cookie 비밀·허용 이메일 목록이
 필요하다. 모두 공개 저장소에 두지 않고 K8s Secret `mlflow-oauth`로 주입한다.
 값이 명령행·히스토리에 남지 않도록 파일 기반(`--from-file`)으로 만든다.
+배포 manifest는 `--authenticated-emails-file`만 이메일 접근 제한으로 사용하며,
+목록 밖 Google 계정은 proxy에서 거부된다.
 
 선행: GCP 콘솔에서 OAuth client(웹) 생성, redirect URI
 `http://localhost:4180/oauth2/callback` 등록. **발급 직후 client id와 client secret을
@@ -64,6 +66,8 @@ gcloud secrets versions add autoresearch-dev-mlflow-oauth-client-secret \
 클러스터가 갈리지 않는다.
 
 ```bash
+(
+set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 
@@ -78,27 +82,64 @@ for k in client-id client-secret; do
   test -s "$d/$k" || { echo "ERROR: $k 정본이 비어 있음 — 'gcloud secrets versions add'로 payload 먼저 등록"; exit 1; }
 done
 
-# cookie 비밀: 기존 K8s Secret에 있으면 보존(전원 재로그인 방지), 최초 생성 때만 랜덤 생성
-kubectl -n mlflow get secret mlflow-oauth -o jsonpath='{.data.cookie-secret}' 2>/dev/null \
-  | base64 -d > "$d/cookie-secret" || true
-test -s "$d/cookie-secret" || python3 -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+# Secret 갱신은 server-side apply를 쓴다. client-side apply는 전체 payload를
+# kubectl.kubernetes.io/last-applied-configuration 어노테이션에 그대로 복제해
+# 시크릿 사본이 하나 더 생기고 옛 값이 남는다(현재 두 Secret에는 이 어노테이션이
+# 없음을 실측 확인).
+# cookie 비밀과 allowlist: Secret 없음과 인증/연결 실패를 구분한다.
+# 기존 Secret을 재실행할 때는 두 값을 보존한다. 최초 생성 또는 의도적 allowlist 변경만
+# ALLOWLIST_FILE에 실제 승인 이메일 파일(한 줄에 하나, 로컬 0600)을 지정한다.
+if kubectl -n mlflow get secret mlflow-oauth --ignore-not-found -o name > "$d/existing-secret"; then
+  if test -s "$d/existing-secret"; then
+    # authenticated-emails는 여기서 읽지 않는다. 목록이 비어 전원 403이 된
+    # 상황이 바로 이 절차로 복구해야 하는 경우인데, 무조건 읽고 test -s로
+    # 막으면 ALLOWLIST_FILE 분기에 닿기도 전에 죽어 복구가 불가능해진다.
+    for k in cookie-secret; do
+      kubectl -n mlflow get secret mlflow-oauth -o "jsonpath={.data.$k}" \
+        | base64 -d > "$d/$k"
+      test -s "$d/$k" || { echo "ERROR: mlflow-oauth.$k 없음"; exit 1; }
+    done
+  else
+    python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+  fi
+else
+  echo "ERROR: mlflow-oauth 존재 여부를 읽지 못함 — context/인증을 확인"; exit 1
+fi
 
-# 허용 이메일(한 줄에 하나) — 목록 밖 Google 계정은 거부된다
-cat > "$d/authenticated-emails" <<'EMAILS'
-someone@example.com
-EMAILS
+# ALLOWLIST_FILE이 지정되면 기존 목록 대신 그 파일을 사용한다. 지정하지 않은
+# 재실행은 기존 목록을 보존하며, Secret이 없으면 명시적 파일 없이는 생성하지 않는다.
+if test -n "${ALLOWLIST_FILE:-}"; then
+  test -f "$ALLOWLIST_FILE" || { echo "ERROR: ALLOWLIST_FILE을 읽을 수 없음"; exit 1; }
+  cp "$ALLOWLIST_FILE" "$d/authenticated-emails"
+else
+  test -s "$d/existing-secret" \
+    || { echo "ERROR: 최초 생성에는 ALLOWLIST_FILE=/안전한/경로/approved-emails 지정 필요"; exit 1; }
+  kubectl -n mlflow get secret mlflow-oauth -o 'jsonpath={.data.authenticated-emails}' \
+    | base64 -d > "$d/authenticated-emails"
+  test -s "$d/authenticated-emails" \
+    || { echo "ERROR: 기존 authenticated-emails가 비어 있음 — ALLOWLIST_FILE로 명시 지정 필요"; exit 1; }
+fi
+awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }' "$d/authenticated-emails" \
+  || { echo "ERROR: authenticated-emails는 빈 줄·# 주석 외에 한 줄당 이메일 하나여야 함"; exit 1; }
 
 kubectl create secret generic mlflow-oauth -n mlflow \
   --from-file=client-id="$d/client-id" \
   --from-file=client-secret="$d/client-secret" \
   --from-file=cookie-secret="$d/cookie-secret" \
-  --from-file=authenticated-emails="$d/authenticated-emails"
+  --from-file=authenticated-emails="$d/authenticated-emails" \
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
+kubectl rollout status deployment/mlflow-oauth-proxy -n mlflow --timeout=120s
+)
 ```
 
-이메일 목록·client 자격 변경 시 위를 다시 실행(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+client 자격만 갱신할 때는 `ALLOWLIST_FILE` 없이 위 블록을 다시 실행한다. 기존
+`authenticated-emails`와 `cookie-secret`이 모두 보존된다. 최초 생성 또는 이메일 목록을
+의도적으로 바꿀 때만 승인 이메일만 담은 로컬 비추적 파일을 준비해
+`ALLOWLIST_FILE=/안전한/경로/approved-emails`로 지정한 뒤 위 블록을 실행하고
+`rollout restart`한다. 파일은 저장소·채팅·명령행 인자에 넣지 않는다.
 
 갱신 시 주의:
 
@@ -122,6 +163,42 @@ kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
   done
   ```
 
+허용 목록에서 한 사용자를 제거할 때는 목록을 갱신하고 위 rollout 완료를 확인한다.
+oauth2-proxy는 보호된 요청마다 세션 이메일을 새 allowlist로 재검사하므로, 이 경우
+cookie-secret을 바꿔 전원 재로그인을 시킬 필요가 없다.
+
+### 전원 세션 무효화 (cookie-secret 회전)
+
+cookie-secret 유출 의심이나 전원 강제 로그아웃이 필요한 경우에만 아래 절차를 쓴다.
+기존 client 자격과 허용 이메일은 값 비노출 파일로 보존하고, 새 cookie-secret으로
+갱신한다. 대화형 셸 자체가 종료되지 않도록 명령 전체는 subshell에서 실행된다.
+
+```bash
+(
+set -euo pipefail
+umask 077
+d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
+for k in client-id client-secret authenticated-emails; do
+  kubectl -n mlflow get secret mlflow-oauth -o "jsonpath={.data.$k}" \
+    | base64 -d > "$d/$k"
+  test -s "$d/$k" || { echo "ERROR: mlflow-oauth.$k 없음"; exit 1; }
+done
+python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
+  > "$d/cookie-secret"
+kubectl create secret generic mlflow-oauth -n mlflow \
+  --from-file=client-id="$d/client-id" \
+  --from-file=client-secret="$d/client-secret" \
+  --from-file=cookie-secret="$d/cookie-secret" \
+  --from-file=authenticated-emails="$d/authenticated-emails" \
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
+rm -rf "$d"; trap - EXIT
+kubectl rollout restart deployment/mlflow-oauth-proxy -n mlflow
+kubectl rollout status deployment/mlflow-oauth-proxy -n mlflow --timeout=120s
+)
+```
+
+완료된 rollout 뒤에는 기존 cookie가 검증되지 않아 모든 사용자가 다시 로그인해야 한다.
+
 ## Model Training 담당자 port-forward 권한 (#236)
 
 `mlflow` 네임스페이스에는 기본 RBAC가 없어 Model Training 담당자가
@@ -137,7 +214,7 @@ Stage 승격, GCS artifact 확인)하지 못했다. 최소 권한으로 이를 �
 
 ```bash
 # 로컬 terraform.tfvars에 대상 계정 추가 후
-terraform -chdir=terraform/admin/mlflow-k8s apply \
+scripts/terraform-env --environment dev --root terraform/admin/mlflow-k8s apply \
   -var project_id=<PROJECT_ID> -var private_services_cidr=<PSA_CIDR>
 ```
 

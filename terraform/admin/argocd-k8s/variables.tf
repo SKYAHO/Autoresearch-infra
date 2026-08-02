@@ -6,19 +6,16 @@ variable "project_id" {
 variable "region" {
   description = "Default GCP region."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "zone" {
   description = "GKE cluster zone."
   type        = string
-  default     = "asia-northeast3-a"
 }
 
 variable "gke_cluster_name" {
   description = "Existing dev GKE cluster name."
   type        = string
-  default     = "autoresearch-dev-gke"
 }
 
 variable "argocd_namespace" {
@@ -73,7 +70,6 @@ variable "argocd_readonly_user_emails" {
 variable "cluster_services_cidr" {
   description = "GKE services 2차 대역 (#122). service VIP 경유 egress(DNS/redis/repo-server)를 ipBlock으로 허용하는 데 사용. dev root의 gke_services_cidr와 일치해야 한다."
   type        = string
-  default     = "172.16.128.0/24"
 
   validation {
     condition     = can(cidrhost(var.cluster_services_cidr, 0))

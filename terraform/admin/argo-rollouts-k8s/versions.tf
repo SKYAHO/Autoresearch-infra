@@ -21,8 +21,6 @@ terraform {
   }
 
   backend "gcs" {
-    bucket = "autoresearch-503903-dev-tfstate"
-    prefix = "admin/argo-rollouts-k8s/"
   }
 }
 

@@ -6,19 +6,16 @@ variable "project_id" {
 variable "region" {
   description = "Default GCP region."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "zone" {
   description = "GKE cluster zone."
   type        = string
-  default     = "asia-northeast3-a"
 }
 
 variable "gke_cluster_name" {
   description = "Existing dev GKE cluster name."
   type        = string
-  default     = "autoresearch-dev-gke"
 }
 
 variable "elastic_namespace" {
@@ -51,9 +48,8 @@ variable "eck_values_file_path" {
 }
 
 variable "kibana_ingress_source_cidr" {
-  description = "Kibana(5601)로 ingress를 허용할 VPC 내부 CIDR. kubectl port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet 기본(#116 교훈)."
+  description = "Kibana(5601)로 ingress를 허용할 VPC 내부 CIDR. kubectl port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet을 쓴다(#116 교훈). 값은 카탈로그 network.dev_subnet_cidr가 공급하므로 여기에 default를 두지 않는다 — 두면 카탈로그와 이중 정본이 된다."
   type        = string
-  default     = "10.10.0.0/20"
 
   validation {
     condition     = can(cidrhost(var.kibana_ingress_source_cidr, 0))
@@ -64,7 +60,6 @@ variable "kibana_ingress_source_cidr" {
 variable "cluster_services_cidr" {
   description = "GKE services 2차 대역 (#122). kube-dns/kubernetes.default VIP egress를 ipBlock으로 허용. dev root의 gke_services_cidr와 일치해야 한다."
   type        = string
-  default     = "172.16.128.0/24"
 
   validation {
     condition     = can(cidrhost(var.cluster_services_cidr, 0))
@@ -75,7 +70,6 @@ variable "cluster_services_cidr" {
 variable "cluster_master_cidr" {
   description = "GKE control plane /28 CIDR. webhook ingress(control plane → operator)와 K8s API post-DNAT egress 대비(#138 패턴). dev root의 gke_master_ipv4_cidr와 일치해야 한다."
   type        = string
-  default     = "172.16.0.0/28"
 
   validation {
     condition     = can(cidrhost(var.cluster_master_cidr, 0))
@@ -89,7 +83,7 @@ variable "elasticsearch_version" {
   default     = "9.2.0"
 }
 
-# --- #293 Kibana Google 로그인 (oauth2-proxy + anonymous access) ---
+# --- #293 Kibana Google 로그인 (oauth2-proxy + Kibana basic 인증) ---
 
 # #323 kibana_anonymous_role 변수는 제거됐다 — Kibana 9.2에서 deprecated된
 # elasticsearch_anonymous_user 대신 실제 fileRealm 사용자를 쓰면서, anonymous

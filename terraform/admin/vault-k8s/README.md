@@ -77,8 +77,8 @@ plan/apply한다. **선행 조건**: dev root `vault.tf`(#132) apply 완료
 
 ```bash
 terraform -chdir=terraform/admin/vault-k8s fmt -check -recursive
-terraform -chdir=terraform/admin/vault-k8s init -backend=false
-terraform -chdir=terraform/admin/vault-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/vault-k8s init -backend=false
+scripts/terraform-env --environment dev --root terraform/admin/vault-k8s validate
 ```
 
 ## 설치 후 확인과 운영

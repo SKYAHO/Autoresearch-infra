@@ -8,6 +8,15 @@
 > 실제 GCP/Kubernetes apply, 애플리케이션 workflow·GitHub Environment 변경,
 > live 검증은 아직 수행하지 않았습니다.
 
+> #485의 paired Feast experiment runtime도 dev Terraform 계약만 추가된 상태입니다.
+> `experiment-runtime`의 Job 생성은 `job_creation_enabled=false`로 fail-closed이며,
+> Airflow는 Job 생성 시도를 중단해야 합니다. 운영·음성 검증 계약은
+> [`runbooks/2026-08-02-paired-feast-experiment-runtime.md`](runbooks/2026-08-02-paired-feast-experiment-runtime.md)를 따릅니다.
+
+> #484 Auto Research 실험 Job 경계도 Terraform 구성만 완료된 상태입니다. 실제
+> apply와 API Job 생성 권한 활성화는 고정 템플릿·image digest·admission 검증 및
+> 별도 승인을 모두 마친 뒤에만 진행합니다.
+
 ## 기본 정보
 
 | 항목 | 값 |
@@ -218,7 +227,7 @@ flowchart TB
 | Vertex AI | BigQuery↔Vertex `CLOUD_RESOURCE` connection(#281) | BigQuery ML `ML.GENERATE_EMBEDDING` 다국어 임베딩 호출 |
 | MLflow | `mlflow` ns — tracking server(#94), 전용 Cloud SQL DB/user + Secret(#93), artifact GCS bucket + 전용 GSA(#92), OAuth2-proxy + 내부 ILB(#232/#244) | 실험 추적 UI. 내부 ILB + Google OAuth |
 | Secret Manager | DB password, YouTube/OpenRouter API key, Airflow OAuth client secret metadata, MLflow DB secret | 민감값 저장소. payload는 Terraform 밖에서 관리 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity. Vault 잔여 IAM은 #478에서 제거 예정 |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), experiment runtime dev 전용 GSA/KSA(#485, Job create disabled), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity. #485는 dev `experiments/`·code archive·dev offline store만 허용하며 production 접근과 public HTTPS egress는 허용하지 않는다. Vault 잔여 IAM은 #478에서 제거 예정 |
 | 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155). 커스텀 대시보드 6장 as-code(#355~#358: K8s 리소스·네트워크·스케일 판단·MLflow·Airflow·Serving), 수집: serving ServiceMonitor(#302)·mlflow oauth2-proxy PodMonitor(#357)·airflow statsd ServiceMonitor+ingress 9102(#358) | 운영 관측 dashboard. 접근은 port-forward. 대시보드는 `deploy/monitoring/dashboards/*.json`이 정본 |
 | GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`mlflow`(#94)·`serving`(#302)·`agent-orchestration`(#453) | ArgoCD Application으로 관리. UI는 Google 로그인 + 이메일 RBAC |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, oauth2-proxy Google 로그인 + basic 인증 — anonymous 폐기 #325), Filebeat allowlist 수집(#100, ndjson 구조화 파싱 #359, 자기 로그 관측 #365), ILM(#101)/snapshot(#102)/runbook(#103), saved object 자동 import Job(#365) — `elastic` ns | airflow/autoresearch 로그 검색·분석 + Logs Overview 대시보드. Airflow task 로그 정본은 GCS 원격 로깅(airflow#147) — ELK는 stdout만 |
@@ -264,7 +273,7 @@ flowchart LR
 | `terraform/bootstrap` | 별도 root | state bucket, WIF, CI SA처럼 dev root를 실행하기 전에 필요한 기반을 만든다. |
 | `terraform/envs/dev` | dev root | 실제 dev GCP 리소스 대부분을 관리한다. |
 | `terraform/admin/gke-team-access` | 별도 state | 팀원 Google 계정 IAM을 관리한다. 사람 이메일이 일반 PR plan에 노출되지 않게 분리했다. |
-| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress, 환경별 Feast apply namespace/KSA/RBAC/NetworkPolicy(#424)를 관리한다. #424 항목은 아직 미적용이다. |
+| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress, 환경별 Feast apply namespace/KSA/RBAC/NetworkPolicy(#424), dev 전용 `experiment-runtime` namespace/KSA·observer RBAC·default-deny NetworkPolicy·quota(#485)를 관리한다. #424와 #485 항목은 아직 미적용이며 #485 Job create는 disabled다. |
 | `terraform/admin/airflow-k8s` | 별도 state | Kubernetes namespace/RBAC/NetworkPolicy를 관리한다. GKE API 접근이 필요해 dev root와 분리했다. |
 | `terraform/admin/monitoring-k8s` | 별도 state | monitoring namespace와 port-forward RBAC(플랫폼 경계)를 관리한다. chart는 #183에서 ArgoCD Application `monitoring`으로 이관(helm_release 제거). |
 | `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application(`monitoring` #183, `argo-rollouts` #186)을 관리한다. |

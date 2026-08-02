@@ -96,8 +96,8 @@ terraform apply
 
 ```bash
 terraform -chdir=terraform/admin/argocd-k8s fmt -check -recursive
-terraform -chdir=terraform/admin/argocd-k8s init -backend=false
-terraform -chdir=terraform/admin/argocd-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/argocd-k8s init -backend=false
+scripts/terraform-env --environment dev --root terraform/admin/argocd-k8s validate
 ```
 
 ## 설치 후 확인
@@ -244,7 +244,7 @@ adopt가 아니라 신규 배포이므로 `CreateNamespace=false`다. 이미지�
 pin한다. 특정 커밋을 추적하려면 apply 시 `-var`로 해당 SHA를 주입한다.
 
 ```bash
-terraform -chdir=terraform/admin/argocd-k8s apply \
+scripts/terraform-env --environment dev --root terraform/admin/argocd-k8s apply \
   -var="serving_target_revision=<merge commit SHA>"
 ```
 
@@ -284,7 +284,7 @@ plan에서 이 변경은 `helm_release.argo_cd will be updated in-place`로만 �
 확인한다:
 
 ```bash
-terraform -chdir=terraform/admin/argocd-k8s plan -no-color \
+scripts/terraform-env --environment dev --root terraform/admin/argocd-k8s plan -no-color \
   | grep -A3 'policy.csv'
 ```
 

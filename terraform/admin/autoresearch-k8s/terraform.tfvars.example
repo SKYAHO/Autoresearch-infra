@@ -11,6 +11,17 @@ app_k8s_service_account = "autoresearch-app"
 # autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
 app_gcp_service_account_email = ""
 
+# Paired Feast experiment runtime. runtime GSA는 dev root output
+# experiment_runtime_contract와, observer KSA는 Airflow root의 실제 KSA 계약과 대조한다.
+experiment_runtime_k8s_namespace       = "experiment-runtime"
+experiment_runtime_k8s_service_account = "experiment-runtime"
+experiment_runtime_gcp_service_account_email = ""
+airflow_k8s_namespace                      = "airflow"
+airflow_k8s_service_account                = "airflow"
+
+# dev private.googleapis.com 고정 VIP. 외부 HTTPS CIDR로 바꾸지 않는다.
+private_googleapis_cidr = "199.36.153.8/30"
+
 # Agent Orchestration API와 Runner GSA는 dev root output
 # agent_orchestration_deployment_contract와 대조한다. 빈 값은 아래 기본값을
 # 파생한다: autoresearch-dev-orch-api|runner@<project_id>.iam.gserviceaccount.com
@@ -18,6 +29,16 @@ agent_orchestration_api_k8s_service_account    = "agent-orchestration-api"
 agent_orchestration_runner_k8s_service_account = "agent-orchestration-runner"
 agent_orchestration_api_gcp_service_account_email    = ""
 agent_orchestration_runner_gcp_service_account_email = ""
+
+# #484 실험 Job 결과 GSA는 dev root output experiment_job_execution_contract와
+# 대조한다. 빈 값은 autoresearch-dev-exp-job@<project_id>.iam.gserviceaccount.com을
+# 파생한다. Job 생성 권한은 고정 템플릿·image digest·admission 검증을 모두 마치기
+# 전까지 반드시 false를 유지한다.
+experiment_job_namespace                 = "autoresearch-experiments"
+experiment_job_k8s_service_account       = "experiment-job"
+experiment_job_gcp_service_account_email = ""
+enable_experiment_job_creation           = false
+private_googleapis_cidr                  = "199.36.153.8/30"
 
 # #424 GitHub Environment → WIF provider → GSA → namespace → KSA 튜플은 불변이다.
 # 아래 namespace/KSA는 terraform/envs/dev의 feast_apply_kubernetes_identities,

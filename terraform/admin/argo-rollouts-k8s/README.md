@@ -55,8 +55,8 @@ terraform apply
 
 ```bash
 terraform -chdir=terraform/admin/argo-rollouts-k8s fmt -check -recursive
-terraform -chdir=terraform/admin/argo-rollouts-k8s init -backend=false
-terraform -chdir=terraform/admin/argo-rollouts-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/argo-rollouts-k8s init -backend=false
+scripts/terraform-env --environment dev --root terraform/admin/argo-rollouts-k8s validate
 ```
 
 ## 설치 후 확인

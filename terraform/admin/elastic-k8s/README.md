@@ -73,6 +73,8 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 못 쓰고, Kibana 9.2에서 anonymous 자동 로그인이 안정적으로 동작하지 않아(#323),
 **oauth2-proxy(Google 로그인 + 허용 이메일)로 접근을 통제하고 Kibana는 기본 basic
 인증(`elastic` 등 실제 사용자)으로 로그인**한다(이중 로그인이나 신뢰도 우선).
+oauth2-proxy는 `authenticated-emails` Secret 파일을 유일한 이메일 allowlist로
+사용하며, `email-domain=*`와 조합하지 않는다.
 
 - 사용자는 Kibana(5601)가 아니라 **oauth2-proxy Service(4180)** 를 로컬 **4181**
   포트로 port-forward 한다(MLflow의 로컬 4180과 충돌 방지). proxy가 Google 로그인 +
@@ -89,6 +91,8 @@ kubectl -n elastic get secret autoresearch-es-elastic-user \
 `http://localhost:4181/oauth2/callback` 등록.
 
 ```bash
+(
+set -euo pipefail
 umask 077
 d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
 # #439: 정본은 Secret Manager — 발급 직후 id/secret 한 쌍을 먼저 등록
@@ -99,19 +103,53 @@ for k in client-id client-secret; do
     | tr -d '\n' > "$d/$k"
   test -s "$d/$k" || { echo "ERROR: $k 정본 비어 있음 — versions add 먼저"; exit 1; }
 done
-printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"   # 정확히 32바이트(oauth2-proxy 요구)
-cat > "$d/authenticated-emails" <<'EMAILS'
-someone@gmail.com
-EMAILS
+# cookie 비밀과 allowlist: Secret 없음과 인증/연결 실패를 구분한다.
+# 기존 Secret을 재실행할 때는 두 값을 보존한다. 최초 생성 또는 의도적 allowlist 변경만
+# ALLOWLIST_FILE에 실제 승인 이메일 파일(한 줄에 하나, 로컬 0600)을 지정한다.
+if kubectl -n elastic get secret kibana-oauth --ignore-not-found -o name > "$d/existing-secret"; then
+  if test -s "$d/existing-secret"; then
+    # authenticated-emails는 여기서 읽지 않는다. 목록이 비어 전원 403이 된
+    # 상황이 바로 이 절차로 복구해야 하는 경우인데, 무조건 읽고 test -s로
+    # 막으면 ALLOWLIST_FILE 분기에 닿기도 전에 죽어 복구가 불가능해진다.
+    for k in cookie-secret; do
+      kubectl -n elastic get secret kibana-oauth -o "jsonpath={.data.$k}" \
+        | base64 -d > "$d/$k"
+      test -s "$d/$k" || { echo "ERROR: kibana-oauth.$k 없음"; exit 1; }
+    done
+  else
+    python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
+  fi
+else
+  echo "ERROR: kibana-oauth 존재 여부를 읽지 못함 — context/인증을 확인"; exit 1
+fi
+
+# ALLOWLIST_FILE이 지정되면 기존 목록 대신 그 파일을 사용한다. 지정하지 않은
+# 재실행은 기존 목록을 보존하며, Secret이 없으면 명시적 파일 없이는 생성하지 않는다.
+if test -n "${ALLOWLIST_FILE:-}"; then
+  test -f "$ALLOWLIST_FILE" || { echo "ERROR: ALLOWLIST_FILE을 읽을 수 없음"; exit 1; }
+  cp "$ALLOWLIST_FILE" "$d/authenticated-emails"
+else
+  test -s "$d/existing-secret" \
+    || { echo "ERROR: 최초 생성에는 ALLOWLIST_FILE=/안전한/경로/approved-emails 지정 필요"; exit 1; }
+  kubectl -n elastic get secret kibana-oauth -o 'jsonpath={.data.authenticated-emails}' \
+    | base64 -d > "$d/authenticated-emails"
+  test -s "$d/authenticated-emails" \
+    || { echo "ERROR: 기존 authenticated-emails가 비어 있음 — ALLOWLIST_FILE로 명시 지정 필요"; exit 1; }
+fi
+awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }' "$d/authenticated-emails" \
+  || { echo "ERROR: authenticated-emails는 빈 줄·# 주석 외에 한 줄당 이메일 하나여야 함"; exit 1; }
 
 kubectl create secret generic kibana-oauth -n elastic \
   --from-file=client-id="$d/client-id" \
   --from-file=client-secret="$d/client-secret" \
   --from-file=cookie-secret="$d/cookie-secret" \
-  --from-file=authenticated-emails="$d/authenticated-emails"
+  --from-file=authenticated-emails="$d/authenticated-emails" \
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
 rm -rf "$d"; trap - EXIT
 
 kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
+kubectl rollout status deployment/kibana-oauth-proxy -n elastic --timeout=120s
+)
 ```
 
 반영 검증(값 비노출): `scripts/verify-oauth-clients.sh <k8s-context> <project-id>` — 5종 프리픽스·SM 해시 일괄 대조(#439).
@@ -123,8 +161,49 @@ kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180
 # 브라우저: http://localhost:4181 → sign-in → Google 로그인 → Kibana
 ```
 
-이메일 목록·client secret 변경 시 위를 다시 실행
-(`--dry-run=client -o yaml | kubectl apply -f -`로 갱신) 후 `rollout restart`.
+client 자격만 갱신할 때는 `ALLOWLIST_FILE` 없이 위 블록을 다시 실행한다. 기존
+`authenticated-emails`와 `cookie-secret`이 모두 보존된다. 최초 생성 또는 이메일 목록을
+의도적으로 바꿀 때만 승인 이메일만 담은 로컬 비추적 파일을 준비해
+`ALLOWLIST_FILE=/안전한/경로/approved-emails`로 지정한 뒤 위 블록을 실행한다.
+파일은 저장소·채팅·명령행 인자에 넣지 않는다. allowlist 갱신만으로 전원 재로그인을
+유발하지 않는다.
+
+허용 목록에서 한 사용자를 제거할 때는 목록을 갱신하고 위 rollout 완료를 확인한다.
+oauth2-proxy는 보호된 요청마다 세션 이메일을 새 allowlist로 재검사하므로, 이 경우
+cookie-secret을 바꿔 전원 재로그인을 시킬 필요가 없다.
+
+### 전원 세션 무효화 (cookie-secret 회전)
+
+cookie-secret 유출 의심이나 전원 강제 로그아웃이 필요한 경우에만 아래 절차를 쓴다.
+기존 client 자격과 허용 이메일은 값 비노출 파일로 보존한 채 cookie-secret만
+회전하고 rollout 완료까지 확인한다. 대화형 셸 자체가 종료되지 않도록 명령 전체는
+subshell에서 실행된다.
+
+```bash
+(
+set -euo pipefail
+umask 077
+d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT
+for k in client-id client-secret authenticated-emails; do
+  kubectl -n elastic get secret kibana-oauth -o "jsonpath={.data.$k}" \
+    | base64 -d > "$d/$k"
+  test -s "$d/$k" || { echo "ERROR: kibana-oauth.$k 없음"; exit 1; }
+done
+python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' \
+  > "$d/cookie-secret"
+kubectl create secret generic kibana-oauth -n elastic \
+  --from-file=client-id="$d/client-id" \
+  --from-file=client-secret="$d/client-secret" \
+  --from-file=cookie-secret="$d/cookie-secret" \
+  --from-file=authenticated-emails="$d/authenticated-emails" \
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
+rm -rf "$d"; trap - EXIT
+kubectl rollout restart deployment/kibana-oauth-proxy -n elastic
+kubectl rollout status deployment/kibana-oauth-proxy -n elastic --timeout=120s
+)
+```
+
+완료된 rollout 뒤에는 기존 cookie가 검증되지 않아 모든 사용자가 다시 로그인해야 한다.
 
 **접근 경로·break-glass**: 사람 접근은 proxy(4181로 노출되는 Service 4180)로 강제한다
 — `elastic-ingress`는 노드→5601 직접 경로를 열지 않는다(proxy→Kibana는 same-ns라 정상).
@@ -297,8 +376,8 @@ Kibana saved object(data view·저장 검색·Logs Overview 대시보드)는 `.k
 
 ```bash
 terraform -chdir=terraform/admin/elastic-k8s fmt -check -recursive
-terraform -chdir=terraform/admin/elastic-k8s init -backend=false
-terraform -chdir=terraform/admin/elastic-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/elastic-k8s init -backend=false
+scripts/terraform-env --environment dev --root terraform/admin/elastic-k8s validate
 ```
 
 ## 설치 후 확인
