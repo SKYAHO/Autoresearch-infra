@@ -77,7 +77,7 @@ Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정
 |---|---|---|
 | namespace | `autoresearch-experiments` | 실험 Pod와 기존 앱을 분리 |
 | Job KSA | `experiment-job` | 결과 버킷 쓰기 전용 Workload Identity |
-| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용 |
+| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용. 이 RBAC를 실제로 쓰려면 API Pod의 egress에 Kubernetes API 경로가 있어야 한다 — 해당 정책은 이 root가 아니라 `deploy/agent-orchestration/network-policy.yaml`이 소유한다(#484에서 services CIDR·control plane CIDR TCP 443 추가) |
 | Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
 | 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
 
