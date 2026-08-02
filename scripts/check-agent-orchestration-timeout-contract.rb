@@ -17,6 +17,12 @@ module AgentOrchestrationTimeoutContract
   TIMEOUT_ENV_NAME = "CODEX_RUNNER_TIMEOUT_SEC"
   TIMEOUT_VALUE = "120"
   TIMEOUT_TEMPLATE_ANNOTATION = "autoresearch.io/codex-runner-timeout-sec"
+  DB_BOOTSTRAP_ENV_NAMES = %w[
+    ORCH_DB_PASSWORD_SECRET_ID
+    ORCH_DB_HOST
+    ORCH_DB_NAME
+    ORCH_DB_USER
+  ].freeze
 
   class ContractError < StandardError; end
 
@@ -59,6 +65,7 @@ module AgentOrchestrationTimeoutContract
     runner_deployment = deployment(File.join(deploy_directory, "runner-deployment.yaml"))
     migration_job = job(File.join(deploy_directory, "api-migration-job.yaml"))
     check_image_reference_contract!(api_deployment, runner_deployment, migration_job)
+    check_db_bootstrap_environment_contract!(api_deployment, migration_job)
     check_deployment_reference!(deploy_directory, "api-deployment.yaml", timeout_value)
     runner_environment = check_deployment_reference!(
       deploy_directory,
@@ -160,6 +167,35 @@ module AgentOrchestrationTimeoutContract
     expect_equal(api_image, runner_bootstrap_image, "Runner Codex auth bootstrap API image")
     expect_equal(api_image, migration_bootstrap_image, "Migration DB bootstrap API image")
     expect_equal(api_image, migration_image, "Migration container API image")
+  end
+
+  def check_db_bootstrap_environment_contract!(api_deployment, migration_job)
+    api_environment = named_container_environment(
+      api_deployment,
+      "initContainers",
+      "bootstrap-db"
+    )
+    migration_environment = named_container_environment(
+      migration_job,
+      "initContainers",
+      "bootstrap-db"
+    )
+
+    DB_BOOTSTRAP_ENV_NAMES.each do |environment_name|
+      expect_equal(
+        api_environment.fetch(environment_name),
+        migration_environment.fetch(environment_name),
+        "Migration DB bootstrap env #{environment_name}"
+      )
+    end
+  end
+
+  def named_container_environment(deployment_document, section, container_name)
+    containers = deployment_document.dig("spec", "template", "spec", section) || []
+    container = containers.find { |item| item.fetch("name") == container_name }
+    raise ContractError, "#{section}에 #{container_name} container가 없습니다" unless container
+
+    container.fetch("env").to_h { |item| [item.fetch("name"), item] }
   end
 
   def container_image(deployment_document, section, container_name)

@@ -70,6 +70,23 @@ IAM·DB 권한·외부 egress도 추가하지 않습니다. Job Pod는 API와 �
 NetworkPolicy가 허용한 Cloud SQL·DNS·Workload Identity·Private Google APIs 경로만
 사용합니다.
 
+`alembic` 실행 세부 구현은 앱 image 계약에 의존합니다. promotion 전에 대상 source의
+API Dockerfile과 `bootstrap_secrets` 구현을 대조해 다음을 확인합니다.
+
+- `bootstrap-db`는 `/runtime/db.env`에 quoting 없는 단일
+  `ORCH_DATABASE_URL=<url>` 행을 기록합니다.
+- orchestration runtime dependency에 Alembic이 포함되고, image `WORKDIR`(`/app`) 아래에
+  `agent_orchestration/alembic.ini`와 migration 파일이 포함됩니다.
+- Job command의 `alembic -c agent_orchestration/alembic.ini upgrade head`가 이 image에서
+  실행됩니다. 이 계약을 바꾸는 앱 PR은 migration 전용 entrypoint를 제공하거나, 같은
+  release에서 이 Job command와 runbook을 함께 갱신해야 합니다.
+
+현재 dev DB에는 `alembic_version`이 없으므로 #483의 `down_revision = None`인 initial
+revision `0001_experiment_tables`부터 적용됩니다. 이 revision은 experiment 관련 네
+table만 additive하게 생성해야 하며, 기존 `chat_interactions` table·sequence는 변경해서는
+안 됩니다. Experiment table schema의 source of truth는 Alembic이고, 기존 `/chat` table은
+API startup의 `ensure_schema()`가 계속 담당합니다.
+
 `PreSync` Job이 실패하면 ArgoCD sync는 API·Runner rollout 전에 중단됩니다. 임의로
 Deployment를 먼저 sync하거나 migration을 API startup에 숨기지 않습니다. Job은
 `alembic upgrade head`만 수행하므로 완료 후 재실행해도 안전합니다. 반면 rollback에서
@@ -77,6 +94,16 @@ Deployment를 먼저 sync하거나 migration을 API startup에 숨기지 않습�
 읽지 않아 그대로 동작할 수 있고, downgrade는 데이터 손실 위험이 있으므로 별도 승인과
 복구 계획을 먼저 마련해야 합니다. 성공·실패 Job은 상태와 log 확인을 위해 다음 sync 전까지
 남기며, 다음 PreSync 전에 `BeforeHookCreation`이 같은 이름의 이전 Job을 삭제합니다.
+
+`activeDeadlineSeconds=180`은 Job 전체 실행 시간에 적용되고 `backoffLimit`보다 우선합니다.
+deadline에 도달하면 실행 중인 Pod는 종료되고 Job은 `Failed`/`DeadlineExceeded`가 되며,
+남은 retry 횟수가 있어도 추가 Pod를 만들지 않습니다. 따라서 `DeadlineExceeded` 뒤에는
+자동 재시도를 가정하지 말고 Job status·credential을 제외한 log·`alembic_version`을 먼저
+확인한 뒤 원인을 고치고 새 PreSync sync를 시작합니다. #483 initial revision은 PostgreSQL
+transaction으로 적용되는 additive DDL만 포함해야 하므로, commit 전 중단이면 다음
+`upgrade head`가 같은 revision부터 다시 적용하고 commit 후 중단이면 version table이 이미
+head를 가리켜야 합니다. 이 두 상태와 다른 partial schema가 관측되면 자동 재시도 대신
+승인된 DB 복구 절차로 전환합니다.
 
 ### 최초 활성화 매니페스트
 
@@ -420,7 +447,7 @@ create_status="$(curl --fail --silent --output "$experiment_response_file" --wri
   --header 'Content-Type: application/json' \
   --header "@${experiment_header_file}" \
   --data '{"hypothesis":"deployment smoke test","metadata":{"source":"gke-smoke"}}')"
-test "$create_status" = "201"
+test "$create_status" = "201" || exit 1
 
 list_status="$(curl --fail --silent --output /dev/null --write-out '%{http_code}' \
   --header "@${experiment_header_file}" http://127.0.0.1:8000/experiments?limit=1)"
@@ -459,6 +486,12 @@ Terraform Application을 reviewed plan/apply로 갱신한 뒤에만 ArgoCD manua
 sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과해야
 하며, 실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로 멈춥니다.
 OAuth 장애와 이미지 장애를 같은 롤백으로 처리하지 않습니다.
+
+rollback manifest를 만들기 전에는 대상 Alembic revision이 `chat_interactions` table과
+sequence를 변경하지 않는 additive migration인지 source diff로 다시 대조합니다. rollback
+sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 반드시
+실행합니다. 이 gate는 rollback 직전의 최대 chat id보다 큰 새 저장 행과 HTTP 201을 함께
+확인하므로, 이전 API digest에서도 `/chat`과 PostgreSQL 저장이 계속 동작함을 증명합니다.
 
 ### Terraform 소유 RBAC와 ArgoCD 소유 manifest가 갈리는 변경
 
