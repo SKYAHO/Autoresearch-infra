@@ -72,18 +72,21 @@ check_mapping() {
   key_pattern="$3"
   path_pattern="$4"
 
+  # $?는 반드시 else 절 첫 명령으로 읽는다. else 없는 if 복합 명령의 종료 상태는
+  # 조건이 거짓일 때 0이라, fi 다음에서 읽으면 grep의 1/2와 무관하게 항상 0이 된다.
   for pattern in "$key_pattern" "$path_pattern"; do
     if grep -Eq "$pattern" "$file"; then
       continue
-    fi
-    grep_status=$?
-    if [ "$grep_status" -eq 1 ]; then
-      echo "ERR $label: authenticated-emails Secret 매핑 누락"
     else
-      echo "ERR $label: authenticated-emails 매핑 검사 실행 실패 (grep exit=$grep_status)"
+      grep_status=$?
+      if [ "$grep_status" -eq 1 ]; then
+        echo "ERR $label: authenticated-emails Secret 매핑 누락"
+      else
+        echo "ERR $label: authenticated-emails 매핑 검사 실행 실패 (grep exit=$grep_status)"
+      fi
+      FAIL=1
+      return
     fi
-    FAIL=1
-    return
   done
   echo "OK  $label: authenticated-emails Secret 매핑 유지"
 }

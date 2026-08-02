@@ -38,10 +38,16 @@ assert_grep_error_fails env-from 'OK  MLflow: 명시적 Secret key 주입만 사
 assert_grep_error_fails mapping 'OK  MLflow: authenticated-emails Secret 매핑 유지'
 
 # 매핑 검사는 실패 원인을 "누락"과 "검사 실행 실패"로 구분해 보고해야 한다.
+# 두 경우를 각각 확인해야 구분이 실제로 성립함을 보장한다 — 한쪽만 보면
+# 어느 분기도 도달 불가한 구현(else 없는 if 뒤에서 $?를 읽는 실수 등)에서도 통과한다.
 SIMULATE_GREP_ERROR=mapping PATH="$test_dir/bin:$PATH" \
   "$repo_root/scripts/check-oauth-email-allowlist.sh" > "$test_dir/output" 2>&1 || true
 if ! "$real_grep" -q '매핑 검사 실행 실패' "$test_dir/output"; then
-  echo "FAIL: 매핑 grep 오류를 '누락'과 구분해 보고하지 않음" >&2
+  echo "FAIL: 매핑 grep 오류를 '검사 실행 실패'로 보고하지 않음" >&2
+  exit 1
+fi
+if "$real_grep" -q 'authenticated-emails Secret 매핑 누락' "$test_dir/output"; then
+  echo "FAIL: grep 실행 오류를 '매핑 누락'으로 잘못 보고함" >&2
   exit 1
 fi
 
@@ -93,6 +99,23 @@ assert_scan_rejects() {
   fi
   rm "$fixture/$target"
 }
+
+# 실제 매핑 누락은 "매핑 누락"으로 보고되어야 한다. 위 grep 오류 케이스와 함께
+# 봐야 두 분기가 모두 도달 가능함이 증명된다.
+cp "$fixture/deploy/mlflow/oauth2-proxy.yaml" "$test_dir/mlflow-proxy.yaml.orig"
+"$real_grep" -v 'key: authenticated-emails' "$test_dir/mlflow-proxy.yaml.orig" \
+  > "$fixture/deploy/mlflow/oauth2-proxy.yaml"
+if OAUTH_ALLOWLIST_CHECK_ROOT="$fixture" \
+  "$repo_root/scripts/check-oauth-email-allowlist.sh" > "$test_dir/output" 2>&1; then
+  echo "FAIL: authenticated-emails 매핑 누락을 잡지 못함" >&2
+  exit 1
+fi
+if ! "$real_grep" -q 'MLflow: authenticated-emails Secret 매핑 누락' "$test_dir/output"; then
+  echo "FAIL: 실제 매핑 누락을 '매핑 누락'으로 보고하지 않음" >&2
+  cat "$test_dir/output" >&2
+  exit 1
+fi
+cp "$test_dir/mlflow-proxy.yaml.orig" "$fixture/deploy/mlflow/oauth2-proxy.yaml"
 
 assert_scan_rejects 'deploy/oauth2-proxy/values.yaml' \
   'extraArgs:
