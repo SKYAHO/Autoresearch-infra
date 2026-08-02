@@ -117,6 +117,33 @@ if ! "$real_grep" -q 'MLflow: authenticated-emails Secret 매핑 누락' "$test_
 fi
 cp "$test_dir/mlflow-proxy.yaml.orig" "$fixture/deploy/mlflow/oauth2-proxy.yaml"
 
+# 등록되지 않은 새 oauth2-proxy 대상이 allowlist를 아예 안 넣은 경우.
+# 대상별 검사는 두 파일만 보므로, 자동 발견 검사가 이를 잡아야 한다.
+mkdir -p "$fixture/deploy/newsvc"
+cat > "$fixture/deploy/newsvc/oauth2-proxy.yaml" <<'NEWSVC'
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+          args:
+            - --provider=google
+NEWSVC
+if OAUTH_ALLOWLIST_CHECK_ROOT="$fixture" \
+  "$repo_root/scripts/check-oauth-email-allowlist.sh" > "$test_dir/output" 2>&1; then
+  echo "FAIL: allowlist 없는 미등록 oauth2-proxy 대상을 잡지 못함" >&2
+  exit 1
+fi
+if ! "$real_grep" -q 'authenticated-emails-file이 없음' "$test_dir/output"; then
+  echo "FAIL: 미등록 대상 누락을 자동 발견 사유로 보고하지 않음" >&2
+  cat "$test_dir/output" >&2
+  exit 1
+fi
+rm -rf "$fixture/deploy/newsvc"
+
 assert_scan_rejects 'deploy/oauth2-proxy/values.yaml' \
   'extraArgs:
   email-domain: "*"' \

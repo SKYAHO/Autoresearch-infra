@@ -128,7 +128,8 @@ check_no_env_from "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
 # 추가되지 않도록 deploy/와 terraform/의 배포 manifest·설정을 검사한다.
 # 실제 Secret 값은 정적으로 읽을 수 없으므로, 운영 preflight에서 별도로 확인한다.
 # 새 oauth2-proxy 대상은 check_target/check_mapping/check_no_env_from에 명시적으로
-# 등록하고, k8s/·charts/ 등 새 경로면 이 scan root도 확장해야 한다.
+# 등록하고, k8s/·charts/ 등 새 경로면 이 scan root도 확장해야 한다. 등록을 잊는
+# 경우는 아래 자동 발견 검사가 잡는다.
 #
 # 전역 검사는 같은 설정의 세 표기를 모두 잡는다: CLI 플래그(`--email-domain`),
 # 환경변수(`OAUTH2_PROXY_EMAIL_DOMAINS`), 그리고 Helm values의 `extraArgs`나
@@ -152,6 +153,38 @@ else
     echo "ERR email-domain 회귀 검사 실행 실패 (grep exit=$grep_status)"
     FAIL=1
   fi
+fi
+
+# 위 대상별 검사는 등록된 2개 파일만 본다. 새 서비스가 --email-domain을 쓰지
+# 않으면서 --authenticated-emails-file도 넣지 않으면 어떤 검사에도 걸리지 않고,
+# 그 서비스의 인가 경계는 "Google 로그인만 하면 통과"가 된다(oauth2-proxy는
+# domain·file이 모두 비면 이메일 판정을 하지 않는다).
+# 그래서 oauth2-proxy 이미지를 참조하는 파일을 자동으로 찾아, 각 파일이
+# authenticated-emails-file을 지정하는지 확인한다. 등록 누락 자체를 잡는 것이
+# 목적이므로 대상별 상세 검사를 대체하지는 않는다.
+# Terraform은 이미지 기본값(variables.tf)과 args(oauth2_proxy.tf)가 다른 파일에
+# 있으므로 파일 단위가 아니라 디렉터리 단위로 판정한다.
+discovered_dirs="$(grep -RIl --exclude='*.md' --exclude-dir='.terraform' \
+  -- 'quay\.io/oauth2-proxy/oauth2-proxy' deploy terraform 2>/dev/null \
+  | while IFS= read -r f; do dirname -- "$f"; done | sort -u || true)"
+if [ -n "$discovered_dirs" ]; then
+  for dir in $discovered_dirs; do
+    if grep -REq --exclude='*.md' --exclude-dir='.terraform' \
+      -- '--authenticated-emails-file=' "$dir"; then
+      echo "OK  자동 발견: $dir — authenticated-emails-file 지정됨"
+    else
+      grep_status=$?
+      if [ "$grep_status" -eq 1 ]; then
+        echo "ERR 자동 발견: $dir — oauth2-proxy 대상인데 authenticated-emails-file이 없음"
+      else
+        echo "ERR 자동 발견: $dir — 검사 실행 실패 (grep exit=$grep_status)"
+      fi
+      FAIL=1
+    fi
+  done
+else
+  echo "ERR oauth2-proxy 이미지를 참조하는 파일을 찾지 못함 — scan root 또는 이미지 표기를 확인"
+  FAIL=1
 fi
 
 if [ "$FAIL" -ne 0 ]; then
