@@ -110,12 +110,14 @@ namespace에는 Pod Security Admission `restricted`를 enforce/audit/warn으로 
 확장을 예약·보장하지 않습니다. 실제 Job 활성화 전에는 node pool capacity를 별도로
 확인해야 합니다.
 
-Airflow GSA의 `experiment-runtime-airflow-observer` Role은 Job/Pod get/list/watch와
-Pod log get만 허용합니다. 첫 변경에서는 Airflow GSA와 runtime KSA 모두
-`jobs.create`를 갖지 않으며 output의 `job_creation_enabled`도 `false`입니다. 생성
-Job의 KSA, immutable image digest, deadline/TTL, restricted Pod 사양을 검증하는
-ValidatingAdmissionPolicy가 적용·검증되기 전에는 create 권한을 켜지 않습니다.
-runtime KSA에는 RoleBinding이 없습니다.
+`experiment-runtime-airflow-observer` Role은 실제 in-cluster Airflow
+`airflow/airflow` KSA 하나에만 Job/Pod get/list/watch와 Pod log get을 허용합니다.
+`autoresearch-batch` KPO KSA와 Helm chart 소유 `airflow-scheduler` KSA에는 이
+RoleBinding을 추가하지 않습니다. 첫 변경에서는 Airflow observer KSA와 runtime KSA
+모두 `jobs.create`를 갖지 않으며 output의 `job_creation_enabled`도 `false`입니다.
+생성 Job의 KSA, immutable image digest, deadline/TTL, restricted Pod 사양을 검증하는
+ValidatingAdmissionPolicy가 적용·검증되기 전에는 create 권한을 켜지 않습니다. runtime
+KSA에는 RoleBinding이 없습니다.
 
 ingress는 전면 차단합니다. egress는 kube-dns, GKE metadata
 `169.254.169.254:80`·`169.254.169.252:987/988`, Private Google APIs VIP
@@ -126,7 +128,6 @@ MLflow egress와 Secret 접근 경로는 포함하지 않습니다.
 
 ```bash
 terraform -chdir=terraform/envs/dev output experiment_runtime_contract
-terraform -chdir=terraform/envs/dev output airflow_gcp_service_account_email
 terraform -chdir=terraform/admin/autoresearch-k8s output \
   experiment_runtime_kubernetes_contract
 ```

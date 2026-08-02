@@ -91,17 +91,25 @@ variable "experiment_runtime_gcp_service_account_email" {
   }
 }
 
-variable "airflow_gcp_service_account_email" {
-  description = "Airflow GSA email bound to the experiment runtime observer Role. Empty derives the dev default."
+variable "airflow_k8s_namespace" {
+  description = "Airflow namespace whose in-cluster service account observes experiment runtime Jobs. Must match terraform/envs/dev."
   type        = string
-  default     = ""
+  default     = "airflow"
 
   validation {
-    condition = (
-      var.airflow_gcp_service_account_email == "" ||
-      can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\\.iam\\.gserviceaccount\\.com$", var.airflow_gcp_service_account_email))
-    )
-    error_message = "airflow_gcp_service_account_email must be empty or use 6-30 character lowercase account/project IDs that start with a letter, contain only letters, digits, or hyphens, and end with a letter or digit."
+    condition     = length(var.airflow_k8s_namespace) >= 1 && length(var.airflow_k8s_namespace) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.airflow_k8s_namespace))
+    error_message = "airflow_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "airflow_k8s_service_account" {
+  description = "Airflow in-cluster service account bound to the experiment runtime observer Role. Must match terraform/envs/dev."
+  type        = string
+  default     = "airflow"
+
+  validation {
+    condition     = length(var.airflow_k8s_service_account) >= 1 && length(var.airflow_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.airflow_k8s_service_account))
+    error_message = "airflow_k8s_service_account must be a valid Kubernetes service account name."
   }
 }
 

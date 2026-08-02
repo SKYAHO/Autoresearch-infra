@@ -11,12 +11,13 @@ app_k8s_service_account = "autoresearch-app"
 # autoresearch-dev-app@<project_id>.iam.gserviceaccount.com
 app_gcp_service_account_email = ""
 
-# Paired Feast experiment runtime. 두 GSA 값은 terraform/envs/dev output
-# experiment_runtime_contract와 airflow_gcp_service_account_email을 대조한다.
+# Paired Feast experiment runtime. runtime GSA는 dev root output
+# experiment_runtime_contract와, observer KSA는 Airflow root의 실제 KSA 계약과 대조한다.
 experiment_runtime_k8s_namespace       = "experiment-runtime"
 experiment_runtime_k8s_service_account = "experiment-runtime"
 experiment_runtime_gcp_service_account_email = ""
-airflow_gcp_service_account_email            = ""
+airflow_k8s_namespace                      = "airflow"
+airflow_k8s_service_account                = "airflow"
 
 # dev private.googleapis.com 고정 VIP. 외부 HTTPS CIDR로 바꾸지 않는다.
 private_googleapis_cidr = "199.36.153.8/30"

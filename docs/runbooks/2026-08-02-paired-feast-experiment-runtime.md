@@ -9,9 +9,9 @@
 `experiment_runtime_kubernetes_contract.job_creation_enabled`의 현재 값은 모두
 `false`입니다. Airflow는 두 output의 identity 좌표가 일치하는지 확인한 뒤에도,
 이 값이 `false`이면 **Job manifest를 만들거나 Kubernetes API에 create 요청을 보내지
-않고** 해당 실행을 중단해야 합니다. 관찰용 Airflow Role은 Job/Pod의
-get/list/watch 및 Pod log get만 허용하며, Airflow GSA와 runtime KSA 모두
-`jobs.create` 권한이 없습니다.
+않고** 해당 실행을 중단해야 합니다. 관찰용 Airflow Role은 실제 in-cluster
+`airflow/airflow` KSA 하나에만 Job/Pod의 get/list/watch 및 Pod log get을 허용하며,
+그 observer KSA와 runtime KSA 모두 `jobs.create` 권한이 없습니다.
 
 이 상태에서 Airflow가 전달받아 보관할 비시크릿 계약은 다음과 같습니다. 실제 버킷
 이름·GSA email·프로젝트 값은 승인된 Terraform output에서만 읽으며, 문서나 DAG
@@ -20,10 +20,16 @@ get/list/watch 및 Pod log get만 허용하며, Airflow GSA와 runtime KSA 모�
 | 항목 | 계약 |
 | --- | --- |
 | Kubernetes 좌표 | admin output `experiment_runtime_kubernetes_contract`의 `namespace`와 `service_account` (기본값: `experiment-runtime` / `experiment-runtime`) |
+| Airflow observer | 같은 admin output의 `airflow_observer_subject` (기본값: `ServiceAccount` `airflow/airflow`). `autoresearch-batch`와 `airflow-scheduler`에는 이 권한을 부여하지 않음 |
 | dev registry/staging/artifact | 각 `experiment_runtime_contract`의 `*_experiments_uri`, 모두 `gs://<dev-bucket>/experiments/` root |
 | comparison 경로 | `experiments/<comparison_id>/` 아래만 사용. IAM Conditions는 `experiments/` root까지만 강제하므로 `<comparison_id>`·condition·source SHA 형식 검증은 Airflow 고정 템플릿의 책임 |
 | code archive | `CODE_ARCHIVE_SHA`를 검증한 뒤 `code/<CODE_ARCHIVE_SHA>.tar.gz`만 사용. 즉 output `code_archive_uri` 아래의 `gs://<bucket>/code/<sha>.tar.gz` 형식 |
 | BigQuery | dev `feast_offline_store_dev` dataset만 PIT read. dataset ID는 output `feast_offline_store_dataset`에서 읽음 |
+
+`code/` prefix의 조건부 `objectViewer`는 정확한 object name을 아는 GET에는 사용할 수
+있지만, 조건 때문에 bucket-wide object LIST를 실행 경로로 가정해서는 안 됩니다.
+Airflow는 `CODE_ARCHIVE_SHA`에서 결정한 정확한 `code/<sha>.tar.gz`만 GET하고 목록으로
+archive를 탐색하거나 이를 위해 bucket-wide list 권한을 추가하지 않습니다.
 
 Job 생성이 활성화되는 후속 변경에서만 immutable image digest, comparison ID,
 condition, `CODE_ARCHIVE_SHA`, registry/result URI를 audit log에 남깁니다. token,

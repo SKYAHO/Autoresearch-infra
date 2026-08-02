@@ -77,8 +77,8 @@ resource "kubernetes_limit_range_v1" "experiment_runtime" {
   }
 }
 
-# Airflow GSA는 종료 상태와 로그만 관찰한다. ValidatingAdmissionPolicy가 KSA,
-# image digest, deadline/TTL을 강제하기 전에는 jobs.create를 절대 추가하지 않는다.
+# Airflow의 in-cluster KSA만 종료 상태와 로그를 관찰한다. ValidatingAdmissionPolicy가
+# KSA, image digest, deadline/TTL을 강제하기 전에는 jobs.create를 절대 추가하지 않는다.
 resource "kubernetes_role_v1" "experiment_runtime_airflow_observer" {
   metadata {
     name      = "experiment-runtime-airflow-observer"
@@ -117,9 +117,9 @@ resource "kubernetes_role_binding_v1" "experiment_runtime_airflow_observer" {
   }
 
   subject {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "User"
-    name      = local.airflow_gcp_service_account_email
+    kind      = "ServiceAccount"
+    name      = var.airflow_k8s_service_account
+    namespace = var.airflow_k8s_namespace
   }
 }
 

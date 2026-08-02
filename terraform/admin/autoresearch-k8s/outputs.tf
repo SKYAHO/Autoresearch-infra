@@ -69,11 +69,16 @@ output "experiment_runtime_kubernetes_contract" {
     service_account           = kubernetes_service_account_v1.experiment_runtime.metadata[0].name
     gcp_service_account_email = local.experiment_runtime_gcp_service_account_email
     airflow_observer_role     = kubernetes_role_v1.experiment_runtime_airflow_observer.metadata[0].name
-    ingress_network_policy    = kubernetes_network_policy_v1.experiment_runtime_ingress.metadata[0].name
-    egress_network_policy     = kubernetes_network_policy_v1.experiment_runtime_egress.metadata[0].name
-    resource_quota            = kubernetes_resource_quota_v1.experiment_runtime.metadata[0].name
-    limit_range               = kubernetes_limit_range_v1.experiment_runtime.metadata[0].name
-    private_googleapis_cidr   = var.private_googleapis_cidr
-    job_creation_enabled      = false
+    airflow_observer_subject = {
+      kind      = "ServiceAccount"
+      name      = var.airflow_k8s_service_account
+      namespace = var.airflow_k8s_namespace
+    }
+    ingress_network_policy  = kubernetes_network_policy_v1.experiment_runtime_ingress.metadata[0].name
+    egress_network_policy   = kubernetes_network_policy_v1.experiment_runtime_egress.metadata[0].name
+    resource_quota          = kubernetes_resource_quota_v1.experiment_runtime.metadata[0].name
+    limit_range             = kubernetes_limit_range_v1.experiment_runtime.metadata[0].name
+    private_googleapis_cidr = var.private_googleapis_cidr
+    job_creation_enabled    = false
   }
 }
