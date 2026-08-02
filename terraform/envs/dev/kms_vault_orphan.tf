@@ -13,9 +13,32 @@
 # 파일이 존재하는 한 실수로 destroy가 계획돼도 apply가 막아 준다.
 #
 # GSA/WI 바인딩/custom role/key IAM binding 4개는 이 파일에 포함하지
-# 않는다 — Vault 워크로드 자체가 영구 폐기됐고 git history로 언제든
-# 재생성 가능하므로, forget/config-유지가 아니라 실제 destroy 대상으로
+# 않는다 — Vault 워크로드 자체가 영구 폐기됐고 git history로 재생성
+# 가능하므로, forget/config-유지가 아니라 실제 destroy 대상으로
 # 남긴다(최소 권한 원칙, `vault.tf` 삭제로 이미 config에서 빠짐).
+#
+# 이 4개 중 2쌍은 참조 관계가 있다(claude-review 9차 지적):
+# `google_kms_crypto_key_iam_member.vault_unseal`의 `role`이
+# `google_project_iam_custom_role.vault_unseal.id`를 참조하고,
+# `google_service_account_iam_member.vault_wi`의 `service_account_id`가
+# `google_service_account.vault.name`을 참조한다(git history, vault.tf
+# 삭제 전 커밋 확인). Terraform은 destroy 시 이 그래프를 뒤집어 참조하는
+# 쪽(binding)을 참조되는 쪽(role/GSA)보다 항상 먼저 destroy하므로,
+# "custom role은 삭제됐는데 binding은 남은" 순서는 일반 apply(비-target)
+# 경로로는 발생하지 않는다 — binding destroy가 중간에 실패하면 그
+# 시점에서 그래프 진행이 멈춰 role/GSA는 아직 destroy 시도조차 안 된
+# 채로 남고(state·GCP 둘 다 "둘 다 존재" 상태 유지), 재실행하면 실패한
+# binding destroy부터 다시 시도해 수렴한다.
+#
+# "git history로 언제든 재생성 가능"의 "언제든"은 부정확하다(claude-review
+# 9차 지적) — GCP custom role은 soft-delete된다. 삭제 후 7일 안에는
+# `gcloud iam roles undelete vaultUnsealKmsAccess --project=<project_id>`로
+# 즉시 복구 가능하지만, 7일이 지나 영구 삭제되면 같은 `role_id`
+# (`vaultUnsealKmsAccess`)는 GCP 쪽 예약이 남아 있어 삭제 후 최대
+# 37일까지 재사용이 막힐 수 있다(공급자 문서 기준). 그 기간 안에
+# git history로 다시 apply하면 role_id 충돌로 실패한다 — 실질적으로는
+# 7일 안에 undelete하거나, 최대 37일을 기다리거나, 새 `role_id`를
+# 쓰는 것 중 하나를 선택해야 한다.
 #
 # `prevent_destroy`는 key ring/crypto key 둘 다에 건다(claude-review 8차
 # 지적 — 이전 리비전은 crypto key에만 걸려 있었다). crypto key가 key ring을
@@ -38,6 +61,24 @@ resource "google_kms_key_ring" "vault" {
 resource "google_kms_crypto_key" "vault_unseal" {
   name     = "vault-unseal"
   key_ring = google_kms_key_ring.vault.id
+  # 이 변경(rotation_period 제거)은 replace를 유발하지 않는다(claude-review
+  # 9차 지적 — in-place update 보장 근거). `rotation_period`는 provider
+  # 스키마(resource_kms_crypto_key.go)에서 `Optional`/`TypeString`이며
+  # `ForceNew`가 아니다 — ForceNew는 `name`/`key_ring`(리소스 식별자)에만
+  # 걸려 있다. 그래서 이번 apply의 plan은 항상 update이며 destroy를
+  # 절대 계획하지 않는다. 참고로(가정 시나리오) 만약 이 리소스에 대해
+  # `name`/`key_ring`처럼 ForceNew 필드가 바뀌어 plan이 replace로 판정되면
+  # `prevent_destroy = true`가 걸린 상태에서 **`terraform apply`가 아니라
+  # `terraform plan` 자체가** "Error: Instance cannot be destroyed"로
+  # 즉시 실패한다(exit code 1) — 로컬 재현으로 확인. apply는 시도조차
+  # 되지 않으므로 `apply.yml`의 dev root plan 스텝에서 파이프라인이
+  # 멈추고, 이 파일의 destroy 대상 4개 리소스를 포함한 나머지 변경도
+  # 함께 적용되지 못한다(같은 plan에 묶여 있으므로). 복구는 ForceNew를
+  # 유발한 변경을 되돌리거나(이번 apply 의도상 발생할 수 없음),
+  # `prevent_destroy`를 일시 해제하는 것뿐인데 후자는 이 파일의 목적과
+  # 정면으로 배치되므로 실질적으로는 원인 diff를 되돌리는 것이 유일한
+  # 선택지다.
+  #
   # rotation_period 없음(기존 90d 제거) — Vault가 영구 폐기돼 더 이상 회전할
   # 필요가 없다. 승인 apply 시 in-place update(PATCH updateMask=
   # rotationPeriod,nextRotationTime, 두 필드 모두 body에 미포함)로 GCP

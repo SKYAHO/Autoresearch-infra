@@ -2,6 +2,12 @@
 # 확인하고, drift가 있으면 이슈로 알린다(#79 미적용 스택 재발 방지).
 # CI SA의 기존 viewer 권한만 사용한다 — apply 권한 없음(자동 apply 아님).
 # admin root는 GKE master 접근 불가로 대상 외(terraform-plan.yml과 동일 사유).
+#
+# #478 머지 후 승인 apply 전까지는 `kms_vault_orphan.tf`의 destroy 대상
+# 4개 리소스가 매일 "drift"(exitcode 2)로 잡혀 이 job이 매번 실패한다 —
+# 예상된 상태이며, 실제 새 drift와 구분하는 방법은
+# docs/VAULT_OPERATIONS_RUNBOOK.md의 "머지~승인 apply 사이 예상 drift"
+# 절 참조(claude-review 9차 지적).
 
 name: Terraform Drift Detect
 

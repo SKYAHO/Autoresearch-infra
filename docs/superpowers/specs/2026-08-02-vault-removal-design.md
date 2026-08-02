@@ -448,9 +448,13 @@ role ID의 즉시 소멸 여부: **아니다.** GCP IAM custom role의 `delete`�
 soft delete다 — 삭제 직후 role은 `DELETED` 상태로 전환되지만 **7일간
 보존**되며, 그 7일 안에는 같은 `role_id`(`vaultUnsealKmsAccess`)로 새
 custom role을 만들 수 없다(API가 "role already exists" 계열 오류를
-반환한다). 7일이 지나면 완전히 삭제되고 그때부터 같은 ID를 재사용할 수
-있다. `gcloud iam roles undelete --project=<PROJECT_ID>
-vaultUnsealKmsAccess`로 7일 안에 되살릴 수도 있다.
+반환한다). `gcloud iam roles undelete --project=<PROJECT_ID>
+vaultUnsealKmsAccess`로 7일 안에 되살릴 수도 있다. **정정(claude-review
+9차 지적)**: "7일이 지나면 완전히 삭제되고 그때부터 같은 ID를 재사용할
+수 있다"는 이전 서술은 부정확했다 — GCP는 영구 삭제(7일 경과) 후에도
+같은 `role_id` 재사용을 최대 37일(삭제 후 7~37일 구간)까지 막을 수
+있다. 안전한 선택지는 (a) 7일 안에 undelete, (b) 최대 37일을 기다린
+뒤 재생성, (c) 다른 `role_id`로 새로 만드는 것뿐이다.
 
 이는 아래 "롤백" 절의 "`vault.tf`를 복원해 `terraform apply`로
 재생성" 서술에 구멍이 있었다는 뜻이다 — **destroy 후 7일 이내에** 그냥
@@ -615,6 +619,63 @@ terraform/admin/vault-k8s init`을 실행하면 무슨 일이 벌어지는지**:
 범위에서 custom role로 좁히지는 않되, 후속 검토 여지를 주석에 한 줄
 남겼다.
 
+## claude-review 9차 지적 (2026-08-02, PR #500)
+
+라운드 8 수정 후 재요청한 리뷰에서 3건이 지적됐다(라운드 8의 5건에서
+감소).
+
+**이해도 확인 답변(1) — `rotation_period` 제거가 replace로 판정될 경우
+`prevent_destroy` 하에서 plan/apply가 각각 어떻게 되는지**: 이번
+변경은 애초에 replace를 유발하지 않는다 — `rotation_period`는
+provider 스키마(`resource_kms_crypto_key.go`)에서 `Optional`/
+`TypeString`이며 `ForceNew`가 아니다(직접 소스 확인, ForceNew는
+`name`/`key_ring`에만 걸림). 그래도 가정 시나리오에 답하기 위해 로컬
+재현으로 확인했다: `prevent_destroy = true`가 걸린 리소스에 대해 plan이
+replace로 판정되면 **`terraform apply`가 아니라 `terraform plan`
+자체가** `Error: Instance cannot be destroyed`로 즉시 실패한다(exit
+code 1, apply는 시도조차 되지 않음). 이 저장소의 `apply.yml`에서는 dev
+root plan 스텝에서 파이프라인이 멈추므로, 같은 plan에 묶인 나머지
+변경(4개 destroy 포함)도 함께 적용되지 못한다. 복구는 ForceNew를
+유발한 원인 diff를 되돌리는 것뿐이다(이 PR 범위에서는 애초에 그런
+diff가 없으므로 해당 없음). `kms_vault_orphan.tf`의
+`google_kms_crypto_key.vault_unseal` 코멘트에 이 내용을 추가했다.
+
+**이해도 확인 답변(2) — destroy 대상 4개 중 custom role↔key IAM
+binding의 부분 실패 시 수렴 여부, 그리고 롤백 시 role_id 재사용
+제약**: git history(vault.tf 삭제 전 커밋)로 참조 관계를 확인했다 —
+`google_kms_crypto_key_iam_member.vault_unseal.role`이
+`google_project_iam_custom_role.vault_unseal.id`를,
+`google_service_account_iam_member.vault_wi.service_account_id`가
+`google_service_account.vault.name`을 참조한다. Terraform은 destroy
+시 이 그래프를 뒤집어 참조하는 쪽(binding)을 항상 먼저 destroy하므로,
+"role만 삭제되고 binding이 남는" 비대칭 상태는 일반(비-target) apply
+경로에서 발생하지 않는다 — binding destroy가 실패하면 그 지점에서
+멈춰 role/GSA는 아직 손대지 않은 채 남고, 재실행하면 그대로 수렴한다.
+role_id 재사용 제약은 웹 검색으로 재확인했다: "7일이 지나면 완전히
+삭제되고 그때부터 같은 ID를 재사용할 수 있다"는 이전(3차 정정) 서술이
+부정확했다 — GCP는 영구 삭제(7일 경과) 후에도 같은 `role_id`
+재사용을 최대 37일(삭제 후 7~37일 구간)까지 막을 수 있다. 안전한
+선택지는 (a) 7일 안에 `gcloud iam roles undelete`, (b) 최대 37일을
+기다린 뒤 재생성, (c) 다른 `role_id` 사용 중 하나다. "롤백" 절과
+`kms_vault_orphan.tf`의 관련 주석을 모두 정정했다.
+
+**이해도 확인 답변(3) — `terraform-drift.yml`이 머지~승인 apply 사이
+매일 돌 때의 정확한 동작과, 진짜 새 drift와의 구분 방법**: 파일을
+다시 읽어 추적했다 — 4개 destroy만 있고 add/change가 0인 plan은
+`-detailed-exitcode` 기준 exitcode `2`를 반환하고, "결과 판정" 스텝이
+exitcode가 `0`이 아니면 무조건 `exit 1`하므로 이 job은 승인 apply
+전까지 **매일 실패 처리**된다(정상 동작). 이슈는 라벨(`bug`/
+`terraform`/`gcp`) + 제목(`[DRIFT] dev root 코드-인프라 불일치`)
+필터로 기존 open 이슈를 찾는 로직 덕분에 첫날 1회만 생성되고 이후는
+코멘트만 추가된다(중복 이슈 생성 없음). 진짜 새 drift와의 구분은
+round 8에서 이미 확보된 리소스 주소 보존 덕분에 가능하다 — 매일
+코멘트가 정확히 이 4개 주소 + `Plan: 0 to add, 0 to change, 4 to
+destroy.`와 일치하면 예상된 Vault drift이고, 주소가 더 있거나
+add/change가 0이 아니거나 destroy 개수가 다르면 별도 조사가 필요한
+새 drift다. 이 판별 기준을 `docs/VAULT_OPERATIONS_RUNBOOK.md`에 새
+절("머지~승인 apply 사이 예상 drift")로 추가하고, `terraform-drift.yml`
+헤더 주석에서 그 절을 참조하도록 했다.
+
 ## 완료 조건
 
 - [ ] `terraform/envs/dev/vault.tf` 삭제
@@ -675,12 +736,28 @@ terraform/admin/vault-k8s init`을 실행하면 무슨 일이 벌어지는지**:
       사실과, config 유지 + `prevent_destroy`로 그 위험을 없앤 이유를
       문서에 기록
 - [ ] 머지 직후 `terraform-drift.yml`이 4개 리소스 destroy 대상 때문에
-      `[DRIFT]` 이슈를 생성함을 예상하고, 그 이슈에 #478 승인 대기 중임을
-      코멘트로 남긴다(승인 apply 완료 후 이슈 자동 종료 확인)
+      매일 job 실패 + `[DRIFT]` 이슈 생성(첫날)/코멘트(이후 매일)를
+      반복함을 `docs/VAULT_OPERATIONS_RUNBOOK.md`의 "머지~승인 apply
+      사이 예상 drift" 절에 기록하고, 진짜 새 drift와 구분하는 기준
+      (예상 4개 주소 + `4 to destroy`와 정확히 일치하는지)을 명시한다
+      (claude-review 9차 지적)
+- [ ] `rotation_period` 제거는 provider 스키마상 `ForceNew`가 아니므로
+      이번 apply의 plan은 항상 in-place update이며 replace를 계획하지
+      않는다는 사실을, `prevent_destroy` 하에서 replace가 발생하면
+      `terraform plan` 자체가(apply 이전 단계에서) 즉시 실패한다는
+      로컬 재현 결과와 함께 `kms_vault_orphan.tf` 주석에 기록한다
+      (claude-review 9차 지적)
+- [ ] destroy 대상 4개 중 참조 관계가 있는 2쌍(key IAM binding→custom
+      role, WI 바인딩→GSA)은 Terraform의 의존성 역순 destroy 덕분에
+      부분 실패 시에도 "참조되는 쪽만 먼저 사라지는" 비대칭 상태가
+      발생하지 않고 재실행만으로 수렴함을 `kms_vault_orphan.tf` 주석에
+      기록한다(claude-review 9차 지적)
 - [ ] 롤백 절에 custom role `vaultUnsealKmsAccess`의 GCP soft delete
       7일 보존 사실과, 그 기간 내 롤백 시 `gcloud iam roles undelete` +
       `terraform import`가 필요하다는 절차 정정 반영(claude-review 3차
-      지적, comment 7 참조)
+      지적, comment 7 참조). 7일 경과 후에도 같은 `role_id` 재사용이
+      최대 37일까지 막힐 수 있다는 사실로 추가 정정(claude-review 9차
+      지적 — "7일 지나면 바로 apply 가능" 서술은 부정확했음)
 
 ## 롤백
 
@@ -708,11 +785,29 @@ terraform/admin/vault-k8s init`을 실행하면 무슨 일이 벌어지는지**:
     vaultUnsealKmsAccess`로 role을 되살린 뒤 `terraform import
     google_project_iam_custom_role.vault_unseal
     projects/<PROJECT_ID>/roles/vaultUnsealKmsAccess`로 state에 편입하고
-    나머지 3개만 일반 `apply`로 재생성한다. 7일이 지난 뒤라면 undelete
-    없이 바로 `apply`해도 된다. `vault.tf`를 복원할 때 `kms_vault_
-    orphan.tf`의 key ring/crypto key 2개 블록은 함께 지워야 한다 —
-    두 파일에 같은 리소스 주소를 남기면 `Duplicate resource` 오류가
-    난다(comment 4 3차 정정 참조).
+    나머지 3개만 일반 `apply`로 재생성한다. **정정(claude-review 9차
+    지적)**: "7일이 지난 뒤라면 undelete 없이 바로 `apply`해도 된다"는
+    이전 서술은 부정확했다 — GCP는 영구 삭제(7일 경과) 후에도 같은
+    `role_id` 재사용을 최대 37일(삭제 후 7~37일 구간)까지 막을 수 있다.
+    즉 안전한 선택지는 (a) 7일 안에 undelete, (b) 최대 37일을 기다린 뒤
+    재생성, (c) 다른 `role_id`로 새로 만드는 것 중 하나이며, "7일만
+    지나면 무조건 바로 apply 가능"은 보장되지 않는다. `vault.tf`를
+    복원할 때 `kms_vault_orphan.tf`의 key ring/crypto key 2개 블록은
+    함께 지워야 한다 — 두 파일에 같은 리소스 주소를 남기면 `Duplicate
+    resource` 오류가 난다(comment 4 3차 정정 참조).
+  - **부분 apply 실패 시 수렴 여부(claude-review 9차 지적)**: destroy
+    대상 4개 중 `google_kms_crypto_key_iam_member.vault_unseal`은
+    `role` 속성으로 `google_project_iam_custom_role.vault_unseal.id`를,
+    `google_service_account_iam_member.vault_wi`는
+    `service_account_id` 속성으로 `google_service_account.vault.name`을
+    참조한다(vault.tf 삭제 전 커밋 기준). Terraform은 destroy 시 이
+    참조 그래프를 뒤집어 참조하는 쪽(binding)을 참조되는 쪽(role/GSA)
+    보다 항상 먼저 destroy하므로, "role/GSA는 지워졌는데 binding만
+    남는" 비대칭 상태는 일반(비-target) apply 경로에서 발생하지 않는다.
+    binding destroy가 실패하면 그 지점에서 그래프 진행이 멈춰 role/GSA는
+    아직 destroy 시도조차 안 된 채 state·GCP 양쪽에 그대로 남고, 재실행
+    하면 실패했던 binding destroy부터 다시 시도해 수렴한다 — 별도 수동
+    개입 없이 재실행만으로 정상 수렴한다.
   - `roles/cloudkms.admin`은 영구 유지로 설계가 바뀌어(comment 3 3차
     정정) 별도 회수 후속 PR이 없으므로, 이와 관련해 되돌릴 대상도 없다.
 - 승인 후 vault-k8s state rm까지 실행했다면, `terraform/admin/vault-k8s/`를 git
