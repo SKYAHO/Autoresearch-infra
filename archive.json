@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T03:44:52Z",
+  "generated_at": "2026-08-02T03:58:58Z",
   "reports": [
+    {
+      "number": 496,
+      "title": "chore: manifest serving 이미지 digest 승격",
+      "author": "waieiches",
+      "merged_at": "2026-08-02T03:58:40Z",
+      "summary_ko": [
+        "서빙 애플리케이션의 컨테이너 이미지 다이제스트를 신규 버전으로 승격합니다.",
+        "manifest 기반 챔피언 모델(version 19)을 반영한 서빙 이미지를 dev 환경에 배포합니다.",
+        "이미지 다이제스트 외의 인프라 설정, 네트워크 정책, 시크릿 등은 변경 없이 유지합니다."
+      ],
+      "report_url": "pr/496/"
+    },
     {
       "number": 480,
       "title": "docs: 이전 런북 실측 상세 보강 — 사고 근거·후속 조치·리뷰 발견 반영 (#477)",
