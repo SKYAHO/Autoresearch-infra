@@ -143,6 +143,19 @@ output "agent_orchestration_deployment_contract" {
   }
 }
 
+output "experiment_job_execution_contract" {
+  description = "Auto Research 실험 Job의 결과 저장 버킷과 Workload Identity 좌표. 토큰과 Secret payload는 포함하지 않는다."
+  value = {
+    results_bucket_name         = google_storage_bucket.experiment_results.name
+    results_bucket_url          = google_storage_bucket.experiment_results.url
+    gcp_service_account_email   = google_service_account.experiment_job.email
+    workload_identity_principal = local.experiment_job_workload_identity_principal
+    kubernetes_namespace        = var.experiment_job_k8s_namespace
+    kubernetes_service_account  = var.experiment_job_k8s_service_account
+    object_retention_days       = var.experiment_results_object_retention_days
+  }
+}
+
 output "airflow_gke_node_pool_name" {
   description = "Airflow Helm component 전용 dev GKE node pool 이름."
   value       = google_container_node_pool.airflow.name

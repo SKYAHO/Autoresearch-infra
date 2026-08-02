@@ -62,6 +62,21 @@ output "rerank_loadtest_contract" {
   }
 }
 
+output "experiment_job_contract" {
+  description = "Auto Research 실험 Job namespace·KSA·GSA·RBAC·NetworkPolicy 계약. API Job 생성 권한은 별도 검증 전 기본 비활성이다."
+  value = {
+    namespace                 = kubernetes_namespace_v1.experiment_jobs.metadata[0].name
+    service_account           = kubernetes_service_account_v1.experiment_job.metadata[0].name
+    gcp_service_account_email = local.experiment_job_gcp_service_account_email
+    api_observer_role         = kubernetes_role_v1.experiment_job_observer.metadata[0].name
+    api_job_creation_enabled  = var.enable_experiment_job_creation
+    ingress_network_policy    = kubernetes_network_policy_v1.experiment_jobs_ingress.metadata[0].name
+    egress_network_policy     = kubernetes_network_policy_v1.experiment_jobs_egress.metadata[0].name
+    resource_quota            = kubernetes_resource_quota_v1.experiment_jobs.metadata[0].name
+    limit_range               = kubernetes_limit_range_v1.experiment_jobs.metadata[0].name
+  }
+}
+
 output "experiment_runtime_kubernetes_contract" {
   description = "Paired Feast experiment runtime의 Kubernetes 격리 좌표와 fail-closed Job 생성 계약."
   value = {

@@ -26,6 +26,12 @@ jobs:
       - name: Run Agent Orchestration deployment contract self-test
         run: ruby scripts/test-agent-orchestration-timeout-contract.rb
 
+      - name: Check oauth2-proxy email allowlist configuration
+        run: scripts/check-oauth-email-allowlist.sh
+
+      - name: Run oauth2-proxy email allowlist self-test
+        run: scripts/test-check-oauth-email-allowlist.sh
+
       # #485 저장소 첫 .tftest.hcl. CI 실행 경로가 없으면 계약 테스트가 로컬 수동
       # 실행에만 의존해 회귀를 잡지 못한다. mock provider 기반이라 클라우드 자격이
       # 필요 없고 backend도 쓰지 않는다.
