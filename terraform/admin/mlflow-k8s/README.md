@@ -12,8 +12,8 @@ chart/앱(MLflow Deployment)은 이 root가 아니라 **ArgoCD Application(`depl
 ## apply
 
 ```bash
-terraform -chdir=terraform/admin/mlflow-k8s init
-terraform -chdir=terraform/admin/mlflow-k8s apply \
+scripts/terraform-env --environment dev --root terraform/admin/mlflow-k8s init
+scripts/terraform-env --environment dev --root terraform/admin/mlflow-k8s apply \
   -var project_id=<PROJECT_ID> -var private_services_cidr=<PSA_CIDR>
 ```
 
@@ -31,7 +31,7 @@ env_file="$(mktemp)"
 trap 'rm -f "$env_file"' EXIT
 
 PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project <PROJECT_ID>)"
-HOST="$(terraform -chdir=terraform/envs/dev output -raw cloud_sql_private_ip_address)"
+HOST="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw cloud_sql_private_ip_address)"
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_HOST=%s\n' "$PW" "$HOST" > "$env_file"
 unset PW
 
@@ -214,7 +214,7 @@ Stage 승격, GCS artifact 확인)하지 못했다. 최소 권한으로 이를 �
 
 ```bash
 # 로컬 terraform.tfvars에 대상 계정 추가 후
-terraform -chdir=terraform/admin/mlflow-k8s apply \
+scripts/terraform-env --environment dev --root terraform/admin/mlflow-k8s apply \
   -var project_id=<PROJECT_ID> -var private_services_cidr=<PSA_CIDR>
 ```
 

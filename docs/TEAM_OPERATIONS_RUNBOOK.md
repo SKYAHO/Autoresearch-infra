@@ -350,8 +350,8 @@ Terraform state 어디에도 값이 없음). 값은 dev root output에서 그대
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
 {
-  printf 'REDIS_HOST=%s\n' "$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_address)"
-  printf 'REDIS_PORT=%s\n' "$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_port)"
+  printf 'REDIS_HOST=%s\n' "$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw redis_discovery_address)"
+  printf 'REDIS_PORT=%s\n' "$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw redis_discovery_port)"
 } > "$env_file"
 kubectl -n autoresearch create secret generic autoresearch-serving-redis \
   --from-env-file="$env_file" --dry-run=client -o yaml | kubectl apply -f -
@@ -451,8 +451,8 @@ Service proxy와 RBAC의 최소 권한은 Terraform output을 직접 읽어 확�
 GSA email은 토큰 payload가 아니므로 출력해도 되지만, 토큰 자체는 출력하지 않는다.
 
 ```bash
-runner_gsa="$(terraform -chdir=terraform/envs/dev output -json rerank_loadtest_github_actions_identities | jq -r '.runner')"
-snapshot_gsa="$(terraform -chdir=terraform/envs/dev output -json rerank_loadtest_github_actions_identities | jq -r '.snapshot_reader')"
+runner_gsa="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -json rerank_loadtest_github_actions_identities | jq -r '.runner')"
+snapshot_gsa="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -json rerank_loadtest_github_actions_identities | jq -r '.snapshot_reader')"
 
 kubectl auth can-i create jobs -n loadtest --as="$runner_gsa"          # yes
 kubectl auth can-i patch configmaps -n loadtest --as="$runner_gsa"     # yes

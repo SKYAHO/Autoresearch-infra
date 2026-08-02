@@ -29,11 +29,11 @@ Deployment, cluster-aware client와 실제 Feature key hash tag 규칙은
 먼저 dev root를 apply해 Redis Cluster와 CA secret을 준비하고 다음 값을 확인합니다.
 
 ```bash
-terraform -chdir=terraform/envs/dev output redis_cluster_name
-terraform -chdir=terraform/envs/dev output redis_discovery_address
-terraform -chdir=terraform/envs/dev output redis_discovery_port
-terraform -chdir=terraform/envs/dev output redis_psc_subnet_cidr
-terraform -chdir=terraform/envs/dev output redis_server_ca_secret_id
+scripts/terraform-env --environment dev --root terraform/envs/dev output redis_cluster_name
+scripts/terraform-env --environment dev --root terraform/envs/dev output redis_discovery_address
+scripts/terraform-env --environment dev --root terraform/envs/dev output redis_discovery_port
+scripts/terraform-env --environment dev --root terraform/envs/dev output redis_psc_subnet_cidr
+scripts/terraform-env --environment dev --root terraform/envs/dev output redis_server_ca_secret_id
 ```
 
 실제 값이 든 `terraform.tfvars`는 커밋하지 않습니다. 예시 파일을 복사한 뒤 dev
@@ -43,26 +43,26 @@ output과 대조합니다.
 cp terraform/admin/autoresearch-k8s/terraform.tfvars.example \
   terraform/admin/autoresearch-k8s/terraform.tfvars
 
-terraform -chdir=terraform/admin/autoresearch-k8s init
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s init
 terraform -chdir=terraform/admin/autoresearch-k8s fmt -check
-terraform -chdir=terraform/admin/autoresearch-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s validate
 ```
 
 live cluster에 `autoresearch` namespace나 KSA가 이미 존재하면 삭제·재생성하지
 말고 초기화 후 최초 apply 전에 state로 import합니다.
 
 ```bash
-terraform -chdir=terraform/admin/autoresearch-k8s import \
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s import \
   kubernetes_namespace_v1.autoresearch autoresearch
 
-terraform -chdir=terraform/admin/autoresearch-k8s import \
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s import \
   kubernetes_service_account_v1.app autoresearch/autoresearch-app
 ```
 
 ## Plan 및 적용
 
 ```bash
-terraform -chdir=terraform/admin/autoresearch-k8s plan \
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s plan \
   -var-file=terraform.tfvars
 ```
 
@@ -253,8 +253,8 @@ manifest에는 endpoint를 평문으로 두지 않고(공개 저장소, MLflow�
 값이 남지 않습니다.
 
 ```bash
-REDIS_HOST=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_address)
-REDIS_PORT=$(terraform -chdir=terraform/envs/dev output -raw redis_discovery_port)
+REDIS_HOST=$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw redis_discovery_address)
+REDIS_PORT=$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw redis_discovery_port)
 kubectl -n autoresearch create secret generic autoresearch-serving-redis \
   --from-literal=REDIS_HOST="$REDIS_HOST" \
   --from-literal=REDIS_PORT="$REDIS_PORT"
@@ -287,7 +287,7 @@ kubectl -n autoresearch delete secret autoresearch-serving-redis
 
 ```bash
 # 로컬 terraform.tfvars에 대상 계정 추가 후
-terraform -chdir=terraform/admin/autoresearch-k8s apply
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s apply
 ```
 
 plan은 대상 계정 수에 따라 Role 2개(`autoresearch_portforward`,
@@ -375,8 +375,8 @@ security diff 검토가 필요합니다. 실제 apply는 별도 승인 뒤 계�
 
 ```bash
 terraform -chdir=terraform/admin/autoresearch-k8s fmt -check -recursive
-terraform -chdir=terraform/admin/autoresearch-k8s validate
-terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvars
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s validate
+scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvars
 ```
 
 적용이 승인·완료된 뒤에는 환경별 subject와 NetworkPolicy를 다음처럼 확인합니다.

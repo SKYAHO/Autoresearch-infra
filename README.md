@@ -68,8 +68,8 @@ dev 환경 Terraform root module은 [terraform/envs/dev](terraform/envs/dev)에 
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init -backend=false
-terraform -chdir=terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev init -backend=false
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
 ```
 
 운영 문서 목록은 [docs/README.md](docs/README.md)에서 시작합니다. 현재 Terraform

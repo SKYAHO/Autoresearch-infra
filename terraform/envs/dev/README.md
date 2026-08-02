@@ -46,16 +46,16 @@
 
 ```bash
 terraform -chdir=terraform/envs/dev fmt -recursive
-terraform -chdir=terraform/envs/dev init
-terraform -chdir=terraform/envs/dev validate
+scripts/terraform-env --environment dev --root terraform/envs/dev init
+scripts/terraform-env --environment dev --root terraform/envs/dev validate
 ```
 
 plan/apply를 실행할 때는 로컬 전용 변수 파일을 만듭니다.
 
 ```bash
 cp terraform/envs/dev/terraform.tfvars.example terraform/envs/dev/terraform.tfvars
-terraform -chdir=terraform/envs/dev plan
-terraform -chdir=terraform/envs/dev apply
+scripts/terraform-env --environment dev --root terraform/envs/dev plan
+scripts/terraform-env --environment dev --root terraform/envs/dev apply
 ```
 
 `terraform.tfvars`에는 실제 GCP project id가 들어갈 수 있으므로 커밋하지 않습니다.

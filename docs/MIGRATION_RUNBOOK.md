@@ -1,5 +1,9 @@
 # 프로젝트 이전/재구축 실행 Runbook
 
+> 환경 좌표의 정본과 Terraform 초기화는 [ENVIRONMENT_CATALOG.md](ENVIRONMENT_CATALOG.md)를
+> 따른다. 카탈로그 변경만으로 리소스를 이전하거나 apply하지 않으며, 이 문서의 승인·검증·
+> 롤백 절차를 함께 따른다.
+
 > #437. 2026-07-29~30 GCP 프로젝트 이전(#404, `ar-infra-501607` →
 > `autoresearch-503903`)의 실측 절차를 재사용 가능한 실행 문서로 정리했다.
 > 결정 요약은 `CHANGE_HISTORY.md`(2026-07-29~30 항목), 개별 함정의 상세 근거는

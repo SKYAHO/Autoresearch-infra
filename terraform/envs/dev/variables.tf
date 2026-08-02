@@ -6,13 +6,11 @@ variable "project_id" {
 variable "region" {
   description = "Default GCP region for dev resources."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "zone" {
   description = "Default GCP zone for zonal dev resources."
   type        = string
-  default     = "asia-northeast3-a"
 }
 
 variable "environment" {
@@ -29,7 +27,6 @@ variable "environment" {
 variable "name_prefix" {
   description = "Prefix used for dev GCP resource names."
   type        = string
-  default     = "autoresearch"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{2,30}$", var.name_prefix))
@@ -46,7 +43,6 @@ variable "labels" {
 variable "dev_subnet_cidr" {
   description = "Primary CIDR range for the dev subnet."
   type        = string
-  default     = "10.10.0.0/20"
 
   validation {
     condition     = can(cidrhost(var.dev_subnet_cidr, 0))
@@ -93,7 +89,6 @@ variable "sql_deletion_protection" {
 variable "private_services_cidr" {
   description = "CIDR for Cloud SQL Private Service Access (VPC peering). Must not overlap dev_subnet_cidr."
   type        = string
-  default     = "192.168.0.0/20"
 
   validation {
     condition     = can(cidrhost(var.private_services_cidr, 0))
@@ -104,7 +99,6 @@ variable "private_services_cidr" {
 variable "redis_psc_subnet_cidr" {
   description = "Dedicated /29 subnet CIDR for Redis Cluster Private Service Connect endpoints."
   type        = string
-  default     = "10.10.16.0/29"
 
   validation {
     condition     = can(cidrhost(var.redis_psc_subnet_cidr, 0)) && can(regex("/29$", var.redis_psc_subnet_cidr))
@@ -172,7 +166,6 @@ variable "gke_master_ipv4_cidr" {
 variable "gke_pods_cidr" {
   description = "GKE pods용 서브넷 2차 대역. dev subnet/private services/master CIDR과 미중복."
   type        = string
-  default     = "172.16.64.0/20"
 
   validation {
     condition     = can(cidrhost(var.gke_pods_cidr, 0))
@@ -183,7 +176,6 @@ variable "gke_pods_cidr" {
 variable "gke_services_cidr" {
   description = "GKE services용 서브넷 2차 대역. 다른 대역과 미중복."
   type        = string
-  default     = "172.16.128.0/24"
 
   validation {
     condition     = can(cidrhost(var.gke_services_cidr, 0))

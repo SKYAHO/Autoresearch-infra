@@ -1,3 +1,17 @@
+# 좌표 변수는 카탈로그(config/environments/dev/environment.yaml)가 공급하며 각
+# root의 variables.tf에는 default가 없다(#491). `terraform test`는 .auto.tfvars를
+# 자동 로드하지 않으므로, 여기서 명시하지 않으면 전 run이 "No value for required
+# variable"로 실패한다. 값은 카탈로그와 동일하게 유지한다.
+variables {
+  project_id            = "autoresearch-503903"
+  region                = "asia-northeast3"
+  zone                  = "asia-northeast3-a"
+  gke_cluster_name      = "autoresearch-dev-gke"
+  resource_prefix       = "autoresearch-dev"
+  private_services_cidr = "192.168.0.0/20"
+  cluster_services_cidr = "172.16.128.0/24"
+}
+
 mock_provider "google" {}
 mock_provider "kubernetes" {}
 

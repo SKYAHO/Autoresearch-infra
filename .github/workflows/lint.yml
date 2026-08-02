@@ -46,6 +46,11 @@ jobs:
           terraform -chdir=terraform/admin/autoresearch-k8s init -backend=false -input=false
           terraform -chdir=terraform/admin/autoresearch-k8s test
 
+      # 카탈로그 스키마·backend 생성·필드 조회의 회귀를 required check에서 잡는다.
+      # 이 테스트가 CI에 없으면 잘못된 카탈로그가 머지된 뒤 apply 시점에야 드러난다.
+      - name: Run dev 환경 카탈로그 검증 self-test
+        run: ruby scripts/test-environment-catalog.rb
+
       - name: Run actionlint
         uses: raven-actions/actionlint@v2
         with:

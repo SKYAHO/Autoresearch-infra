@@ -32,6 +32,9 @@ variable "feast_apply_workflow_ref" {
 }
 
 variable "region" {
+  # bootstrap은 카탈로그 공급 대상이 아니므로(#413 보호 유지) 여기서 default를
+  # 없애면 공급원이 사라진다. region은 state 버킷 이름과 달리 전역 유니크가
+  # 아니어서 기본값이 안전하며, 다른 리전에 부트스트랩하려면 -var로 덮는다.
   description = "Location for the Terraform state GCS bucket."
   type        = string
   default     = "asia-northeast3"
