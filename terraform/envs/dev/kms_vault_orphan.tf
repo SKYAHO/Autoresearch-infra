@@ -49,8 +49,11 @@ resource "google_kms_crypto_key" "vault_unseal" {
   # 영구적이다).
   #
   # 머지 후 승인 apply 전까지는 이 리소스도 매일 drift plan에 in-place
-  # update로 잡힌다 — 판별 기준은 docs/VAULT_OPERATIONS_RUNBOOK.md의
-  # "머지~승인 apply 사이 예상 drift" 절 참조.
+  # update로 잡힌다 — 판별 기준(부분 실패 시 부분집합 인식 포함)과, Vault와
+  # 무관한 다른 dev root apply가 먼저 실행돼 이 변경과 함께 반영되는
+  # 경우 승인자가 리소스 주소로 식별하는 방법은
+  # docs/VAULT_OPERATIONS_RUNBOOK.md의 "머지~승인 apply 사이 예상 drift"
+  # 절 참조.
   #
   # 승인 apply 후 검증:
   #   gcloud kms keys describe vault-unseal \

@@ -231,10 +231,44 @@ resource 주소가 그대로 남는다(`will be destroyed`/`will be updated
 in-place` 헤더 형태 — `terraform-drift.yml`의 allowlist 정규식
 `# .+ will be `가 두 헤더 모두 매치한다). 매일 코멘트 내용이 정확히 위
 5개 주소 + `Plan: 0 to add, 1 to change, 4 to destroy.`와 같다면 승인
-apply 대기 중인 예상 drift다. 주소가 6개 이상이거나, add가 0이 아니거나,
-change/destroy 개수가 각각 1/4가 아니면 Vault와 무관한 새 drift이므로
-별도로 조사한다. 승인 apply 완료 후에는 이 5개 리소스가 모두
-수렴하므로(4개는 state에서 사라지고, crypto key는 in-place update가
-반영돼 더 이상 diff가 없음) 이 절은 더 이상 적용되지 않는다 — apply
-완료 후 첫 drift 실행이 exitcode 0(또는 다른 사유의 drift만 남음)인지
-확인해 마무리한다.
+apply 대기 중인 예상 drift다. **위 5개 주소 전부가 정확한 부분집합이고
+그 외 주소가 하나도 없다면**(add는 항상 0이어야 함) — 5개 전부든,
+승인 apply가 중간 실패해 일부만 반영된 뒤 남은 부분집합이든 — Vault
+정리 관련 예상 drift로 취급한다(승인 apply가 정확히 이 5개 리소스만
+건드리므로, 부분 실패해도 이 5개의 부분집합 밖으로 나가는 리소스는
+생기지 않는다). **5개 주소 밖의 다른 리소스 주소가 하나라도 섞여
+있으면** 그 부분만 Vault와 무관한 새 drift이므로 별도로 조사한다(5개
+자체는 여전히 예상 drift로 무시한다 — 두 판단은 독립적이다). 승인
+apply 완료 후에는 이 5개 리소스가 모두 수렴하므로(4개는 state에서
+사라지고, crypto key는 in-place update가 반영돼 더 이상 diff가 없음)
+이 절은 더 이상 적용되지 않는다 — apply 완료 후 첫 drift 실행이
+exitcode 0(또는 다른 사유의 drift만 남음)인지 확인해 마무리한다.
+
+`google_kms_key_ring.vault`가 이 5개에 없는 이유(claude-review 12차
+지적): key ring 리소스는 `name`/`location` 2개 속성만 schema에 있고
+둘 다 생성 후 불변(ForceNew)이라 — 이 PR에서 어떤 속성값도 바꾸지
+않았으므로 — config와 live state가 항상 일치해 plan에 diff 자체가
+전혀 나타나지 않는다("추적 대상에서 뺐다"가 아니라 "속성 diff가 없어
+plan에 나타날 수가 없다"). `prevent_destroy`는 여전히 걸려 있어 만약
+key ring 자체가 config에서 사라지면(`removed` 블록 등) plan이 즉시
+에러로 막힌다 — drift 목록에 없는 것과 삭제 방지가 걸려 있는 것은
+별개다.
+
+**머지 후 승인 apply 전, Vault와 무관한 다른 dev root apply가 먼저
+승인·실행되는 경우**(claude-review 12차 지적): `apply.yml`의 dev root
+apply는 그 시점 dev root 전체 plan을 적용하므로, 이 5개 변경은 그
+apply가 무엇을 위해 트리거됐든 함께 반영된다 — 이는 문제가 아니라
+정상 동작이다(config가 이미 머지돼 있는 이상 어느 apply가 먼저
+실행되든 결과는 같다). 그 apply의 승인자가 plan 요약에서 이 5개를
+식별하는 근거: 위 5개 리소스 주소는 전부 리소스 이름에 `vault`가
+포함된다(`google_kms_crypto_key.vault_unseal`,
+`google_service_account.vault`,
+`google_service_account_iam_member.vault_wi`,
+`google_project_iam_custom_role.vault_unseal`,
+`google_kms_crypto_key_iam_member.vault_unseal`) — plan 요약(`GITHUB_STEP_SUMMARY`)이
+리소스 주소를 그대로 노출하므로, 다른 PR의 변경과 섞여 있어도 주소에
+`vault`가 있는 항목만 이 절의 대상으로 골라 확인하면 된다. 별도
+자동화(예: CI에서 Vault 관련 항목만 분리해 강조 표시)는 두지 않는다 —
+5개뿐인 소규모 목록이라 사람이 주소 문자열로 골라내는 것으로 충분하고,
+자동화를 추가하면 이 정리가 끝난 뒤 곧바로 걷어내야 할 코드가 하나 더
+생긴다.

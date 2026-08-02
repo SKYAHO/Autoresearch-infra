@@ -135,9 +135,12 @@ state가 비면 원격 GCS state 객체도 정리 대상이나, 실제 삭제(�
 제거)는 별도로 재확인 후 수행한다.
 
 ```bash
-# 5) state 정리 완료 후, 카탈로그 3곳에서 vault-k8s 항목 제거(아래 설명 참조)
+# 5) state 정리 완료 후, 카탈로그 4곳에서 vault-k8s 관련 항목 제거(아래 설명 참조)
 #    - config/environments/dev/environment.yaml (state.roots)
 #    - scripts/environment_catalog.rb (TERRAFORM_ROOTS, ROOT_VARIABLE_KEYS)
+#    - scripts/environment_catalog.rb (terraform_variables의
+#      "ui_ingress_source_cidr" 항목 + 그 아래 설명 주석 — vault-k8s가
+#      유일한 소비자이므로 vault-k8s 항목 제거와 함께 dead entry가 된다)
 #    - scripts/test-environment-catalog.rb (VALID_CATALOG 픽스처)
 #    제거 후 로컬 검증:
 ruby scripts/test-environment-catalog.rb
@@ -153,6 +156,18 @@ backend-config 생성에 의존하므로, state 정리가 끝나기 전까지 �
 "state 정리 완료 전까지 유지" 주석을 남겨 다음 정리 작업에서 실수로
 지워지는 것을 막는다.
 
+**4번째 정리 위치(claude-review 12차 지적)**: `terraform_variables`가
+반환하는 값 목록 중 `"ui_ingress_source_cidr" => network.fetch("dev_subnet_cidr")`
+항목(그리고 바로 아래 "vault의 `ui_ingress_source_cidr`와 같은 값·같은
+근거" 설명 주석)은 `ROOT_VARIABLE_KEYS`에서 이 키를 요청하는 root가
+`terraform/admin/vault-k8s` 하나뿐이라서 존재한다(다른 root는 이 키를
+카탈로그에서 받지 않는다 — `values.slice(*ROOT_VARIABLE_KEYS.fetch(root))`가
+요청하지 않은 root에는 애초에 이 값을 전달하지 않는다). `vault-k8s`
+항목을 `ROOT_VARIABLE_KEYS`에서 지우면 이 값을 요청하는 root가 하나도
+남지 않아, 이 항목은 계산은 되지만 어떤 root에도 전달되지 않는 dead
+entry가 된다 — 위 3곳과 같은 타이밍(state 정리 완료 후)에 함께
+제거한다.
+
 **이 항목이 남아 있는 동안 CI가 안전한 이유(claude-review 10차 지적)**:
 `.github/workflows/apply.yml`의 `ADMIN_ROOTS`는 vault-k8s를 정적으로
 제외한 목록이라(같은 파일 주석 참조) 이 카탈로그 항목이 있어도 apply
@@ -162,7 +177,7 @@ job이 이 root를 순회하지 않는다. `.github/workflows/lint.yml`이 실�
 init`을 호출하지 않음), 이 항목의 존재 자체로 CI가 실 `vault-k8s`
 디렉터리를 건드릴 경로는 없다. 위험은 사람이 이 root를 대상으로 CLI를
 직접 실행할 때만 있고, 그 경로는 `environment.yaml`의 경고 주석과 이
-절의 절차로 방어한다. **추적**: 카탈로그 3곳(위 5단계)을 지우는 작업은
+절의 절차로 방어한다. **추적**: 카탈로그 4곳(위 5단계)을 지우는 작업은
 이 문서가 그 자체로 체크리스트 역할을 한다 — state 정리(1~4단계) 완료
 직후 5단계를 실행하는 것으로 별도 이슈 없이 이 절차 안에서 완결한다.
 
@@ -787,6 +802,100 @@ gap이나 같은 줄을 손대는 김에 함께 반영) — 2건 모두 추가.
 운영 제외 → #478 root 삭제(원격 state 잔여 4개만 승인 대기) 상태임을
 트리 밖 각주로 명시(트리 안에 다시 넣지 않음 — 존재하지 않는 디렉터리를
 트리에 넣으면 오히려 오해를 유발한다는 라운드 10 이전 판단 유지).
+
+## claude-review 12차 지적 (2026-08-02, PR #500)
+
+라운드 11 수정 후 재요청한 리뷰에서 5건이 지적됐다. 라운드 11이 순수
+문서 일관성 문제였던 것과 달리, 이번 5건은 모두 설계·견고성에 관한
+실질적 질문이었다(문서 오탈자가 아니라 "이 경계선이 왜 여기인가", "이
+가정이 깨지면 어떻게 되는가" 유형).
+
+**이해도 확인 답변(1) — `kms_vault_orphan.tf`의 잔존 변경 5건이 머지 후
+Vault와 무관한 다른 dev root apply에 먼저 bundle될 수 있는가, 승인자가
+그 apply의 plan 요약에서 Vault 정리 건을 식별할 근거가 있는가**: 그런
+경우는 문제가 아니라 정상 동작이다 — config가 이미 머지돼 있는 이상
+어느 apply가 먼저 실행되든 이 5건은 함께 반영된다. 식별 근거: 5개
+리소스 주소(`google_kms_crypto_key.vault_unseal`,
+`google_service_account.vault`, `google_service_account_iam_member.vault_wi`,
+`google_project_iam_custom_role.vault_unseal`,
+`google_kms_crypto_key_iam_member.vault_unseal`) 전부 이름에 `vault`가
+포함돼 있어, 다른 변경과 섞여도 plan 요약에서 `vault` 문자열로 골라낼
+수 있다. `docs/VAULT_OPERATIONS_RUNBOOK.md`의 "머지~승인 apply 사이
+예상 drift" 절에 이 근거와, 승인 apply가 중간 실패해 5개 중 일부만
+반영된 경우의 부분집합 판별 규칙(5개의 부분집합이면 계속 예상 drift,
+그 밖의 주소가 섞이면 그 부분만 새 drift로 조사)을 추가했다.
+
+**이해도 확인 답변(2) — `vault.tf` 삭제 후 `roles/iam.roleAdmin`이
+dev root apply에 계속 필요한가**: `grep -rln
+google_project_iam_custom_role terraform/envs/dev/`가 무매치를
+반환한다 — dev root config에 남은 custom role 정의는 이제 0건이다.
+이 role을 요구하던 유일한 리소스(`vaultUnsealKmsAccess` custom role,
+`vault.tf`에서 정의)는 이미 config에서 삭제됐고, 원격 state에는 아직
+남아 있어 승인 apply가 이를 destroy한다. **그 destroy 자체가
+`iam.roleAdmin`(`roles.delete`)을 요구하므로 승인 apply 전까지는
+유지가 필요하다** — `cloudkms.admin`(라운드 10)과 달리 이번엔 "왜
+유지하는가"가 아니라 "왜 지금 당장 회수하면 안 되는가"가 핵심이다.
+apply 완료 후에는 이 role을 요구하는 리소스가 config에 없어 실질적으로
+미사용 상태가 되지만, 회수를 이 PR에서 먼저 하면 승인 apply의 custom
+role destroy 자체가 막힌다. 회수 여부는 승인 apply 완료 후 별도
+후속 이슈로 판단한다 — `github_actions.tf`의 `dev_apply_roles` 주석에
+근거를 남겼다.
+
+**이해도 확인 답변(3) — drift 판별 기준의 "정확히 5개 주소 완전 일치"가
+승인 apply 중간 실패 시 깨지는 문제, `google_kms_key_ring.vault`가
+5개 목록에서 빠진 이유**: `docs/VAULT_OPERATIONS_RUNBOOK.md`의 판별
+기준을 "5개 주소의 정확한 부분집합이면(그 밖의 주소가 없으면) 예상
+drift, 5개 밖의 주소가 섞이면 그 부분만 새 drift"로 완화했다 — 5개
+전부든 중간 실패 후 남은 부분집합이든 동일하게 취급 가능하다. key
+ring이 빠진 이유: `name`/`location` 2개 속성 모두 ForceNew이고 이 PR이
+어느 쪽도 바꾸지 않아 config와 live state가 항상 일치하므로 plan에
+diff가 원천적으로 나타나지 않는다("추적 대상에서 뺀 것"이 아니라
+"속성 diff가 없어 나타날 수 없는 것") — `prevent_destroy`는 여전히
+걸려 있어 key ring 삭제 시도는 별개로 막힌다.
+
+**이해도 확인 답변(4) — 카탈로그 정리 체크리스트가 실제로는 3곳이
+아니라 4곳이라는 지적**: 맞다. `scripts/environment_catalog.rb`의
+`terraform_variables`가 반환하는 `"ui_ingress_source_cidr" =>
+network.fetch("dev_subnet_cidr")` 항목(과 그 아래 설명 주석)은
+`ROOT_VARIABLE_KEYS`에서 이 키를 요청하는 root가 `vault-k8s` 하나뿐이라
+존재한다 — `vault-k8s` 항목을 지우면 이 항목은 어떤 root에도 전달되지
+않는 dead entry가 된다. "승인 후 실행할 vault-k8s admin root state
+정리 절차" 절의 5단계 체크리스트에 4번째 항목으로 추가했다.
+
+**이해도 확인 답변(5) — grep allowlist 정규식 4벌의 alternative 순서
+불일치, 중복 설명 주석 60줄 이상**: `apply.yml`의 admin root plan
+스텝(구 344행)만 `will no longer be managed by Terraform`이 `(moved
+from ...)`보다 앞에 있었다 — 매치 결과는 동일하지만 4곳 diff 대조를
+어렵게 했다. 나머지 3곳(`apply.yml`의 dev root plan 스텝,
+`terraform-plan.yml`, `terraform-drift.yml`)과 같은 순서
+`(will be|must be|has moved to) → (moved from ...) → will no longer be
+managed by Terraform → Plan: → No changes`로 통일했다. 또한 4곳에
+거의 같은 내용으로 복제돼 있던 15~20줄 설명 주석을 이 절로 흡수하고,
+각 workflow 파일에는 이 절을 가리키는 2~3줄 pointer만 남겼다:
+
+- **`(will be|must be|has moved to)`**: 리소스 주소 헤더(생성/변경/삭제/
+  이동) 자체.
+- **`(moved from .+)`**: `has moved to`는 #468에서 추가됐는데, 이동
+  대상 리소스에 동시에 속성 변경이 있으면 Terraform이 헤더를 `# <new>
+  will be updated in-place` + `# (moved from <old>)` 두 줄로 나눠
+  렌더링한다 — 이 두 번째 줄이 없으면 move-only 케이스와 달리
+  move+change 병존 케이스의 주소 이동 사실이 요약에서 누락된다.
+- **`will no longer be managed by Terraform`**: `removed` 블록/forget
+  헤더. dev root(`terraform/envs/dev`)에는 지금 이 블록이 없어 dev
+  root 전용 3개 파일(`apply.yml`의 dev root plan 스텝,
+  `terraform-plan.yml`, `terraform-drift.yml`)에서는 이 alternative가
+  오늘 당장 매치되지 않는다. 그래도 포함하는 이유: `^Plan: [0-9]`는
+  항상 매치되므로, 이 alternative가 빠지면 미래에 dev root가 removed
+  블록을 하나라도 쓸 때 요약이 `Plan: 0 to add, 0 to change, 0 to
+  destroy, 1 to forget.`처럼 총계만 남고 어떤 리소스가 forget되는지
+  주소가 완전히 사라진다 — PR 댓글, 매일 도는 drift 이슈 본문, 승인
+  게이트 요약 어느 화면을 보든 리뷰어/담당자가 원인 리소스를 특정할 수
+  없다. 이 alternative의 매치 동작 자체는 `apply.yml`의 admin root plan
+  스텝에서 `monitoring-k8s`/`argo-rollouts-k8s`의 기존 removed
+  블록(#307/#312류, destroy=false)으로 실제 exercise돼 검증돼 있다.
+
+다음에 alternative를 추가·수정할 때는 이 절만 갱신하고, 4개 workflow
+파일은 정규식 문자열 자체만(순서 포함, 동일하게) 갱신한다.
 
 ## 완료 조건
 

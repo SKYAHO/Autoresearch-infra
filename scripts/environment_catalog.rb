@@ -96,7 +96,10 @@ class EnvironmentCatalog
       "cluster_services_cidr" => gke.fetch("services_cidr"),
       "ui_ingress_source_cidr" => network.fetch("dev_subnet_cidr"),
       # port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet이 정본이다(#116).
-      # vault의 ui_ingress_source_cidr와 같은 값·같은 근거라 함께 카탈로그가 공급한다.
+      # vault-k8s(ROOT_VARIABLE_KEYS)의 ui_ingress_source_cidr와 같은 값·같은
+      # 근거라 함께 카탈로그가 공급한다 — vault-k8s가 이 키의 유일한 소비자다
+      # (#478). vault-k8s state 정리 완료 후 이 항목도 함께 제거한다(체크리스트:
+      # docs/superpowers/specs/2026-08-02-vault-removal-design.md).
       "kibana_ingress_source_cidr" => network.fetch("dev_subnet_cidr")
     }
     values.slice(*ROOT_VARIABLE_KEYS.fetch(root))

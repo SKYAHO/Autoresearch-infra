@@ -251,6 +251,18 @@ moved {
 # 오남용되는 경로까지는 어느 쪽도 막지 못한다. custom role로 좁히는 후속
 # 작업은 하지 않는다(근거 조사 전체는
 # docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
+#
+# `roles/iam.roleAdmin`(263행, #478 재확인): dev root config에 남은
+# `google_project_iam_custom_role` 리소스는 이제 0건이다(`grep -rln
+# google_project_iam_custom_role terraform/envs/dev/` 무매치로 확인) —
+# 유일하게 이 role을 요구하던 `vault_unseal` custom role은 `vault.tf`
+# 삭제로 이미 사라졌다(원격 state에는 아직 남아 있고, 승인 apply가 이를
+# destroy한다). 그 destroy 자체가 `iam.roleAdmin`(`roles.delete`)을
+# 요구하므로 승인 apply 전까지는 계속 유지해야 한다. apply 완료 후에는
+# 이 role을 요구하는 리소스가 dev root config에 없어 실질적으로 미사용
+# 상태가 되지만, 이 PR에서 먼저 회수하면 그 apply의 custom role destroy
+# 자체가 막히므로 지금 회수하지 않는다 — 회수 여부는 승인 apply 완료 후
+# 별도 후속 이슈로 판단한다.
 resource "google_project_iam_member" "dev_apply_roles" {
   for_each = toset([
     "roles/compute.networkAdmin",                     # VPC/subnet/router/NAT/route/firewall/address
