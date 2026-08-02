@@ -409,8 +409,9 @@ SKYAHO/Autoresearch/.github/workflows/rerank-loadtest.yml@refs/heads/main
 
 runner GSA는 `loadtest` namespace의 RoleBinding으로 ConfigMap·Job·Pod/log와
 진단 Event만 다루며, snapshot-reader GSA는 `monitoring` namespace의
-`kube-prometheus-stack-prometheus` Service proxy `get`만 수행한다. 두 GSA에는
-`roles/container.clusterViewer`만 GCP 프로젝트 권한으로 부여한다. Job KSA는
+`services/proxy`에서 `http:kube-prometheus-stack-prometheus:9090` resource name의
+`get`만 수행한다. 두 GSA에는 `roles/container.clusterViewer`만 GCP 프로젝트
+권한으로 부여한다. Job KSA는
 `rerank-loadtest`이고 서비스 계정 토큰 자동 마운트를 끈다.
 
 앱 저장소 workflow의 `vars.RERANK_LOADTEST_RUNNER_SA`와
@@ -461,10 +462,10 @@ kubectl auth can-i patch configmaps -n loadtest --as="$runner_gsa"     # yes
 kubectl auth can-i get pods/exec -n loadtest --as="$runner_gsa"        # no
 kubectl auth can-i delete jobs -n loadtest --as="$runner_gsa"          # no
 kubectl auth can-i get services --subresource=proxy \
-  --resource-name=kube-prometheus-stack-prometheus \
+  --resource-name=http:kube-prometheus-stack-prometheus:9090 \
   -n monitoring --as="$snapshot_gsa"                                   # yes
 kubectl auth can-i get services --subresource=proxy \
-  --resource-name=other-service -n monitoring --as="$snapshot_gsa"     # no
+  --resource-name=http:other-service:9090 -n monitoring --as="$snapshot_gsa" # no
 ```
 
 ### 실행과 비용 경계

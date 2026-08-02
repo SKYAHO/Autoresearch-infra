@@ -286,8 +286,10 @@ resource "kubernetes_network_policy_v1" "rerank_loadtest_egress" {
 }
 
 # Prometheus는 GitHub Actions의 snapshot-reader GSA가 Kubernetes Service proxy
-# endpoint로 읽는다. resource_names로 kube-prometheus-stack Prometheus Service
-# 하나만 허용하고, pods/exec나 Prometheus 파드 직접 조회는 허용하지 않는다.
+# endpoint로 읽는다. kubectl get --raw의 services/proxy resource name은
+# `http:<service>:<port>` 형식이므로, 실제 요청 이름을 resource_names에 고정한다.
+# Prometheus Service 하나만 허용하고, pods/exec나 Prometheus 파드 직접 조회는
+# 허용하지 않는다.
 resource "kubernetes_role_v1" "rerank_loadtest_prometheus_snapshot_reader" {
   metadata {
     name      = "rerank-loadtest-prometheus-snapshot-reader"
@@ -297,7 +299,7 @@ resource "kubernetes_role_v1" "rerank_loadtest_prometheus_snapshot_reader" {
   rule {
     api_groups     = [""]
     resources      = ["services/proxy"]
-    resource_names = ["kube-prometheus-stack-prometheus"]
+    resource_names = ["http:kube-prometheus-stack-prometheus:9090"]
     verbs          = ["get"]
   }
 }

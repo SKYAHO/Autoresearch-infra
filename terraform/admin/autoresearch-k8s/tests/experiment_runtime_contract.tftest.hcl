@@ -149,3 +149,27 @@ run "preserve_task1_runtime_gsa_and_fail_closed_contract" {
     error_message = "The experiment runtime contract must remain fail-closed."
   }
 }
+
+run "bind_snapshot_reader_to_actual_prometheus_proxy_resource_name" {
+  command = plan
+
+  variables {
+    project_id            = "valid-project"
+    private_services_cidr = "192.168.0.0/20"
+  }
+
+  assert {
+    condition = (
+      kubernetes_role_v1.rerank_loadtest_prometheus_snapshot_reader.metadata[0].namespace == "monitoring" &&
+      contains(
+        kubernetes_role_v1.rerank_loadtest_prometheus_snapshot_reader.rule[0].resource_names,
+        "http:kube-prometheus-stack-prometheus:9090"
+      ) &&
+      !contains(
+        kubernetes_role_v1.rerank_loadtest_prometheus_snapshot_reader.rule[0].resource_names,
+        "kube-prometheus-stack-prometheus"
+      )
+    )
+    error_message = "The snapshot reader Role must allow the exact Kubernetes services/proxy resource name used by the Prometheus proxy request in monitoring."
+  }
+}
