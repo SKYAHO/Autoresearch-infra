@@ -19,8 +19,6 @@ terraform {
   }
 
   backend "gcs" {
-    bucket = "autoresearch-503903-dev-tfstate"
-    prefix = "admin/vault-k8s/"
   }
 }
 

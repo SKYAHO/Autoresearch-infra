@@ -25,6 +25,8 @@ keys/
 
 # Terraform / IaC
 .terraform/
+.environment.auto.tfvars.json
+.environment.backend.hcl
 *.tfstate
 *.tfstate.*
 *.tfplan

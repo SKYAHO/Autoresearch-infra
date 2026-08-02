@@ -6,19 +6,16 @@ variable "project_id" {
 variable "region" {
   description = "Default GCP region."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "zone" {
   description = "GKE cluster zone."
   type        = string
-  default     = "asia-northeast3-a"
 }
 
 variable "gke_cluster_name" {
   description = "Existing dev GKE cluster name."
   type        = string
-  default     = "autoresearch-dev-gke"
 }
 
 variable "monitoring_namespace" {

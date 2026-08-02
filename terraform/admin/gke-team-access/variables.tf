@@ -39,7 +39,6 @@ variable "bigquery_data_lake_raw_dataset_id" {
 variable "region" {
   description = "Default GCP region for provider operations."
   type        = string
-  default     = "asia-northeast3"
 }
 
 variable "team_member_emails" {
@@ -91,7 +90,6 @@ variable "db_password_secret_id" {
 variable "name_prefix" {
   description = "Resource name prefix used by terraform/envs/dev (#269). Must match that root's name_prefix so the Cloud Build builder SA email derives correctly."
   type        = string
-  default     = "autoresearch"
 }
 
 variable "cloud_build_builder_service_account_email" {

@@ -122,7 +122,7 @@ docs: GCP 운영 가이드 갱신
 
 **PR 생성 전 체크:**
 - [ ] `terraform -chdir=terraform/envs/dev fmt -check -recursive` 통과
-- [ ] `terraform -chdir=terraform/envs/dev validate` 통과
+- [ ] `scripts/terraform-env --environment dev --root terraform/envs/dev validate` 통과
 - [ ] `git diff --check` 통과
 - [ ] state, `.tfvars` 실값, service account key, secret이 포함되지 않았다
 - [ ] 커밋 메시지가 컨벤션을 따른다
