@@ -25,7 +25,11 @@ terraform/
 | admin | `terraform/admin/argocd-k8s` | ArgoCD namespace와 Helm 설치, AppProject/Application(monitoring·argo-rollouts·mlflow·serving·agent-orchestration) |
 | admin | `terraform/admin/argo-rollouts-k8s` | Argo Rollouts namespace/NetworkPolicy 경계(chart는 ArgoCD Application이 관리, #186) |
 | admin | `terraform/admin/elastic-k8s` | ECK/Elasticsearch namespace와 네트워크 경계 (#97) |
-| admin | `terraform/admin/vault-k8s` | retired: #412 운영 제외, root/state 제거는 #478 |
+
+`terraform/admin/vault-k8s`는 #412에서 운영 제외됐고 root 디렉터리는
+#478에서 완전히 삭제됐다(더 이상 현재 트리에 존재하지 않음). 원격 GCS
+state에는 여전히 4개 리소스가 남아 있으며, 정리 절차는
+`docs/superpowers/specs/2026-08-02-vault-removal-design.md`를 참조한다.
 
 ## 기본 명령
 

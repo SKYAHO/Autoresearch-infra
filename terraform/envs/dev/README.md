@@ -31,7 +31,7 @@
 - IAP 전용 bastion host(`bastion.tf`, 외부 IP 없음) (#47/#50)
 - Airflow internal ILB 예약 내부 IP(`terraform output airflow_ilb_ip`)와 private DNS zone `dev.autoresearch.internal`(`dns.tf`) (#48/#51)
 - Airflow Google OAuth client 자격증명용 Secret Manager secret metadata (#54/#55)
-- Vault dev auto-unseal 잔여 구성(`vault.tf`, #132): 운영 경로는 #412에서 폐기됐고 코드·state·IAM 정리는 #478에서 진행
+- Vault dev auto-unseal: 운영 경로는 #412에서 폐기, `vault.tf` 코드는 #478에서 삭제됐고 state의 KMS key ring/crypto key 2개(`vault_removed.tf`, forget 대상)만 남아 있음
 - Elasticsearch GCS snapshot 기반(`elastic.tf`): snapshot bucket, snapshot GSA + Workload Identity, bucket IAM (#102)
 - GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer
   (#121/#157/#187), 환경별 Feast apply SA(#424)
@@ -79,7 +79,7 @@ apply 경계는 코드에 구성되었지만 이 변경에서 실제 GCP/Kuberne
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
 | DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
 | IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, 실험 Job SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
-| KMS/Vault | key ring `vault`, crypto key `vault_unseal`, Vault GSA + unseal custom role (#132) |
+| KMS | key ring `vault`, crypto key `vault_unseal` (#132, Vault 폐기·#478로 GSA/WI 바인딩/custom role은 제거됐고 key ring/crypto key 2개만 `removed` 블록으로 state에 남아 있음) |
 | Elastic snapshot | ES snapshot GCS bucket, snapshot GSA + Workload Identity (#102) |
 | CI pusher | GAR pusher SA, app image pusher SA, Airflow deployer SA, 코드 아카이브 업로더 SA, dev/prod Feast apply SA(WIF, #121/#157/#187/#238/#424) |
 

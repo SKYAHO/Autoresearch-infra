@@ -27,6 +27,9 @@ class EnvironmentCatalog
     terraform/admin/monitoring-k8s
     terraform/admin/vault-k8s
   ].freeze
+  # ↑ vault-k8s: #478로 root 디렉터리는 삭제됐지만, state 정리 절차
+  # (docs/superpowers/specs/2026-08-02-vault-removal-design.md)가 이
+  # 항목의 backend-config 생성에 의존한다. state 정리 완료 전까지 유지.
 
   BACKEND_ROOTS = TERRAFORM_ROOTS
 

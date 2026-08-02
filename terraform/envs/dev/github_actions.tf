@@ -252,6 +252,13 @@ resource "google_project_iam_member" "dev_apply_roles" {
     "roles/run.admin",                                # Cloud Run v2 + service IAM
     "roles/servicenetworking.networksAdmin",          # Cloud SQL PSA peering
     "roles/networkconnectivity.consumerNetworkAdmin", # Redis PSC service connection policy
+    "roles/cloudkms.admin",                           # #478: vault_removed.tf 미대상 4개 중
+    # google_kms_crypto_key_iam_member.vault_unseal의 destroy(setIamPolicy)에
+    # 유일하게 필요. 다른 role은 KMS 리소스 IAM을 포함하지 않는다. 이 destroy가
+    # 포함된 apply가 승인·적용된 뒤 별도 PR/이슈로 이 role을 다시 회수한다 —
+    # 같은 apply에서 회수와 destroy를 동시에 두면 Terraform 병렬 실행 순서에
+    # 따라 destroy가 403으로 실패할 수 있다(권한 회수-destroy 동시 apply의
+    # ordering hazard, docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
   ])
   project = var.project_id
   role    = each.value
