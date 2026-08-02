@@ -479,6 +479,73 @@ rotation/IAM 변경)하는 데 상시 필요해 **회수하지 않기로** 결�
 그런 후속 PR 자체가 존재하지 않는다 — 이 코멘트의 (a)~(c) 순서 분석
 전체가 전제 소멸로 moot됐다.
 
+## claude-review 7차 지적 (2026-08-02, PR #500)
+
+3차 정정(comment 1~9) 반영 후 재요청한 리뷰에서 5건이 새로 나왔다. 이번
+회차는 추론만으로 답하지 않고, 실제 provider 소스와 workflow 인증 흐름을
+직접 확인해 답했다.
+
+**이해도 확인 답변 (comment 1 — `kms_vault_orphan.tf`의 rotation 제거가
+정말로 `--remove-rotation-schedule`와 동일하게 GCP 쪽 스케줄을 해제하는지
+근거 부족)**: `terraform-provider-google`의
+`resource_kms_crypto_key.go`(`resourceKMSCryptoKeyUpdate`) 소스를 직접
+가져와 확인했다. `rotation_period`가 config에서 사라지면
+`d.HasChange("rotation_period")`가 true가 되어 `updateMask`에
+`rotationPeriod,nextRotationTime` 두 필드가 포함되고, 새 값이 빈 값이라
+`obj["rotationPeriod"]`는 요청 바디에 아예 채워지지 않는다("필드는
+updateMask에, 바디에는 없음" 조합은 GCP PATCH의 표준 "필드 삭제" 문법) —
+`gcloud kms keys update --remove-rotation-schedule`와 기능적으로 동일하다.
+또한 `next_rotation_time`은 이 리소스의 Terraform schema 속성 자체가
+아니라 updateMask 구성에만 등장하므로, apply 후 그 값이 stale computed
+diff로 남을 위험도 없다. `kms_vault_orphan.tf`의 주석을 이 근거로 갱신했다.
+
+**이해도 확인 답변 (comment 2 — `github_actions.tf:255`의
+`roles/cloudkms.admin` 영구 유지 근거로 든 "drift 감지 refresh"가 실제
+workflow 인증과 맞는지)**: 맞지 않았다. `terraform-drift.yml`과
+`terraform-plan.yml`은 둘 다 `CI_SA_EMAIL`(project-level `roles/viewer`,
+읽기 전용)로 인증해 plan만 수행하며 `dev_apply` SA를 쓰지 않는다.
+`apply.yml`의 "Apply dev root" 스텝만 `DEV_APPLY_SA_EMAIL`로 인증하고,
+그마저도 새로 plan/refresh하지 않고 GCS에서 내려받은 저장된 plan
+바이너리(`terraform apply tfplan.bin`)를 그대로 적용한다. 따라서
+`dev_apply`의 `roles/cloudkms.admin`이 필요한 진짜 이유는 "drift 감지"가
+아니라 "`kms_vault_orphan.tf`의 2개 리소스를 다루는 모든 dev root
+apply(이번 승인 apply 포함)를 `dev_apply` SA가 실행하기 때문"이다.
+`github_actions.tf`의 해당 주석을 이 근거로 정정했다.
+
+**이해도 확인 답변 (comment 3 — `will no longer be managed by Terraform`
+allowlist 패턴이 정말 "미래 대비"인지, 어디서도 검증 불가능한 죽은
+코드는 아닌지)**: `grep -rln "^\s*removed\s*{" terraform/`로 저장소
+전체를 훑어본 결과, 이 패턴은 가정이 아니라 **이미 실제로 존재**했다 —
+`terraform/admin/monitoring-k8s/main.tf`(`helm_release.
+kube_prometheus_stack`)와 `terraform/admin/argo-rollouts-k8s/main.tf`
+(`helm_release.argo_rollouts`)에 기존 `removed { lifecycle { destroy =
+false } }` 블록이 있다. 그런데 이 두 root는 `apply.yml`의
+`ADMIN_ROOTS`에는 포함되지만, `terraform-drift.yml`/`terraform-plan.yml`
+/`apply.yml`의 **dev-root** plan 스텝은 각 workflow 헤더 주석대로 admin
+root를 명시적으로 제외한다. 즉 이 3곳(정확히는 4곳 — `apply.yml`은
+dev-root 스텝과 admin-root 스텝이 분리)에서 패턴을 두는 게 아니라, 이
+패턴이 실제로 exercise되는 유일한 지점인 `apply.yml`의 admin-root plan
+스텝 1곳에만 남기고 나머지 3곳은 되돌렸다 — "미래 대비"라는 이전 근거는
+검증 불가능한 죽은 코드를 정당화하는 부정확한 서술이었다. `완료 조건`의
+해당 항목도 이 결정에 맞춰 정정했다(아래).
+
+**이해도 확인 답변 (comment 4 — rotation 제거가 "그 즉시 과금이 멈춘다"는
+서술의 정확성)**: 부정확했다. Cloud KMS는 사용량이 아니라 **활성
+CryptoKeyVersion 수** 기준으로 과금한다. rotation 제거가 멈추는 것은
+**신규** version 생성뿐이고, 이미 존재하는 활성 version 1개는 그 version이
+실제로 `DESTROYED` 상태가 되기 전까지 계속 과금된다(software key 기준
+버전당 월 $0.06). `kms_vault_orphan.tf`·`docs/TERRAFORM_DEV.md`·PR #500
+본문 체크리스트를 모두 이 근거로 정정했다 — 이번 설계(key ring/crypto
+key `prevent_destroy` 영구 보존)에서는 이 잔여 과금도 영구적이나 금액은
+미미하다.
+
+**이해도 확인 답변 (comment 5 — `docs/VAULT_OPERATIONS_RUNBOOK.md:8`이
+아직 "`removed` 블록 apply"라는 2차 정정 시절 서술을 담고 있어 3차
+정정(comment 1)의 최종 설계와 불일치)**: 지적이 맞았다. 3차 정정 이후
+문서 전반을 훑을 때 이 배너 문구를 놓쳤다 — "dev root는 `removed` 블록
+apply"를 "dev root는 `kms_vault_orphan.tf` 유지 + 잔여 4개 destroy
+apply"로 정정했다.
+
 ## 완료 조건
 
 - [ ] `terraform/envs/dev/vault.tf` 삭제
@@ -513,11 +580,13 @@ rotation/IAM 변경)하는 데 상시 필요해 **회수하지 않기로** 결�
       명시(claude-review 3차 지적 반영)
 - [ ] `docs/VAULT_OPERATIONS_RUNBOOK.md` 배너 갱신(코드 제거 완료, state
       정리는 승인 대기로 정정)
-- [ ] `.github/workflows/terraform-drift.yml`/`terraform-plan.yml`/
-      `apply.yml`의 allowlist 정규식에 있는 `will no longer be managed by
-      Terraform` 패턴은 유지한다 — #478 자체는 더 이상 이 문구를 만들지
-      않지만(3차 정정), 이 저장소의 다른 root가 향후 `removed` 블록을 쓸
-      때를 대비한 일반 방어 fix로서 유효하다
+- [ ] `will no longer be managed by Terraform` allowlist 패턴은
+      `terraform-drift.yml`/`terraform-plan.yml`/`apply.yml`의 dev-root
+      plan 스텝 3곳에서는 되돌린다(dev root는 admin root 제외 스코프이고
+      #478 최종 설계도 이 문구를 만들지 않아 검증 불가능한 죽은 코드였다
+      — claude-review 7차 지적). `apply.yml`의 admin-root plan 스텝
+      1곳에만 남기고, 근거를 `monitoring-k8s`/`argo-rollouts-k8s`의 기존
+      `removed` 블록(helm_release forget)으로 정정한다
 - [ ] `scripts/environment_catalog.rb`/`config/environments/dev/environment.yaml`의
       `vault-k8s` 카탈로그 항목 유지 사유 주석 추가
 - [ ] `fmt -check`, `validate`, `git diff --check` 통과

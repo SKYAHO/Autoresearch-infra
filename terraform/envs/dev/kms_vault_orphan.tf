@@ -26,10 +26,18 @@ resource "google_kms_crypto_key" "vault_unseal" {
   name     = "vault-unseal"
   key_ring = google_kms_key_ring.vault.id
   # rotation_period 없음(기존 90d 제거) — Vault가 영구 폐기돼 더 이상 회전할
-  # 필요가 없다. 승인 apply 시 in-place update로 기존 rotation_period가
-  # 제거되며, 그 즉시 신규 CryptoKeyVersion 생성·과금이 멈춘다(수동
-  # `gcloud kms keys update --remove-rotation-schedule` 불필요 — apply
-  # 자체가 그 동작을 대체한다).
+  # 필요가 없다. 승인 apply 시 in-place update(PATCH updateMask=
+  # rotationPeriod,nextRotationTime, 두 필드 모두 body에 미포함)로 GCP
+  # 쪽 rotation schedule 자체가 해제된다 — `gcloud kms keys update
+  # --remove-rotation-schedule`와 동일한 효과이며, provider가 이
+  # updateMask를 정확히 그렇게 구성하는지는 terraform-provider-google
+  # 소스(resource_kms_crypto_key.go)로 확인했다(claude-review 7차 지적,
+  # 수동 gcloud 절차 불필요 확인). 이후 **신규** CryptoKeyVersion 생성·
+  # 과금은 멈추지만, 이미 존재하는 활성 version 1개의 월정액 과금(버전당
+  # 약 $0.06)은 그 version이 실제로 `DESTROYED` 상태가 되기 전까지는
+  # 계속된다 — "과금이 완전히 멈춘다"는 서술은 부정확하다(claude-review
+  # 7차 지적). key ring/crypto key를 `prevent_destroy`로 영구 보존하는
+  # 이번 설계에서는 이 잔여 과금도 영구적이나, 금액 자체는 미미하다.
 
   lifecycle {
     prevent_destroy = true

@@ -77,17 +77,21 @@ jobs:
           # 추가 — 전자는 moved-only, 후자는 move+change 병존 케이스('#
           # <new> will be updated in-place' + '# (moved from <old>)' 두 줄
           # 렌더링)에서 주소 이동 사실이 누락되지 않게 한다.
-          # 'will no longer be managed by Terraform'은 #478 작업 중 추가 —
-          # removed 블록(forget) 대상의 plan 헤더가 이 문구라 위 패턴
-          # 어디에도 매칭되지 않았다(apply.yml/terraform-drift.yml과 동일한
-          # 버그, 4차 리뷰에서 이 파일만 누락 지적됨). #478 자체는
-          # 최종적으로 removed 블록 대신 config 유지(kms_vault_orphan.tf,
-          # prevent_destroy)로 설계를 바꿔 이 문구를 만들지 않지만, 이
-          # 저장소의 다른 root가 향후 removed 블록을 쓸 때를 대비한 일반
-          # 방어 fix로 유지한다. 이 워크플로는 PR에 직접 게시되는 plan
-          # 요약이라 forget 대상 주소 유실 시 리뷰어가 가장 먼저 놓치는
-          # 지점이다.
-          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# .+ will no longer be managed by Terraform|^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' \
+          #
+          # 'will no longer be managed by Terraform'(removed 블록/forget
+          # 헤더) 패턴은 #478 작업 중 한때 추가했다가 되돌렸다 — 이
+          # workflow는 dev root(`terraform/envs/dev`)만 대상이고(admin
+          # root는 상단 주석대로 제외), dev root에는 removed 블록이 없고
+          # #478 최종 설계(config 유지, kms_vault_orphan.tf)도 이 문구를
+          # 만들지 않는다. 반면 removed 블록은 admin root
+          # `monitoring-k8s`/`argo-rollouts-k8s`(helm_release forget,
+          # #307/#312류)에 실제로 존재하는데 이 workflow의 스코프 밖이라
+          # 여기서는 이 패턴을 실제 plan 출력으로 검증할 방법이 없다
+          # (claude-review 7차 지적 — 검증 불가능한 코드는 CI가 회귀를
+          # 못 잡는 사각지대). 같은 패턴이 실제로 exercise되는
+          # `.github/workflows/apply.yml`의 admin root plan 스텝에만
+          # 남겨 뒀다.
+          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' \
             /tmp/plan.out > /tmp/plan.summary || true
 
       - name: PR 댓글 게시

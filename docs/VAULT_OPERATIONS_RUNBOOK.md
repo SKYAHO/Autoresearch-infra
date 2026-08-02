@@ -5,8 +5,9 @@
 > 후)에는 helm release·`vault` namespace가 존재하지 않았고, admin-apply
 > ROOTS에서도 제외됐다(#416). #478에서 `terraform/envs/dev/vault.tf`와
 > `terraform/admin/vault-k8s/` root 코드를 완전히 삭제했다 — 남은 GCP/K8s
-> state 정리(dev root는 `removed` 블록 apply, vault-k8s는 `terraform state
-> rm`)는 별도 승인 후 진행한다. 아래 내용은 실행 불가한 **이력 보존용**이며,
+> state 정리(dev root는 `kms_vault_orphan.tf` 유지 + 잔여 4개 destroy apply,
+> vault-k8s는 `terraform state rm`)는 별도 승인 후 진행한다. 아래 내용은
+> 실행 불가한 **이력 보존용**이며,
 > 실 서비스 secret은 GCP Secret Manager가 담당한다.
 
 dev GKE의 Vault(`vault` namespace, #132/#134) 운영 절차. 설치 구성 문서는

@@ -1685,13 +1685,22 @@ keyring은 삭제 API 자체가 없고, crypto key destroy는 리소스 자체 �
 주의: 위 리소스의 실제 state 정리는 이 문서만으로 수행하지 않는다. 승인
 후 dev root apply를 실행하면 key ring/crypto key 2개는 config에 남은 채
 rotation 속성만 in-place update되고(위 표의 `rotation = 90d`가 이 apply로
-제거된다 — GCP가 이후 신규 `CryptoKeyVersion`을 자동 생성하지 않으므로
-개별 과금(software key 기준 버전당 월 $0.06)도 그 시점부터 멈춘다), 나머지
+제거된다 — `gcloud kms keys update --remove-rotation-schedule`와 동일한
+효과라 수동 절차 불필요, apply 자체가 그 동작을 대체한다), 나머지
 GSA/WI 바인딩/custom role/key IAM binding 4개는 실제로 GCP에서 삭제된다.
+
+**과금 관련 정확한 서술**: rotation 제거가 멈추는 것은 **신규**
+`CryptoKeyVersion` 생성뿐이다. 이미 존재하는 활성 version 1개에 대한
+과금(software key 기준 버전당 월 $0.06)은 그 version이 실제로
+`DESTROYED` 상태가 되기 전까지는 계속된다 — Cloud KMS는 사용량이 아니라
+활성 key version 수 기준으로 과금하기 때문이다. 이번 설계는 key ring/
+crypto key를 `prevent_destroy`로 **영구** 보존하므로 이 잔여 과금도
+영구적이다(금액 자체는 미미하다). 기존 version을 실제로 파기해 이
+과금을 없앨지는 별도 판단이 필요하다 — 파기는 되돌릴 수 없고, 이번 PR이
+의도적으로 피한 동작이다.
+
 `kms_vault_orphan.tf`가 config에 남아 있는 한 이 2개 리소스는
-`terraform-drift.yml`의 정기 drift 감지 대상에 계속 포함된다(수동
-`gcloud kms keys update --remove-rotation-schedule` 절차 불필요 — apply
-자체가 그 동작을 대체한다).
+`terraform-drift.yml`의 정기 drift 감지 대상에 계속 포함된다.
 
 상세 근거는
 `docs/superpowers/specs/2026-08-02-vault-removal-design.md`의 "dev root

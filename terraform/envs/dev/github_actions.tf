@@ -253,13 +253,20 @@ resource "google_project_iam_member" "dev_apply_roles" {
     "roles/servicenetworking.networksAdmin",          # Cloud SQL PSA peering
     "roles/networkconnectivity.consumerNetworkAdmin", # Redis PSC service connection policy
     "roles/cloudkms.admin",                           # #478: google_kms_crypto_key_iam_member.
-    # vault_unseal의 destroy(setIamPolicy)에 우선 필요하고, 승인 apply 이후에는
-    # kms_vault_orphan.tf가 남겨 둔 key ring/crypto key 2개를 계속 관리(drift
-    # 감지 refresh, 향후 rotation/IAM 변경 발생 시 update)하는 데 상시
-    # 필요하다 — 다른 role은 KMS 리소스 IAM/속성 변경을 포함하지 않는다.
-    # 그래서 이 role은 destroy 완료 후에도 **회수하지 않는다**(1차 리비전은
-    # 별도 후속 PR에서 회수 예정이었으나, kms_vault_orphan.tf 설계로 전환하며
-    # 폐기 — docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
+    # vault_unseal의 destroy(setIamPolicy)와 kms_vault_orphan.tf의 rotation
+    # 제거 update(cloudkms.cryptoKeys.update)에 이번 승인 apply에서 우선
+    # 필요하다. **drift 감지(terraform-drift.yml)와는 무관** — drift plan은
+    # `dev_apply`가 아니라 `CI_SA`(project-level `roles/viewer`, 읽기 전용)로
+    # 돌기 때문이다(claude-review 7차 지적으로 정정 — 이전 리비전은 "drift
+    # 감지 refresh"를 근거로 들었으나 사실과 다름). 이 role을 영구 유지하는
+    # 진짜 이유는, kms_vault_orphan.tf의 key ring/crypto key 2개를 다루는
+    # 모든 apply(이번 승인 apply, 그리고 향후 이 2개 리소스에 rotation
+    # 재도입·IAM 재바인딩 등 변경이 생겨 이 root를 다시 apply할 때)를
+    # `dev_apply` SA가 실행하기 때문이다 — 다른 role은 KMS 리소스 IAM/속성
+    # 변경을 포함하지 않는다. 그래서 이 role은 destroy 완료 후에도
+    # **회수하지 않는다**(1차 리비전은 별도 후속 PR에서 회수 예정이었으나,
+    # kms_vault_orphan.tf 설계로 전환하며 폐기 —
+    # docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
   ])
   project = var.project_id
   role    = each.value
