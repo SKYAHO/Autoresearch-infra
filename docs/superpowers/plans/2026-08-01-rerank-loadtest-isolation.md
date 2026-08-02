@@ -28,7 +28,7 @@ dev GKE에서 실행할 수 있도록 전용 Kubernetes 경계와 GitHub Actions
   - runner KSA: `rerank-loadtest`
   - snapshot-reader: GitHub Actions WIF GSA(파드 KSA가 아님)
   - serving Service: `autoresearch/autoresearch-serving:8000`
-  - Prometheus Service proxy: `monitoring/kube-prometheus-stack-prometheus:9090`
+  - Prometheus Service proxy resource: `monitoring/services/http:kube-prometheus-stack-prometheus:9090/proxy`
 
 ## Global constraints
 
