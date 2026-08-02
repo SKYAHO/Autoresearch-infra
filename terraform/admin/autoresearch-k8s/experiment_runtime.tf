@@ -2,12 +2,6 @@
 # 첫 변경에서는 observer read만 제공하고 Job 생성은 admission 경계가 준비될 때까지
 # fail-closed로 유지한다. 실제 Job manifest는 Airflow 저장소가 후속 변경에서 소유한다.
 
-data "kubernetes_service_v1" "experiment_runtime_kube_dns" {
-  metadata {
-    name      = "kube-dns"
-    namespace = "kube-system"
-  }
-}
 
 resource "kubernetes_namespace_v1" "experiment_runtime" {
   metadata {
@@ -162,7 +156,7 @@ resource "kubernetes_network_policy_v1" "experiment_runtime_egress" {
     egress {
       to {
         ip_block {
-          cidr = "${data.kubernetes_service_v1.experiment_runtime_kube_dns.spec[0].cluster_ip}/32"
+          cidr = "${data.kubernetes_service_v1.kube_dns.spec[0].cluster_ip}/32"
         }
       }
 
@@ -251,9 +245,9 @@ resource "kubernetes_network_policy_v1" "experiment_runtime_egress" {
   lifecycle {
     precondition {
       condition = (
-        try(data.kubernetes_service_v1.experiment_runtime_kube_dns.spec[0].type, "") == "ClusterIP" &&
-        try(data.kubernetes_service_v1.experiment_runtime_kube_dns.spec[0].cluster_ip, "") != "" &&
-        try(data.kubernetes_service_v1.experiment_runtime_kube_dns.spec[0].cluster_ip, "") != "None"
+        try(data.kubernetes_service_v1.kube_dns.spec[0].type, "") == "ClusterIP" &&
+        try(data.kubernetes_service_v1.kube_dns.spec[0].cluster_ip, "") != "" &&
+        try(data.kubernetes_service_v1.kube_dns.spec[0].cluster_ip, "") != "None"
       )
       error_message = "kube-dns must be an existing ClusterIP Service before the experiment runtime egress policy can be applied."
     }

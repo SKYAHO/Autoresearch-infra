@@ -2,16 +2,6 @@ mock_provider "google" {}
 mock_provider "kubernetes" {}
 
 override_data {
-  target = data.kubernetes_service_v1.experiment_runtime_kube_dns
-  values = {
-    spec = [{
-      cluster_ip = "172.16.128.10"
-      type       = "ClusterIP"
-    }]
-  }
-}
-
-override_data {
   target = data.kubernetes_service_v1.kube_dns
   values = {
     spec = [{
