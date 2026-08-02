@@ -78,12 +78,33 @@ import 후 `terraform plan`이 0 add / 0 change / 0 destroy로 수렴해야 한�
 replication 설정을 그대로 반영). 편차가 있으면 코드를 라이브에 맞춰 조정하고, 라이브
 쪽을 바꾸지 않는다.
 
+실측(2026-08-02, `gcloud secrets describe --format='value(replication)'`): 두 secret
+모두 `automatic={}`로, 코드의 `replication { auto {} }`와 일치한다. `replication`은
+Secret Manager에서 생성 후 변경 불가(ForceNew) 필드이지만, 값이 이미 일치하므로 import
+시 교체가 발생하지 않는다.
+
+### 머지 → import → plan 확인 순서 보장
+
+이 import는 PR에 코드로 포함되지 않는 수동 out-of-band 절차다. `import {}` 블록
+(TF >= 1.6, `versions.tf` 충족)으로 코드화하는 대신 수동 절차를 유지한 이유:
+`import {}`는 참조하는 라이브 리소스가 없으면 plan이 실패한다. 이 이슈의 목적은
+재구축(라이브 secret이 아직 없는 상태)에서도 이 컨테이너가 정상 생성되게 하는
+것이므로, import를 코드에 고정하면 재구축 경로가 새로 깨진다. 현재 프로젝트처럼
+라이브 secret이 이미 있는 경우에만 1회성으로 import가 필요하다.
+
+머지 직후 이 PR 작업자가 즉시 import를 실행하고 `terraform plan`이 0/0/0으로
+수렴하는지 확인한다. 그 사이(머지~import) `apply.yml`이 먼저 실행되면, 이
+리소스 생성 API 호출만 `ALREADY_EXISTS`로 실패한다 — Terraform은 그래프상
+독립적인 다른 dev root 리소스 변경까지 막지 않고, 이 리소스에 의존하지 않는
+변경은 그대로 적용된다. 이후 import를 수행하면 정상 수렴한다.
+
 ## 완료 조건
 
 - [ ] `terraform plan` 0 add / 0 change / 0 destroy (import 후)
 - [ ] `scripts/verify-oauth-clients.sh` argocd 항목 WARN 없이 통과
-- [ ] `terraform/admin/argocd-k8s/README.md`, `docs/MIGRATION_RUNBOOK.md` Secret
-      인벤토리에 컨테이너 출처가 Terraform임을 반영
+- [ ] `terraform/admin/argocd-k8s/README.md`, `docs/MIGRATION_RUNBOOK.md`,
+      `docs/OAUTH_OPERATIONS_RUNBOOK.md` Secret 인벤토리에 컨테이너 출처가
+      Terraform임을 반영
 - [ ] `secret_manager.tf:130` 부근 "argocd와 대칭" 주석을 실제와 맞게 정정
 
 ## 롤백

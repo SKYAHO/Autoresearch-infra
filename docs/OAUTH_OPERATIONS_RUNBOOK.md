@@ -72,13 +72,15 @@ Google OAuth 콘솔 등록과 운영 검증에서는 **해당 환경의 실제 �
 | MLflow | `autoresearch-dev-mlflow-oauth-client-id` / `autoresearch-dev-mlflow-oauth-client-secret` |
 | Grafana | `autoresearch-dev-grafana-oauth-client-id` / `autoresearch-dev-grafana-oauth-client-secret` |
 | Kibana | `autoresearch-dev-kibana-oauth-client-id` / `autoresearch-dev-kibana-oauth-client-secret` |
-| ArgoCD | `argocd-google-oidc-client-id` / `argocd-google-oidc-client-secret` (Terraform 미관리, `prevent_destroy` 없음) |
+| ArgoCD | `argocd-google-oidc-client-id` / `argocd-google-oidc-client-secret` (Terraform 관리, `prevent_destroy = true`, 이름은 접두사 규칙 예외 — #494) |
 
-Airflow·MLflow·Grafana·Kibana의 client Secret Manager 정본은 Terraform이
-관리하며 `prevent_destroy = true`가 설정되어 있다. ArgoCD의 두 OAuth secret은
-Terraform 리소스가 없는 운영자 수동 생성 정본이므로 같은 보호 장치가 없다.
-ArgoCD secret을 삭제하거나 이름을 바꾸면 자동 복구되지 않으므로, rotation 전
-백업과 break-glass 경로를 먼저 확인한다.
+5종 모두 컨테이너는 Terraform이 관리하며 `prevent_destroy = true`가 설정돼 있다.
+값(version)은 어느 쪽도 Terraform이 관리하지 않으며 운영자가 직접 채운다. ArgoCD의
+두 이름만 `${local.resource_prefix}-` 접두사 규칙의 예외로, 기존 라이브 이름을
+그대로 쓴다(근거:
+`docs/superpowers/specs/2026-08-02-argocd-oidc-secret-iac-design.md`). 컨테이너가
+Terraform 관리 대상이 된 뒤에도 값 삭제·재발급은 자동 복구되지 않으므로, rotation
+전 백업과 break-glass 경로를 먼저 확인한다.
 
 Secret Manager 자동 동기화(External Secrets Operator/CSI Driver)는 이 런북의
 범위가 아니다. 도입하려면 workload별 IAM, 동기화 지연, rotation trigger, 삭제

@@ -164,6 +164,16 @@ Secret Manager의 `argocd-google-oidc-client-id` / `-secret` **컨테이너**는
 #494). 재구축 시 dev root apply만으로 이 컨테이너가 생성된다. 값(version)은
 Terraform이 관리하지 않으므로 재구축 뒤에도 아래 절차로 운영자가 직접 채운다.
 
+재구축 직후처럼 컨테이너만 있고 version이 아직 없으면 `versions access latest`가
+`NOT_FOUND`로 실패한다. 콘솔에서 받은 값을 먼저 정본에 채운다(값은 화면에 남기지 않는다).
+
+```bash
+gcloud secrets versions add argocd-google-oidc-client-id \
+  --project autoresearch-503903 --data-file=-
+gcloud secrets versions add argocd-google-oidc-client-secret \
+  --project autoresearch-503903 --data-file=-
+```
+
 ```bash
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
