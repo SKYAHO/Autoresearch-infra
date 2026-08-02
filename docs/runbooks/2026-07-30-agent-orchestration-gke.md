@@ -6,7 +6,8 @@ ServiceAccount(KSA), GCP ServiceAccount(GSA), 파일 시스템으로 분리한 d
 가지며, Runner는 Codex OAuth bootstrap 시크릿 하나만 읽습니다.
 
 이 문서는 `deploy/agent-orchestration/`의 immutable digest 주입, OAuth 초기 인증,
-ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장 검증·롤백 절차를 다룹니다.
+Alembic PreSync migration, ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장
+검증·롤백 절차를 다룹니다.
 외부 Ingress, LoadBalancer, 사용자별 OAuth, 외부 공개 API는 범위가 아닙니다.
 
 ## 적용 전 조건
@@ -58,6 +59,51 @@ ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장 검증·롤백 절�
 `agent_orchestration_deployment_contract` output은 비밀번호와 OAuth payload를
 출력하지 않습니다. output 값을 조회할 때도 CI log, PR 본문, 티켓에 복사하지
 않습니다.
+
+### Experiment API Alembic migration
+
+Experiment API v0를 포함한 API image는 `api-migration-job.yaml`의 ArgoCD `PreSync`
+hook을 통해 API rollout 전에 `alembic upgrade head`를 실행합니다. Job은 API와 같은
+immutable digest와 기존 `agent-orchestration-api` KSA의 DB bootstrap만 재사용합니다.
+따라서 OAuth PVC, `ORCH_API_TOKEN`, `ORCH_RUNNER_TOKEN`은 Job에 전달되지 않으며, 새
+IAM·DB 권한·외부 egress도 추가하지 않습니다. Job Pod는 API와 같은 label을 써 기존 API
+NetworkPolicy가 허용한 Cloud SQL·DNS·Workload Identity·Private Google APIs 경로만
+사용합니다.
+
+`alembic` 실행 세부 구현은 앱 image 계약에 의존합니다. promotion 전에 대상 source의
+API Dockerfile과 `bootstrap_secrets` 구현을 대조해 다음을 확인합니다.
+
+- `bootstrap-db`는 `/runtime/db.env`에 quoting 없는 단일
+  `ORCH_DATABASE_URL=<url>` 행을 기록합니다.
+- orchestration runtime dependency에 Alembic이 포함되고, image `WORKDIR`(`/app`) 아래에
+  `agent_orchestration/alembic.ini`와 migration 파일이 포함됩니다.
+- Job command의 `alembic -c agent_orchestration/alembic.ini upgrade head`가 이 image에서
+  실행됩니다. 이 계약을 바꾸는 앱 PR은 migration 전용 entrypoint를 제공하거나, 같은
+  release에서 이 Job command와 runbook을 함께 갱신해야 합니다.
+
+현재 dev DB에는 `alembic_version`이 없으므로 #483의 `down_revision = None`인 initial
+revision `0001_experiment_tables`부터 적용됩니다. 이 revision은 experiment 관련 네
+table만 additive하게 생성해야 하며, 기존 `chat_interactions` table·sequence는 변경해서는
+안 됩니다. Experiment table schema의 source of truth는 Alembic이고, 기존 `/chat` table은
+API startup의 `ensure_schema()`가 계속 담당합니다.
+
+`PreSync` Job이 실패하면 ArgoCD sync는 API·Runner rollout 전에 중단됩니다. 임의로
+Deployment를 먼저 sync하거나 migration을 API startup에 숨기지 않습니다. Job은
+`alembic upgrade head`만 수행하므로 완료 후 재실행해도 안전합니다. 반면 rollback에서
+`alembic downgrade`는 자동 실행하지 않습니다. 이전 API는 추가된 experiment table을
+읽지 않아 그대로 동작할 수 있고, downgrade는 데이터 손실 위험이 있으므로 별도 승인과
+복구 계획을 먼저 마련해야 합니다. 성공·실패 Job은 상태와 log 확인을 위해 다음 sync 전까지
+남기며, 다음 PreSync 전에 `BeforeHookCreation`이 같은 이름의 이전 Job을 삭제합니다.
+
+`activeDeadlineSeconds=180`은 Job 전체 실행 시간에 적용되고 `backoffLimit`보다 우선합니다.
+deadline에 도달하면 실행 중인 Pod는 종료되고 Job은 `Failed`/`DeadlineExceeded`가 되며,
+남은 retry 횟수가 있어도 추가 Pod를 만들지 않습니다. 따라서 `DeadlineExceeded` 뒤에는
+자동 재시도를 가정하지 말고 Job status·credential을 제외한 log·`alembic_version`을 먼저
+확인한 뒤 원인을 고치고 새 PreSync sync를 시작합니다. #483 initial revision은 PostgreSQL
+transaction으로 적용되는 additive DDL만 포함해야 하므로, commit 전 중단이면 다음
+`upgrade head`가 같은 revision부터 다시 적용하고 commit 후 중단이면 version table이 이미
+head를 가리켜야 합니다. 이 두 상태와 다른 partial schema가 관측되면 자동 재시도 대신
+승인된 DB 복구 절차로 전환합니다.
 
 ### 최초 활성화 매니페스트
 
@@ -252,6 +298,9 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
 만족하지 않으면 sync하지 않습니다.
 
 - API와 Runner image가 모두 `@sha256:` immutable digest입니다.
+- Experiment API를 포함하는 promotion에서는 API digest가 API container, API DB
+  bootstrap, Runner OAuth bootstrap, PreSync migration Job의 두 container까지 다섯 image
+  reference에 모두 같은 값으로 pin돼 있습니다.
 - API에는 `agent-orchestration-api` KSA와 DB runtime `emptyDir`만 있고 OAuth PVC가
   없습니다. API에는 `ORCH_API_TOKEN`과 `ORCH_RUNNER_TOKEN`만 전달되며 OAuth
   bootstrap Secret은 전달되지 않습니다.
@@ -288,7 +337,13 @@ sync 뒤에는 다음 상태를 확인합니다.
 kubectl -n autoresearch rollout status deployment/agent-orchestration-runner --timeout=5m
 kubectl -n autoresearch rollout status deployment/agent-orchestration-api --timeout=5m
 kubectl -n autoresearch get pod -l app.kubernetes.io/part-of=agent-orchestration
+kubectl -n autoresearch get job agent-orchestration-api-migration \
+  -o jsonpath='{.status.succeeded}'
 ```
+
+마지막 명령의 출력은 `1`이어야 합니다. 실패한 PreSync Job은 API rollout을 막으므로
+`kubectl logs`를 credential을 출력하지 않는 범위에서 확인하고 sync를 재시도하기 전에
+원인을 해결합니다.
 
 ## 공통 post-sync end-to-end gate
 
@@ -359,6 +414,51 @@ HTTP 201 또는 신규 저장 행 확인에 실패하면 deployment success로 �
 승인된 incident/rollback 판단으로 멈추고, Runner를 외부 노출하거나 민감 값을 출력해
 원인을 추적하지 않습니다.
 
+### Experiment API v0 추가 gate
+
+Experiment API promotion에서는 `/openapi.json`에 `/experiments`와
+`/experiments/{experiment_id}` 경로가 있는지 먼저 확인합니다. 그 뒤 `/chat`과 같은
+`X-Orch-Token`으로 비민감 test hypothesis 하나를 생성하고 목록 조회가 성공하는지를
+확인합니다. 응답 본문·UUID·token은 stdout이나 티켓에 남기지 않습니다. 다음 명령은
+응답 JSON을 0600 임시 파일에만 보관하고 생성·목록 HTTP status만 검증합니다.
+
+```bash
+(
+if [ -z "${ORCH_API_TOKEN:-}" ]; then
+  echo "ORCH_API_TOKEN is required for the approved Experiment API smoke test." >&2
+  exit 1
+fi
+
+experiment_header_file="$(mktemp)" || exit 1
+experiment_response_file="$(mktemp)" || exit 1
+experiment_openapi_file="$(mktemp)" || exit 1
+trap 'rm -f "$experiment_header_file" "$experiment_response_file" "$experiment_openapi_file"' EXIT
+trap 'exit 1' HUP INT TERM
+chmod 600 "$experiment_header_file" "$experiment_response_file" "$experiment_openapi_file" || exit 1
+printf 'X-Orch-Token: %s\n' "$ORCH_API_TOKEN" > "$experiment_header_file" || exit 1
+
+curl --fail --silent --output "$experiment_openapi_file" \
+  http://127.0.0.1:8000/openapi.json || exit 1
+python3 -c 'import json, sys; paths = json.load(open(sys.argv[1], encoding="utf-8"))["paths"]; assert "/experiments" in paths; assert "/experiments/{experiment_id}" in paths' \
+  "$experiment_openapi_file" || exit 1
+
+create_status="$(curl --fail --silent --output "$experiment_response_file" --write-out '%{http_code}' \
+  --request POST http://127.0.0.1:8000/experiments \
+  --header 'Content-Type: application/json' \
+  --header "@${experiment_header_file}" \
+  --data '{"hypothesis":"deployment smoke test","metadata":{"source":"gke-smoke"}}')"
+test "$create_status" = "201" || exit 1
+
+list_status="$(curl --fail --silent --output /dev/null --write-out '%{http_code}' \
+  --header "@${experiment_header_file}" http://127.0.0.1:8000/experiments?limit=1)"
+test "$list_status" = "200"
+)
+```
+
+이 gate는 Experiment table 생성과 API DB session 연결을 함께 증명합니다. 더 상세한
+상태 event·log·promotion 계약은 앱 저장소 OpenAPI와 #483 테스트를 기준으로 확인하며,
+운영 smoke test에 실제 실험 입력·사용자 데이터·LLM prompt를 넣지 않습니다.
+
 ## 롤백과 보안 확인
 
 이미지 promotion은 검증된 API와 Runner immutable digest를 manifest commit에 함께
@@ -378,7 +478,7 @@ HTTP 201 또는 신규 저장 행 확인에 실패하면 deployment success로 �
    Runner Ready 및 API `/healthcheck`를 확인한 뒤
    [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과합니다.
 
-이미지 rollback도 같은 순서입니다. 이전에 검증된 두 digest를 포함한 새 rollback
+이미지 rollback도 같은 순서입니다. 이전에 검증된 API digest 다섯 container 참조와 Runner digest를 포함한 새 rollback
 manifest commit을 만들고, 그 commit의 정확한 40자리 SHA로
 `AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하며
 `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 두 Variables가 주입된
@@ -386,6 +486,12 @@ Terraform Application을 reviewed plan/apply로 갱신한 뒤에만 ArgoCD manua
 sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과해야
 하며, 실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로 멈춥니다.
 OAuth 장애와 이미지 장애를 같은 롤백으로 처리하지 않습니다.
+
+rollback manifest를 만들기 전에는 대상 Alembic revision이 `chat_interactions` table과
+sequence를 변경하지 않는 additive migration인지 source diff로 다시 대조합니다. rollback
+sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 반드시
+실행합니다. 이 gate는 rollback 직전의 최대 chat id보다 큰 새 저장 행과 HTTP 201을 함께
+확인하므로, 이전 API digest에서도 `/chat`과 PostgreSQL 저장이 계속 동작함을 증명합니다.
 
 ### Terraform 소유 RBAC와 ArgoCD 소유 manifest가 갈리는 변경
 
@@ -428,15 +534,16 @@ RBAC와 NetworkPolicy를 함께 바꾸는 변경은 다음 순서를 지킵니�
 ### 이미지 참조 원자성
 
 API digest는 `api` container, API의 `bootstrap-db` init container, Runner의
-`bootstrap-codex-auth` init container 세 곳을 **같은 commit에서 함께** 갱신합니다.
-세 번째 init container도 API 이미지의 `bootstrap_secrets` CLI와 OAuth 파일 형식 계약을
-실행하므로, 이 참조만 이전 digest로 남기면 API runtime과 Runner bootstrap의 인자·파일
-형식이 달라질 수 있습니다. CI 계약 검사는 세 API image reference의 동등성과 모든
+`bootstrap-codex-auth` init container, PreSync migration Job의 두 container 다섯 곳을
+**같은 commit에서 함께** 갱신합니다. Runner init container는 API 이미지의
+`bootstrap_secrets` CLI와 OAuth 파일 형식 계약을 실행하고, migration Job은 같은 image의
+Alembic migration을 실행하므로 어느 하나라도 이전 digest로 남기면 runtime·bootstrap·DB
+schema 계약이 달라질 수 있습니다. CI 계약 검사는 다섯 API image reference의 동등성과 모든
 image의 `@sha256` pin을 검증합니다.
 
 Runner 본체만 promotion할 때에는 Runner container digest만 별도로 바꿀 수 있습니다.
 다만 API 또는 Runner 중 한 쪽의 rollback이 필요하고 해당 release 조합의 호환성이
-검증되지 않았다면, 마지막으로 end-to-end gate를 통과한 API 세 참조와 Runner 본체
+검증되지 않았다면, 마지막으로 end-to-end gate를 통과한 API 다섯 참조와 Runner 본체
 digest의 조합 전체를 새 rollback manifest commit으로 되돌립니다.
 
 마지막으로 다음을 확인합니다.

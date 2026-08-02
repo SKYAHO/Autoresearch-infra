@@ -72,10 +72,88 @@ Dir.mktmpdir("agent-orchestration-api-image-contract-") do |temporary_root|
 
   begin
     AgentOrchestrationTimeoutContract.check!(temporary_root)
-  rescue AgentOrchestrationTimeoutContract::ContractError
-    next
+  rescue AgentOrchestrationTimeoutContract::ContractError => error
+    next if error.message.include?("Runner Codex auth bootstrap API image")
+
+    raise "Runner bootstrap image mutation이 다른 계약에서 실패했습니다: #{error.message}"
   end
   raise "Runner bootstrap API image 불일치를 감지하지 못했습니다"
+end
+
+Dir.mktmpdir("agent-orchestration-migration-image-contract-") do |temporary_root|
+  deploy_root = File.join(temporary_root, "deploy")
+  FileUtils.mkdir_p(deploy_root)
+  FileUtils.cp_r(AgentOrchestrationTimeoutContract::DEPLOY_DIRECTORY, deploy_root)
+  api_path = File.join(deploy_root, "agent-orchestration", "api-deployment.yaml")
+  runner_path = File.join(deploy_root, "agent-orchestration", "runner-deployment.yaml")
+  migration_path = File.join(deploy_root, "agent-orchestration", "api-migration-job.yaml")
+  api_image = AgentOrchestrationTimeoutContract.deployment(api_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  runner_image = AgentOrchestrationTimeoutContract.deployment(runner_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  File.write(migration_path, File.read(migration_path).sub(api_image, runner_image))
+
+  begin
+    AgentOrchestrationTimeoutContract.check!(temporary_root)
+  rescue AgentOrchestrationTimeoutContract::ContractError => error
+    next if error.message.include?("Migration DB bootstrap API image")
+
+    raise "Migration bootstrap image mutation이 다른 계약에서 실패했습니다: #{error.message}"
+  end
+  raise "Migration API image 불일치를 감지하지 못했습니다"
+end
+
+Dir.mktmpdir("agent-orchestration-migration-container-image-contract-") do |temporary_root|
+  deploy_root = File.join(temporary_root, "deploy")
+  FileUtils.mkdir_p(deploy_root)
+  FileUtils.cp_r(AgentOrchestrationTimeoutContract::DEPLOY_DIRECTORY, deploy_root)
+  api_path = File.join(deploy_root, "agent-orchestration", "api-deployment.yaml")
+  runner_path = File.join(deploy_root, "agent-orchestration", "runner-deployment.yaml")
+  migration_path = File.join(deploy_root, "agent-orchestration", "api-migration-job.yaml")
+  api_image = AgentOrchestrationTimeoutContract.deployment(api_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  runner_image = AgentOrchestrationTimeoutContract.deployment(runner_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  File.write(
+    migration_path,
+    File.read(migration_path).sub(
+      "name: migrate\n          image: #{api_image}",
+      "name: migrate\n          image: #{runner_image}"
+    )
+  )
+
+  begin
+    AgentOrchestrationTimeoutContract.check!(temporary_root)
+  rescue AgentOrchestrationTimeoutContract::ContractError => error
+    next if error.message.include?("Migration container API image")
+
+    raise "Migration container image mutation이 다른 계약에서 실패했습니다: #{error.message}"
+  end
+  raise "Migration container API image 불일치를 감지하지 못했습니다"
+end
+
+Dir.mktmpdir("agent-orchestration-migration-db-bootstrap-contract-") do |temporary_root|
+  deploy_root = File.join(temporary_root, "deploy")
+  FileUtils.mkdir_p(deploy_root)
+  FileUtils.cp_r(AgentOrchestrationTimeoutContract::DEPLOY_DIRECTORY, deploy_root)
+  migration_path = File.join(deploy_root, "agent-orchestration", "api-migration-job.yaml")
+  File.write(
+    migration_path,
+    File.read(migration_path).sub("value: 192.168.0.3", "value: 192.168.0.4")
+  )
+
+  begin
+    AgentOrchestrationTimeoutContract.check!(temporary_root)
+  rescue AgentOrchestrationTimeoutContract::ContractError => error
+    next if error.message.include?("Migration DB bootstrap env")
+
+    raise "Migration DB bootstrap env mutation이 다른 계약에서 실패했습니다: #{error.message}"
+  end
+  raise "Migration DB bootstrap env 불일치를 감지하지 못했습니다"
 end
 
 puts "Agent Orchestration deployment contract self-test: passed"
