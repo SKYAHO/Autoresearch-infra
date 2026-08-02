@@ -103,7 +103,9 @@ concurrency:
 env:
   TF_IN_AUTOMATION: "true"
   TERRAFORM_VERSION: 1.13.5
-  PLAN_PREFIX: gs://autoresearch-503903-dev-tfstate/apply-plans
+  # PLAN_PREFIX는 카탈로그 state.bucket에서 파생한다(각 job의 대조 step이
+  # GITHUB_ENV로 내보낸다). 여기에 버킷을 하드코딩하면 카탈로그와 이중 정본이 돼,
+  # 카탈로그만 바꾼 이전에서 plan 객체가 옛 버킷으로 향한다.
   DEV_ROOT: terraform/envs/dev
   # #307/#312/#314 admin K8s root 7개, namespace 소유 root 먼저·argocd 마지막
   # (다른 namespace 참조) 순서 유지. gke-team-access(#314)·vault-k8s(#412)는
@@ -118,8 +120,6 @@ env:
     terraform/admin/argocd-k8s
   # 두 root 그룹이 공유하는 변수. 이름이 겹치지 않는다는 불변식은 #449 리뷰에서
   # 실측 확인됨(양방향 충돌 0건) — 어긴 root가 생기면 이 env 블록을 재검토한다.
-  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-  TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
 
 jobs:
   plan:
@@ -144,7 +144,11 @@ jobs:
             echo "::error::GCP_PROJECT_ID가 dev 환경 카탈로그와 일치하지 않습니다"
             exit 1
           fi
-          echo "카탈로그 project_id 일치 확인"
+          catalog_bucket="$(ruby scripts/environment_catalog.rb \
+            --catalog config/environments/dev/environment.yaml \
+            --field state.bucket)"
+          echo "PLAN_PREFIX=gs://${catalog_bucket}/apply-plans" >> "$GITHUB_ENV"
+          echo "카탈로그 project_id 일치 확인 / PLAN_PREFIX 파생 완료"
 
       # #305 방어: admin root를 다루는 dispatch에서만 의미가 있다 — scope=dev
       # 단독 실행이 무관한 admin secret 미설정으로 막히지 않게 한다.
@@ -194,11 +198,7 @@ jobs:
         env:
           ROOTS: ${{ env.DEV_ROOT }}
           # dev root 전용 변수(admin root는 선언하지 않음).
-          TF_VAR_dev_subnet_cidr: ${{ vars.DEV_SUBNET_CIDR }}
           TF_VAR_labels: ${{ vars.TF_LABELS_JSON || '{}' }}
-          TF_VAR_gke_master_ipv4_cidr: ${{ vars.GKE_MASTER_IPV4_CIDR }}
-          TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
-          TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
           # MAN은 빈 목록이 정상 상태(기본 접속은 DNS 엔드포인트 #45)라 폴백을 둔다.
           TF_VAR_master_authorized_networks: ${{ vars.MASTER_AUTHORIZED_NETWORKS || '[]' }}
         run: |
@@ -351,7 +351,11 @@ jobs:
             echo "::error::GCP_PROJECT_ID가 dev 환경 카탈로그와 일치하지 않습니다"
             exit 1
           fi
-          echo "카탈로그 project_id 일치 확인"
+          catalog_bucket="$(ruby scripts/environment_catalog.rb \
+            --catalog config/environments/dev/environment.yaml \
+            --field state.bucket)"
+          echo "PLAN_PREFIX=gs://${catalog_bucket}/apply-plans" >> "$GITHUB_ENV"
+          echo "카탈로그 project_id 일치 확인 / PLAN_PREFIX 파생 완료"
 
       - uses: google-github-actions/setup-gcloud@v2
       - uses: hashicorp/setup-terraform@v3

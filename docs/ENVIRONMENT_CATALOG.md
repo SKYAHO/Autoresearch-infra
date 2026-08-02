@@ -22,6 +22,23 @@ ruby scripts/environment_catalog.rb \
 
 필드 경로가 없거나 카탈로그가 유효하지 않으면 값을 출력하지 않고 실패합니다.
 
+## GitHub 변수와의 관계
+
+카탈로그가 생성하는 `.environment.auto.tfvars.json`은 Terraform 변수 우선순위상
+`TF_VAR_` 환경변수보다 **강합니다**. 따라서 카탈로그가 공급하는 좌표를 workflow의
+`TF_VAR_`로 중복 정의하면, GitHub 변수를 바꿔도 조용히 무시되어 "바꿨는데 반영이
+안 되는" 상태가 됩니다. 이를 막기 위해 카탈로그 소유 좌표(project/region/zone,
+이름 prefix, GKE cluster, 각종 CIDR)의 `TF_VAR_` 선언은 workflow에서 제거했습니다.
+
+workflow에 남아 있는 `TF_VAR_`는 카탈로그가 공급하지 않는 값뿐입니다 —
+`labels`, `master_authorized_networks`, 각 allowlist 이메일(secret), ArgoCD·Agent
+Orchestration 배포 입력 등. 새 좌표를 카탈로그에 추가할 때는 대응하는 `TF_VAR_`
+선언도 함께 제거해야 이중 정본이 생기지 않습니다.
+
+`GCP_PROJECT_ID`만은 bootstrap anchor로 남아 있으며(WIF 인증은 카탈로그를 읽기
+전에 필요), 각 workflow가 인증 **전에** 카탈로그와 대조해 불일치 시 실패합니다.
+`PLAN_PREFIX`도 카탈로그 `state.bucket`에서 파생해 하드코딩을 없앴습니다.
+
 ## 정본 경계
 
 - 카탈로그: project ID, region, zone, 이름 prefix, GKE cluster, CIDR, state bucket/prefix

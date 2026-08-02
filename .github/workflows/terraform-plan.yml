@@ -63,13 +63,7 @@ jobs:
         continue-on-error: true
         env:
           # tfvars 가 gitignored 라 CI에 변수값이 없다. GitHub variables 에서 주입.
-          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-          TF_VAR_dev_subnet_cidr: ${{ vars.DEV_SUBNET_CIDR }}
           TF_VAR_labels: ${{ vars.TF_LABELS_JSON || '{}' }}
-          TF_VAR_private_services_cidr: ${{ vars.PRIVATE_SERVICES_CIDR }}
-          TF_VAR_gke_master_ipv4_cidr: ${{ vars.GKE_MASTER_IPV4_CIDR }}
-          TF_VAR_gke_pods_cidr: ${{ vars.GKE_PODS_CIDR }}
-          TF_VAR_gke_services_cidr: ${{ vars.GKE_SERVICES_CIDR }}
           TF_VAR_master_authorized_networks: ${{ vars.MASTER_AUTHORIZED_NETWORKS || '[]' }}
         # plan 원문은 runner 임시파일에만 둔다(공개 PR 코멘트에 게시 금지).
         # 공개 코멘트에는 리소스 주소 헤더 + 요약만 게시하므로, 여기서 안전한
