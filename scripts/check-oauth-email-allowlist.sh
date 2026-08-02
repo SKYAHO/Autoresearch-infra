@@ -146,7 +146,7 @@ check_no_env_from "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
 if grep -REn --exclude='*.md' \
   --exclude-dir='.terraform' \
   -- "$email_domain_pattern|OAUTH2_PROXY_EMAIL_DOMAINS|(^|[^[:alnum:]_])email[-_]domains?[[:space:]]*[:=]" deploy terraform; then
-  echo "ERR 저장소 manifest/Terraform 설정에 email-domain 또는 OAUTH2_PROXY_EMAIL_DOMAINS가 남아 있음"
+  echo "ERR 위 경로에 email-domain 계열 설정이 있음 — oauth2-proxy 설정이면 제거하고, oauth2-proxy와 무관한 email_domain 키라면 이 스캔의 제외 조건(--exclude 또는 경로 한정)을 명시적으로 추가할 것"
   FAIL=1
 else
   grep_status=$?
@@ -171,10 +171,18 @@ fi
 #
 # Terraform은 이미지 기본값(variables.tf)과 args(oauth2_proxy.tf)가 다른 파일에
 # 있으므로 파일 단위가 아니라 디렉터리 단위로 판정한다.
-# 이미지 표기는 upstream quay와 GAR 미러를 모두 포괄하도록 태그 기반으로 잡는다.
-# 이미지 참조 방식을 또 바꾸면(예: Helm chart 전환) 이 패턴도 함께 갱신해야 한다.
+# 이미지 표기는 upstream quay·GAR 미러·digest 고정을 모두 포괄하도록
+# `oauth2-proxy` 뒤에 태그(:) 또는 digest(@)가 오는 형태로 잡는다.
+#
+# 알려진 한계 두 가지(둘 다 의도적 trade-off):
+#  - 판정 단위가 디렉터리다. Terraform은 이미지 기본값(variables.tf)과
+#    args(oauth2_proxy.tf)가 다른 파일이라 파일 단위로는 오탐이 난다. 대신 한
+#    디렉터리에 oauth2-proxy 매니페스트가 둘 이상이고 그중 하나에만 flag가 있으면
+#    통과한다. 새 대상은 여전히 check_target에 명시 등록하는 것이 정본이다.
+#  - 이미지 참조 방식이 또 바뀌면(예: Helm chart의 repository/tag 분리 표기)
+#    이 패턴도 함께 갱신해야 한다. 발견 0건이면 아래에서 실패시켜 침묵을 막는다.
 discovered_dirs="$(grep -RIlE --exclude='*.md' --exclude-dir='.terraform' \
-  -- '(^|[^[:alnum:]_-])oauth2-proxy:v[0-9]' deploy terraform 2>/dev/null \
+  -- '(^|[^[:alnum:]_-])oauth2-proxy[:@]' deploy terraform 2>/dev/null \
   | while IFS= read -r f; do dirname -- "$f"; done | sort -u || true)"
 if [ -n "$discovered_dirs" ]; then
   printf '%s\n' "$discovered_dirs" | while IFS= read -r dir; do
