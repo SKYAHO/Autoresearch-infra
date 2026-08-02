@@ -204,9 +204,12 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         }]
       }
       validations = [
+        # Job의 pod template에는 serviceAccountName defaulting이 적용되지 않는다
+        # (Pod 오브젝트와 달리 실측상 필드가 그대로 비어 온다). 가드 없이 비교하면
+        # 누락 Job이 CEL 런타임 오류로만 거부돼 사유가 드러나지 않으므로 명시한다.
         {
-          expression = "object.spec.template.spec.serviceAccountName == '${var.experiment_job_k8s_service_account}'"
-          message    = "실험 Job은 승인된 serviceAccountName만 사용해야 합니다."
+          expression = "has(object.spec.template.spec.serviceAccountName) && object.spec.template.spec.serviceAccountName == '${var.experiment_job_k8s_service_account}'"
+          message    = "실험 Job은 승인된 serviceAccountName을 명시해야 합니다."
         },
         # initContainers도 같은 Pod에서 같은 KSA로 실행돼 metadata server로 GSA
         # token을 얻고 egress allowlist도 동일하므로, containers만 검사하면
@@ -239,9 +242,14 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # size()==1로 "승인된 toleration 정확히 하나"를 강제해 runbook 서술과 맞춘다.
         # Job 오브젝트는 Pod가 아니라 DefaultTolerationSeconds admission의 대상이
         # 아니므로, 제출한 template이 그대로 평가된다.
+        # operator는 Job pod template에서 defaulting되지 않는다(실측: Pod와 달리
+        # `operator: Equal`이 채워지지 않고 필드가 비어 온다). Kubernetes 의미상
+        # 빈 operator는 Equal이므로, runbook 표기 그대로 `workload=batch-od:NoSchedule`
+        # 를 operator 없이 쓴 Job이 거부되지 않도록 미설정을 Equal로 취급한다.
+        # key/value/effect는 has()로 명시 요구해 누락 사유가 메시지로 드러나게 한다.
         {
-          expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.size() == 1 && object.spec.template.spec.tolerations.all(t, t.key == 'workload' && t.operator == 'Equal' && t.value == 'batch-od' && t.effect == 'NoSchedule')"
-          message    = "실험 Job은 batch-od toleration 하나만 사용해야 합니다."
+          expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.size() == 1 && object.spec.template.spec.tolerations.all(t, has(t.key) && t.key == 'workload' && (!has(t.operator) || t.operator == 'Equal') && has(t.value) && t.value == 'batch-od' && has(t.effect) && t.effect == 'NoSchedule')"
+          message    = "실험 Job은 workload=batch-od:NoSchedule toleration 하나만 사용해야 합니다."
         },
         # quota 회수의 서버 측 강제. 이 root는 API KSA에 delete를 주지 않고
         # enable_experiment_job_creation=false 롤백도 실행 중 Job을 멈추지 않으므로,
