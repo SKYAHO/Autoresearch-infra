@@ -297,7 +297,7 @@ resource "kubernetes_role_v1" "rerank_loadtest_prometheus_snapshot_reader" {
   rule {
     api_groups     = [""]
     resources      = ["services/proxy"]
-    resource_names = ["kube-prometheus-stack-prometheus"]
+    resource_names = ["http:kube-prometheus-stack-prometheus:9090"]
     verbs          = ["get"]
   }
 }
