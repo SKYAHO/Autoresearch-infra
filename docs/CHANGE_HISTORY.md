@@ -163,16 +163,29 @@
   원칙의 양방향 사례.
 - **데이터**: GCS 8버킷 서버사이드 rsync, BQ 7테이블 cp, Cloud SQL 3개 DB
   export/import(모델 레지스트리·Airflow 이력 보존), 이미지 7종 digest 보존 복사.
-- **재구축에서 드러난 함정**(상세는 #404 진행 기록): CRD 의존 root의 operator
-  선적용, 신선 클러스터 한정 ns 참조 순서, operator Secret 선주입 없인
+- **재구축에서 드러난 함정**(Phase별 재사용 절차로 상세 정리는
+  `docs/MIGRATION_RUNBOOK.md`): CRD 의존 root의 operator 선적용, 신선
+  클러스터 한정 ns 생성 레이스(root 내부 `depends_on` 누락 — #436→#442로
+  확정·해결, 초기 "root 간 순서" 진단은 오진), operator Secret 선주입 없인
   rollout 대기 실패, 수동 kubectl 오브젝트(batch KSA)의 누락(#427→#428 IaC
-  편입), OAuth client의 프로젝트 종속(5종 재발급·전환).
+  편입), OAuth client의 프로젝트 종속(5종 재발급·전환), 내부 UI
+  `loadBalancerIP` 하드코딩과 DNS 예약 IP 불일치(#425→#426 — 리터럴 값 갱신,
+  output 자동 참조는 미완).
 - **quota 구조**: 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot이 E2를 소모 —
   증설 대신 batch-spot을 n2로 전환해 수요를 N2 quota(200)로 이전(#422).
-- **롤백·정리**: 옛 프로젝트는 결제 분리로 정지(재연결 시 복구 가능). OAuth
-  전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·데이터 경로 기준) 확인.
-  코드 잔재는 드랍된 vault 샌드박스의 helm-values 1건뿐이며 #412 B~C(root째
-  삭제)가 정리한다. 삭제 예약은 그 이후.
+- **롤백·정리**: OAuth 전환 완료로 **런타임 의존 0**(가동 중 워크로드·CI·
+  데이터 경로 기준) 확인 후, 2026-07-31 옛 프로젝트 `ar-infra-501607`을
+  `gcloud projects delete`로 `DELETE_REQUESTED` 전환(30일 내
+  `gcloud projects undelete`로 프로젝트 ID 복원 가능 — 리소스·데이터 복구는
+  보장되지 않아 실질 롤백은 IaC 재적용 + 백업 복원이다). 코드 잔재는 2건 — ① 드랍된
+  vault 샌드박스의 helm-values(#412 B~C가 root째 삭제로 정리),
+  ② `terraform/envs/dev/gke_ctr_retrain.tf` 상단의 옛 프로젝트 대상
+  `terraform import` 지시 주석(#316 당시 절차 — 옛 프로젝트가
+  `DELETE_REQUESTED`인 지금은 실행 불가·불필요한 낡은 지시라 후속 정리
+  대상).
+- **재사용 가능한 실행 절차**(Phase별 진행상황·마주친 이슈·해결 방법)는
+  `docs/MIGRATION_RUNBOOK.md`(#437)에 정리했다. 설계 당시 결정 근거는
+  `docs/superpowers/specs/2026-07-29-project-migration-design.md`를 본다.
 
 ## 2026-07-30: Feast dev/prod 런타임 IAM 경계 구성 (#424) — 미적용
 
