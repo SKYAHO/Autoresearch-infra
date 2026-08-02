@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T05:00:16Z",
+  "generated_at": "2026-08-02T05:02:10Z",
   "reports": [
+    {
+      "number": 499,
+      "title": "feat: ArgoCD OIDC Secret Manager 정본 2종을 IaC로 편입",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-02T05:01:57Z",
+      "summary_ko": [
+        "라이브 환경에만 수동으로 존재하던 ArgoCD Google OIDC 인증용 Secret Manager 리소스 2종을 Terraform 코드(IaC)로 편입하였습니다.",
+        "기존 라이브 리소스 이름을 유지하여 스크립트 및 Helm 설정 수정을 방지하고, 삭제 방지(prevent_destroy) 옵션을 추가하여 안정성을 높였습니다.",
+        "상세 설계 문서를 신규 작성하고, 마이그레이션 런북 및 ArgoCD 운영 문서의 시크릿 인벤토리 정보를 최신화하였습니다."
+      ],
+      "report_url": "pr/499/"
+    },
     {
       "number": 498,
       "title": "docs: agent-orchestration ArgoCD 핀 갱신 절차와 egress 선행 조건 명문화",
