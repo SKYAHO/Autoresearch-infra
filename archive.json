@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T03:35:20Z",
+  "generated_at": "2026-08-02T03:38:23Z",
   "reports": [
+    {
+      "number": 493,
+      "title": "feat: 실험 runtime의 dev Feast IAM·격리 실행 경계",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-02T03:38:11Z",
+      "summary_ko": [
+        "paired Feast 실험 실행을 위한 전용 dev GCP/GKE IAM 계정과 Kubernetes 격리 환경(experiment-runtime)을 구축하였습니다.",
+        "GCS 'experiments/'·'code/' prefix와 BigQuery dev dataset만 접근하도록 권한을 최소화하고, 외부 인터넷 및 운영 리소스 접근을 차단하였습니다.",
+        "ValidatingAdmissionPolicy 등 승인 제어가 완비될 때까지 Job 생성을 비활성화(job_creation_enabled=false)하여 fail-closed 상태를 유지합니다."
+      ],
+      "report_url": "pr/493/"
+    },
     {
       "number": 490,
       "title": "feat: 실험별 Kubernetes Job 실행 기반 추가",
