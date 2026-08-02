@@ -62,6 +62,7 @@ class EnvironmentCatalog
 
     validate_gcp!
     validate_network!
+    validate_gke!
     validate_state!
     self
   end
@@ -82,12 +83,12 @@ class EnvironmentCatalog
       "dev_subnet_cidr" => network.fetch("dev_subnet_cidr"),
       "private_services_cidr" => network.fetch("private_services_cidr"),
       "redis_psc_subnet_cidr" => network.fetch("redis_psc_subnet_cidr"),
-      "gke_cluster_name" => data.fetch("gke").fetch("cluster_name"),
-      "gke_master_ipv4_cidr" => data.fetch("gke").fetch("master_ipv4_cidr"),
-      "gke_pods_cidr" => data.fetch("gke").fetch("pods_cidr"),
-      "gke_services_cidr" => data.fetch("gke").fetch("services_cidr"),
-      "cluster_master_cidr" => data.fetch("gke").fetch("master_ipv4_cidr"),
-      "cluster_services_cidr" => data.fetch("gke").fetch("services_cidr"),
+      "gke_cluster_name" => gke.fetch("cluster_name"),
+      "gke_master_ipv4_cidr" => gke.fetch("master_ipv4_cidr"),
+      "gke_pods_cidr" => gke.fetch("pods_cidr"),
+      "gke_services_cidr" => gke.fetch("services_cidr"),
+      "cluster_master_cidr" => gke.fetch("master_ipv4_cidr"),
+      "cluster_services_cidr" => gke.fetch("services_cidr"),
       "ui_ingress_source_cidr" => network.fetch("dev_subnet_cidr")
     }
     values.slice(*ROOT_VARIABLE_KEYS.fetch(root))
@@ -159,6 +160,12 @@ class EnvironmentCatalog
     raise CatalogError, "state mapping이 필요합니다"
   end
 
+  def gke
+    data.fetch("gke")
+  rescue KeyError
+    raise CatalogError, "gke mapping이 필요합니다"
+  end
+
   def validate_gcp!
     raise CatalogError, "gcp는 mapping이어야 합니다" unless gcp.is_a?(Hash)
 
@@ -178,10 +185,23 @@ class EnvironmentCatalog
   def validate_network!
     raise CatalogError, "network는 mapping이어야 합니다" unless network.is_a?(Hash)
 
-    %w[dev_subnet_cidr private_services_cidr].each do |key|
+    %w[dev_subnet_cidr private_services_cidr redis_psc_subnet_cidr].each do |key|
       IPAddr.new(required_string(network, key))
     rescue IPAddr::InvalidAddressError
       raise CatalogError, "#{key}는 유효한 CIDR이어야 합니다"
+    end
+  end
+
+  def validate_gke!
+    raise CatalogError, "gke는 mapping이어야 합니다" unless gke.is_a?(Hash)
+
+    cluster_name = required_string(gke, "cluster_name")
+    raise CatalogError, "gke cluster_name 형식이 잘못되었습니다" unless cluster_name.match?(/\A[a-z][a-z0-9-]{0,38}[a-z0-9]\z/)
+
+    %w[master_ipv4_cidr pods_cidr services_cidr].each do |key|
+      IPAddr.new(required_string(gke, key))
+    rescue IPAddr::InvalidAddressError
+      raise CatalogError, "gke #{key}는 유효한 CIDR이어야 합니다"
     end
   end
 

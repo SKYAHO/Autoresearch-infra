@@ -14,12 +14,18 @@ end
 
 def assert_catalog_error(message)
   yield
+  # 블록이 CatalogError를 던지지 않고 끝나면 그 자체가 실패다 — raise가 없으면
+  # 모든 음성 테스트가 항진(vacuous) 통과한다.
+  raise message
 rescue EnvironmentCatalog::CatalogError
-  return
+  nil
 end
 
 def write_catalog(directory, content)
-  path = File.join(directory, "environment.yaml")
+  # 케이스마다 고유 파일을 쓴다 — 같은 이름을 덮어쓰면 앞서 얻은 경로가
+  # 뒤의 mutation 내용을 가리키게 되어 테스트끼리 오염된다.
+  @catalog_sequence = (@catalog_sequence || 0) + 1
+  path = File.join(directory, "environment-#{@catalog_sequence}.yaml")
   File.write(path, content)
   path
 end
@@ -109,7 +115,7 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
 
   missing_project_path = write_catalog(
     directory,
-    VALID_CATALOG.sub("    project_id: autoresearch-503903\n", "")
+    VALID_CATALOG.sub(/^ *project_id: autoresearch-503903\n/, "")
   )
   assert_catalog_error("project_id 누락을 허용하면 안 됩니다") do
     EnvironmentCatalog.load(missing_project_path).validate!
@@ -117,6 +123,22 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
 
   assert_catalog_error("알려지지 않은 Terraform root의 backend를 만들면 안 됩니다") do
     catalog.backend_config("terraform/admin/unknown-root")
+  end
+
+  invalid_gke_cidr_path = write_catalog(
+    directory,
+    VALID_CATALOG.sub("pods_cidr: 172.16.64.0/20", "pods_cidr: not-a-cidr")
+  )
+  assert_catalog_error("gke CIDR 형식 오류를 허용하면 안 됩니다") do
+    EnvironmentCatalog.load(invalid_gke_cidr_path).validate!
+  end
+
+  missing_gke_path = write_catalog(
+    directory,
+    VALID_CATALOG.sub(/^gke:\n(?:  .+\n)+/, "")
+  )
+  assert_catalog_error("gke mapping 누락을 허용하면 안 됩니다") do
+    EnvironmentCatalog.load(missing_gke_path).validate!
   end
 
   stdout, stderr, status = run_catalog_cli([
