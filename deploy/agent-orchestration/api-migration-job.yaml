@@ -1,32 +1,35 @@
-# Agent Orchestration API의 최초 배포 manifest다. API container와 DB bootstrap은
-# 같은 immutable digest를 사용한다. 이후 promotion·rollback도 두 참조를 같은
-# manifest commit에서 함께 갱신하며 mutable tag는 사용하지 않는다.
-apiVersion: apps/v1
-kind: Deployment
+# Experiment API v0 Alembic migration은 API rollout 전에 한 번만 실행한다. 기존 API
+# KSA의 DB bootstrap 경로만 사용하며 OAuth PVC와 API·Runner 요청 토큰은 mount하지 않는다.
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: agent-orchestration-api
+  name: agent-orchestration-api-migration
   namespace: autoresearch
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-1"
+    # 성공·실패 Job을 다음 sync 전까지 남겨 상태와 log를 확인한다. 다음 PreSync 전에
+    # 같은 이름의 이전 Job은 삭제해 migration이 다시 실행될 수 있게 한다.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
   labels:
-    app.kubernetes.io/name: agent-orchestration-api
+    app.kubernetes.io/name: agent-orchestration-api-migration
     app.kubernetes.io/part-of: agent-orchestration
     app.kubernetes.io/component: api
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: agent-orchestration-api
+  backoffLimit: 1
+  activeDeadlineSeconds: 180
   template:
     metadata:
-      # ConfigMap 값과 함께 바뀌어 API·Runner Pod를 같은 timeout으로 재기동한다.
-      annotations:
-        autoresearch.io/codex-runner-timeout-sec: "120"
       labels:
-        app.kubernetes.io/name: agent-orchestration-api
+        # API egress policy만 적용해 DB, DNS, Workload Identity와 Private Google
+        # APIs 외에는 연결할 수 없다.
+        app.kubernetes.io/name: agent-orchestration-api-migration
         app.kubernetes.io/part-of: agent-orchestration
         app.kubernetes.io/component: api
     spec:
       serviceAccountName: agent-orchestration-api
       automountServiceAccountToken: true
+      restartPolicy: Never
       securityContext:
         fsGroup: 10001
         seccompProfile:
@@ -62,59 +65,35 @@ spec:
             capabilities:
               drop: ["ALL"]
       containers:
-        - name: api
+        - name: migrate
           image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:76092067b2dbe638e2e351cb11275e0f1f2c7e3dfd2d6b4b92c2db6a4a0bf74e
           imagePullPolicy: IfNotPresent
-          ports:
-            - name: http
-              containerPort: 8000
+          command:
+            - python
+            - -c
+            - |
+              import os
+              from pathlib import Path
+
+              entries = [
+                  line.split("=", 1)[1]
+                  for line in Path("/runtime/db.env").read_text(encoding="utf-8").splitlines()
+                  if line.startswith("ORCH_DATABASE_URL=")
+              ]
+              if len(entries) != 1:
+                  raise SystemExit("Expected exactly one ORCH_DATABASE_URL runtime entry")
+              os.environ["ORCH_DATABASE_URL"] = entries[0]
+              os.execvp(
+                  "alembic",
+                  ["alembic", "-c", "agent_orchestration/alembic.ini", "upgrade", "head"],
+              )
           env:
-            - name: LLM_BACKEND
-              value: codex_runner
-            - name: CODEX_RUNNER_URL
-              value: http://agent-orchestration-runner.autoresearch.svc.cluster.local:8080
-            - name: CODEX_RUNNER_TIMEOUT_SEC
-              valueFrom:
-                configMapKeyRef:
-                  name: agent-orchestration-runner-timeout
-                  key: CODEX_RUNNER_TIMEOUT_SEC
-            - name: ORCH_RUNNER_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  # API와 Runner 사이에서만 쓰는 별도 내부 인증 토큰이다. 이
-                  # 토큰은 OAuth·DB 시크릿과 분리되며 Secret Manager 접근권한을
-                  # 추가로 부여하지 않는다.
-                  name: agent-orchestration-runner-token
-                  key: ORCH_RUNNER_TOKEN
             - name: ORCH_RUNTIME_DIR
               value: /runtime
-            - name: ORCH_API_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  # 운영자가 runbook 절차로 주입하는 공유 요청 토큰이다. DB/OAuth
-                  # 시크릿과 달리 GSA accessor를 부여하지 않는다.
-                  name: agent-orchestration-api-token
-                  key: ORCH_API_TOKEN
           volumeMounts:
             - name: db-runtime
               mountPath: /runtime
               readOnly: true
-          startupProbe:
-            httpGet:
-              path: /healthcheck
-              port: http
-            periodSeconds: 10
-            failureThreshold: 30
-          readinessProbe:
-            httpGet:
-              path: /healthcheck
-              port: http
-            periodSeconds: 10
-          livenessProbe:
-            tcpSocket:
-              port: http
-            periodSeconds: 20
-            failureThreshold: 3
           resources:
             requests:
               cpu: 100m
