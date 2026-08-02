@@ -1,3 +1,10 @@
+# 이 예시의 좌표 값(project_id/region/zone/name_prefix/CIDR 등)은
+# config/environments/dev/environment.yaml이 정본이며, 래퍼가 생성하는
+# .environment.auto.tfvars.json이 terraform.tfvars보다 우선합니다.
+# 아래 좌표를 로컬 terraform.tfvars에 적어도 무시되므로, 값을 바꾸려면
+# 카탈로그를 수정하십시오. 이 파일에는 카탈로그가 공급하지 않는 값
+# (허용 이메일 목록, labels, master_authorized_networks 등)만 두는 것이 맞습니다.
+
 project_id = "your-gcp-project-id"
 
 region      = "asia-northeast3"

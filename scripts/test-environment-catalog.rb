@@ -172,6 +172,19 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
   assert(init_without_backend.include?("init"), "init 명령을 Terraform에 전달해야 합니다")
   assert(!init_without_backend.any? { |argument| argument.start_with?("-backend-config=") }, "-backend=false에는 backend-config를 전달하면 안 됩니다")
 
+  # drift/plan workflow가 실제로 쓰는 호출 형태. backend를 쓰는 root에서
+  # -backend=false 없이 init하면 -backend-config가 붙어야 하며, set -e 아래에서
+  # 스크립트가 중간에 죽지 않고 이 경로까지 도달하는지도 함께 보장한다.
+  init_with_backend = run_wrapper([
+    "--environment", "dev", "--root", "terraform/envs/dev", "init", "-reconfigure", "-no-color"
+  ])
+  assert(init_with_backend.include?("init"), "init 명령을 Terraform에 전달해야 합니다")
+  assert(
+    init_with_backend.any? { |argument| argument.start_with?("-backend-config=") },
+    "backend root의 init에는 -backend-config를 전달해야 합니다"
+  )
+  assert(init_with_backend.include?("-reconfigure"), "사용자 인수(-reconfigure)를 그대로 전달해야 합니다")
+
   bootstrap_validate = run_wrapper([
     "--environment", "dev", "--root", "terraform/bootstrap", "validate"
   ])

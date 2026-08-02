@@ -33,11 +33,26 @@ generated=$(ruby "$repository_root/scripts/environment_catalog.rb" --catalog "$c
 backend_file=$(printf '%s' "$generated" | ruby -rjson -e 'value = JSON.parse(STDIN.read); print(value["backend_file"] || "")')
 
 if [ "$command" = "init" ]; then
+  # `[ ... ] && exec ...` 형태는 조건이 거짓일 때 AND-OR 리스트가 non-zero로
+  # 끝난다. set -e 아래에서 그 리스트가 루프 본문의 마지막 명령이면 루프 자체의
+  # 종료 상태가 non-zero가 되어, 셸 구현에 따라 errexit로 스크립트가 조용히
+  # 죽을 수 있다(bash-as-sh와 dash의 동작이 갈리는 영역). CI는 dash를 쓰므로
+  # 셸 의존 동작에 기대지 않고 명시적 if/변수로 분기한다.
+  use_backend_config=1
   for argument in "$@"; do
-    [ "$argument" = "-backend=false" ] && exec terraform -chdir="$root" init "$@"
+    if [ "$argument" = "-backend=false" ]; then
+      use_backend_config=0
+      break
+    fi
   done
-  [ -z "$backend_file" ] && exec terraform -chdir="$root" init "$@"
-  exec terraform -chdir="$root" init -backend-config="$backend_file" "$@"
+  if [ -z "$backend_file" ]; then
+    use_backend_config=0
+  fi
+
+  if [ "$use_backend_config" -eq 1 ]; then
+    exec terraform -chdir="$root" init -backend-config="$backend_file" "$@"
+  fi
+  exec terraform -chdir="$root" init "$@"
 fi
 
 exec terraform -chdir="$root" "$command" "$@"
