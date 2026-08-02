@@ -897,6 +897,75 @@ managed by Terraform → Plan: → No changes`로 통일했다. 또한 4곳에
 다음에 alternative를 추가·수정할 때는 이 절만 갱신하고, 4개 workflow
 파일은 정규식 문자열 자체만(순서 포함, 동일하게) 갱신한다.
 
+## claude-review 13차 지적 (2026-08-02, PR #500)
+
+12차 반영 커밋(`01dcc71`) 푸시 후 draft 토글로 재트리거한 13차 리뷰에서
+새 지적 3건이 나왔다(5→3→6→6→5→**3**, 여전히 비단조 감소 — 2회 연속
+감소가 수렴을 뜻하지 않는다).
+
+**이해도 확인 답변(1)** — `kms_vault_orphan.tf:20`, GSA 롤백이 custom
+role과 대칭인지: WebSearch로 GCP 공식 문서
+(`cloud.google.com/iam/docs/service-accounts-delete-undelete`)를 확인한
+결과 **대칭이 아니다**. `google_service_account`는 삭제 후 대기 없이
+**즉시** 같은 `account_id`로 재생성 가능하지만, 그 결과는 완전히 새
+identity(새 unique numeric id)이고 옛 IAM 바인딩을 상속하지 않는다(옛
+identity를 유지하려면 삭제 후 30일 이내 `account.undelete`가 필요).
+이 저장소는 GSA를 참조하는 바인딩(WI 바인딩, key IAM binding)도 전부
+Terraform 리소스로 관리하므로 `vault.tf`를 통째로 되돌려 apply하면
+SA+두 바인딩은 새 identity 기준으로 다시 일관되게 맞춰져 문제가 없다.
+문제는 **custom role** 쪽이다: destroy 후 7일 이내면 role_id가
+soft-delete 상태라 재생성 apply가 충돌 에러로 실패할 수 있고(먼저
+`gcloud iam roles undelete` 필요), 7~37일 사이면 role_id 재사용 자체가
+막혀 apply가 실패한다. 즉 **destroy 후 7~37일 사이에 4개 리소스를 한
+apply로 되돌리면 SA/두 바인딩은 성공하고 custom role만 실패하는 부분
+apply**가 실제로 발생할 수 있다. `terraform/envs/dev/kms_vault_orphan.tf`
+상단 주석에 이 비대칭성과 대응 방법(custom role만 별도 완전 삭제 대기 후
+재시도, 또는 임시 role_id 우회)을 추가했다.
+
+**이해도 확인 답변(2)** — `kms_vault_orphan.tf:37`, 이 리소스가 실제로
+감지하는 변경의 범위: WebSearch로
+`github.com/hashicorp/terraform-provider-google`의
+`kms_crypto_key.html.markdown`과 `kms_crypto_key_version` data source
+문서를 확인한 결과, `google_kms_crypto_key` 리소스 schema는
+name/key_ring/purpose/rotation_period/version_template/labels 등 **key
+자체의 메타데이터**만 추적하고, 개별 `CryptoKeyVersion`의 상태
+(ENABLED/DISABLED/DESTROYED)는 이 리소스의 속성이 아니다 — provider에
+`CryptoKeyVersion`을 관리하는 resource 자체가 없고, 읽기 전용
+`google_kms_crypto_key_version` data source만 있다. 그래서 누군가
+Terraform 밖에서 `gcloud kms keys versions destroy`로 활성 version의
+파기를 예약해도 이 리소스의 추적 속성에는 diff가 생기지 않으므로, 다음
+drift plan은 `No changes`로 나온다(exitcode 2로 잡히지 않는다). 즉 이
+파일의 "영구 보존" 설계가 실제로 막는 것은 **Terraform 경로로 key
+ring/crypto key 리소스 자체가 삭제되는 것**(`prevent_destroy`)뿐이며,
+GCP 콘솔/gcloud로 직접 CryptoKeyVersion을 파기하는 경로는 이 설계로도
+drift 감지로도 막지 못한다 — `next_rotation_time` 사각지대와 같은 계열의
+한계다. `roles/cloudkms.admin`(`cryptoKeyVersions.destroy` 포함)이 오히려
+이 경로의 위험원이기도 하다는 점을 `kms_vault_orphan.tf`의 crypto key
+리소스 블록 바로 앞에 추가했다.
+
+**이해도 확인 답변(3)** — `github_actions.tf:283`, `cloudkms.admin`을
+정상 상태에서도 유지하는 근거의 정밀화: 10차에서 쓴 "apply 정상
+상태에서 실제 호출되는 API는 keyRings.get + cryptoKeys.get/update/
+setIamPolicy뿐이다"는 부정확했다 — **이번 승인 apply 자체**(rotation
+제거 update + iam_member destroy)와 **그 이후의 정상 상태**(두 리소스
+모두 config와 live state 일치, iam_member 리소스는 config에서 완전히
+사라짐)를 구분하지 않았다. 정확히는: 이번 승인 apply만 cryptoKeys.update
++ cryptoKeys.setIamPolicy를 실제로 호출하고, 그 이후 매 apply는 refresh
+단계에서 keyRings.get + cryptoKeys.get만 호출한다 — 반영할 diff가 없으니
+update/setIamPolicy는 향후 rotation 재도입이나 key IAM 재바인딩처럼
+**실제 config 변경이 생길 때만** 재호출된다. 그렇다면 정상 상태에는
+`roles/cloudkms.viewer`로 낮추고 변경 시점에만 넓히면 되지 않느냐는
+질문에는, 좁히지 않기로 했다: `dev_apply_roles`는 이 SA의 상시 권한
+집합이고 apply별로 동적으로 넓혔다 좁히는 메커니즘이 이 저장소에
+없다(#451 단일 `apply.yml` 진입점이 매 실행마다 for_each 목록 전체를
+그대로 적용) — 향후 KMS 변경 1건을 반영하려면 "확장 PR+승인 apply" →
+"실제 변경 PR+승인 apply" → "축소 PR+승인 apply" 3번이 필요해지는데, 이
+2개 리소스는 애초에 "영구 보존, 변경 계획 없음" 설계라 그 변경 자체가
+드물다. 드문 이벤트 대비로 상시 3배 운영 부담을 지기보다, 이미 걸려
+있는 2겹 방어선(`prevent_destroy` + 사람 승인 게이트)으로 충분하다고
+판단했다. `github_actions.tf`의 `cloudkms.admin` 주석을 이 구분과
+근거로 갱신했다.
+
 ## 완료 조건
 
 - [ ] `terraform/envs/dev/vault.tf` 삭제

@@ -19,6 +19,25 @@
 # `gcloud iam roles undelete`로 즉시 복구 가능, 이후 영구 삭제되면 같은
 # role_id 재사용이 최대 37일까지 막힐 수 있다).
 #
+# 4개 destroy 대상을 한꺼번에 롤백(`vault.tf` git 복원 + apply)해야 하는
+# 상황의 비대칭성(claude-review 13차 지적, WebSearch로 GCP 공식 문서
+# 확인): `google_service_account`는 custom role과 달리 삭제 후 대기 없이
+# **즉시** 같은 `account_id`로 재생성 가능하다 — 다만 GCP 내부적으로는
+# 완전히 새 identity(새 unique numeric id)가 만들어지고 옛 IAM 바인딩을
+# 상속하지 않는다(`account.undelete`로 복구해야 옛 identity가 유지되며,
+# undelete는 삭제 후 30일 이내에만 가능). 이 저장소는 GSA를 참조하는
+# 바인딩(WI 바인딩, key IAM binding)도 전부 Terraform 리소스로 관리하므로
+# — `vault.tf`를 통째로 되돌려 apply하면 SA+두 바인딩은 함께
+# 새로 생성돼 새 identity 기준으로 다시 일관되게 맞춰진다. 문제는 그
+# 지점이 아니라 **custom role**이다: 원본 destroy 후 7일 이내면
+# `terraform apply`가 새로 만들려는 role_id가 아직 soft-delete 상태라
+# 충돌 에러가 날 수 있고(이 경우 `gcloud iam roles undelete`로 먼저
+# 복구한 뒤 `terraform import`가 필요), 7일~37일 사이면 role_id 자체가
+# 막혀 있어 apply가 실패한다. 즉 **destroy 후 7~37일 사이에 전체 롤백을
+# 시도하면 SA/두 바인딩은 성공하고 custom role만 실패하는 부분 apply**가
+# 실제로 발생할 수 있다 — 이 경우 custom role만 별도로 완전 삭제 대기
+# 후 재시도하거나, 임시 role_id로 우회한 뒤 나중에 정리한다.
+#
 # 이 설계의 조사 근거·검토 이력 전체는
 # docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조.
 
@@ -62,6 +81,26 @@ resource "google_kms_crypto_key" "vault_unseal" {
   #   두 값 모두 비어야 정상. `next_rotation_time`은 이 리소스의 Terraform
   #   schema 속성이 아니라 drift 감지로 잡히지 않는 사각지대이므로, 이
   #   gcloud 명령이 유일한 검증 수단이다.
+  #
+  # 이 리소스가 실제로 감지하는 범위(claude-review 13차 지적): Terraform
+  # provider의 `google_kms_crypto_key` schema는
+  # name/key_ring/purpose/rotation_period/version_template/labels 등
+  # **key 자체의 메타데이터**만 추적하고, 개별 CryptoKeyVersion의
+  # 상태(ENABLED/DISABLED/DESTROYED)는 이 리소스의 속성이 아니다 —
+  # provider에 CryptoKeyVersion을 관리하는 resource 자체가 없다(읽기
+  # 전용 `google_kms_crypto_key_version` data source만 있음). 그래서
+  # 누군가 Terraform 밖에서 `gcloud kms keys versions destroy`로 활성
+  # version의 파기를 예약해도 이 리소스의 추적 속성에는 아무 diff가
+  # 생기지 않으므로, 다음 날 drift plan은 `No changes`로 나온다 —
+  # exitcode 2로 잡히지 않는다. 즉 이 파일의 "영구 보존" 설계가 실제로
+  # 막는 것은 **Terraform 경로로 key ring/crypto key 리소스 자체가
+  # 삭제되는 것**(`prevent_destroy`)뿐이며, GCP 콘솔/gcloud로 직접
+  # CryptoKeyVersion을 파기하는 경로는 이 설계로도, drift 감지로도 막지
+  # 못한다(`next_rotation_time` 사각지대와 같은 계열의 한계). 이 SA가
+  # 가진 `roles/cloudkms.admin`(project 전체, `cryptoKeyVersions.destroy`
+  # 포함)이 오히려 이 경로의 위험원이기도 하다 — 실제 방어선은 IAM으로
+  # 이 API 호출 권한을 가진 주체(사람 breakglass 포함)를 최소화하는
+  # 것뿐이고, 이 PR은 그 IAM 축소까지는 다루지 않는다.
 
   lifecycle {
     prevent_destroy = true
