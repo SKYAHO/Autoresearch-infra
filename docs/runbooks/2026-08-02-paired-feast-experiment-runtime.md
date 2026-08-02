@@ -46,6 +46,29 @@ prefix 조건을 걸 수 없으므로, **registry 버킷 전체의 object LIST�
 Airflow는 `CODE_ARCHIVE_SHA`에서 결정한 정확한 `code/<sha>.tar.gz`만 GET하고 목록으로
 archive를 탐색하거나 이를 위해 bucket-wide list 권한을 추가하지 않습니다.
 
+## Job 생성 활성화 전에 해소해야 하는 IAM 공백 2건
+
+이 PR은 계약과 경계만 정의하고 `job_creation_enabled=false`로 fail-closed
+상태입니다. 아래 두 가지는 **실제 실행 경로에서만 드러나는 공백**이므로, Job 생성을
+켜기 전에 반드시 결론을 내야 합니다.
+
+1. **experiment registry 객체의 생산자가 정해져 있지 않습니다.** runtime은
+   `registry_experiments_uri`(`gs://<dev-registry-bucket>/experiments/`)에 대해
+   **읽기 전용**(`objectViewer`)만 가집니다. 즉 이 prefix 아래 registry 객체를
+   누가 언제 만드는지가 이 PR 범위 밖이며, 생산자가 없으면 runtime의 registry
+   로드가 "권한"이 아니라 "객체 없음"으로 실패합니다. 공유
+   `gs://<bucket>/registry.db`(버킷 루트)는 IAM 조건 밖이라 대안이 되지 않습니다
+   — 이는 의도된 격리이지 누락이 아닙니다.
+2. **BigQuery PIT 조회가 entity DataFrame 경로면 현재 권한으로 완주하지 못합니다.**
+   `feast_offline_store_dev`에 `roles/bigquery.dataViewer`만 부여해
+   `bigquery.tables.create`가 없습니다. Feast BigQuery offline store는 entity
+   DataFrame을 임시 테이블로 업로드한 뒤 조인하므로, 이 경로를 쓰면 테이블 생성
+   단계에서 실패합니다. project 수준 `jobUser`·`readSessionUser`는 쿼리 실행과
+   Storage Read API 권한이지 테이블 생성 권한이 아닙니다. 해소 방향은 ① 실험 전용
+   scratch dataset을 만들어 그 dataset에만 `dataEditor`를 주거나 ② entity
+   DataFrame 대신 이미 저장된 entity 테이블을 참조하는 경로로 제한하는 것이며,
+   어느 쪽이든 별도 승인과 IAM 변경이 필요합니다.
+
 Job 생성이 활성화되는 후속 변경에서만 immutable image digest, comparison ID,
 condition, `CODE_ARCHIVE_SHA`, registry/result URI를 audit log에 남깁니다. token,
 Secret payload, Terraform state, 실제 `.tfvars` 값은 로그·DAG 변수·문서에 남기지
