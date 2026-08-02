@@ -128,7 +128,32 @@ resource "google_secret_manager_secret_iam_member" "agent_orchestration_runner_c
   member    = "serviceAccount:${google_service_account.agent_orchestration_runner.email}"
 }
 
-# #439 Grafana·Kibana UI OAuth client 자격 정본. mlflow(#420)·argocd와 대칭 —
+# #494 ArgoCD Google OIDC client 자격 정본. 라이브에 이미 존재하던 컨테이너를
+# import로 state에 입양(값 변경 없음). 이름은 resource_prefix 접두사 규칙의
+# 의도적 예외 — 기존 라이브 이름을 유지해야 README의 `gcloud secrets versions
+# access --secret argocd-google-oidc-client-id` 절차와 argo-cd.values.yaml.tftpl의
+# `$argocd-google-oidc:clientId` 참조 경로가 그대로 유효하다(설계 근거:
+# docs/superpowers/specs/2026-08-02-argocd-oidc-secret-iac-design.md). 값(version)은
+# Terraform이 관리하지 않으며 운영자가 gcloud로 직접 채운다(accessor 없음, UI
+# OAuth 4종과 동일).
+resource "google_secret_manager_secret" "argocd_google_oidc_client" {
+  for_each = toset([
+    "argocd-google-oidc-client-id",
+    "argocd-google-oidc-client-secret",
+  ])
+  secret_id = each.key
+
+  replication {
+    auto {}
+  }
+
+  # payload는 destroy 시 복구 불가 — UI OAuth 4종·mlflow #420과 같은 보호.
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# #439 Grafana·Kibana UI OAuth client 자격 정본. mlflow(#420)·argocd(#494)와 대칭 —
 # 재발급은 id/secret이 한 쌍으로 바뀌므로 둘 다 SM에 정본을 둬야 runbook
 # 하드코딩/클러스터 값 갈림("재발급 ≠ 반영", #404 실측)이 재발하지 않는다.
 # 값(version)은 operator가 넣고, 주입도 운영자 자격으로 읽는다(accessor 없음).
