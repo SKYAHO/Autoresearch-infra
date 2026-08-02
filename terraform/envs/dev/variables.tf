@@ -397,6 +397,17 @@ variable "experiment_results_object_retention_days" {
   }
 }
 
+variable "experiment_results_noncurrent_version_retention_days" {
+  description = "실험 결과의 archived generation 보존 일수. live 삭제 후 운영자 복구 창을 제공한다."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.experiment_results_noncurrent_version_retention_days >= 1 && floor(var.experiment_results_noncurrent_version_retention_days) == var.experiment_results_noncurrent_version_retention_days
+    error_message = "experiment_results_noncurrent_version_retention_days는 1 이상의 정수여야 합니다."
+  }
+}
+
 variable "mlflow_bucket_location" {
   description = "MLflow artifact GCS bucket location."
   type        = string

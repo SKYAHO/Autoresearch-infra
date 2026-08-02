@@ -73,10 +73,9 @@ Kubernetes RBAC는 Pod 사양의 image·env·volume 내용을 검증하지 않�
   제한을 만족하지 못하면 실행하지 않고 이미지를 수정한다.
 - ResourceQuota와 LimitRange
 - Job 생성 주체의 namespace-scoped 권한
-- Job Pod의 별도 KSA. Workload Identity로 GCS에 접근해야 하므로 서비스 계정 토큰
-  자동 마운트는 켜되, 해당 KSA에는 Kubernetes API 권한을 부여하지 않는다. GKE
-  metadata server는 KSA projected token, KSA annotation, GSA의 Workload Identity
-  member binding을 대조해 GCP access token을 발급한다.
+- Job Pod의 별도 KSA. Kubernetes API 서비스 계정 토큰 자동 마운트는 끄며, GKE
+  metadata server는 호출 Pod identity, KSA annotation, GSA의 Workload Identity
+  member binding을 사용해 GCP access token을 발급한다.
 - Secret 접근 권한 미부여
 - default-deny NetworkPolicy 후 필요한 목적지만 허용
 - Job 템플릿은 앱 저장소의 고정 계약으로 관리하며 임의 사용자 manifest를 그대로
@@ -106,7 +105,9 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
 - `ttlSecondsAfterFinished`: 종료 Job 자동 정리 기간 설정
 - CPU·메모리 requests/limits 필수. 초기 단일 컨테이너 상한은 1 vCPU/2 GiB
 - `batch-od` nodeSelector 및 `workload=batch-od:NoSchedule` toleration 필수. 일반
-  앱 pool과 컴퓨트 경계를 분리하며, admission 검증이 이를 강제한다.
+  앱 pool과 컴퓨트 경계를 분리하며, admission 검증이 이를 강제한다. 다만 이 pool은
+  #297 Action Log shard KPO와 공유하므로 Job 생성 권한 활성화 전 전용 pool 또는
+  capacity·우선순위 경합 계획을 별도 승인한다.
 - namespace ResourceQuota로 동시 실행 수·총 CPU·총 메모리 상한 설정
 
 정확한 숫자는 실제 dev GKE quota와 예상 실험 소요량을 확인한 뒤 plan 문서에서

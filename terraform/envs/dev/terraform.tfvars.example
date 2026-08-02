@@ -57,6 +57,11 @@ agent_orchestration_k8s_namespace  = "autoresearch"
 agent_orchestration_api_k8s_service_account    = "agent-orchestration-api"
 agent_orchestration_runner_k8s_service_account = "agent-orchestration-runner"
 
+# #484 결과 버킷 Workload Identity subject. admin root의 experiment_job_namespace 및
+# experiment_job_k8s_service_account와 반드시 같은 튜플로 유지한다.
+experiment_job_k8s_namespace       = "autoresearch-experiments"
+experiment_job_k8s_service_account = "experiment-job"
+
 # #424 Feast apply GKE Job의 환경별 namespace/KSA. 실제 오브젝트와 GSA annotation은
 # terraform/admin/autoresearch-k8s가 생성한다. Task 2의 WI subject와 아래 값 및
 # admin root의 feast_apply_identities 값은 반드시 함께 유지한다.
@@ -88,6 +93,11 @@ airflow_api_k8s_secret_name       = "autoresearch-airflow-env"
 raw_data_bucket_location                   = "asia-northeast3"
 raw_data_bucket_storage_class              = "STANDARD"
 raw_data_noncurrent_version_retention_days = 30
+
+# #484 실험 결과 live object는 30일 후 archive하고, archived generation은 7일 더
+# 보존한다. 장기 보관 결과는 별도 승인된 저장소로 이관한다.
+experiment_results_object_retention_days            = 30
+experiment_results_noncurrent_version_retention_days = 7
 
 bigquery_location                   = "asia-northeast3"
 bigquery_delete_contents_on_destroy = false

@@ -22,11 +22,22 @@ resource "google_storage_bucket" "experiment_results" {
     }
 
     condition {
-      # live·archived generation 모두 삭제 대상으로 명시한다. versioning bucket에서
-      # live generation은 30일 후 archive되고, 다음 lifecycle 평가에서 archived
-      # generation이 영구 삭제된다. 장기 복구용 보관이 아닌 dev 비용 상한이 목적이다.
-      with_state = "ANY"
+      # 결과 live generation은 30일 후 archive한다. Job GSA는 overwrite/delete할 수
+      # 없지만, 운영자 복구·정정으로 생긴 archived generation에는 별도 복구 창을 둔다.
+      with_state = "LIVE"
       age        = var.experiment_results_object_retention_days
+    }
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      # archived 시점부터 7일을 보존한 뒤 영구 삭제한다.
+      with_state                 = "ARCHIVED"
+      days_since_noncurrent_time = var.experiment_results_noncurrent_version_retention_days
     }
   }
 

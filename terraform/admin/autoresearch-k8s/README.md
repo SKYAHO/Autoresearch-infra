@@ -81,9 +81,10 @@ Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정
 | Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
 | 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
 
-`experiment-job` KSA에는 Kubernetes RoleBinding을 만들지 않습니다. Workload
-Identity가 결과 버킷 인증에 쓰는 서비스 계정 토큰은 자동 마운트하지만, Kubernetes
-API 권한이나 Secret 접근 권한을 의미하지 않습니다.
+`experiment-job` KSA에는 Kubernetes RoleBinding을 만들지 않고, Kubernetes API 토큰
+자동 마운트(`automount_service_account_token`)도 `false`로 둡니다. Workload Identity의
+GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부에 Kubernetes 토큰이
+필요하지 않습니다.
 
 ### Job 생성 권한 활성화 조건
 
@@ -100,6 +101,8 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    허용되지 않은 image와 `batch-od` scheduling 계약 위반을 거부한다.
 5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
    수행한다.
+6. `batch-od`는 #297의 재시도 내성이 없는 Action Log shard KPO와 공유하므로, 전용
+   실험 node pool을 만들거나 해당 KPO와의 capacity·우선순위 경합 계획을 승인한다.
 
 권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
 Terraform apply로 값을 `false`로 되돌립니다. namespace, KSA, 결과 버킷을 롤백
@@ -117,9 +120,11 @@ Terraform apply로 값을 `false`로 되돌립니다. namespace, KSA, 결과 버
 병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request/limit은
 500m/1 GiB이고, 단일 컨테이너는 1 vCPU/2 GiB를 넘을 수 없습니다. Job 템플릿과
 admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` toleration을
-강제해야 합니다. `batch-od`는 min 0/max 2 전용 on-demand pool이므로 일반 앱 pool
-압박은 막지만, 실험 실행 시 최대 두 노드의 비용과 해당 pool의 다른 batch 작업 경합은
-여전히 관측해야 합니다. 운영 검증 절차와 Job manifest 계약은
+강제해야 합니다. `batch-od`는 #297 Action Log shard KPO와 공유하는 min 0/max 2
+on-demand pool이므로 일반 앱 pool 압박은 막지만, 실험 실행 시 해당 KPO가 Pending이
+될 수 있습니다. Job 생성 권한을 활성화하기 전에는 전용 실험 pool 또는 capacity·우선순위
+계획을 별도로 승인하고, batch-od node/pod Pending·autoscaler·CPU/memory를 관측해야
+합니다. 운영 검증 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
 따릅니다.
 

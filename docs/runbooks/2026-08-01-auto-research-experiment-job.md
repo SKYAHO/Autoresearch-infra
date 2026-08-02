@@ -60,11 +60,10 @@ API는 사용자가 보낸 임의 manifest를 Kubernetes API로 전달해서는 
   사용해 논리적 경로 재사용도 거부한다.
 
 결과 메타데이터에는 metric, 평가 기준, 데이터 버전, source revision, image digest,
-시작·종료 시각, Job UID를 기록한다. lifecycle은 live·archived generation 모두 age
-30일에 적용한다. versioning bucket에서 live 객체는 먼저 archived가 되고 다음 lifecycle
-평가에서 영구 삭제되므로, 30일은 영구 삭제 시각이 아니라 삭제 처리가 시작되는 기준이다.
-versioning은 이 짧은 보존 기간 안의 운영자 복구용이며 장기 보존 수단이 아니므로,
-장기 보관이 필요한 결과는 별도 승인된 경로로 이관한다.
+시작·종료 시각, Job UID를 기록한다. lifecycle은 live object가 30일 후 archive되고,
+archived generation은 noncurrent이 된 시점부터 7일을 더 보존한 뒤 영구 삭제한다.
+versioning은 운영자 복구·정정으로 생긴 이전 generation의 명시적 복구 창이며, 장기
+보존 수단이 아니므로 장기 보관이 필요한 결과는 별도 승인된 경로로 이관한다.
 
 GKE Workload Identity에서 컨테이너의 ADC/GCS client는 GKE metadata server에 token을
 요청한다. metadata server는 호출 Pod의 source identity, `experiment-job` KSA annotation,
@@ -162,6 +161,10 @@ live dev cluster는 NodeLocal DNSCache가 활성화됐지만 Cloud DNS for GKE�
 `169.254.20.10`으로 바뀌므로, 그 변경 이슈에서 해당 `/32`의 UDP/TCP 53 egress를
 추가하고 dry-run과 실제 DNS 검증을 함께 수행한다.
 
+NodeLocal DNSCache 활성화는 `terraform/envs/dev/gke.tf`의 `dns_cache_config`으로
+관리한다. apply 전에는 `gcloud container clusters describe`와 Pod의 `resolv.conf`로
+IaC 설정·live addon·실제 nameserver를 함께 대조한다.
+
 이 private zone은 `googleapis.com`만 대상으로 한다. `pkg.dev`, `gcr.io`, `run.app`,
 외부 AI API와 일반 인터넷 endpoint는 이 VIP로 해석되지 않으며 실험 Pod의 egress
 allowlist에도 없다. 이미지 pull은 노드가 수행하는 별도 경로이므로, 실험 이미지와
@@ -189,6 +192,13 @@ API는 새 제출을 차단하고 운영자에게 escalate한다. API는 delete 
 
 비용 경보나 quota 초과가 발생하면 API 동시 제출 제한을 먼저 낮춘다. namespace quota
 상향은 node 여유, 예상 최대 실행 시간, 비용 상한을 문서화한 별도 이슈에서 검토한다.
+
+`batch-od`는 실험 전용 pool이 아니라 #297의 재시도 내성이 없는 Action Log shard KPO와
+공유한다. 최대 request 1 vCPU인 실험 Job 두 개는 e2-standard-2 allocatable CPU 약
+1930m 기준 서로 다른 두 노드를 점유할 수 있어, pool max 2에서는 Action Log shard가
+`FailedScheduling`/Pending이 될 수 있다. Job 생성 권한 활성화 전 전용 실험 pool 또는
+승인된 capacity·우선순위 계획을 마련한다. 운영 중에는 batch-od node 수, Pending Pod,
+autoscaler 이벤트, CPU/memory request와 Action Log shard 상태를 함께 관측한다.
 
 ## Pod Security 버전 갱신
 
