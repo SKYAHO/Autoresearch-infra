@@ -36,10 +36,17 @@
 
 세부 주입 명령과 서비스별 소유 root는 다음 문서를 정본으로 참조한다.
 
-Kibana callback URI는 표의 기본값을 무조건 고정한 값이 아니다. 실제 값은
-`terraform/admin/elastic-k8s/variables.tf`의 `kibana_public_base_url`에서
-파생되며, 로컬 `tfvars`로 덮어쓸 수 있다. Google OAuth 콘솔과 운영 검증에서는
-해당 환경의 변수값에 `/oauth2/callback`을 붙인 값을 사용한다.
+**Kibana와 ArgoCD의 callback URI는 표의 기본값을 고정한 상수가 아니다.** 둘 다
+Terraform 변수에서 파생되며 로컬 `tfvars`로 덮어쓸 수 있다.
+
+- Kibana: `terraform/admin/elastic-k8s/variables.tf`의 `kibana_public_base_url`
+  (기본 `http://localhost:4181`) + `/oauth2/callback`
+- ArgoCD: `terraform/admin/argocd-k8s/variables.tf`의 `argocd_server_url`
+  (기본 `https://localhost:8443`) + `/auth/callback`
+
+Google OAuth 콘솔 등록과 운영 검증에서는 **해당 환경의 실제 변수값**에 각 경로를
+붙인 값을 사용한다. 표의 값을 상수로 오인해 다른 환경에서 잘못 등록하지 않도록
+주의한다.
 
 - ArgoCD: [`terraform/admin/argocd-k8s/README.md`](../terraform/admin/argocd-k8s/README.md)
 - Airflow: `SKYAHO/Autoresearch-airflow`의 `docs/gke-helm-gitsync.md`
@@ -221,7 +228,7 @@ cookie-secret을 유지한 allowlist 변경은 기존 세션이 최대 기본 �
 
 - [ ] 실제 payload가 Git, PR, 로그, Terraform state에 포함되지 않았다.
 - [ ] Secret key 이름이 해당 제품의 현재 계약과 일치한다.
-- [ ] allowlist key가 존재하고 비어 있지 않으며, 허용 계정 로그인과 제거 계정 거부를 확인했다. (`verify-oauth-clients.sh`는 allowlist 값의 존재·내용을 검사하지 않음. MLflow/Kibana는 #488 해결 전까지 이 항목을 완료 처리하지 않음)
+- [ ] allowlist key가 존재하고 비어 있지 않으며, 허용 계정 로그인과 제거 계정 거부를 확인했다. (`verify-oauth-clients.sh`는 client id/secret 쌍만 대조하고 allowlist 값의 존재·내용은 검사하지 않는다. allowlist는 값 비노출 `entries=N`·`placeholder_like=0` 점검과 실제 계정 smoke test로 확인한다)
 - [ ] client ID와 secret이 같은 세대의 쌍이다.
 - [ ] redirect URI와 port-forward/Bastion 경로가 기존 값과 일치한다.
 - [ ] rollout status가 성공했다.
