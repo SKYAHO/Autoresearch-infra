@@ -410,10 +410,20 @@ RBAC와 NetworkPolicy를 함께 바꾸는 변경은 다음 순서를 지킵니�
 
 1. RBAC(Terraform)와 NetworkPolicy(manifest) 변경을 같은 PR에 포함해 머지합니다.
 2. 머지 커밋의 정확한 40자리 SHA로 `AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하고
-   admin apply를 실행해 RBAC를 반영합니다.
+   admin apply를 실행해 RBAC를 반영합니다. `terraform/admin/argocd-k8s/main.tf`에서
+   `targetRevision`은 `agent_orchestration_deployment_enabled ? target_revision :
+   "agent-orchestration-disabled"`로 결정되므로, 이 flag가 이미 `true`인 정상 운영
+   상태에서만 SHA 갱신이 그대로 반영됩니다. flag가 `false`라면 [롤백과 보안
+   확인](#롤백과-보안-확인) 절차처럼 SHA 갱신과
+   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true` 설정을 함께 적용해야 합니다.
 3. ArgoCD에서 Application diff를 확인한 뒤 manual sync해 NetworkPolicy를 반영합니다.
 4. live NetworkPolicy와, 권한을 실제로 쓰는 Pod에서의 연결 가능 여부를 함께 확인합니다.
    권한 확인만으로는 충분하지 않습니다.
+
+이 순서는 권한/경로를 **확장**하는 변경 기준입니다. `enable_experiment_job_creation`을
+되돌리거나 egress 규칙을 제거하는 등 **축소** 방향 변경은 반대 순서(먼저 NetworkPolicy로
+경로를 막고, 그다음 RBAC를 회수)를 씁니다 — 그래야 "경로는 없는데 권한만 남아있는" 창이
+아니라 "권한은 있는데 경로가 없는" 더 안전한 중간 상태만 거칩니다.
 
 ### 이미지 참조 원자성
 

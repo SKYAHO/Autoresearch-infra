@@ -43,10 +43,32 @@ Job KSA, sha256 digest image, `batch-od` nodeSelector/toleration을 서버 측�
 `deploy/agent-orchestration/network-policy.yaml`로 별도 sync가 필요해, RBAC만 반영되고
 egress가 반영되지 않으면 "제출은 되지만 상태를 읽지 못하는" 상태가 남는다).
 
+`172.16.128.1/32`(services CIDR 첫 IP, pre-DNAT 경로용)는 `config/environments/dev/environment.yaml`의
+`services_cidr: 172.16.128.0/24`에서 파생된 값이다. `gke_services_cidr`가 바뀌면
+`deploy/agent-orchestration/network-policy.yaml`·`docs/TERRAFORM_DEV.md`·이 문서 세 곳을
+함께 갱신해야 하며, 갱신을 놓치면 아래 게이트가 옛 값 기준으로 "반영됨"을 오탐 출력할 수
+있다. manifest는 pre-DNAT용 services CIDR VIP와 post-DNAT용 control plane CIDR
+(`172.16.0.0/28`) 두 ipBlock을 함께 열므로 게이트도 둘 다 확인한다.
+
 ```bash
-kubectl -n autoresearch get networkpolicy agent-orchestration-api-egress \
-  -o jsonpath='{.spec.egress}' | grep -q '172.16.128.1/32' \
-  && echo "K8s API egress 반영됨" || echo "미반영 — ArgoCD sync 선행 필요"
+POLICY=$(kubectl -n autoresearch get networkpolicy agent-orchestration-api-egress \
+  -o jsonpath='{.spec.egress}' 2>&1)
+if [ $? -ne 0 ]; then
+  echo "조회 실패 — NetworkPolicy 부재 또는 kubectl 권한(networkpolicies get) 부족: $POLICY"
+elif echo "$POLICY" | grep -q '172.16.128.1/32' && echo "$POLICY" | grep -q '172.16.0.0/28'; then
+  echo "K8s API egress(services CIDR VIP + control plane CIDR) 반영됨"
+else
+  echo "NetworkPolicy는 존재하나 egress 규칙 미반영 — ArgoCD sync 선행 필요"
+fi
+```
+
+이 게이트는 두 CIDR 문자열의 존재만 확인하므로, live 값이 **정확히 핀으로 지정한 커밋
+SHA**에서 나왔음을 보증하지 않는다 — 우연히 같은 IP를 포함한 이전 revision의 규칙이
+남아 있어도 "반영됨"으로 보고될 수 있다. SHA 수준까지 확인하려면 ArgoCD가 실제로 sync한
+커밋을 함께 대조한다.
+
+```bash
+kubectl -n argocd get application agent-orchestration -o jsonpath='{.status.sync.revision}'
 ```
 
 ## Job manifest 계약
