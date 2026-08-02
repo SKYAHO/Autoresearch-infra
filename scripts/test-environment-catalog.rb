@@ -3,6 +3,7 @@
 
 require "fileutils"
 require "json"
+require "open3"
 require "tmpdir"
 
 require_relative "environment_catalog"
@@ -42,6 +43,11 @@ def run_wrapper(arguments)
     ENV.delete("ENV_LOG")
     Dir.glob(File.join(repository_root, "terraform", "**", ".environment.*")).each { |path| File.delete(path) }
   end
+end
+
+def run_catalog_cli(arguments)
+  repository_root = File.expand_path("..", __dir__)
+  Open3.capture3("ruby", File.join(repository_root, "scripts", "environment_catalog.rb"), *arguments)
 end
 
 VALID_CATALOG = <<~YAML.freeze
@@ -112,6 +118,18 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
   assert_catalog_error("알려지지 않은 Terraform root의 backend를 만들면 안 됩니다") do
     catalog.backend_config("terraform/admin/unknown-root")
   end
+
+  stdout, stderr, status = run_catalog_cli([
+    "--catalog", valid_path, "--field", "gcp.project_id"
+  ])
+  assert(status.success?, "카탈로그 필드 조회가 실패했습니다: #{stderr}")
+  assert(stdout == "autoresearch-503903\n", "카탈로그 project_id 조회값이 다릅니다")
+
+  _stdout, stderr, status = run_catalog_cli([
+    "--catalog", valid_path, "--field", "gcp.unknown"
+  ])
+  assert(!status.success?, "존재하지 않는 카탈로그 필드를 허용하면 안 됩니다")
+  assert(stderr.include?("환경 카탈로그 오류"), "카탈로그 필드 오류를 안전하게 보고해야 합니다")
 
   Dir.mktmpdir("environment-catalog-generated-") do |output_root|
     generated = catalog.write_terraform_inputs!(

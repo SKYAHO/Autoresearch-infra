@@ -103,6 +103,21 @@ class EnvironmentCatalog
     }
   end
 
+  def field_value(path)
+    validate!
+    unless path.is_a?(String) && path.match?(%r{\A[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\z})
+      raise CatalogError, "카탈로그 필드 경로 형식이 잘못되었습니다"
+    end
+
+    path.split(".").reduce(data) do |value, key|
+      unless value.is_a?(Hash) && value.key?(key)
+        raise CatalogError, "카탈로그 필드를 찾을 수 없습니다: #{path}"
+      end
+
+      value.fetch(key)
+    end
+  end
+
   def write_terraform_inputs!(root:, output_root:)
     variables = terraform_variables(root)
     backend = backend_config(root) if BACKEND_ROOTS.include?(root)
@@ -151,11 +166,13 @@ class EnvironmentCatalog
     region = required_string(gcp, "region")
     zone = required_string(gcp, "zone")
     name_prefix = required_string(gcp, "name_prefix")
+    resource_prefix = required_string(gcp, "resource_prefix")
 
     raise CatalogError, "project_id 형식이 잘못되었습니다" unless project_id.match?(/\A[a-z][a-z0-9-]{4,28}[a-z0-9]\z/)
     raise CatalogError, "region 형식이 잘못되었습니다" unless region.match?(/\A[a-z]+-[a-z]+\d+\z/)
     raise CatalogError, "zone은 region에 속해야 합니다" unless zone.start_with?("#{region}-")
     raise CatalogError, "name_prefix 형식이 잘못되었습니다" unless name_prefix.match?(/\A[a-z][a-z0-9-]{2,30}\z/)
+    raise CatalogError, "resource_prefix 형식이 잘못되었습니다" unless resource_prefix.match?(/\A[a-z][a-z0-9-]{2,50}\z/)
   end
 
   def validate_network!
@@ -210,17 +227,29 @@ if $PROGRAM_NAME == __FILE__
       parser.on("--catalog PATH") { |value| options[:catalog] = value }
       parser.on("--root PATH") { |value| options[:root] = value }
       parser.on("--output-root PATH") { |value| options[:output_root] = value }
+      parser.on("--field PATH") { |value| options[:field] = value }
     end.parse!
 
-    %i[catalog root output_root].each do |key|
-      abort("#{key} 인수가 필요합니다") unless options[key]
-    end
+    abort("catalog 인수가 필요합니다") unless options[:catalog]
+    catalog = EnvironmentCatalog.load(options[:catalog])
+    if options[:field]
+      abort("field 조회에는 root 또는 output-root를 함께 사용할 수 없습니다") if options[:root] || options[:output_root]
 
-    generated = EnvironmentCatalog.load(options[:catalog]).write_terraform_inputs!(
-      root: options[:root],
-      output_root: options[:output_root]
-    )
-    puts JSON.generate(generated)
+      value = catalog.field_value(options[:field])
+      raise EnvironmentCatalog::CatalogError, "카탈로그 필드 값은 문자열이어야 합니다" unless value.is_a?(String)
+
+      puts value
+    else
+      %i[root output_root].each do |key|
+        abort("#{key} 인수가 필요합니다") unless options[key]
+      end
+
+      generated = catalog.write_terraform_inputs!(
+        root: options[:root],
+        output_root: options[:output_root]
+      )
+      puts JSON.generate(generated)
+    end
   rescue EnvironmentCatalog::CatalogError => error
     warn "환경 카탈로그 오류: #{error.message}"
     exit 1
