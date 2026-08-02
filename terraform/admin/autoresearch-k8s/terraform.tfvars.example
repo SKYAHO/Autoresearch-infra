@@ -19,6 +19,16 @@ agent_orchestration_runner_k8s_service_account = "agent-orchestration-runner"
 agent_orchestration_api_gcp_service_account_email    = ""
 agent_orchestration_runner_gcp_service_account_email = ""
 
+# #484 실험 Job 결과 GSA는 dev root output experiment_job_execution_contract와
+# 대조한다. 빈 값은 autoresearch-dev-exp-job@<project_id>.iam.gserviceaccount.com을
+# 파생한다. Job 생성 권한은 고정 템플릿·image digest·admission 검증을 모두 마치기
+# 전까지 반드시 false를 유지한다.
+experiment_job_namespace                 = "autoresearch-experiments"
+experiment_job_k8s_service_account       = "experiment-job"
+experiment_job_gcp_service_account_email = ""
+enable_experiment_job_creation           = false
+private_googleapis_cidr                  = "199.36.153.8/30"
+
 # #424 GitHub Environment → WIF provider → GSA → namespace → KSA 튜플은 불변이다.
 # 아래 namespace/KSA는 terraform/envs/dev의 feast_apply_kubernetes_identities,
 # GSA는 해당 GitHub Environment의 FEAST_APPLY_SA와 반드시 함께 바꾼다.

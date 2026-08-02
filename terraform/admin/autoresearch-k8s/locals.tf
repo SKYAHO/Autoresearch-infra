@@ -25,4 +25,15 @@ locals {
   }
 
   feast_apply_identities = var.feast_apply_identities == null ? local.feast_apply_default_identities : var.feast_apply_identities
+
+  # admin root는 dev root Terraform state를 직접 읽지 않는다. GSA의 account id는
+  # dev root local과 같은 짧은 `-exp-job` 규칙으로 파생하며, 예외만 변수로 override한다.
+  experiment_job_gcp_service_account_email = var.experiment_job_gcp_service_account_email != "" ? var.experiment_job_gcp_service_account_email : "${var.resource_prefix}-exp-job@${var.project_id}.iam.gserviceaccount.com"
+
+  # 기본 허용 prefix는 이 프로젝트의 Artifact Registry Docker 저장소다
+  # (예: asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/).
+  experiment_job_allowed_image_prefixes = coalesce(
+    var.experiment_job_allowed_image_prefixes,
+    ["${var.region}-docker.pkg.dev/${var.project_id}/${var.resource_prefix}-docker/"],
+  )
 }

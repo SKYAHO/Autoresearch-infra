@@ -8,6 +8,10 @@
 > 실제 GCP/Kubernetes apply, 애플리케이션 workflow·GitHub Environment 변경,
 > live 검증은 아직 수행하지 않았습니다.
 
+> #484 Auto Research 실험 Job 경계도 Terraform 구성만 완료된 상태입니다. 실제
+> apply와 API Job 생성 권한 활성화는 고정 템플릿·image digest·admission 검증 및
+> 별도 승인을 모두 마친 뒤에만 진행합니다.
+
 ## 기본 정보
 
 | 항목 | 값 |
