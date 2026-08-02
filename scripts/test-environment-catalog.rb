@@ -185,11 +185,33 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
   )
   assert(init_with_backend.include?("-reconfigure"), "사용자 인수(-reconfigure)를 그대로 전달해야 합니다")
 
-  bootstrap_validate = run_wrapper([
-    "--environment", "dev", "--root", "terraform/bootstrap", "validate"
-  ])
-  assert(bootstrap_validate.include?("validate"), "bootstrap validate 명령을 Terraform에 전달해야 합니다")
-  assert(!bootstrap_validate.any? { |argument| argument.start_with?("-backend-config=") }, "bootstrap root에는 backend-config를 전달하면 안 됩니다")
+  # #413 보호: bootstrap은 카탈로그 공급 대상이 아니어야 한다. 현재 dev 좌표를
+  # 자동 주입하면 새 프로젝트 구축 시 옛 버킷명으로 조용히 진행될 수 있다.
+  assert_catalog_error("bootstrap root에 카탈로그 변수를 공급하면 안 됩니다") do
+    catalog.terraform_variables("terraform/bootstrap")
+  end
+
+  # root마다 서로 다른 state prefix를 받아야 한다. 각 versions.tf에서 prefix를
+  # 지웠으므로, 여기서 어긋나면 두 root가 같은 state를 덮어쓰는 사고가 된다.
+  seen_prefixes = {}
+  EnvironmentCatalog::BACKEND_ROOTS.each do |backend_root|
+    config = catalog.backend_config(backend_root)
+    assert(
+      config.fetch("bucket") == "autoresearch-503903-dev-tfstate",
+      "#{backend_root}의 backend bucket이 카탈로그와 다릅니다"
+    )
+    prefix = config.fetch("prefix")
+    assert(!prefix.to_s.empty?, "#{backend_root}의 state prefix가 비어 있습니다")
+    assert(
+      !seen_prefixes.key?(prefix),
+      "state prefix가 중복됩니다: #{prefix} (#{seen_prefixes[prefix]} ↔ #{backend_root})"
+    )
+    seen_prefixes[prefix] = backend_root
+  end
+  assert(
+    seen_prefixes.size == EnvironmentCatalog::BACKEND_ROOTS.size,
+    "backend root 수와 고유 prefix 수가 다릅니다"
+  )
 end
 
 puts "환경 카탈로그 검증 테스트: 통과"

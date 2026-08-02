@@ -10,7 +10,14 @@ scripts/terraform-env --environment dev --root terraform/envs/dev validate
 scripts/terraform-env --environment dev --root terraform/envs/dev init -reconfigure
 ```
 
-래퍼는 카탈로그를 검증하고 root별 gitignored 입력·backend 파일을 생성합니다. bootstrap root는 state bucket 생성 전 실행되므로 backend 없이 카탈로그 var-file만 사용합니다.
+래퍼는 카탈로그를 검증하고 root별 gitignored 입력·backend 파일을 생성합니다.
+
+**`terraform/bootstrap`은 의도적으로 래퍼 대상이 아닙니다(#413).** state 버킷
+이름은 전역 유니크라 프로젝트를 넘나드는 안전한 기본값이 없어 default 없는 필수
+변수로 두었고, bootstrap을 실행하는 유일한 시나리오가 새 프로젝트 구축/이전입니다.
+여기에 현재 dev 카탈로그 값을 자동 공급하면 `-var-file`을 깜빡한 운영자가 **옛
+프로젝트 좌표로 조용히 진행**하게 되어 그 보호가 사라집니다. bootstrap은
+`docs/TERRAFORM_BOOTSTRAP.md`의 명시 `-var-file` 절차를 그대로 따릅니다.
 
 다른 저장소의 CI는 검증된 필드만 읽을 수 있습니다.
 

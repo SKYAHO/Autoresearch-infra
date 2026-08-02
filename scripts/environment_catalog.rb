@@ -10,8 +10,12 @@ require "yaml"
 class EnvironmentCatalog
   class CatalogError < StandardError; end
 
+  # terraform/bootstrap은 의도적으로 제외한다(#413). state 버킷 이름은 전역
+  # 유니크라 프로젝트를 넘나드는 안전한 기본값이 없어 default 없는 필수 변수로
+  # 두었고, bootstrap을 실행하는 유일한 시나리오가 "새 프로젝트 구축/이전"이다.
+  # 여기서 현재 dev 카탈로그 값을 자동 공급하면 -var-file을 깜빡한 운영자가
+  # **옛 프로젝트 좌표로 조용히 진행**하게 되어 그 보호가 사라진다.
   TERRAFORM_ROOTS = %w[
-    terraform/bootstrap
     terraform/envs/dev
     terraform/admin/airflow-k8s
     terraform/admin/argo-rollouts-k8s
@@ -24,7 +28,7 @@ class EnvironmentCatalog
     terraform/admin/vault-k8s
   ].freeze
 
-  BACKEND_ROOTS = TERRAFORM_ROOTS - ["terraform/bootstrap"]
+  BACKEND_ROOTS = TERRAFORM_ROOTS
 
   ROOT_VARIABLE_KEYS = {
     "terraform/envs/dev" => %w[
@@ -70,8 +74,6 @@ class EnvironmentCatalog
   def terraform_variables(root)
     validate!
     ensure_known_root!(root)
-
-    return bootstrap_variables if root == "terraform/bootstrap"
 
     values = {
       "project_id" => gcp.fetch("project_id"),
@@ -224,13 +226,6 @@ class EnvironmentCatalog
     raise CatalogError, "지원하지 않는 Terraform root입니다: #{root}" unless TERRAFORM_ROOTS.include?(root)
   end
 
-  def bootstrap_variables
-    {
-      "project_id" => gcp.fetch("project_id"),
-      "region" => gcp.fetch("region"),
-      "state_bucket_name" => state.fetch("bucket")
-    }
-  end
 
   def required_string(mapping, key)
     value = mapping[key]
