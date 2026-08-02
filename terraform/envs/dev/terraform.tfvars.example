@@ -48,6 +48,10 @@ airflow_gke_node_disk_size        = 30
 airflow_gke_node_disk_type        = "pd-standard"
 gke_app_k8s_namespace             = "autoresearch"
 gke_app_k8s_service_account       = "autoresearch-app"
+# Paired Feast experiment runtime KSA. 실제 namespace/KSA와 GSA annotation은
+# terraform/admin/autoresearch-k8s에서 함께 관리한다.
+experiment_runtime_k8s_namespace       = "experiment-runtime"
+experiment_runtime_k8s_service_account = "experiment-runtime"
 agent_orchestration_db_name        = "agent_orchestration"
 agent_orchestration_db_user        = "agent_orchestration_app"
 # Cloud SQL built-in user 생성 전에 운영자 migration 절차로 같은 custom role을

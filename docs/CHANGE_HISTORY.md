@@ -3,6 +3,19 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-02: paired Feast experiment runtime dev 격리 계약 (#485) — 미적용
+
+- paired Feast 실험을 기존 Airflow batch·Feast apply와 분리하기 위해 dev 전용
+  `experiment-runtime` namespace/KSA/GSA, `experiments/`·`code/` prefix 한정 GCS
+  IAM, dev `feast_offline_store_dev` 읽기 권한, default-deny NetworkPolicy와
+  ResourceQuota/LimitRange를 정의했다.
+- Job 생성은 `job_creation_enabled=false` 및 observer-only RBAC로 fail-closed다.
+  ValidatingAdmissionPolicy, immutable image digest, TTL/deadline, GKE capacity와
+  BigQuery 비용 gate가 승인된 후속 변경 전에는 Airflow가 Job 생성 시도를 중단한다.
+- production registry/BigQuery/Redis CA 권한, Redis·Cloud SQL·MLflow 및 public
+  external HTTPS egress를 의도적으로 부여하지 않았다. 실제 apply와 live 검증은
+  수행하지 않았다.
+
 ## 2026-08-01: Auto Research 실험별 Kubernetes Job 실행 경계 (#484)
 
 - 기존 `autoresearch` namespace와 분리한 `autoresearch-experiments` namespace를

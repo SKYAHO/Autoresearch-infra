@@ -196,6 +196,20 @@ output "code_uploader_service_account_email" {
   value       = google_service_account.code_uploader.email
 }
 
+output "experiment_runtime_contract" {
+  description = "Paired Feast experiment runtime이 소비할 비시크릿 dev IAM 좌표와 fail-closed Job 생성 계약."
+  value = {
+    service_account_email       = google_service_account.experiment_runtime.email
+    workload_identity_principal = local.experiment_runtime_workload_identity_principal
+    registry_experiments_uri    = "gs://${google_storage_bucket.feast_registry_dev.name}/${local.experiment_runtime_experiments_prefix}"
+    staging_experiments_uri     = "gs://${google_storage_bucket.feast_staging_dev.name}/${local.experiment_runtime_experiments_prefix}"
+    artifact_experiments_uri    = "gs://${google_storage_bucket.mlflow_artifacts.name}/${local.experiment_runtime_experiments_prefix}"
+    code_archive_uri            = "gs://${google_storage_bucket.code_artifacts.name}/${local.experiment_runtime_code_prefix}"
+    feast_offline_store_dataset = google_bigquery_dataset.feast_offline_store_dev.dataset_id
+    job_creation_enabled        = false
+  }
+}
+
 output "github_actions_airflow_deployer_service_account_email" {
   description = "GitHub Actions (Autoresearch-airflow) WIF가 가장하여 dev GKE의 Airflow Helm release를 배포하는 SA email. repository variable GKE_DEPLOYER_SA 값으로 사용."
   value       = google_service_account.airflow_deployer.email

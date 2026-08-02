@@ -55,6 +55,75 @@ variable "app_gcp_service_account_email" {
   default     = ""
 }
 
+variable "experiment_runtime_k8s_namespace" {
+  description = "Kubernetes namespace dedicated to paired Feast experiment runtime Jobs."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_namespace) >= 1 && length(var.experiment_runtime_k8s_namespace) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_namespace))
+    error_message = "experiment_runtime_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "experiment_runtime_k8s_service_account" {
+  description = "Kubernetes service account mapped to the experiment runtime GCP service account."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_service_account) >= 1 && length(var.experiment_runtime_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_service_account))
+    error_message = "experiment_runtime_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
+variable "experiment_runtime_gcp_service_account_email" {
+  description = "Experiment runtime GSA email from terraform/envs/dev output. Empty derives the dev default."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.experiment_runtime_gcp_service_account_email == "" ||
+      can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\\.iam\\.gserviceaccount\\.com$", var.experiment_runtime_gcp_service_account_email))
+    )
+    error_message = "experiment_runtime_gcp_service_account_email must be empty or use 6-30 character lowercase account/project IDs that start with a letter, contain only letters, digits, or hyphens, and end with a letter or digit."
+  }
+}
+
+variable "airflow_k8s_namespace" {
+  description = "Airflow namespace whose in-cluster service account observes experiment runtime Jobs. Must match terraform/envs/dev."
+  type        = string
+  default     = "airflow"
+
+  validation {
+    condition     = length(var.airflow_k8s_namespace) >= 1 && length(var.airflow_k8s_namespace) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.airflow_k8s_namespace))
+    error_message = "airflow_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "airflow_k8s_service_account" {
+  description = "Airflow in-cluster service account bound to the experiment runtime observer Role. Must match terraform/envs/dev."
+  type        = string
+  default     = "airflow"
+
+  validation {
+    condition     = length(var.airflow_k8s_service_account) >= 1 && length(var.airflow_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.airflow_k8s_service_account))
+    error_message = "airflow_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
+variable "private_googleapis_cidr" {
+  description = "Private Google APIs VIP CIDR allowed from experiment runtime Jobs."
+  type        = string
+  default     = "199.36.153.8/30"
+
+  validation {
+    condition     = can(cidrhost(var.private_googleapis_cidr, 0)) && var.private_googleapis_cidr == "199.36.153.8/30"
+    error_message = "private_googleapis_cidr must be the canonical Private Google APIs CIDR 199.36.153.8/30."
+  }
+}
+
 variable "agent_orchestration_api_k8s_service_account" {
   description = "Agent Orchestration API의 전용 Kubernetes service account 이름."
   type        = string
@@ -311,15 +380,4 @@ variable "enable_experiment_job_creation" {
   description = "Agent Orchestration API의 실험 Job 생성 권한 활성화 여부. 고정 템플릿·허용 digest·admission 검증 완료 전에는 false를 유지한다."
   type        = bool
   default     = false
-}
-
-variable "private_googleapis_cidr" {
-  description = "Private Google Access DNS가 해석하는 Google API VIP CIDR."
-  type        = string
-  default     = "199.36.153.8/30"
-
-  validation {
-    condition     = can(cidrhost(var.private_googleapis_cidr, 0))
-    error_message = "private_googleapis_cidr은 유효한 CIDR이어야 합니다."
-  }
 }

@@ -6,6 +6,10 @@ locals {
   agent_orchestration_api_gcp_service_account_email    = var.agent_orchestration_api_gcp_service_account_email != "" ? var.agent_orchestration_api_gcp_service_account_email : "${var.resource_prefix}-orch-api@${var.project_id}.iam.gserviceaccount.com"
   agent_orchestration_runner_gcp_service_account_email = var.agent_orchestration_runner_gcp_service_account_email != "" ? var.agent_orchestration_runner_gcp_service_account_email : "${var.resource_prefix}-orch-runner@${var.project_id}.iam.gserviceaccount.com"
 
+  # dev root의 experiment_runtime_contract와 같은 기본값을 사용한다. override는
+  # 두 root output을 대조할 때만 사용한다.
+  experiment_runtime_gcp_service_account_email = var.experiment_runtime_gcp_service_account_email != "" ? var.experiment_runtime_gcp_service_account_email : "${var.resource_prefix}-exp-runtime@${var.project_id}.iam.gserviceaccount.com"
+
   # #424 Task 2의 Workload Identity subject와 정확히 같은 namespace/KSA 기본값을
   # 사용한다. annotation과 RoleBinding은 반드시 같은 환경의 GSA만 참조한다.
   # GSA local part는 dev root의 feast_apply_{dev,prod}_sa_name과 같아야 한다.
