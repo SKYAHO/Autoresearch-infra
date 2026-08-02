@@ -802,7 +802,7 @@ Airflow(#48)와 동일 패턴. 단 인증 유지를 위해 ILB는 **oauth2-proxy
 | ILB 예약 내부 IP | `autoresearch-dev-mlflow-ilb` | dev subnet 내부 예약, `output.mlflow_ilb_ip` |
 | 레코드 | `mlflow.dev.autoresearch.internal` → ILB IP | A, TTL 300. 기존 `internal` zone 재사용 |
 | LB 대상 | oauth2-proxy Service(4180) | `deploy/mlflow`(ArgoCD). `mlflow:5000`은 미노출 |
-| 인증 | oauth2-proxy(Google + 허용 이메일) 유지 | redirect URI `localhost:4180` **불변**(터널 접속이라 콘솔 재등록 불필요) |
+| 인증 | oauth2-proxy(Google + `authenticated-emails` 계약) 유지. `authenticated-emails` 파일이 유일한 이메일 경계(#488에서 `--email-domain=*` 제거) | redirect URI `localhost:4180` **불변**(터널 접속이라 콘솔 재등록 불필요) |
 | 노출 범위 | **VPC 내부 전용** | 인터넷 노출 없음. 접근은 Bastion(#47) 터널 경유 |
 
 단계: (1) 예약 IP + DNS apply(dev root, IP는 `terraform output mlflow_ilb_ip`)

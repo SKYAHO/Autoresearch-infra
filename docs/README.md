@@ -16,6 +16,7 @@
 | MLflow 접속·실험/모델 등록·시크릿 로테이션·백업·장애 대응 | [`MLFLOW_OPERATIONS_RUNBOOK.md`](MLFLOW_OPERATIONS_RUNBOOK.md) |
 | Agent Orchestration API/Runner의 내부 GKE 배포·OAuth bootstrap·저장 검증 | [`runbooks/2026-07-30-agent-orchestration-gke.md`](runbooks/2026-07-30-agent-orchestration-gke.md) |
 | Kibana/ELK 로그 검색·운영 절차 확인 | [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) |
+| ArgoCD/Airflow/MLflow/Grafana/Kibana Google OAuth Secret·allowlist 갱신·롤백 | [`OAUTH_OPERATIONS_RUNBOOK.md`](OAUTH_OPERATIONS_RUNBOOK.md) |
 | Vault(폐기 #412 — 이력 보존용) | [`VAULT_OPERATIONS_RUNBOOK.md`](VAULT_OPERATIONS_RUNBOOK.md) |
 | 프로젝트 이전·클러스터 재구축 실행 절차 확인 | [`MIGRATION_RUNBOOK.md`](MIGRATION_RUNBOOK.md) |
 | dev Terraform 리소스, 변수, output, apply 절차 확인 | [`TERRAFORM_DEV.md`](TERRAFORM_DEV.md) |
