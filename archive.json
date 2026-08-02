@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T04:09:57Z",
+  "generated_at": "2026-08-02T04:18:18Z",
   "reports": [
+    {
+      "number": 483,
+      "title": "docs: Google OAuth 운영 규약 통합",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-02T04:18:05Z",
+      "summary_ko": [
+        "ArgoCD, Airflow, MLflow, Grafana, Kibana의 Google OAuth 운영 규약을 단일 런북 문서로 통합 작성하였습니다.",
+        "Secret Manager 정본과 Kubernetes Secret 실행 사본 간의 연동 및 자격증명·허용목록 갱신/롤백 절차를 표준화하였습니다.",
+        "런타임 인증 로직과 시크릿 키는 변경하지 않으며 기존 운영 문서와 인프라 요약의 링크 및 문구를 업데이트하였습니다."
+      ],
+      "report_url": "pr/483/"
+    },
     {
       "number": 496,
       "title": "chore: manifest serving 이미지 digest 승격",
