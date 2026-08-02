@@ -387,9 +387,9 @@ variable "experiment_results_bucket_storage_class" {
 }
 
 variable "experiment_results_object_retention_days" {
-  description = "실험 결과 객체 보존 일수. 비용 상한을 위해 1일 이상 정수만 허용한다."
+  description = "실험 결과 live 객체 보존 일수. 결과 조회·감사와 비용 상한을 위해 1일 이상 정수만 허용한다."
   type        = number
-  default     = 30
+  default     = 90
 
   validation {
     condition     = var.experiment_results_object_retention_days >= 1 && floor(var.experiment_results_object_retention_days) == var.experiment_results_object_retention_days
@@ -400,7 +400,7 @@ variable "experiment_results_object_retention_days" {
 variable "experiment_results_noncurrent_version_retention_days" {
   description = "실험 결과의 archived generation 보존 일수. live 삭제 후 운영자 복구 창을 제공한다."
   type        = number
-  default     = 7
+  default     = 30
 
   validation {
     condition     = var.experiment_results_noncurrent_version_retention_days >= 1 && floor(var.experiment_results_noncurrent_version_retention_days) == var.experiment_results_noncurrent_version_retention_days

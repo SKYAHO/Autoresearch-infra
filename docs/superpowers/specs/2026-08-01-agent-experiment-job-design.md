@@ -64,7 +64,9 @@ autoresearch-experiments
 
 API는 `autoresearch-experiments` namespace에서 Job의 생성·조회·상태 확인만
 수행한다. Job Pod는 API와 다른 KSA를 사용하며, 결과 저장에 필요한 GCS 객체 생성
-권한만 갖는다. API에는 실험 결과 버킷 쓰기 권한을 부여하지 않는다.
+권한만 갖는다. API에는 실험 결과 버킷 쓰기 권한을 부여하지 않는다. 상태 API는
+인증·감사 가능한 응답으로 결과를 조회하기 위한 bucket-scoped 읽기 권한만 갖고,
+실행 Job은 새 객체 생성 권한만 갖는다.
 
 Kubernetes RBAC는 Pod 사양의 image·env·volume 내용을 검증하지 않으므로, namespace
 분리만으로 충분한 보안 경계로 간주하지 않는다. 다음 방어선을 함께 적용한다.
@@ -121,9 +123,9 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
   `roles/storage.objectCreator`에는 기존 객체를 덮어쓰는 데 필요한 삭제 권한이 없고,
   API는 create-if-absent precondition으로 동일 prefix의 논리적 중복도 거부한다.
 - Job은 성공·실패를 Kubernetes Job 상태로 남기고, 애플리케이션 상태 API는
-  `Job`/`Pod` 상태와 결과 URI 및 API DB의 요약 metric을 결합해 표시한다. API에는
-  결과 객체 내용 읽기 권한을 부여하지 않는다. 결과 다운로드/상세 조회가 필요하면
-  사용자 인증·prefix 조건·감사 로그를 갖춘 별도 read 경로를 설계한다.
+  `Job`/`Pod` 상태와 결과 URI 및 API DB의 요약 metric을 결합해 표시한다. API는
+  결과 버킷을 읽을 수 있지만, 사용자 인증·prefix 조건·감사 로그를 거친 응답만
+  제공하며 사용자에게 버킷 IAM이나 공개 URL을 부여하지 않는다.
 - 결과 파일에는 metric, 평가 기준, 데이터 버전, 실행 이미지 digest, source
   revision을 포함한다.
 
@@ -152,8 +154,9 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
 
 MVP에서는 API에 Job 삭제 권한을 부여하지 않는다. `ttlSecondsAfterFinished` 누락이나
 TTL controller 장애로 quota가 회수되지 않으면 API는 새 제출을 중지하고 운영자에게
-escalate한다. 운영자는 결과·감사 메타데이터를 확인한 뒤 별도 승인된 namespace Job
-삭제 권한으로 회수한다. `enable_experiment_job_creation=false`는 새 Job 제출만
+escalate한다. 운영자는 결과·감사 메타데이터를 확인한 뒤 break-glass cluster 관리자
+권한으로 회수한다. 이 권한은 API KSA나 실험 KSA에 부여하지 않는다.
+`enable_experiment_job_creation=false`는 새 Job 제출만
 차단하며 이미 실행 중인 Job은 중단하지 않는다. 취소·재시도는 별도 설계에서 권한과
 상태 전이를 함께 검토한다. API가 사용자 입력을 그대로 Job 명세로 전달하지 않도록
 앱 저장소 구현에서 허용 필드를 고정한다.
@@ -198,7 +201,8 @@ escalate한다. 운영자는 결과·감사 메타데이터를 확인한 뒤 별
   API는 이 기간의 quota 초과를 대기열/재시도 가능 상태로 기록하고, TTL controller가
   Job 객체를 삭제한 뒤에만 새 Job을 제출한다. 결과 객체는 live·archived generation
   모두 원래 생성 시점 기준 30일 후 삭제한다.
-- 결과 저장 후 Job을 정리해도 메타데이터와 결과 URI는 API DB에 남긴다.
+- 결과 저장 후 Job을 정리해도 메타데이터와 결과 URI는 API DB에 남긴다. 결과
+  live generation은 90일, archived generation은 noncurrent 시점부터 30일 보존한다.
 - 롤백은 새 Job 생성을 중지하고, 이전 manifest/image digest로 API·실험 실행
   계약을 되돌리는 방식으로 수행한다. 기존 namespace·GSA·버킷을 삭제하는
   방식은 사용하지 않는다.
@@ -244,9 +248,9 @@ escalate한다. 운영자는 결과·감사 메타데이터를 확인한 뒤 별
 
 Kubernetes의 `restricted` 프로파일은 보안 중심·저신뢰 워크로드를 대상으로 하며
 non-root, privilege escalation 차단, hostPath 차단 등을 요구한다. GKE Workload
-Identity는 GKE metadata server가 KSA 토큰을 바탕으로 단기 Google Cloud 토큰을
-발급하므로, 결과 저장 Job은 KSA 토큰을 사용하되 Kubernetes RBAC 권한은 부여하지
-않는다.
+Identity는 GKE metadata server가 호출 Pod identity, KSA annotation, Workload Identity
+member binding을 사용해 단기 Google Cloud 토큰을 발급한다. 따라서 결과 저장 Job은
+Kubernetes API 토큰 자동 마운트를 끄고 Kubernetes RBAC 권한도 부여하지 않는다.
 
 ## 10. 후속 작업
 
@@ -254,7 +258,9 @@ Identity는 GKE metadata server가 KSA 토큰을 바탕으로 단기 Google Clou
 - 결과 스키마와 metric 계약을 앱·Airflow 담당자와 합의
 - 실험 feature 변경을 dev Feature Store에서만 수행하도록 앱 계약 강화
 - 장시간 실험·대규모 병렬 실행이 필요할 때 Controller 또는 큐 기반 구조 재검토
-- UI·인증·실험 취소·재시도 정책을 별도 이슈로 분리
+- UI·인증·실험 취소·재시도 정책을 별도 이슈로 분리. 특히 취소는 API의 광범위한
+  `delete` 권한으로 처리하지 않고 Job 소유권·감사 로그·최소권한을 검증하는 전용
+  운영 경로를 설계한 뒤에만 제공
 
 ## 11. 검토 근거
 

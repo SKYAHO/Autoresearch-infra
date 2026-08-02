@@ -20,6 +20,10 @@
   Job 템플릿·admission이 `batch-od` 전용 nodeSelector/toleration을 강제하도록
   계약을 보완했다. 일반 앱 pool 경합을 막기 위해 동시 Job·Pod 상한은 2개,
   컨테이너 최대는 1 vCPU/2 GiB로 낮췄다.
+- 후속 보안 리뷰에서 실험과 무관한 클러스터 전역 NodeLocal DNSCache 변경은 PR에서
+  제외했다. 결과 버킷은 live 90일·archived 30일의 복구 창을 두고, 실행 Job에는
+  객체 생성만, 상태 API에는 인증·감사 응답을 위한 객체 읽기만 각각 최소 권한으로
+  부여했다. API의 Job 삭제 권한은 계속 부여하지 않는다.
 - 실제 Terraform apply와 live Job 검증은 아직 수행하지 않았다. 운영 절차는
   `docs/runbooks/2026-08-01-auto-research-experiment-job.md`를 따른다.
 

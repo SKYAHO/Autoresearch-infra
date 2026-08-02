@@ -22,7 +22,7 @@ resource "google_storage_bucket" "experiment_results" {
     }
 
     condition {
-      # 결과 live generation은 30일 후 archive한다. Job GSA는 overwrite/delete할 수
+      # 결과 live generation은 90일 후 archive한다. Job GSA는 overwrite/delete할 수
       # 없지만, 운영자 복구·정정으로 생긴 archived generation에는 별도 복구 창을 둔다.
       with_state = "LIVE"
       age        = var.experiment_results_object_retention_days
@@ -35,7 +35,7 @@ resource "google_storage_bucket" "experiment_results" {
     }
 
     condition {
-      # archived 시점부터 7일을 보존한 뒤 영구 삭제한다.
+      # archived 시점부터 30일을 보존한 뒤 영구 삭제한다.
       with_state                 = "ARCHIVED"
       days_since_noncurrent_time = var.experiment_results_noncurrent_version_retention_days
     }
@@ -72,4 +72,13 @@ resource "google_storage_bucket_iam_member" "experiment_job_object_creator" {
   bucket = google_storage_bucket.experiment_results.name
   role   = "roles/storage.objectCreator"
   member = "serviceAccount:${google_service_account.experiment_job.email}"
+}
+
+# 상태 API는 결과를 인증·감사 가능한 API 응답으로 제한해 제공하기 위해 읽기만 한다.
+# 실행 Job과 달리 생성·변경·삭제 권한은 주지 않으며, 사용자에게 버킷 IAM을 직접
+# 부여하거나 공개 URL을 만들지 않는다.
+resource "google_storage_bucket_iam_member" "agent_orchestration_api_experiment_results_viewer" {
+  bucket = google_storage_bucket.experiment_results.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.agent_orchestration_api.email}"
 }

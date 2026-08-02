@@ -31,7 +31,7 @@ terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvar
 | Job KSA | `experiment-job` |
 | GSA | `autoresearch-dev-exp-job@<project>.iam.gserviceaccount.com` |
 | 결과 버킷 | `<project>-autoresearch-dev-experiment-results` |
-| 결과 권한 | 버킷 단위 `roles/storage.objectCreator`만 |
+| 결과 권한 | Job GSA `roles/storage.objectCreator`, 상태 API GSA `roles/storage.objectViewer` |
 
 API KSA의 Job 생성 권한은 `enable_experiment_job_creation=false`가 기본이다. 고정
 템플릿, 허용 image digest, admission 검증이 적용되기 전에는 이 값을 변경하지 않는다.
@@ -60,8 +60,8 @@ API는 사용자가 보낸 임의 manifest를 Kubernetes API로 전달해서는 
   사용해 논리적 경로 재사용도 거부한다.
 
 결과 메타데이터에는 metric, 평가 기준, 데이터 버전, source revision, image digest,
-시작·종료 시각, Job UID를 기록한다. lifecycle은 live object가 30일 후 archive되고,
-archived generation은 noncurrent이 된 시점부터 7일을 더 보존한 뒤 영구 삭제한다.
+시작·종료 시각, Job UID를 기록한다. lifecycle은 live object가 90일 후 archive되고,
+archived generation은 noncurrent이 된 시점부터 30일을 더 보존한 뒤 영구 삭제한다.
 versioning은 운영자 복구·정정으로 생긴 이전 generation의 명시적 복구 창이며, 장기
 보존 수단이 아니므로 장기 보관이 필요한 결과는 별도 승인된 경로로 이관한다.
 
@@ -78,9 +78,10 @@ Secret 조회, exec, cluster 권한 상승을 할 수 없다. GCP 측에서도 �
 
 `roles/storage.objectCreator`만 가진 Job은 업로드한 객체를 다시 GET/list하거나
 무결성 검증을 위해 읽을 수 없다. 업로드 요청은 `ifGenerationMatch=0` precondition과
-응답의 generation/checksum으로 성공 여부를 확인하고, API DB에는 결과 URI와 요약
-metric만 기록한다. 결과 객체의 사용자 다운로드/상세 조회는 이번 PR 범위에 없으며,
-별도 인증·감사 가능한 read 경로를 설계할 때까지 제공하지 않는다.
+응답의 generation/checksum으로 성공 여부를 확인한다. 같은 경로가 이미 있으면 GCS는
+새 generation을 만들지 않고 HTTP 412를 반환하므로 재시도하지 않는다. IAM 거부는 HTTP
+403이며 구성·권한 오류로 분류한다. 상태 API GSA만 bucket-scoped `objectViewer`로 결과를
+읽고 응답을 인증·감사하며, 사용자에게 버킷 IAM이나 공개 URL을 직접 부여하지 않는다.
 
 ## 적용 후 권한 검증
 
@@ -154,16 +155,13 @@ Cloud SQL, Redis, MLflow, `0.0.0.0/0:443`, 외부 AI API는 허용 목록에 없
 따른 HTTPS timeout이 발생한다. DNS 자체가 실패하면 이름 해석 오류로 구분한다.
 route가 없거나 방화벽이 차단하면 역시 연결 timeout이 발생한다.
 
-live dev cluster는 NodeLocal DNSCache가 활성화됐지만 Cloud DNS for GKE는 사용하지
-않으므로 Pod DNS 목적지는 kube-dns Service IP다. services CIDR 규칙은 service VIP에
-대해 pre-DNAT로 정책을 평가하는 dataplane을, `kube-system` selector는 post-DNAT로
-평가하는 dataplane을 각각 대비한다. Cloud DNS for GKE를 활성화하면 Pod nameserver가
+현재 live dev cluster의 NodeLocal DNSCache 상태는 이 실험 PR에서 변경하거나 전제로
+삼지 않는다. Cloud DNS for GKE를 사용하지 않는 구성에서는 Pod DNS 목적지가 kube-dns
+Service IP다. services CIDR 규칙은 service VIP에 대해 pre-DNAT로 정책을 평가하는
+dataplane을, `kube-system` selector는 post-DNAT로 평가하는 dataplane을 각각 대비한다.
+Cloud DNS for GKE를 활성화하면 Pod nameserver가
 `169.254.20.10`으로 바뀌므로, 그 변경 이슈에서 해당 `/32`의 UDP/TCP 53 egress를
 추가하고 dry-run과 실제 DNS 검증을 함께 수행한다.
-
-NodeLocal DNSCache 활성화는 `terraform/envs/dev/gke.tf`의 `dns_cache_config`으로
-관리한다. apply 전에는 `gcloud container clusters describe`와 Pod의 `resolv.conf`로
-IaC 설정·live addon·실제 nameserver를 함께 대조한다.
 
 이 private zone은 `googleapis.com`만 대상으로 한다. `pkg.dev`, `gcr.io`, `run.app`,
 외부 AI API와 일반 인터넷 endpoint는 이 VIP로 해석되지 않으며 실험 Pod의 egress
@@ -172,7 +170,9 @@ Artifact Registry 접근은 Job 제출 전에 검증한다.
 
 ## 장애 처리와 롤백
 
-1. API에서 새 실험 제출을 중지하고 실행 중 Job의 ID·상태·결과 URI를 기록한다.
+1. API에서 새 실험 제출을 중지하고 실행 중 Job의 ID·상태·결과 URI를 기록한다. 현재
+   API에는 Job delete 권한이 없으므로 사용자 취소는 지원하지 않으며, 실행 중 Job은
+   `activeDeadlineSeconds` 종료를 기다린다.
 2. 이미지 pull 실패, Pending, OOMKilled, deadline 초과, 애플리케이션 exit code를
    구분해 원인을 조사한다. API는 해당 Job/Pod Event에서 `ImagePullBackOff`,
    `FailedScheduling`, `FailedCreate`를 확인한다. 실패한 Job을 자동 재시도하지 않는다.
@@ -186,8 +186,9 @@ Artifact Registry 접근은 Job 제출 전에 검증한다.
 
 `ttlSecondsAfterFinished` 누락 또는 TTL controller 장애로 quota가 회수되지 않으면
 API는 새 제출을 차단하고 운영자에게 escalate한다. API는 delete 권한이 없으므로,
-운영자는 결과 URI·Job 상태·감사 메타데이터를 확인한 뒤 별도 승인된 Job 삭제 권한으로
-명시적으로 회수한다. `enable_experiment_job_creation=false` 적용은 새 Job 제출만
+운영자는 결과 URI·Job 상태·감사 메타데이터를 확인한 뒤 break-glass cluster 관리자
+권한으로 명시적으로 회수한다. 이 권한은 API KSA나 실험 KSA에 부여하지 않는다.
+`enable_experiment_job_creation=false` 적용은 새 Job 제출만
 막으며, 이미 실행 중인 Job을 취소·중지하지 않는다.
 
 비용 경보나 quota 초과가 발생하면 API 동시 제출 제한을 먼저 낮춘다. namespace quota

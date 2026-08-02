@@ -121,11 +121,6 @@ resource "google_container_cluster" "dev" {
       disabled = false
     }
 
-    # default 동작에 의존하지 않고 NodeLocal DNSCache를 state로 관리한다. 실험 Job
-    # NetworkPolicy의 DNS 허용 경로는 kube-dns Service IP와 함께 검증한다.
-    dns_cache_config {
-      enabled = true
-    }
   }
 
   vertical_pod_autoscaling {

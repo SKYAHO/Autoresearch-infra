@@ -94,10 +94,10 @@ raw_data_bucket_location                   = "asia-northeast3"
 raw_data_bucket_storage_class              = "STANDARD"
 raw_data_noncurrent_version_retention_days = 30
 
-# #484 실험 결과 live object는 30일 후 archive하고, archived generation은 7일 더
+# #484 실험 결과 live object는 90일 후 archive하고, archived generation은 30일 더
 # 보존한다. 장기 보관 결과는 별도 승인된 저장소로 이관한다.
-experiment_results_object_retention_days            = 30
-experiment_results_noncurrent_version_retention_days = 7
+experiment_results_object_retention_days            = 90
+experiment_results_noncurrent_version_retention_days = 30
 
 bigquery_location                   = "asia-northeast3"
 bigquery_delete_contents_on_destroy = false

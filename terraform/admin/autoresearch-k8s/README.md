@@ -77,7 +77,7 @@ Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정
 |---|---|---|
 | namespace | `autoresearch-experiments` | 실험 Pod와 기존 앱을 분리 |
 | Job KSA | `experiment-job` | 결과 버킷 쓰기 전용 Workload Identity |
-| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태만 기본 조회 |
+| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용 |
 | Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
 | 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
 
@@ -105,8 +105,10 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    실험 node pool을 만들거나 해당 KPO와의 capacity·우선순위 경합 계획을 승인한다.
 
 권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
-Terraform apply로 값을 `false`로 되돌립니다. namespace, KSA, 결과 버킷을 롤백
-수단으로 삭제하지 않습니다.
+Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
+중인 Job·Pod·GCS 업로드를 중단하지 않습니다. 취소는 API에 `delete` 권한을 추가하지
+않은 현재 MVP에서는 제공하지 않으며, 종료·quota 회수는 `activeDeadlineSeconds`와 TTL
+controller에 의존합니다. namespace, KSA, 결과 버킷을 롤백 수단으로 삭제하지 않습니다.
 
 ### 네트워크와 용량 상한
 

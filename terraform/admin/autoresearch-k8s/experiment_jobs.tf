@@ -35,7 +35,9 @@ resource "kubernetes_service_account_v1" "experiment_job" {
   automount_service_account_token = false
 }
 
-# 실험은 일반 앱 pool이 아니라 batch-od 전용 pool에 고정한다. 이 quota는 pool의
+# 실험은 일반 앱 pool이 아니라 batch-od pool에 고정한다. 이 pool은 Action Log shard
+# KPO와 공유하므로, 생성 권한 활성화 전에 별도의 용량·우선순위 계획을 승인해야 한다.
+# quota는 pool의
 # e2-standard-2 두 노드(min 0/max 2)에서 각각 한 Job이 안정적으로 실행되는
 # 보수적 상한이다. 완료 Job도 TTL 전에는 quota에 포함되므로 무한 재시도·대량 제출로
 # batch 비용이 늘어나는 경로를 차단한다.

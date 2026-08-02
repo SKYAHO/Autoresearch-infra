@@ -40,7 +40,9 @@
 - GCS 객체 prefix는 `experiments/<experiment-id>/<attempt-id>/`로 문서화합니다. prefix IAM은 사용하지 않고 버킷 자체를 실험 결과 전용으로 분리합니다.
 - Job GSA account id는 30자 제한을 검증하고 기본값은 `autoresearch-dev-exp-job`로 둡니다.
 - Job KSA principal은 `autoresearch-experiments/experiment-job`로 고정된 기본값에서 파생합니다.
-- Job GSA에는 버킷 수준 `roles/storage.objectCreator`만 부여합니다. objectViewer, objectAdmin, bucket IAM 권한은 부여하지 않습니다.
+- Job GSA에는 버킷 수준 `roles/storage.objectCreator`만 부여합니다. Job에는 objectViewer,
+  objectAdmin, bucket IAM 권한을 부여하지 않으며, 상태 API GSA에만 결과 조회용
+  `roles/storage.objectViewer`를 별도 부여합니다.
 - Job KSA→GSA Workload Identity binding은 `roles/iam.workloadIdentityUser`로만 연결합니다.
 
 - [ ] **1단계: Terraform 입력 검증 조건을 먼저 정의합니다.**
@@ -49,7 +51,7 @@
 
 - [ ] **2단계: 버킷·GSA·IAM·Workload Identity 리소스를 추가합니다.**
 
-  `experiment_jobs.tf`에 `google_storage_bucket.experiment_results`, `google_service_account.experiment_job`, `google_service_account_iam_member.experiment_job_wi`, `google_storage_bucket_iam_member.experiment_job_object_creator`를 추가합니다. 버킷 lifecycle은 기존 `storage.tf` 패턴을 따르고 `experiment_results_object_retention_days` 기본값 30일로 제한합니다.
+  `experiment_jobs.tf`에 `google_storage_bucket.experiment_results`, `google_service_account.experiment_job`, `google_service_account_iam_member.experiment_job_wi`, `google_storage_bucket_iam_member.experiment_job_object_creator`, 상태 API의 읽기 전용 IAM을 추가합니다. 버킷 lifecycle은 기존 `storage.tf` 패턴을 따르고 live 90일·archived 30일의 복구 창을 둡니다.
 
 - [ ] **3단계: 결과 버킷과 계약 좌표를 output으로 노출합니다.**
 
