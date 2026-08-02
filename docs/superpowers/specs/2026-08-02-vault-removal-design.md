@@ -116,8 +116,14 @@ scripts/terraform-env --environment dev --root terraform/admin/vault-k8s \
 scripts/terraform-env --environment dev --root terraform/admin/vault-k8s \
   state list   # data source 2개만 남고 비어 있어야 함
 
-# 4) 복원한 디렉터리를 다시 제거해 main 트리를 원상 복구
-git checkout HEAD -- terraform/admin/vault-k8s
+# 4) 복원한 디렉터리를 index와 워킹트리 양쪽에서 제거해 main 트리를 원상 복구
+#    (이 PR 머지 후 HEAD에는 이 경로가 이미 없으므로 `git checkout HEAD --
+#    terraform/admin/vault-k8s`는 pathspec 오류로 실패한다. 1)단계의
+#    `git checkout <부모> -- ...`는 파일을 index에 staged 상태로 올려두므로
+#    working tree만 지우는 것으로는 불충분하다.)
+git restore --staged terraform/admin/vault-k8s
+rm -rf terraform/admin/vault-k8s
+git status --short terraform/admin   # 아무것도 남지 않아야 함
 ```
 
 state가 비면 원격 GCS state 객체도 정리 대상이나, 실제 삭제(버킷 오브젝트
@@ -384,6 +390,73 @@ vaultUnsealKmsAccess`로 7일 안에 되살릴 수도 있다.
 `terraform apply`를 돌리면 custom role 생성 단계에서 오류가 난다.
 "롤백" 절을 아래와 같이 정정한다(체크리스트에도 반영).
 
+**이해도 확인 답변 (comment 8 — `vault_removed.tf` 삭제 후속 PR이 승인
+apply보다 먼저 머지되는 경우, `vault_removed.tf:19`)**:
+comment 4는 forget apply 성공을 `terraform state list`로 확인한 뒤 이
+파일을 삭제하는 정리를 별도 후속 PR로 미뤄 두었는데, 그 순서를 강제하는
+장치는 코드·CI 어디에도 없다.
+
+- **plan에 미치는 영향**: `vault_removed.tf`가 먼저 사라지면 dev root
+  config에는 key ring/crypto key에 대한 어떤 블록도 남지 않는다
+  (`vault.tf`는 이미 이 PR에서 삭제됨). 승인 apply가 아직 실행되지
+  않은 상태라 state에는 이 2개 리소스가 여전히 남아 있으므로, 그
+  다음 plan은 이 2개를 GSA·WI 바인딩·custom role·key IAM binding
+  4개와 똑같이 **`will be destroyed`(실제 destroy)로 계획한다** —
+  `removed` 블록이 막던 "forget vs destroy" 구분이 사라지는 것이다.
+- **live GCP 영향**: 이 plan이 그대로 승인·apply되면 crypto key
+  destroy가 CryptoKeyVersion 파기를 실제로 예약한다(위 "정정된 접근"
+  절의 원래 위험이 그대로 재현). 다만 확정까지 기본 24시간의 유예가
+  있고, 이 dev key에는 실제 Vault Raft 데이터가 없어(배경 절 참고)
+  파기돼도 복구할 실피해는 없다 — 위험은 "의도와 다른 삭제가 조용히
+  실행된다"는 절차 실수 쪽이지, 데이터 손실 쪽이 아니다.
+- **`terraform-drift.yml`로 구분 가능한가**: 텍스트로는 구분된다 —
+  정상 시나리오는 plan 요약에 `will no longer be managed by
+  Terraform, but will not be destroyed`가 찍히고, 이 사고 시나리오는
+  `will be destroyed`가 찍힌다. 다만 `terraform-drift.yml`은 이
+  차이를 해석하지 않고 원문 그대로 이슈에 올릴 뿐이므로, 매일 오는
+  `[DRIFT]` 이슈를 습관적으로 훑어보는 사람이 두 문구의 차이를
+  놓치면 못 잡아낸다 — 자동 판별 장치는 없다.
+- **강제 장치가 필요한가**: 코드/CI 수준 가드(예: "config에 없는데
+  `removed`도 없는 KMS 주소가 있으면 실패"하는 정적 검사)까지는
+  이 PR 범위에서 만들지 않는다 — blast radius가 dev의 미사용 key
+  1개로 좁고 24시간 유예가 있어 과설계다. 대신 후속 PR 자체의 설명에
+  "이 PR은 #478 승인 apply가 `terraform state list`로 이 2개 주소
+  부재를 확인한 뒤에만 머지한다"는 전제 조건을 명시하는 것을 완료
+  조건에 추가한다(아래 체크리스트).
+
+**이해도 확인 답변 (comment 9 — `roles/cloudkms.admin` 회수 후속 PR이
+승인 apply보다 먼저 머지되는 경우, `github_actions.tf:255`)**:
+
+- **(a) 그래프상 의존 관계**: comment 3에서 이미 확인한 대로 없다.
+  `google_project_iam_member.dev_apply_roles["roles/cloudkms.admin"]`
+  회수와 `google_kms_crypto_key_iam_member.vault_unseal` destroy는
+  서로를 참조하지 않는 독립 노드라 실행 순서가 보장되지 않는다 — 이
+  후속 PR이 승인 apply보다 먼저 머지되면 comment 3이 막으려던 바로
+  그 403 순서 위험이 재현된다.
+- **(b) 403으로 apply가 중단되면 state/GCP는 어떤 상태로 남는가**:
+  role 회수(`google_project_iam_member` 리소스)가 먼저 처리돼
+  성공했다면 그 리소스는 state·GCP 양쪽에서 이미 제거된 상태로
+  남는다. 반면 `google_kms_crypto_key_iam_member.vault_unseal`
+  destroy 호출이 403으로 실패하면 이 리소스는 **state에도 GCP에도
+  그대로 남는다**(destroy가 완료돼야 state에서 빠지므로) — 즉
+  "dev_apply SA는 cloudkms 권한이 없는데 아직 destroy 안 된 KMS IAM
+  binding이 state에 남아 있는" 부분 실패 상태가 된다. 재실행하려면
+  `roles/cloudkms.admin`을 다시 부여(이 후속 PR을 되돌리거나 동등한
+  권한을 임시 부여)한 뒤 apply를 다시 돌려야 한다.
+- **(c) 어느 단계가 이 실패를 잡아내는가**: `plan` job은 `CI_SA`의
+  project-level `roles/viewer`로 읽기만 하므로 이 시점에는 실패하지
+  않는다(comment 3의 CI_SA 분석과 동일). 실제로 실패하는 지점은
+  `apply` job의 "Apply dev root" 스텝(`apply.yml:383`)이다 — `rc`가
+  0이 아니면 `::error::`를 출력하고 그 워크플로 run 자체가 실패로
+  끝난다(GitHub Actions run이 실패 표시되어 승인자·dispatch한 사람
+  눈에 바로 보인다. `terraform-drift.yml`과는 무관한 경로다).
+- **전제 조건을 어디에 남길지**: 지금은 comment 3 문단 안의 문장
+  하나뿐이다. comment 8과 동일하게, 이 role을 회수하는 후속 PR
+  자체의 설명에 "#478 승인 apply가 성공적으로 끝나 `google_kms_
+  crypto_key_iam_member.vault_unseal`이 `terraform state list`에서
+  사라진 것을 확인한 뒤에만 머지한다"는 전제 조건을 명시하는 것을
+  완료 조건에 추가한다.
+
 ## 완료 조건
 
 - [ ] `terraform/envs/dev/vault.tf` 삭제
@@ -434,6 +507,11 @@ vaultUnsealKmsAccess`로 7일 안에 되살릴 수도 있다.
       7일 보존 사실과, 그 기간 내 롤백 시 `gcloud iam roles undelete` +
       `terraform import`가 필요하다는 절차 정정 반영(claude-review 3차
       지적, comment 7 참조)
+- [ ] 두 후속 PR(`vault_removed.tf` 삭제, `roles/cloudkms.admin` 회수)은
+      각각의 PR 설명에 "#478 승인 apply가 성공적으로 끝난 뒤에만 머지"라는
+      전제 조건과 `terraform state list` 확인 방법을 명시한다(claude-review
+      3차 지적, comment 8/9 참조 — 순서를 어기면 각각 의도치 않은 KMS
+      destroy, IAM 회수-destroy 403 순서 위험 재현)
 
 ## 롤백
 
