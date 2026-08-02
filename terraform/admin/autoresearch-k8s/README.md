@@ -95,12 +95,16 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
 
 1. API가 사용자 입력을 Job manifest로 그대로 전달하지 않고 고정 템플릿만 사용한다.
 2. 이미지가 mutable tag가 아닌 허용 목록의 digest인지 검증한다.
-3. Job 이름·label·결과 GCS prefix·CPU/메모리·deadline·TTL·`backoffLimit: 0`을 서버가
-   강제한다.
+3. Job 이름·label·결과 GCS prefix·CPU/메모리·`backoffLimit: 0`은 API의 고정 템플릿이
+   강제하고, `activeDeadlineSeconds`·TTL은 아래 4번 정책이 서버 측에서 강제한다.
+   CPU/메모리는 namespace ResourceQuota·LimitRange가 함께 상한을 건다.
 4. 이 root의 `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy가
-   ServiceAccount 변경, digest 없는 image, `batch-od` nodeSelector/toleration 계약
-   위반을 서버 측에서 거부한다. Pod Security `restricted`는 privileged·host namespace
-   등 별도 위험 필드를 거부한다.
+   ServiceAccount 변경, digest 없는 image(`initContainers` 포함), `batch-od`
+   nodeSelector/toleration 계약 위반, `activeDeadlineSeconds`·
+   `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. 두 시간
+   필드를 정책에 둔 것은 완료 Job이 quota를 무기한 점유하는 경로를 막기 위해서다
+   (API KSA에 `delete`가 없어 회수 수단이 TTL뿐이다). Pod Security `restricted`는
+   privileged·host namespace 등 별도 위험 필드를 거부한다.
 5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
    수행한다.
 6. `batch-od`는 #297의 재시도 내성이 없는 Action Log shard KPO와 공유하므로, 전용

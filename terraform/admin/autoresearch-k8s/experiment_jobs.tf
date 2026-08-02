@@ -208,17 +208,42 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "object.spec.template.spec.serviceAccountName == '${var.experiment_job_k8s_service_account}'"
           message    = "실험 Job은 승인된 serviceAccountName만 사용해야 합니다."
         },
+        # initContainers도 같은 Pod에서 같은 KSA로 실행돼 metadata server로 GSA
+        # token을 얻고 egress allowlist도 동일하므로, containers만 검사하면
+        # mutable tag 이미지를 initContainers에 넣어 digest 고정을 우회할 수 있다.
+        # ephemeralContainers는 PodTemplateSpec에서 API 서버가 금지하므로 대상 밖.
+        # 미설정 list는 has() 가드로, 빈 list는 all()이 true라 양쪽 다 통과한다.
         {
-          expression = "object.spec.template.spec.containers.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$'))"
-          message    = "실험 Job 컨테이너 이미지는 sha256 digest로 고정해야 합니다."
+          expression = "object.spec.template.spec.containers.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$')) && (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, c.image.matches('^.+@sha256:[a-f0-9]{64}$')))"
+          message    = "실험 Job의 모든 컨테이너(initContainers 포함) 이미지는 sha256 digest로 고정해야 합니다."
+        },
+        # 필드를 아예 빼고 제출한 Job도 거부되어야 한다. 가드 없이 인덱싱하면
+        # 거부는 되지만 "CEL 런타임 오류 → failurePolicy Fail"이라는 우회적 경로라
+        # 의도한 동작인지 코드에서 드러나지 않는다. has()/in으로 명시해 누락 거부를
+        # 규칙 자체로 표현하고, 메시지도 정확한 사유를 남기게 한다.
+        {
+          expression = "has(object.spec.template.spec.nodeSelector) && 'cloud.google.com/gke-nodepool' in object.spec.template.spec.nodeSelector && object.spec.template.spec.nodeSelector['cloud.google.com/gke-nodepool'] == 'batch-od'"
+          message    = "실험 Job은 nodeSelector로 batch-od node pool을 명시해야 합니다."
+        },
+        # exists는 승인된 toleration의 "포함"만 보장한다. nodeSelector가 batch-od로
+        # 고정돼 있어 추가 toleration이 다른 pool 스케줄로 이어지지는 않지만,
+        # runbook의 "이 두 값만 사용한다"와 강제 범위가 다르므로 여기서 개수까지
+        # 제한해 문서와 실제 강제를 일치시킨다.
+        {
+          expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.all(t, t.key == 'workload' && t.operator == 'Equal' && t.value == 'batch-od' && t.effect == 'NoSchedule')"
+          message    = "실험 Job은 batch-od toleration만 사용해야 합니다."
+        },
+        # quota 회수의 서버 측 강제. 이 root는 API KSA에 delete를 주지 않고
+        # enable_experiment_job_creation=false 롤백도 실행 중 Job을 멈추지 않으므로,
+        # 두 필드가 없으면 count/jobs.batch=2가 영구 점유돼 회수 경로가 break-glass
+        # 관리자 권한밖에 남지 않는다. 상한 3600초는 runbook의 Job 계약과 같은 값이다.
+        {
+          expression = "has(object.spec.activeDeadlineSeconds) && object.spec.activeDeadlineSeconds > 0 && object.spec.activeDeadlineSeconds <= 3600"
+          message    = "실험 Job은 activeDeadlineSeconds를 1~3600초로 명시해야 합니다."
         },
         {
-          expression = "object.spec.template.spec.nodeSelector['cloud.google.com/gke-nodepool'] == 'batch-od'"
-          message    = "실험 Job은 batch-od node pool만 사용해야 합니다."
-        },
-        {
-          expression = "object.spec.template.spec.tolerations.exists(t, t.key == 'workload' && t.operator == 'Equal' && t.value == 'batch-od' && t.effect == 'NoSchedule')"
-          message    = "실험 Job은 승인된 batch-od toleration을 포함해야 합니다."
+          expression = "has(object.spec.ttlSecondsAfterFinished) && object.spec.ttlSecondsAfterFinished >= 0 && object.spec.ttlSecondsAfterFinished <= 3600"
+          message    = "실험 Job은 ttlSecondsAfterFinished를 0~3600초로 명시해야 합니다."
         },
       ]
     }

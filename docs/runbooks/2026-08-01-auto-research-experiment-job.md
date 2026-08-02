@@ -143,6 +143,55 @@ spec:
 EOF
 ```
 
+`autoresearch-experiment-job-contract` 정책의 거부 경로도 같은 방식으로 확인한다.
+아래 네 manifest는 각각 다른 규칙에 걸려야 하며, 모두 admission 단계에서 거부된다.
+정책은 `failurePolicy: Fail` + binding `validationActions: ["Deny"]`이므로 규칙
+위반과 필드 누락 모두 최종 결과가 deny다. 필드 누락 거부는 CEL 런타임 오류에 기대지
+않고 `has()`/`in` 가드로 규칙에 명시돼 있어, 메시지로 사유가 구분된다.
+
+| 음성 케이스 | 기대 거부 사유 |
+|---|---|
+| `initContainers`에 mutable tag 이미지 | 모든 컨테이너(initContainers 포함) digest 고정 |
+| `nodeSelector` 미지정 | nodeSelector로 batch-od 명시 |
+| `tolerations`에 batch-od 외 항목 추가 | batch-od toleration만 사용 |
+| `activeDeadlineSeconds`/`ttlSecondsAfterFinished` 미지정 또는 3600 초과 | 각 필드 범위 |
+
+```bash
+kubectl -n autoresearch-experiments create --dry-run=server -f - <<'EOF'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: experiment-initcontainer-negative
+spec:
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: experiment-job
+      nodeSelector:
+        cloud.google.com/gke-nodepool: batch-od
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: batch-od
+          effect: NoSchedule
+      initContainers:
+        - name: prep
+          image: registry.k8s.io/pause:3.10
+      containers:
+        - name: run
+          image: registry.k8s.io/pause@sha256:0000000000000000000000000000000000000000000000000000000000000000
+EOF
+```
+
+`activeDeadlineSeconds`와 `ttlSecondsAfterFinished`는 이 정책이 서버 측에서 강제한다.
+두 필드가 없으면 완료 Job이 `count/jobs.batch=2` quota를 무기한 점유하는데, 이 root는
+API KSA에 `delete`를 부여하지 않고 `enable_experiment_job_creation = false` 롤백도
+실행 중 Job을 멈추지 않으므로 회수 경로가 break-glass 관리자 권한만 남는다. 정책이
+두 필드를 필수·상한으로 요구하면 그 상태 자체가 만들어지지 않는다.
+
 정상 Job을 승인된 digest로 하나 제출하기 전에는 NetworkPolicy가 다음 통신 외에는
 차단하는지 검토한다.
 
