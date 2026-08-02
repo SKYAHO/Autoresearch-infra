@@ -242,7 +242,57 @@ apply 대기 중인 예상 drift다. **위 5개 주소 전부가 정확한 부�
 apply 완료 후에는 이 5개 리소스가 모두 수렴하므로(4개는 state에서
 사라지고, crypto key는 in-place update가 반영돼 더 이상 diff가 없음)
 이 절은 더 이상 적용되지 않는다 — apply 완료 후 첫 drift 실행이
-exitcode 0(또는 다른 사유의 drift만 남음)인지 확인해 마무리한다.
+exitcode 0(또는 다른 사유의 drift만 없음)인지 확인해 마무리한다.
+
+**승인 apply 화면에서 `google_kms_key_ring.vault`가 안 건드려짐을
+확인하는 방법(claude-review 14차 지적)**: 이번 승인 apply의 실제 plan도
+위와 같은 allowlist를 거쳐 `apply.yml`의 `$GITHUB_STEP_SUMMARY`에
+출력된다 — 나오는 줄은 정확히 위 5개 리소스 주소 헤더 +
+`Plan: 0 to add, 1 to change, 4 to destroy.`뿐이다. Terraform plan은
+액션이 있는 모든 리소스를 예외 없이 출력하므로, `google_kms_key_ring.vault`가
+실제로 건드려졌다면 6번째 주소 줄로 나타난다 — 지금은 두 속성
+(`name`/`location`)이 모두 불변이라 diff 자체가 없어 어떤 줄도 만들지
+않는다(12차 지적 답변 참조). 즉 승인자는 "key_ring이라는 문자열이 안
+보이는지" 대신 **"주소 줄이 정확히 5개이고 그 5개가 전부 위 목록과
+일치하는지, Plan: 요약 숫자가 0/1/4인지"**로 확인한다 — 6번째 줄이
+나타나거나 숫자가 다르면 key_ring을 포함해 무언가 예상 밖의 리소스가
+이 apply에 섞였다는 뜻이다.
+
+**dev root 전체를 destroy해야 하는 상황과 `prevent_destroy`의 상호작용
+(claude-review 14차 지적)**: 프로젝트 이전이나 dev 환경 전체 재구축처럼
+dev root를 통째로 destroy해야 하는 드문 상황에서는, `terraform destroy`
+(또는 `terraform plan -destroy`)가 이 두 리소스를 destroy 대상에 포함하는
+순간 **plan 계산 자체가 통째로 실패**한다 — Terraform은 plan을 리소스별로
+부분 진행하지 않고 한 번에 계산하므로, 다른 리소스는 전혀 건드리지
+못한 채 "Error: Instance cannot be destroyed"로 root 전체 destroy가
+막힌다. 우회하려면 이 2개 리소스를 destroy 대상에서 명시적으로 빼야
+한다 — `-target`으로 나머지 리소스만 지정하거나, 일회성 커밋으로 두
+리소스의 `lifecycle { prevent_destroy = true }`를 제거한 뒤 destroy한다.
+후자를 택해도 실제 GCP 동작은 리소스마다 다르다: `google_kms_key_ring`은
+GCP에 삭제 API 자체가 없어 provider가 API를 호출하지 않고 state에서만
+지운다(GCP 쪽 리소스는 그대로 남는다 — 지금의 orphan 상태와 동일).
+반면 `google_kms_crypto_key` destroy는 실제로 모든 CryptoKeyVersion
+파기를 예약하는 API를 호출한다(비가역). Vault가 이미 #412에서 영구
+폐기됐고 다른 소비자가 없는 전체 teardown 시나리오라면 이 결과 자체는
+받아들일 만하다 — `prevent_destroy`의 목적은 이 destroy를 영원히
+금지하는 것이 아니라, dev root의 일상적인 변경(다른 리소스 추가/삭제)
+도중 **의도치 않게** 함께 destroy되는 사고를 막는 것이다. 이 저장소에는
+전체 teardown 전용 절차 문서가 아직 없다 — 실제로 그 상황이 오면 이
+절을 시작점으로 삼는다.
+
+**승인 apply 완료 후 검증**: rotation 해제가 실제로 반영됐는지는 이
+apply의 plan/apply 요약만으로는 확인할 수 없다 — `next_rotation_time`이
+이 리소스의 Terraform schema 속성이 아니라 drift 감지 범위 밖이기
+때문이다(spec 문서의 "claude-review 13차 지적" 절 참조). 아래 gcloud
+명령이 유일한 검증 수단이다:
+
+```bash
+gcloud kms keys describe vault-unseal \
+  --keyring="${resource_prefix}-vault" --location=<region> \
+  --project=<project_id> --format='value(rotationPeriod,nextRotationTime)'
+```
+
+두 값 모두 비어야 정상이다.
 
 `google_kms_key_ring.vault`가 이 5개에 없는 이유(claude-review 12차
 지적): key ring 리소스는 `name`/`location` 2개 속성만 schema에 있고

@@ -75,8 +75,8 @@ jobs:
           # allowlist: 리소스 주소 헤더(will be/must be/has moved to/
           # (moved from ...)/will no longer be managed by Terraform)와
           # Plan:/No changes 요약 줄만 통과시킨다 — 속성값·오류 텍스트는
-          # 제외한다. 각 alternative가 필요한 이유·이 정규식이 4개 workflow
-          # 파일에서 순서까지 동일하게 유지돼야 하는 이유는
+          # 제외한다. 각 alternative가 필요한 이유·이 정규식이 3개 workflow
+          # 파일 4곳에서 순서까지 동일하게 유지돼야 하는 이유는
           # docs/superpowers/specs/2026-08-02-vault-removal-design.md의
           # "grep allowlist 정규식 통일" 절 참조.
           grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^[[:space:]]*# .+ will no longer be managed by Terraform|^Plan: [0-9]|^No changes\.' \

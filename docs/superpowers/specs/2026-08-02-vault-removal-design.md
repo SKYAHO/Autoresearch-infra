@@ -894,8 +894,8 @@ managed by Terraform → Plan: → No changes`로 통일했다. 또한 4곳에
   스텝에서 `monitoring-k8s`/`argo-rollouts-k8s`의 기존 removed
   블록(#307/#312류, destroy=false)으로 실제 exercise돼 검증돼 있다.
 
-다음에 alternative를 추가·수정할 때는 이 절만 갱신하고, 4개 workflow
-파일은 정규식 문자열 자체만(순서 포함, 동일하게) 갱신한다.
+다음에 alternative를 추가·수정할 때는 이 절만 갱신하고, 3개 workflow
+파일 4곳은 정규식 문자열 자체만(순서 포함, 동일하게) 갱신한다.
 
 ## claude-review 13차 지적 (2026-08-02, PR #500)
 
@@ -965,6 +965,71 @@ update/setIamPolicy는 향후 rotation 재도입이나 key IAM 재바인딩처�
 있는 2겹 방어선(`prevent_destroy` + 사람 승인 게이트)으로 충분하다고
 판단했다. `github_actions.tf`의 `cloudkms.admin` 주석을 이 구분과
 근거로 갱신했다.
+
+## claude-review 14차 지적 (2026-08-02, PR #500)
+
+13차 반영 커밋(`d104281`) 푸시 후 draft 토글로 재트리거한 14차 리뷰에서
+새 지적 6건이 나왔다(5→3→6→6→5→3→**6**, 여전히 비단조 감소).
+
+**이해도 확인 답변(1)** — `kms_vault_orphan.tf:49`, `prevent_destroy`가
+dev root 전체 destroy 경로와 상호작용하는지: 프로젝트 이전이나 dev
+환경 재구축처럼 dev root를 통째로 destroy해야 하는 상황에서는, 이 2개
+리소스가 destroy 대상에 포함되는 순간 plan 계산 자체가 통째로 실패해
+다른 리소스도 전혀 건드리지 못한다. 우회하려면 `-target`으로 이
+2개를 빼거나 `prevent_destroy`를 일회성으로 제거해야 하고, 후자를
+택해도 실제 GCP 동작은 리소스마다 다르다(key ring은 provider가 API를
+호출하지 않고 state에서만 지움, crypto key는 실제로 CryptoKeyVersion
+파기를 예약함). `docs/VAULT_OPERATIONS_RUNBOOK.md`에 새 절로 추가했다
+— 이 저장소에 전체 teardown 전용 절차 문서는 아직 없다.
+
+**이해도 확인 답변(2)** — `apply.yml:225`, 승인 화면만으로
+`google_kms_key_ring.vault`가 안 건드려짐을 확인하는 방법: 이번 승인
+apply의 plan도 같은 allowlist를 거쳐 정확히 5개 리소스 주소 헤더 +
+`Plan: 0 to add, 1 to change, 4 to destroy.`만 출력한다. Terraform
+plan은 액션이 있는 모든 리소스를 예외 없이 출력하므로, key_ring이
+실제로 건드려졌다면 6번째 줄로 나타난다 — 승인자는 "key_ring 문자열이
+안 보이는지"가 아니라 "주소 줄이 정확히 5개이고 숫자가 0/1/4인지"로
+확인한다. `docs/VAULT_OPERATIONS_RUNBOOK.md`에 추가했다.
+
+**이해도 확인 답변(3)** — `scripts/environment_catalog.rb:103`, 12차
+지적으로 추가한 주석이 실제로는 `kibana_ingress_source_cidr` 바로
+위에 놓여 그 키를 가리키는 것으로 오독될 수 있다는 지적: 정확한
+지적이다. 지시 대상인 `ui_ingress_source_cidr` 바로 위로 주석을
+옮기고, `kibana_ingress_source_cidr` 위에는 "소비자는 elastic-k8s다 —
+vault-k8s 정리 대상이 아니다"를 명시하는 짧은 주석을 남겼다. 정리
+시점(승인 apply 이후)에 이 주석만 보고 103행을 잘못 지우면
+`values.slice`가 elastic-k8s가 필요로 하는 키를 누락해 그 root의
+plan/apply가 실패하는 경로였다.
+
+**이해도 확인 답변(4)** — `config/environments/dev/environment.yaml:39`,
+사람이 읽어야만 작동하는 ⚠️ 경고 대신 코드로 막을 수 있는지: 맞다.
+`environment_catalog.rb`의 `write_terraform_inputs!`가
+`FileUtils.mkdir_p`로 root 디렉터리를 조용히 재생성하던 부분을, 디렉터리가
+이미 존재하지 않으면 `CatalogError`로 즉시 실패하도록 바꿨다(root
+디렉터리는 커밋된 `.tf` 코드와 함께 항상 존재해야 한다는 불변조건을
+코드가 직접 강제). `scripts/test-environment-catalog.rb`에 실패 케이스
+테스트를 추가했다. `FileUtils` require도 더 이상 쓰이지 않아 제거했다.
+
+**이해도 확인 답변(5)** — `kms_vault_orphan.tf:10`, 리소스 정의 12줄에
+주석 42줄, 같은 내용이 `github_actions.tf`/`docs/TERRAFORM_DEV.md`/
+`docs/VAULT_OPERATIONS_RUNBOOK.md`/이 spec까지 중복된다는 지적: 맞다.
+`kms_vault_orphan.tf`를 결정과 제약(GCP 삭제 불가 → rotation 제거 +
+`prevent_destroy`, IAM 4개는 destroy 분리)만 남기도록 크게 줄이고,
+조사 근거·롤백 절차·API 호출 단계별 분석·리뷰 대응 이력은 이 spec
+문서를 정본으로 삼아 넘겼다. 운영 절차(승인 apply 후 gcloud 검증
+명령 포함)는 `docs/VAULT_OPERATIONS_RUNBOOK.md`로 옮겼다. 이 spec의
+"claude-review 7~13차 지적" 절들이 그대로 조사 이력의 정본 역할을
+한다.
+
+**이해도 확인 답변(6)** — `apply.yml:331`, "4개 workflow 파일"이라는
+표현이 실제로는 3개 파일 4곳이라는 지적, 그리고 복제를 강제할 장치가
+없다는 지적: 표현을 "3개 workflow 파일 4곳"으로 4군데(`apply.yml`
+2곳, `terraform-plan.yml`, `terraform-drift.yml`, 이 spec 문서) 모두
+수정했다. 또한 `scripts/check-drift-summary-grep-consistency.sh`를
+새로 추가해 4곳의 `grep -E` 정규식 문자열이 완전히 동일한지 CI에서
+강제한다(`.github/workflows/lint.yml`에 self-test와 함께 연결) — 한
+곳만 갱신되고 나머지가 밀려도 지금까지는 CI가 통과했지만, 이제는 이
+검사가 실패한다.
 
 ## 완료 조건
 

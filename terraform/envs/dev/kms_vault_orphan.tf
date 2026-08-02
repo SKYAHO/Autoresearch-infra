@@ -1,45 +1,22 @@
 # #478: Vault는 #412에서 영구 폐기됐지만, 이 2개 KMS 리소스(key ring/crypto
 # key)는 GCP에서 애초에 삭제가 불가능하다 — key ring은 삭제 API 자체가
-# 없고, crypto key destroy는 리소스 삭제 자체는 거부하되 모든
-# CryptoKeyVersion의 파기를 실제로 예약한다(재현 불가능). 그래서 `removed`
-# 블록으로 forget하지 않고 리소스 블록을 그대로 남긴 채 rotation_period만
-# 제거해 drift 감지 범위 안에 둔다. `prevent_destroy`는 key ring/crypto key
-# 둘 다에 독립적으로 건다 — crypto key가 key ring을 참조해 지금은 crypto
-# key guard가 key ring destroy도 막지만, key ring 블록만 단독으로 지워지는
-# 경로까지 막으려면 key ring 쪽에도 guard가 필요하다.
+# 없고, crypto key destroy는 리소스 삭제는 거부하되 모든 CryptoKeyVersion의
+# 파기를 실제로 예약한다(재현 불가능). 그래서 `removed` 블록으로 forget하지
+# 않고 리소스 블록을 그대로 남긴 채 rotation_period만 제거해 drift 감지
+# 범위 안에 둔다. `prevent_destroy`는 key ring/crypto key 둘 다에 독립적으로
+# 건다.
 #
-# GSA/WI 바인딩/custom role/key IAM binding 4개는 이 파일에 포함하지
-# 않고 실제 destroy 대상으로 남긴다(최소 권한 원칙, `vault.tf` 삭제로 이미
-# config에서 빠짐). destroy 대상 중 2쌍(key IAM binding→custom role,
-# WI 바인딩→GSA)은 참조 관계가 있어 Terraform이 destroy 시 그 순서를
-# 뒤집어 참조하는 쪽(binding)을 먼저 destroy한다 — binding destroy가
-# 중간에 실패해도 role/GSA는 손대지 않은 채 남으므로, 재실행만으로
-# 비대칭 상태 없이 수렴한다. custom role(`vaultUnsealKmsAccess`)
-# 재생성은 GCP의 soft-delete 제약을 받는다(삭제 후 7일 내
-# `gcloud iam roles undelete`로 즉시 복구 가능, 이후 영구 삭제되면 같은
-# role_id 재사용이 최대 37일까지 막힐 수 있다).
+# GSA/WI 바인딩/custom role/key IAM binding 4개는 이 파일에 포함하지 않고
+# 실제 destroy 대상으로 남긴다(최소 권한 원칙, `vault.tf` 삭제로 이미
+# config에서 빠짐).
 #
-# 4개 destroy 대상을 한꺼번에 롤백(`vault.tf` git 복원 + apply)해야 하는
-# 상황의 비대칭성(claude-review 13차 지적, WebSearch로 GCP 공식 문서
-# 확인): `google_service_account`는 custom role과 달리 삭제 후 대기 없이
-# **즉시** 같은 `account_id`로 재생성 가능하다 — 다만 GCP 내부적으로는
-# 완전히 새 identity(새 unique numeric id)가 만들어지고 옛 IAM 바인딩을
-# 상속하지 않는다(`account.undelete`로 복구해야 옛 identity가 유지되며,
-# undelete는 삭제 후 30일 이내에만 가능). 이 저장소는 GSA를 참조하는
-# 바인딩(WI 바인딩, key IAM binding)도 전부 Terraform 리소스로 관리하므로
-# — `vault.tf`를 통째로 되돌려 apply하면 SA+두 바인딩은 함께
-# 새로 생성돼 새 identity 기준으로 다시 일관되게 맞춰진다. 문제는 그
-# 지점이 아니라 **custom role**이다: 원본 destroy 후 7일 이내면
-# `terraform apply`가 새로 만들려는 role_id가 아직 soft-delete 상태라
-# 충돌 에러가 날 수 있고(이 경우 `gcloud iam roles undelete`로 먼저
-# 복구한 뒤 `terraform import`가 필요), 7일~37일 사이면 role_id 자체가
-# 막혀 있어 apply가 실패한다. 즉 **destroy 후 7~37일 사이에 전체 롤백을
-# 시도하면 SA/두 바인딩은 성공하고 custom role만 실패하는 부분 apply**가
-# 실제로 발생할 수 있다 — 이 경우 custom role만 별도로 완전 삭제 대기
-# 후 재시도하거나, 임시 role_id로 우회한 뒤 나중에 정리한다.
-#
-# 이 설계의 조사 근거·검토 이력 전체는
-# docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조.
+# 이 설계의 조사 근거·롤백 절차(GSA/custom role 재생성 비대칭 포함)·API
+# 호출 단계별 분석·리뷰 대응 이력 전체는 정본인
+# docs/superpowers/specs/2026-08-02-vault-removal-design.md를 참조한다 —
+# 이 파일 자체에는 결정과 제약만 남긴다(claude-review 14차 지적: 중복
+# 서술은 한쪽만 갱신되면 서로 어긋난다). 운영 절차(승인 apply 후 검증,
+# drift 판별 기준, dev root 전체 destroy와의 상호작용)는
+# docs/VAULT_OPERATIONS_RUNBOOK.md 참조.
 
 resource "google_kms_key_ring" "vault" {
   name     = "${local.resource_prefix}-vault"
@@ -53,54 +30,8 @@ resource "google_kms_key_ring" "vault" {
 resource "google_kms_crypto_key" "vault_unseal" {
   name     = "vault-unseal"
   key_ring = google_kms_key_ring.vault.id
-  # rotation_period 없음(기존 90d 제거). `rotation_period`는 provider
-  # 스키마에서 ForceNew가 아니므로 이 변경은 항상 in-place update이며
-  # replace를 계획하지 않는다(가정: `name`/`key_ring`처럼 ForceNew 필드가
-  # 바뀌어 plan이 replace로 판정되면 `prevent_destroy` 하에서는 apply가
-  # 아니라 `terraform plan` 자체가 "Error: Instance cannot be destroyed"로
-  # 즉시 실패한다 — 로컬 재현으로 확인).
-  #
-  # 승인 apply 시 in-place update(PATCH updateMask=rotationPeriod,
-  # nextRotationTime)로 GCP 쪽 rotation schedule이 해제된다 — 이후 신규
-  # CryptoKeyVersion 생성·과금은 멈추지만, 이미 존재하는 활성 version
-  # 1개의 월정액 과금(버전당 약 $0.06)은 그 version이 실제로 DESTROYED
-  # 상태가 되기 전까지 계속된다(영구 보존 설계이므로 이 잔여 과금도
-  # 영구적이다).
-  #
-  # 머지 후 승인 apply 전까지는 이 리소스도 매일 drift plan에 in-place
-  # update로 잡힌다 — 판별 기준(부분 실패 시 부분집합 인식 포함)과, Vault와
-  # 무관한 다른 dev root apply가 먼저 실행돼 이 변경과 함께 반영되는
-  # 경우 승인자가 리소스 주소로 식별하는 방법은
-  # docs/VAULT_OPERATIONS_RUNBOOK.md의 "머지~승인 apply 사이 예상 drift"
-  # 절 참조.
-  #
-  # 승인 apply 후 검증:
-  #   gcloud kms keys describe vault-unseal \
-  #     --keyring="${resource_prefix}-vault" --location=<region> \
-  #     --project=<project_id> --format='value(rotationPeriod,nextRotationTime)'
-  #   두 값 모두 비어야 정상. `next_rotation_time`은 이 리소스의 Terraform
-  #   schema 속성이 아니라 drift 감지로 잡히지 않는 사각지대이므로, 이
-  #   gcloud 명령이 유일한 검증 수단이다.
-  #
-  # 이 리소스가 실제로 감지하는 범위(claude-review 13차 지적): Terraform
-  # provider의 `google_kms_crypto_key` schema는
-  # name/key_ring/purpose/rotation_period/version_template/labels 등
-  # **key 자체의 메타데이터**만 추적하고, 개별 CryptoKeyVersion의
-  # 상태(ENABLED/DISABLED/DESTROYED)는 이 리소스의 속성이 아니다 —
-  # provider에 CryptoKeyVersion을 관리하는 resource 자체가 없다(읽기
-  # 전용 `google_kms_crypto_key_version` data source만 있음). 그래서
-  # 누군가 Terraform 밖에서 `gcloud kms keys versions destroy`로 활성
-  # version의 파기를 예약해도 이 리소스의 추적 속성에는 아무 diff가
-  # 생기지 않으므로, 다음 날 drift plan은 `No changes`로 나온다 —
-  # exitcode 2로 잡히지 않는다. 즉 이 파일의 "영구 보존" 설계가 실제로
-  # 막는 것은 **Terraform 경로로 key ring/crypto key 리소스 자체가
-  # 삭제되는 것**(`prevent_destroy`)뿐이며, GCP 콘솔/gcloud로 직접
-  # CryptoKeyVersion을 파기하는 경로는 이 설계로도, drift 감지로도 막지
-  # 못한다(`next_rotation_time` 사각지대와 같은 계열의 한계). 이 SA가
-  # 가진 `roles/cloudkms.admin`(project 전체, `cryptoKeyVersions.destroy`
-  # 포함)이 오히려 이 경로의 위험원이기도 하다 — 실제 방어선은 IAM으로
-  # 이 API 호출 권한을 가진 주체(사람 breakglass 포함)를 최소화하는
-  # 것뿐이고, 이 PR은 그 IAM 축소까지는 다루지 않는다.
+  # rotation_period 없음(기존 90d 제거) — `rotation_period`는 ForceNew가
+  # 아니므로 in-place update이며 replace를 유발하지 않는다.
 
   lifecycle {
     prevent_destroy = true

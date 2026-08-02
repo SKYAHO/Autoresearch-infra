@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require "ipaddr"
-require "fileutils"
 require "json"
 require "optparse"
 require "yaml"
@@ -94,12 +93,13 @@ class EnvironmentCatalog
       "gke_services_cidr" => gke.fetch("services_cidr"),
       "cluster_master_cidr" => gke.fetch("master_ipv4_cidr"),
       "cluster_services_cidr" => gke.fetch("services_cidr"),
+      # vault-k8s(ROOT_VARIABLE_KEYS)가 이 키의 유일한 소비자다(#478).
+      # vault-k8s state 정리 완료 후 이 항목도 함께 제거한다(체크리스트:
+      # docs/superpowers/specs/2026-08-02-vault-removal-design.md).
       "ui_ingress_source_cidr" => network.fetch("dev_subnet_cidr"),
       # port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet이 정본이다(#116).
-      # vault-k8s(ROOT_VARIABLE_KEYS)의 ui_ingress_source_cidr와 같은 값·같은
-      # 근거라 함께 카탈로그가 공급한다 — vault-k8s가 이 키의 유일한 소비자다
-      # (#478). vault-k8s state 정리 완료 후 이 항목도 함께 제거한다(체크리스트:
-      # docs/superpowers/specs/2026-08-02-vault-removal-design.md).
+      # 위 ui_ingress_source_cidr와 같은 값·같은 근거라 함께 카탈로그가 공급하지만,
+      # 소비자는 elastic-k8s다 — vault-k8s 정리 대상이 아니다.
       "kibana_ingress_source_cidr" => network.fetch("dev_subnet_cidr")
     }
     values.slice(*ROOT_VARIABLE_KEYS.fetch(root))
@@ -134,7 +134,14 @@ class EnvironmentCatalog
     variables = terraform_variables(root)
     backend = backend_config(root) if BACKEND_ROOTS.include?(root)
     target_directory = File.join(output_root, root)
-    FileUtils.mkdir_p(target_directory)
+    # root 디렉터리가 없으면 즉시 실패한다(claude-review 14차 지적) — 이
+    # 디렉터리는 항상 커밋된 .tf 코드와 함께 존재해야 하므로, 여기서
+    # mkdir_p로 조용히 새로 만들면 코드 없이 입력 파일만 있는 사용
+    # 불가능한 디렉터리가 생긴다(#478 vault-k8s처럼 카탈로그 항목은
+    # 의도적으로 남아 있는데 root 디렉터리만 삭제된 경우가 실례).
+    unless Dir.exist?(target_directory)
+      raise CatalogError, "Terraform root 디렉터리가 없습니다: #{target_directory}"
+    end
 
     var_file = File.join(target_directory, ".environment.auto.tfvars.json")
     File.write(var_file, JSON.pretty_generate(variables) + "\n")
