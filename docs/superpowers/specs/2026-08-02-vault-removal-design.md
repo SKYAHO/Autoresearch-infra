@@ -319,6 +319,71 @@ binding)에 대한 **config 자체 부재**(= 실제 destroy 대상)가 함께
    `dev_apply` SA로 한 번에 정리한다 — 별도 정리 주체나 후속 작업이
    필요 없다(이번 PR과 같은 승인 경로).
 
+**이해도 확인 답변 (comment 6 — forget과 destroy가 같은 apply에 있을 때
+순서, `vault_removed.tf:19`)**:
+같은 apply 안에서 `google_kms_crypto_key.vault_unseal`은 forget되고,
+그 key를 참조하던 `google_kms_crypto_key_iam_member.vault_unseal`은
+실제 destroy된다. 두 동작의 순서는 결과에 영향을 주지 않는다 — 이유는
+"어느 쪽이 먼저 실행되는지"가 아니라 "destroy가 값을 어디서 가져오는지"에
+있다.
+
+- `google_kms_crypto_key_iam_member.vault_unseal`의 `crypto_key_id`
+  값은 **그 리소스 자신의 state 항목에 생성 시점에 이미 값으로
+  저장돼 있다**(참조가 아니라 문자열 값). config에서 `vault.tf`가
+  통째로 삭제된 이상 이 리소스는 config에 존재하지 않으므로, destroy
+  계획은 config의 참조식을 다시 평가하지 않고 **state에 저장된 값을
+  그대로 읽어 GCP API 호출을 구성**한다. 즉 destroy 시점에 crypto key
+  리소스가 여전히 state에 있는지, 이미 forget돼 사라졌는지는 이
+  destroy 호출과 무관하다 — forget은 GCP API를 전혀 호출하지 않는
+  순수 state 조작이므로 IAM member 쪽 값을 훼손하거나 무효화할 수도
+  없다.
+- 로컬에서 `null_resource` 2개(B가 A를 참조하는 trigger를 가짐)로
+  같은 상황을 재현해 실측했다: A를 `removed`(destroy=false)로,
+  B를 config에서 완전히 제거(=destroy 대상)해 같은 apply를 실행하면
+  `Plan: 0 to add, 0 to change, 1 to destroy.`로 함께 계획되고 apply는
+  `Apply complete! Resources: 0 added, 0 changed, 1 destroyed.`로
+  오류 없이 끝난다. B의 destroy diff에는 `- "a_id" = "<A의 id
+  값>"`이 그대로 찍히는데, 이 값은 B 자신의 state에서 나온 것이지 A를
+  다시 조회해서 나온 값이 아니다 — 실제 시나리오의 `crypto_key_id`와
+  동일한 성격이다.
+- 그래도 Terraform의 그래프 빌더는 state에 기록된 의존 관계(B가 A를
+  참조해 생성됐다는 이력)를 이용해 일반적으로 의존하는 쪽(B)을 먼저
+  처리하고 의존 대상(A)의 forget/destroy를 나중에 처리하는 순서를
+  택하는 경향이 있지만, 이는 안전을 더 강화하는 부수 효과일 뿐 이
+  케이스의 정합성이 그 순서에 의존하지는 않는다 — 반대 순서였어도
+  결과는 같다.
+
+**이해도 확인 답변 (comment 7 — 잔여 3개 destroy의 권한 커버리지와 custom
+role 재생성, `github_actions.tf:255`)**:
+지적된 주석은 `google_kms_crypto_key_iam_member.vault_unseal` 1개에
+필요한 권한만 설명한다. 나머지 3개는 이미 `dev_apply_roles`에 있는
+**다른** role로 커버되므로 `cloudkms.admin`과는 무관하다.
+
+- `google_service_account.vault`(GSA) destroy → `roles/iam.serviceAccountAdmin`
+  (`github_actions.tf:241`, "SA 15종 + SA IAM"이라는 기존 주석이 이미
+  이 용도를 포함).
+- `google_service_account_iam_member.vault_wi`(WI 바인딩) destroy →
+  동일하게 `roles/iam.serviceAccountAdmin`(SA IAM 멤버 관리 포함).
+- `google_project_iam_custom_role.vault_unseal`(custom role
+  `vaultUnsealKmsAccess`) destroy → `roles/iam.roleAdmin`
+  (`github_actions.tf:244`, "custom role"이라는 기존 주석). 이 role은
+  애초에 `vault.tf`가 이 custom role을 **생성**할 때도 필요했던
+  권한이므로 원래부터 있었다 — `cloudkms.admin`을 새로 추가한 이유와는
+  무관하다.
+
+role ID의 즉시 소멸 여부: **아니다.** GCP IAM custom role의 `delete`는
+soft delete다 — 삭제 직후 role은 `DELETED` 상태로 전환되지만 **7일간
+보존**되며, 그 7일 안에는 같은 `role_id`(`vaultUnsealKmsAccess`)로 새
+custom role을 만들 수 없다(API가 "role already exists" 계열 오류를
+반환한다). 7일이 지나면 완전히 삭제되고 그때부터 같은 ID를 재사용할 수
+있다. `gcloud iam roles undelete --project=<PROJECT_ID>
+vaultUnsealKmsAccess`로 7일 안에 되살릴 수도 있다.
+
+이는 아래 "롤백" 절의 "`vault.tf`를 복원해 `terraform apply`로
+재생성" 서술에 구멍이 있었다는 뜻이다 — **destroy 후 7일 이내에** 그냥
+`terraform apply`를 돌리면 custom role 생성 단계에서 오류가 난다.
+"롤백" 절을 아래와 같이 정정한다(체크리스트에도 반영).
+
 ## 완료 조건
 
 - [ ] `terraform/envs/dev/vault.tf` 삭제
@@ -336,10 +401,17 @@ binding)에 대한 **config 자체 부재**(= 실제 destroy 대상)가 함께
 - [ ] `CLAUDE.md`(및 symlink `AGENTS.md`), `.claude/docs/agent-project-reference.md`,
       `.claude/docs/agent-terraform-reference.md`, `.claude/docs/architecture-overview.md`
       갱신
-- [ ] `docs/TERRAFORM_DEV.md` "Vault auto-unseal 기반 — 폐기 이력" 절과
-      디렉터리 트리 갱신, 및 이를 참조하던 나머지 문서(`terraform/envs/dev/README.md`,
+- [ ] `docs/TERRAFORM_DEV.md` "Vault auto-unseal 기반 — 폐기 이력" 절을
+      "forget 2건 + destroy 4건"으로 정정(claude-review 3차 지적 — 이전
+      리비전인 "6개 전부 forget, GCP 쪽 변경 없음" 서술이 남아 있었음),
+      및 이를 참조하던 나머지 문서(`terraform/envs/dev/README.md`,
       `terraform/README.md`, `docs/INFRASTRUCTURE_SUMMARY.md`,
       `.github/pr-report/pipeline-nodes.json`)의 stale 참조 정리
+- [ ] `docs/TERRAFORM_DEV.md`의 forget 후 비용 서술 정정 — key rotation
+      `90d`는 forget 후에도 live에 남아 CryptoKeyVersion이 계속 쌓이고
+      과금되며 drift 감지 밖이라는 사실을 명시하고, forget apply **전**
+      `gcloud kms keys update ... --remove-rotation-schedule`로 rotation을
+      해제하는 절차를 승인 후 실행 순서에 추가(claude-review 3차 지적)
 - [ ] `docs/VAULT_OPERATIONS_RUNBOOK.md` 배너 갱신(코드 제거 완료, state
       정리는 승인 대기로 정정)
 - [ ] `.github/workflows/terraform-drift.yml`의 allowlist 정규식에
@@ -358,6 +430,10 @@ binding)에 대한 **config 자체 부재**(= 실제 destroy 대상)가 함께
 - [ ] 머지 직후 `terraform-drift.yml`이 4개 리소스 destroy 대상 때문에
       `[DRIFT]` 이슈를 생성함을 예상하고, 그 이슈에 #478 승인 대기 중임을
       코멘트로 남긴다(승인 apply 완료 후 이슈 자동 종료 확인)
+- [ ] 롤백 절에 custom role `vaultUnsealKmsAccess`의 GCP soft delete
+      7일 보존 사실과, 그 기간 내 롤백 시 `gcloud iam roles undelete` +
+      `terraform import`가 필요하다는 절차 정정 반영(claude-review 3차
+      지적, comment 7 참조)
 
 ## 롤백
 
@@ -373,7 +449,17 @@ binding)에 대한 **config 자체 부재**(= 실제 destroy 대상)가 함께
     GCP에서 삭제되므로 `terraform import`로 되돌릴 대상 자체가 없다 —
     `vault.tf`를 복원해 `terraform apply`로 재생성해야 한다(GSA 이메일이
     바뀌면 그 GSA를 참조하는 다른 리소스도 함께 갱신 필요, 실질적으로는
-    #478 이전 상태로의 완전한 재구축).
+    #478 이전 상태로의 완전한 재구축). **단, custom role
+    `vaultUnsealKmsAccess`는 destroy 후 7일간 GCP IAM에서 soft delete
+    상태로 보존되며 같은 role_id 재생성이 막혀 있다**(comment 7 참조) —
+    이 7일 이내에 `vault.tf`를 복원해 그냥 `terraform apply`를 돌리면
+    custom role 생성 단계에서 오류가 난다. 그 기간 안에 롤백하려면 먼저
+    `gcloud iam roles undelete --project=<PROJECT_ID>
+    vaultUnsealKmsAccess`로 role을 되살린 뒤 `terraform import
+    google_project_iam_custom_role.vault_unseal
+    projects/<PROJECT_ID>/roles/vaultUnsealKmsAccess`로 state에 편입하고
+    나머지 3개만 일반 `apply`로 재생성한다. 7일이 지난 뒤라면 undelete
+    없이 바로 `apply`해도 된다.
 - `roles/cloudkms.admin` 후속 회수 PR까지 되돌리려면 그 PR만 별도로
   revert한다(이번 PR의 롤백 범위와 독립적).
 - 승인 후 vault-k8s state rm까지 실행했다면, `terraform/admin/vault-k8s/`를 git

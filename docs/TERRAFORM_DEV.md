@@ -1658,24 +1658,43 @@ Vault 운영 경로를 폐기**했다. 새 클러스터(#404)에는 Vault가 배
 삭제했다.** 아래 KMS keyring/key·GSA·WI·IAM 리소스는 코드 삭제만으로는
 사라지지 않고 dev root state에 여전히 존재한다. `google_kms_crypto_key`의
 `prevent_destroy`는 리소스 블록 자체가 삭제된 뒤로는 보호막이 되지 않으므로
-(config가 없으면 lifecycle 검사가 실행되지 않는다), 실수로 destroy가
-계획되는 것을 막기 위해 dev root에 6개 리소스 전부에 대한 `removed`
-블록(`terraform/envs/dev/vault_removed.tf`, `lifecycle { destroy = false
-}`)을 이미 코드로 추가해 뒀다. 이 블록을 반영하는 apply(state에서만
-forget, GCP 쪽 변경 없음)는 별도 승인을 받은 뒤 진행한다. 이 절은 그
-정리가 끝날 때까지의 이력과 잔여 자산을 설명하는 참고 문서다.
+(config가 없으면 lifecycle 검사가 실행되지 않는다), KMS key ring/crypto key
+**2개**만 `removed` 블록(`terraform/envs/dev/vault_removed.tf`,
+`lifecycle { destroy = false }`)으로 destroy 시도 자체를 막아 뒀다.
+나머지 GSA·WI 바인딩·custom role·key IAM binding **4개**는 `removed` 블록을
+두지 않았다 — Vault는 #412에서 영구 폐기됐고 git history로 언제든
+재생성 가능하므로, forget보다 실제 destroy가 최소 권한 원칙에 맞다(상세
+근거는 아래 설계 문서 참조). 즉 승인 후 apply는 **forget 2건 + destroy
+4건**으로 계획된다 — "GCP 쪽 변경 없음"이 아니다. 이 절은 그 정리가
+끝날 때까지의 이력과 잔여 자산을 설명하는 참고 문서다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d. keyring은 GCP 특성상 영구 삭제 불가. `removed` 블록으로 destroy 시도 자체를 막아 둠(코드는 삭제됐으나 live/state에는 존재) |
-| GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음. `removed` 블록 대상(코드는 삭제됐으나 live/state에는 존재) |
-| WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. namespace는 live에 없음(#404 재구축 이후 미배포). `removed` 블록 대상 |
-| KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족. `removed` 블록 대상 |
+| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d. keyring은 GCP 특성상 영구 삭제 불가. `removed` 블록으로 destroy 시도 자체를 막아 둠(코드는 삭제됐으나 live/state에는 존재) — **forget 대상** |
+| GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음. 코드는 삭제됐고 config 부재 상태로 남아 있어 승인 후 apply 시 **실제 destroy 대상** |
+| WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. namespace는 live에 없음(#404 재구축 이후 미배포). **실제 destroy 대상** |
+| KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족. **실제 destroy 대상**(key IAM binding + custom role 리소스 자체 둘 다) |
 
 주의: 위 리소스의 실제 state 제거는 이 문서만으로 수행하지 않는다. 승인
-후 `removed` 블록을 포함한 dev root apply를 실행하면 6개 리소스가
-destroy 없이 state에서만 분리(forget)되고, keyring/key는 비용이 발생하지
-않는 미사용 상태로 남는다. 상세 근거는
+후 `removed` 블록을 포함한 dev root apply를 실행하면 key ring/crypto key
+2개는 destroy 없이 state에서만 분리(forget)되고, 나머지 GSA/WI
+바인딩/custom role/key IAM binding 4개는 실제로 GCP에서 삭제된다.
+forget된 key는 "비용이 발생하지 않는 미사용 상태"가 아니다 — 아래 표의
+`rotation = 90d` 설정은 forget 후에도 live 리소스에 그대로 남아 GCP가
+90일마다 새 `CryptoKeyVersion`을 자동 생성하고, ENABLED 상태의 key
+version은 개별 과금 대상이다(software key 기준 버전당 월 $0.06). 그
+시점부터는 code에도 state에도 이 리소스가 없어 `terraform-drift.yml`도
+감지하지 못하므로, forget apply **전에** rotation을 해제하는 것을
+권장한다(그 시점엔 아직 state에 있어 절차가 명확하고, Terraform 밖 수동
+조작 창을 만들지 않는다):
+
+```bash
+gcloud kms keys update vault-unseal \
+  --keyring=autoresearch-dev-vault --location=asia-northeast3 \
+  --remove-rotation-schedule
+```
+
+상세 근거는
 `docs/superpowers/specs/2026-08-02-vault-removal-design.md`의 "dev root
 state 분리 전략" 절을 참조한다.
 
