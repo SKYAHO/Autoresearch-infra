@@ -485,21 +485,6 @@ output "mlflow_oauth_client_secret_secret_id" {
   value       = google_secret_manager_secret.mlflow_oauth_client_secret.secret_id
 }
 
-output "vault_service_account_email" {
-  description = "Vault auto-unseal용 GSA email(#132). vault-k8s root의 KSA annotation 값."
-  value       = google_service_account.vault.email
-}
-
-output "vault_kms_key_ring_name" {
-  description = "Vault unseal KMS keyring 이름(#132). helm values seal gcpckms key_ring 값."
-  value       = google_kms_key_ring.vault.name
-}
-
-output "vault_kms_crypto_key_name" {
-  description = "Vault unseal KMS crypto key 이름(#132). helm values seal gcpckms crypto_key 값."
-  value       = google_kms_crypto_key.vault_unseal.name
-}
-
 output "es_snapshot_bucket_name" {
   description = "Elasticsearch snapshot GCS bucket 이름(#102). repository-gcs 등록 시 사용."
   value       = google_storage_bucket.es_snapshots.name

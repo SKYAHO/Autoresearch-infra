@@ -214,12 +214,15 @@ jobs:
             {
               echo "### $root"
               echo '```text'
-              # 'has moved to'/'(moved from ...)'는 #468에서 추가 — 전자는
-              # moved-only(주소 이동만, create/destroy 0건), 후자는
-              # move+change 병존(이동+동시 속성 변경) 케이스의 주소 이동
-              # 사실이 요약에서 누락되지 않게 한다. 두 헤더 모두 리소스
-              # 주소만 담고 있어 속성값 비공개 원칙을 깨지 않는다.
-              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
+              # allowlist: 리소스 주소 헤더(will be/must be/has moved to/
+              # (moved from ...)/will no longer be managed by Terraform)와
+              # Plan:/No changes 요약 줄만 통과시킨다 — 속성값·오류 텍스트는
+              # 제외한다. 각 alternative가 필요한 이유·미포함 시 정보 손실
+              # 시나리오·이 정규식이 3개 workflow 파일 4곳(dev root 3곳 +
+              # admin root 1곳)에서 순서까지 동일하게 유지돼야 하는 이유는
+              # docs/superpowers/specs/2026-08-02-vault-removal-design.md의
+              # "grep allowlist 정규식 통일" 절 참조.
+              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^[[:space:]]*# .+ will no longer be managed by Terraform|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$rc" -ne 0 ]; then
@@ -315,7 +318,17 @@ jobs:
               # move+change 병존(이동+동시 속성 변경) 케이스의 주소 이동
               # 사실이 요약에서 누락되지 않게 한다. 두 헤더 모두 리소스
               # 주소만 담고 있어 속성값 비공개 원칙을 깨지 않는다.
-              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
+              #
+              # allowlist: 위 "Plan dev root" 스텝과 동일 정규식(순서 포함).
+              # 'will no longer be managed by Terraform' alternative는 admin
+              # root `monitoring-k8s`/`argo-rollouts-k8s`의 helm_release
+              # removed 블록(#307/#312류, destroy=false)이 실제로 만드는 plan
+              # 헤더라 이 스텝에서 매치 동작이 exercise된다 — 이 승인 게이트가
+              # apply Environment reviewer가 실제로 읽는 화면이라 drift
+              # 알림보다 영향이 크다. 전체 근거는
+              # docs/superpowers/specs/2026-08-02-vault-removal-design.md의
+              # "grep allowlist 정규식 통일" 절 참조.
+              grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^[[:space:]]*# .+ will no longer be managed by Terraform|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             if [ "$rc" -ne 0 ]; then

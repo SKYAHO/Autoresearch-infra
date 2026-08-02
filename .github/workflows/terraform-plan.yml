@@ -71,13 +71,14 @@ jobs:
         run: |
           set -o pipefail
           scripts/terraform-env --environment dev --root terraform/envs/dev plan -no-color -input=false > /tmp/plan.out 2>&1
-          # allowlist: '# <addr> will be/must be/has moved to ...' 리소스
-          # 주소 헤더와 'Plan:'/'No changes' 요약 라인만. 속성값/오류 텍스트는
-          # 포함하지 않는다. 'has moved to'/'(moved from ...)'는 #468에서
-          # 추가 — 전자는 moved-only, 후자는 move+change 병존 케이스('#
-          # <new> will be updated in-place' + '# (moved from <old>)' 두 줄
-          # 렌더링)에서 주소 이동 사실이 누락되지 않게 한다.
-          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' \
+          # allowlist: 리소스 주소 헤더(will be/must be/has moved to/
+          # (moved from ...)/will no longer be managed by Terraform)와
+          # Plan:/No changes 요약 줄만 통과시킨다 — 속성값·오류 텍스트는
+          # 제외한다. 각 alternative가 필요한 이유·이 정규식이 3개 workflow
+          # 파일 4곳에서 순서까지 동일하게 유지돼야 하는 이유는
+          # docs/superpowers/specs/2026-08-02-vault-removal-design.md의
+          # "grep allowlist 정규식 통일" 절 참조.
+          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^[[:space:]]*# .+ will no longer be managed by Terraform|^Plan: [0-9]|^No changes\.' \
             /tmp/plan.out > /tmp/plan.summary || true
 
       - name: PR 댓글 게시

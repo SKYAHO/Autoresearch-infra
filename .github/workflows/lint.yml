@@ -32,6 +32,15 @@ jobs:
       - name: Run oauth2-proxy email allowlist self-test
         run: scripts/test-check-oauth-email-allowlist.sh
 
+      # #478 claude-review 14차 지적: plan 요약 allowlist 정규식이 4곳(apply.yml
+      # dev/admin root 스텝 + terraform-plan.yml + terraform-drift.yml)에
+      # 복제돼 있어 한 곳만 갱신되면 CI 없이 조용히 어긋난다.
+      - name: Check drift/plan summary grep allowlist consistency
+        run: scripts/check-drift-summary-grep-consistency.sh
+
+      - name: Run drift/plan summary grep allowlist consistency self-test
+        run: scripts/test-check-drift-summary-grep-consistency.sh
+
       # #485 저장소 첫 .tftest.hcl. CI 실행 경로가 없으면 계약 테스트가 로컬 수동
       # 실행에만 의존해 회귀를 잡지 못한다. mock provider 기반이라 클라우드 자격이
       # 필요 없고 backend도 쓰지 않는다.

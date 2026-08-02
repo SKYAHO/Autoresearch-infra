@@ -232,6 +232,58 @@ moved {
 # dev root가 관리하는 리소스 타입 전수 스캔 기준 role 열거(#341 spec 표).
 # owner/editor 단일 부여 대신 열거해 크기를 명시한다. 부족분은 403-driven으로
 # 실측 보완(#310 compute.viewer 전례)하고 spec에 반영한다.
+#
+# `roles/cloudkms.admin`(#478): kms_vault_orphan.tf의 key ring/crypto key
+# 2개를 다루는 모든 dev root apply(이번 승인 apply와 향후 rotation
+# 재도입·IAM 재바인딩 등)를 `dev_apply` SA가 실행하므로 영구 유지한다 —
+# **drift 감지(terraform-drift.yml)와는 무관**하다(그쪽은 project-level
+# `roles/viewer`만 가진 `CI_SA`로 돈다).
+#
+# 단계별 실제 호출 API(claude-review 13차 지적으로 구분): **이번 승인
+# apply**는 crypto key의 rotation_period in-place update(cryptoKeys.update)와
+# `google_kms_crypto_key_iam_member.vault_unseal` destroy(binding 제거,
+# cryptoKeys.setIamPolicy)를 실제로 호출한다. 그 이후 **정상 상태**(두
+# 리소스 모두 config와 live state가 일치하고 IAM binding 리소스 자체가
+# config에서 사라진 상태)의 매 apply는 refresh 단계에서 keyRings.get +
+# cryptoKeys.get만 호출한다 — 반영할 diff가 없으므로 update/setIamPolicy는
+# 호출되지 않는다. 이 두 API는 향후 누군가 rotation_period를 다시
+# 추가하거나 이 2개 리소스에 google_kms_crypto_key_iam_member를 다시
+# 추가하는 **config 변경이 실제로 생길 때만** 재호출된다.
+#
+# 그렇다면 정상 상태에서는 `roles/cloudkms.viewer`(get/list만)로 낮추고
+# 향후 변경 시점에만 다시 넓히면 되지 않는가(claude-review 13차 지적)?
+# 좁히지 않는다 — `dev_apply_roles`는 이 SA의 상시 권한 집합이고, apply별로
+# role을 동적으로 넓혔다 좁히는 메커니즘이 이 저장소에 없다(#451 단일
+# `apply.yml` 진입점이 매 실행마다 이 for_each 목록 전체를 그대로 적용).
+# 향후 KMS 변경 1건을 반영하려면 "role 확장 PR+승인 apply" →
+# "실제 변경 PR+승인 apply" → "role 축소 PR+승인 apply" 3번이 필요해지는데,
+# 이 2개 리소스는 애초에 "영구 보존, 변경 계획 없음" 설계라 그 변경 자체가
+# 드물게 일어난다 — 드문 이벤트 대비로 상시 3배 운영 부담을 지기보다,
+# 이미 걸려 있는 2겹 방어선(아래 ①②)으로 충분하다고 본다.
+# `roles/cloudkms.viewer`는 get/list만 있고 update/setIamPolicy가 없어
+# 이번 승인 apply 자체에는 부족하다. 다만
+# `cloudkms.admin`은 project 내 다른 모든 key까지 포함해
+# cryptoKeyVersions.destroy(비가역)까지 부여한다 — IAM 자체는 이 초과분을
+# 이 2개 리소스로 제한하지 못한다(role은 project 단위, 더 좁은 predefined
+# role은 update/setIamPolicy가 없음). 실제 방어선은 코드 쪽 2겹이다:
+# ①이 2개 리소스의 `prevent_destroy`가 Terraform 경로의 destroy를 막고,
+# ②`apply.yml`의 사람 승인 게이트가 이 SA로 실행되는 모든 apply를 리뷰
+# 없이 실행되지 않게 막는다 — SA 자격 자체가 Terraform 밖에서 직접
+# 오남용되는 경로까지는 어느 쪽도 막지 못한다. custom role로 좁히는 후속
+# 작업은 하지 않는다(근거 조사 전체는
+# docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
+#
+# `roles/iam.roleAdmin`(263행, #478 재확인): dev root config에 남은
+# `google_project_iam_custom_role` 리소스는 이제 0건이다(`grep -rln
+# google_project_iam_custom_role terraform/envs/dev/` 무매치로 확인) —
+# 유일하게 이 role을 요구하던 `vault_unseal` custom role은 `vault.tf`
+# 삭제로 이미 사라졌다(원격 state에는 아직 남아 있고, 승인 apply가 이를
+# destroy한다). 그 destroy 자체가 `iam.roleAdmin`(`roles.delete`)을
+# 요구하므로 승인 apply 전까지는 계속 유지해야 한다. apply 완료 후에는
+# 이 role을 요구하는 리소스가 dev root config에 없어 실질적으로 미사용
+# 상태가 되지만, 이 PR에서 먼저 회수하면 그 apply의 custom role destroy
+# 자체가 막히므로 지금 회수하지 않는다 — 회수 여부는 승인 apply 완료 후
+# 별도 후속 이슈로 판단한다.
 resource "google_project_iam_member" "dev_apply_roles" {
   for_each = toset([
     "roles/compute.networkAdmin",                     # VPC/subnet/router/NAT/route/firewall/address
@@ -249,7 +301,7 @@ resource "google_project_iam_member" "dev_apply_roles" {
     "roles/secretmanager.admin",                      # secret/version/secret IAM
     "roles/artifactregistry.admin",                   # repo + repo IAM
     "roles/dns.admin",                                # zone/record
-    "roles/cloudkms.admin",                           # KMS keyring/key(#132 vault)
+    "roles/cloudkms.admin",                           # key ring/crypto key IAM·속성 (#478 잔존 리소스)
     "roles/run.admin",                                # Cloud Run v2 + service IAM
     "roles/servicenetworking.networksAdmin",          # Cloud SQL PSA peering
     "roles/networkconnectivity.consumerNetworkAdmin", # Redis PSC service connection policy

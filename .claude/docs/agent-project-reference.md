@@ -26,8 +26,7 @@ terraform/
 │   ├── argocd-k8s/           # ArgoCD + AppProject/Application(monitoring·argo-rollouts·mlflow·serving·agent-orchestration) (separate state)
 │   ├── argo-rollouts-k8s/    # argo-rollouts namespace/NetworkPolicy (chart는 ArgoCD Application, #186) (separate state)
 │   ├── mlflow-k8s/           # MLflow namespace/KSA(WI)/NetworkPolicy (#94) (separate state)
-│   ├── elastic-k8s/          # ECK operator + ES/Kibana/Filebeat CR (#97) (separate state)
-│   └── vault-k8s/            # retired: #412에서 운영 제외, 완전 제거는 #478 (separate state)
+│   └── elastic-k8s/          # ECK operator + ES/Kibana/Filebeat CR (#97) (separate state)
 ├── envs/
 │   └── dev/                 # dev 환경 root module
 │       ├── versions.tf      # Terraform/provider 버전, provider 설정
@@ -48,7 +47,7 @@ terraform/
 │       ├── secret_manager.tf     # Secret Manager
 │       ├── bastion.tf       # IAP 전용 bastion host (#47)
 │       ├── dns.tf           # Airflow ILB 고정 IP + private DNS zone (#48)
-│       ├── vault.tf         # retired: Vault auto-unseal 잔여 구성, #478에서 제거 예정
+│       ├── kms_vault_orphan.tf   # Vault 폐기 후 잔존 KMS key ring/crypto key (#478, prevent_destroy)
 │       ├── elastic.tf       # Elasticsearch GCS snapshot bucket/GSA (#102)
 │       ├── github_actions.tf     # WIF pusher SA (GAR/app image/Airflow deployer)
 │       ├── code_artifacts.tf     # 코드 아카이브 GCS bucket + 업로더 SA/WIF + 파드 read IAM (#238)
@@ -84,7 +83,7 @@ docs/
 ├── GRAFANA_OPERATIONS_RUNBOOK.md   # Grafana 점검·앱 메트릭 e2e 검증
 ├── ROLLOUTS_OPERATIONS_RUNBOOK.md  # Argo Rollouts promote/abort 운영
 ├── KIBANA_OPERATIONS_RUNBOOK.md    # Kibana/ELK 로그 운영
-├── VAULT_OPERATIONS_RUNBOOK.md     # Vault 폐기 이력 참고(운영 경로 아님, #478)
+├── VAULT_OPERATIONS_RUNBOOK.md     # Vault 폐기 이력 참고(운영 경로 아님, #132/#412/#478)
 ├── CHANGE_HISTORY.md        # 완료된 주요 인프라 변경 결정 요약
 ├── BRANCH_RULESET_MAIN.md   # main ruleset 설명
 ├── GITHUB_LABELS_AND_PROJECT.md  # label/Project 운영 기준
@@ -96,6 +95,10 @@ docs/
 CONTRIBUTING.md              # 사람용 협업 규칙 (워크플로우 전체)
 branch_ruleset_main.json     # main branch ruleset 정의
 ```
+
+`vault-k8s`는 #412에서 운영 제외됐고 #478에서 root 디렉터리가 삭제됐다
+(원격 state 잔여 4개 정리만 승인 대기 —
+`docs/superpowers/specs/2026-08-02-vault-removal-design.md` 참조).
 
 로컬 전용(커밋하지 않음): `agent.local.md`, `docs/NOTION_PROGRESS_TIMELINE.md`,
 `.claude/settings.local.json`

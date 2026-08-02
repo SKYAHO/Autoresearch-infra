@@ -637,18 +637,6 @@ variable "internal_dns_domain" {
   }
 }
 
-variable "vault_k8s_namespace" {
-  description = "Vault Workload Identity 매핑용 Kubernetes namespace(#132). 실제 namespace는 terraform/admin/vault-k8s가 관리."
-  type        = string
-  default     = "vault"
-}
-
-variable "vault_k8s_service_account" {
-  description = "Vault Workload Identity 매핑용 Kubernetes service account 이름(#132)."
-  type        = string
-  default     = "vault"
-}
-
 variable "elastic_k8s_namespace" {
   description = "Elasticsearch Workload Identity 매핑용 Kubernetes namespace(#102). 실제 namespace는 terraform/admin/elastic-k8s가 관리."
   type        = string

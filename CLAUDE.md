@@ -53,7 +53,9 @@
   - `secret_manager.tf` — Secret Manager 리소스와 resource-level IAM
   - `bastion.tf` — #47 IAP 전용 bastion host
   - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
-  - `vault.tf` — #132 Vault auto-unseal용 KMS key/GSA/WI
+  - `kms_vault_orphan.tf` — #478 Vault 폐기 후 잔존 KMS key ring/crypto key
+    (GCP에서 삭제 불가능한 리소스, rotation 제거 + `prevent_destroy`로
+    영구 config 유지)
   - `elastic.tf` — #102 Elasticsearch GCS snapshot bucket/GSA
   - `github_actions.tf` — WIF pusher SA 4종(각각 최소권한·repo@ref 제한): GAR
     pusher, app image pusher, Airflow deployer(container.clusterViewer),
@@ -63,8 +65,10 @@
     `code-archive.yml@main` workflow_ref 제한, 버킷 objectAdmin) + 파드 read IAM
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
   `airflow-k8s`(Airflow 경계), `argocd-k8s`(ArgoCD), `monitoring-k8s`(모니터링),
-  `vault-k8s`(#134 Vault), `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK),
+  `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK), `mlflow-k8s`(#94 MLflow),
   `autoresearch-k8s`(앱 namespace/KSA 경계), 팀원 GKE 접근 IAM은 `gke-team-access`.
+  `vault-k8s`는 #412에서 운영 제외됐고 #478에서 root 디렉터리가 삭제됐다
+  (원격 state 잔여 4개 정리만 승인 대기 — `terraform/README.md` 참조).
 - 재사용 module은 `terraform/modules/` (현재 미사용, staging/prod 분리 시 추출)
 - GitHub Actions는 `.github/workflows/`: `lint.yml`(actionlint, required
   check), `terraform-plan.yml`(OIDC/WIF 기반 PR plan 및 댓글 게시),

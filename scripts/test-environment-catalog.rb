@@ -154,6 +154,11 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
   assert(stderr.include?("환경 카탈로그 오류"), "카탈로그 필드 오류를 안전하게 보고해야 합니다")
 
   Dir.mktmpdir("environment-catalog-generated-") do |output_root|
+    # write_terraform_inputs!는 root 디렉터리가 이미 존재해야 한다(실제
+    # 저장소에서는 커밋된 .tf 코드와 함께 항상 존재 — claude-review 14차
+    # 지적으로 없으면 CatalogError). 여기 output_root는 합성 tmp dir이라
+    # 그 불변조건을 직접 재현해 준다.
+    FileUtils.mkdir_p(File.join(output_root, "terraform/envs/dev"))
     generated = catalog.write_terraform_inputs!(
       root: "terraform/envs/dev",
       output_root: output_root
@@ -164,6 +169,12 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
     assert(variables.fetch("project_id") == "autoresearch-503903", "생성 var-file의 project_id가 다릅니다")
     assert(backend.include?("bucket = \"autoresearch-503903-dev-tfstate\""), "생성 backend의 bucket이 다릅니다")
     assert(backend.include?("prefix = \"dev/\""), "생성 backend의 prefix가 다릅니다")
+  end
+
+  Dir.mktmpdir("environment-catalog-missing-root-") do |output_root|
+    assert_catalog_error("root 디렉터리가 없으면 조용히 만들지 말고 실패해야 합니다") do
+      catalog.write_terraform_inputs!(root: "terraform/envs/dev", output_root: output_root)
+    end
   end
 
   init_without_backend = run_wrapper([
