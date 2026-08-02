@@ -38,10 +38,13 @@ cookie-secret 회전이 필요하지 않다. 전체 사용자의 강제 재로�
 
 이 PR의 머지는 Kibana Deployment를 바꾸지 않는다. `elastic-k8s`는 수동 Terraform
 apply 경로이고 dev root drift workflow의 감시 대상도 아니므로, apply 전 live pod는
-기존 `--email-domain=*` 인가 상태로 남는다. CI 정적 검사는 저장소 설정만 보장하며
-클러스터 반영을 증명하지 않는다. operator는 승인된 apply 뒤 `rollout status`와 아래
-명령으로 실제 args에 `--email-domain`이 없는지 확인한 후 허용·미허용 계정 smoke test를
-수행한다(Secret 값은 출력하지 않는다).
+기존 `--email-domain=*` 인가 상태로 남는다. 따라서 [#488](https://github.com/SKYAHO/Autoresearch-infra/issues/488)은
+승인된 apply와 운영 smoke test가 끝날 때까지 닫지 않는다. CI 정적 검사는 저장소 설정만
+보장하며 클러스터 반영을 증명하지 않는다. plan상 변경은 Deployment의 in-place update이고,
+기본 RollingUpdate는 새 pod의 readiness를 기다려 교체하지만 `replicas: 1` 환경에서는
+스케줄·Secret 오류 시 서비스 단절이 가능하므로 운영 창에서 수행한다. operator는 승인된
+apply 뒤 `rollout status`와 아래 명령으로 실제 args에 `--email-domain`이 없는지 확인한 후
+허용·미허용 계정 smoke test를 수행한다(Secret 값은 출력하지 않는다).
 
 ```bash
 kubectl -n elastic get deployment kibana-oauth-proxy \

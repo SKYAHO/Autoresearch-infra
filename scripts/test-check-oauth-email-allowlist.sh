@@ -3,6 +3,9 @@
 set -eu
 
 repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+real_grep="$(command -v grep)"
+test -n "$real_grep" || { echo "FAIL: grep 명령을 찾을 수 없음" >&2; exit 1; }
+export REAL_GREP="$real_grep"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 mkdir "$test_dir/bin"
@@ -12,7 +15,7 @@ printf '%s\n' '#!/bin/sh' \
   '  *" -c "*) test "${SIMULATE_GREP_ERROR:-}" = count && { echo "simulated grep error" >&2; exit 2; } ;;' \
   '  *envFrom:*) test "${SIMULATE_GREP_ERROR:-}" = env-from && { echo "simulated grep error" >&2; exit 2; } ;;' \
   'esac' \
-  'exec /usr/bin/grep "$@"' > "$test_dir/bin/grep"
+  'exec "$REAL_GREP" "$@"' > "$test_dir/bin/grep"
 chmod +x "$test_dir/bin/grep"
 
 assert_grep_error_fails() {
@@ -23,7 +26,7 @@ assert_grep_error_fails() {
     echo "FAIL: grep 오류가 allowlist 검사 성공으로 처리됨 ($mode)" >&2
     exit 1
   fi
-  if /usr/bin/grep -q "$success_message" "$test_dir/output"; then
+  if "$real_grep" -q "$success_message" "$test_dir/output"; then
     echo "FAIL: grep 오류에서 성공 메시지를 출력함 ($mode)" >&2
     exit 1
   fi
@@ -31,5 +34,11 @@ assert_grep_error_fails() {
 
 assert_grep_error_fails count 'OK  MLflow: authenticated-emails-file 유지'
 assert_grep_error_fails env-from 'OK  MLflow: 명시적 Secret key 주입만 사용'
+
+if ! "$real_grep" -Fq 'run: scripts/test-check-oauth-email-allowlist.sh' \
+  "$repo_root/.github/workflows/lint.yml"; then
+  echo "FAIL: oauth2-proxy allowlist self-test가 lint workflow에 연결되지 않음" >&2
+  exit 1
+fi
 
 echo "PASS: grep 오류는 allowlist 검사 실패로 처리됨"

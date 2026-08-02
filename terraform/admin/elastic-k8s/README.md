@@ -114,7 +114,7 @@ if kubectl -n elastic get secret kibana-oauth --ignore-not-found -o name > "$d/e
       test -s "$d/$k" || { echo "ERROR: kibana-oauth.$k 없음"; exit 1; }
     done
   else
-    printf '%s' "$(openssl rand -hex 16)" > "$d/cookie-secret"
+    python3 -c 'import os,base64,sys;sys.stdout.write(base64.urlsafe_b64encode(os.urandom(32)).decode())' > "$d/cookie-secret"
   fi
 else
   echo "ERROR: kibana-oauth 존재 여부를 읽지 못함 — context/인증을 확인"; exit 1

@@ -29,6 +29,9 @@ jobs:
       - name: Check oauth2-proxy email allowlist configuration
         run: scripts/check-oauth-email-allowlist.sh
 
+      - name: Run oauth2-proxy email allowlist self-test
+        run: scripts/test-check-oauth-email-allowlist.sh
+
       - name: Run actionlint
         uses: raven-actions/actionlint@v2
         with:
