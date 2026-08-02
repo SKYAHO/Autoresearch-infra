@@ -15,6 +15,9 @@ fi
 
 FAIL=0
 email_domain_pattern='--email-domain([^[:alnum:]-]|$)'
+discovery_fail_marker="$(mktemp)"
+rm -f "$discovery_fail_marker"
+trap 'rm -f "$discovery_fail_marker"' EXIT
 
 # if 조건의 grep 실패는 errexit 대상이 아니므로, else에서 다른 명령보다 먼저
 # $?를 저장해 exit 1(정상 비매치)과 exit 2 이상(검사 오류)을 구분한다.
@@ -155,20 +158,27 @@ else
   fi
 fi
 
-# 위 대상별 검사는 등록된 2개 파일만 본다. 새 서비스가 --email-domain을 쓰지
-# 않으면서 --authenticated-emails-file도 넣지 않으면 어떤 검사에도 걸리지 않고,
-# 그 서비스의 인가 경계는 "Google 로그인만 하면 통과"가 된다(oauth2-proxy는
-# domain·file이 모두 비면 이메일 판정을 하지 않는다).
-# 그래서 oauth2-proxy 이미지를 참조하는 파일을 자동으로 찾아, 각 파일이
-# authenticated-emails-file을 지정하는지 확인한다. 등록 누락 자체를 잡는 것이
-# 목적이므로 대상별 상세 검사를 대체하지는 않는다.
+# 위 대상별 검사는 등록된 2개 파일만 본다. 새 서비스가 --email-domain도
+# --authenticated-emails-file도 넣지 않으면 어떤 검사에도 걸리지 않는다.
+#
+# 그 상태의 실제 동작은 fail-open이 아니라 **fail-closed**다. v7.7.1
+# newValidatorImpl은 domains가 비면 도메인 판정이 false, usersFile이 비면
+# UserMap이 빈 맵이라 파일 판정도 false, allowAll도 false이므로 모든 이메일이
+# 거부된다. 따라서 이 검사가 막는 것은 "무방비 노출"이 아니라 ① 전원 차단으로
+# 서비스가 죽는 배포와 ② 그 증상을 --email-domain=*로 "고쳐" #488을 되살리는
+# 흔한 대응이다. 모든 oauth2-proxy 대상이 allowlist를 명시하도록 강제해 두 경로를
+# 함께 막는다. 대상별 상세 검사(매핑·envFrom)를 대체하지는 않는다.
+#
 # Terraform은 이미지 기본값(variables.tf)과 args(oauth2_proxy.tf)가 다른 파일에
 # 있으므로 파일 단위가 아니라 디렉터리 단위로 판정한다.
-discovered_dirs="$(grep -RIl --exclude='*.md' --exclude-dir='.terraform' \
-  -- 'quay\.io/oauth2-proxy/oauth2-proxy' deploy terraform 2>/dev/null \
+# 이미지 표기는 upstream quay와 GAR 미러를 모두 포괄하도록 태그 기반으로 잡는다.
+# 이미지 참조 방식을 또 바꾸면(예: Helm chart 전환) 이 패턴도 함께 갱신해야 한다.
+discovered_dirs="$(grep -RIlE --exclude='*.md' --exclude-dir='.terraform' \
+  -- '(^|[^[:alnum:]_-])oauth2-proxy:v[0-9]' deploy terraform 2>/dev/null \
   | while IFS= read -r f; do dirname -- "$f"; done | sort -u || true)"
 if [ -n "$discovered_dirs" ]; then
-  for dir in $discovered_dirs; do
+  printf '%s\n' "$discovered_dirs" | while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
     if grep -REq --exclude='*.md' --exclude-dir='.terraform' \
       -- '--authenticated-emails-file=' "$dir"; then
       echo "OK  자동 발견: $dir — authenticated-emails-file 지정됨"
@@ -179,9 +189,13 @@ if [ -n "$discovered_dirs" ]; then
       else
         echo "ERR 자동 발견: $dir — 검사 실행 실패 (grep exit=$grep_status)"
       fi
-      FAIL=1
+      # subshell(파이프)이라 FAIL 대입이 부모로 전파되지 않는다. 마커 파일로 알린다.
+      : > "$discovery_fail_marker"
     fi
   done
+  if [ -f "$discovery_fail_marker" ]; then
+    FAIL=1
+  fi
 else
   echo "ERR oauth2-proxy 이미지를 참조하는 파일을 찾지 못함 — scan root 또는 이미지 표기를 확인"
   FAIL=1
