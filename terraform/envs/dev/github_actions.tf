@@ -249,7 +249,6 @@ resource "google_project_iam_member" "dev_apply_roles" {
     "roles/secretmanager.admin",                      # secret/version/secret IAM
     "roles/artifactregistry.admin",                   # repo + repo IAM
     "roles/dns.admin",                                # zone/record
-    "roles/cloudkms.admin",                           # KMS keyring/key(#132 vault)
     "roles/run.admin",                                # Cloud Run v2 + service IAM
     "roles/servicenetworking.networksAdmin",          # Cloud SQL PSA peering
     "roles/networkconnectivity.consumerNetworkAdmin", # Redis PSC service connection policy

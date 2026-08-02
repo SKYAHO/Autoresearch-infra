@@ -59,7 +59,7 @@ resource "google_dns_record_set" "mlflow" {
 # #138 Google API 트래픽을 private.googleapis.com 고정 VIP(199.36.153.8/30)로
 # 유도하는 VPC 전용 zone. googleapis.com만 override하므로 pkg.dev(이미지 pull),
 # run.app(Cloud Run), metadata 경로는 영향이 없다. 이 zone 덕분에 Google API만
-# 필요한 namespace(vault 등)는 egress 443을 고정 CIDR로 좁힐 수 있다.
+# 필요한 namespace는 egress 443을 고정 CIDR로 좁힐 수 있다.
 # 제거 시 TTL(300s) 이내에 공개 IP 해석으로 복귀한다.
 resource "google_dns_managed_zone" "private_googleapis" {
   name        = "${local.resource_prefix}-private-googleapis"

@@ -7,7 +7,7 @@
 - GCP 프로젝트: `autoresearch-503903`
 - dev root module: `terraform/envs/dev`
 - Terraform backend: GCS `autoresearch-503903-dev-tfstate`, prefix `dev/`
-- 최신 apply·검증: 2026-07-29~30 — #404 프로젝트 이전 재구축(autoresearch-503903, dev root 전체 + admin root 7종, vault 드랍 #412/#416). 직전 기준선은 2026-07-23. dev root와 K8s admin root 7개(autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s 순, vault-k8s는 #416에서 제외) 모두 최종 plan `No changes`.
+- 최신 apply·검증: 2026-07-29~30 — #404 프로젝트 이전 재구축(autoresearch-503903, dev root 전체 + admin root 7종, vault 드랍 #412/#416). 직전 기준선은 2026-07-23. dev root와 K8s admin root 7개(autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s 순, vault-k8s는 #416에서 제외) 모두 최종 plan `No changes`. vault.tf·vault-k8s root 코드는 #478에서 완전 삭제(state 정리는 별도 승인 대기).
   이후 스택(MLflow #91~95, ELK #96~103, Redis #129, Feast 피처 테이블·Vertex #281, Cloud
   SQL tier #273, batch-od 노드풀 #297, Inference Server #302, admin root 승인 게이트 CI
   apply #307/#312 등) apply 이력은 `docs/CHANGE_HISTORY.md`를 기준으로 한다.
@@ -28,8 +28,7 @@ terraform/
 │   ├── argocd-k8s/       # #83/#84 ArgoCD namespace + Helm release + Applications (separate state)
 │   ├── mlflow-k8s/       # #94 MLflow namespace/KSA(WI)/NetworkPolicy (separate state)
 │   ├── argo-rollouts-k8s/ # #88 Argo Rollouts controller (separate state)
-│   ├── elastic-k8s/      # #97~103 ECK/ES/Kibana/Filebeat/ILM/snapshot + Kibana Google 로그인(#294/#319) (separate state)
-│   └── vault-k8s/        # retired: #412 운영 제외, #478에서 root/state 제거 예정
+│   └── elastic-k8s/      # #97~103 ECK/ES/Kibana/Filebeat/ILM/snapshot + Kibana Google 로그인(#294/#319) (separate state)
 ├── bootstrap/            # #6 1회성: GCS state bucket + WIF + CI SA (local state)
 │   ├── main.tf
 │   ├── outputs.tf
@@ -60,7 +59,6 @@ terraform/
 │       ├── storage.tf        # #18 dev 원본 데이터/Feast GCS bucket
 │       ├── terraform.tfvars.example
 │       ├── variables.tf
-│       ├── vault.tf          # retired: #132 Vault auto-unseal 잔여 구성, #478에서 제거 예정
 │       ├── versions.tf
 │       ├── vertex_ai.tf      # #280 BigQuery ↔ Vertex AI connection + aiplatform IAM
 │       └── vpc.tf          # #2 dev VPC / subnet / 최소 firewall
@@ -815,8 +813,8 @@ Bastion 터널로 `localhost:4180`에 접속하므로 redirect URI는 그대로�
 
 `googleapis.com.` private zone(A `private.googleapis.com` → 199.36.153.8~11,
 CNAME `*.googleapis.com`)이 VPC 전체의 Google API 해석을 고정 VIP로 유도한다.
-이 덕분에 Google API만 필요한 namespace(vault)는 egress 443을
-`199.36.153.8/30`으로 좁힌다. `pkg.dev`(노드 이미지 pull), `run.app`
+이 덕분에 Google API만 필요한 namespace는 egress 443을
+`199.36.153.8/30`으로 좁힐 수 있다. `pkg.dev`(노드 이미지 pull), `run.app`
 (Cloud Run proxy), metadata 경로는 zone 범위 밖이라 영향이 없다.
 argocd(GitHub)·airflow(OpenRouter 등)는 외부 endpoint 의존으로
 `0.0.0.0/0:443`을 유지한다(설계:
@@ -1654,22 +1652,26 @@ public external HTTPS egress가 없는지, node allocatable/autoscaler가 quota�
 HashiCorp Vault dev 도입 설계와 과거 구성은
 `docs/superpowers/specs/2026-07-12-vault-dev-design.md`에서 확인할 수 있다.
 실 secret은 이관하지 않고 Secret Manager를 사용하기로 결정했으며, **#412에서
-Vault 운영 경로를 폐기**했다. 새 클러스터(#404)에는 Vault가 배포돼 있지 않고,
-`vault-k8s`는 admin-apply ROOTS에서도 제외되어 있다. 현재 남은
-`vault-k8s` root와 dev root의 `vault.tf`·KMS/GSA/IAM 코드는 완전 제거 이슈
-[#478](https://github.com/SKYAHO/Autoresearch-infra/issues/478)에서 정리한다.
-이 절은 제거 전까지의 이력과 잔여 자산을 설명하는 참고 문서다.
+Vault 운영 경로를 폐기**했다. 새 클러스터(#404)에는 Vault가 배포돼 있지 않았고,
+`vault-k8s`는 admin-apply ROOTS에서도 제외돼 있었다. **#478에서 dev root의
+`vault.tf`와 `terraform/admin/vault-k8s/` root 코드를 저장소에서 완전히
+삭제했다.** 아래 KMS keyring/key·GSA·WI·IAM 리소스는 코드 삭제만으로는
+사라지지 않고 각 root의 원격 state에 여전히 존재하며, 실제 GCP
+삭제(`terraform state rm` 후 필요 시 콘솔/gcloud 정리)는 별도 승인을 받은
+뒤 진행한다. 이 절은 그 정리가 끝날 때까지의 이력과 잔여 자산을 설명하는
+참고 문서다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d, key `prevent_destroy`. keyring은 GCP 특성상 삭제 불가 |
-| GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음 |
-| WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. 잔여 IAM/state 정리는 #478 |
+| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d, key `prevent_destroy`. keyring은 GCP 특성상 삭제 불가. 코드는 삭제됐으나 live/state에는 존재 |
+| GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음. 코드는 삭제됐으나 live/state에는 존재 |
+| WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. namespace는 live에 없음(#404 재구축 이후 미배포) |
 | KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족 |
 
-주의: Vault Raft 데이터가 남아 있는지 먼저 확인한다. KMS key ring/crypto key는
-GCP 특성상 삭제가 제한될 수 있으므로, #478에서 사용 여부와 보존·비활성화
-범위를 확인한 뒤 IAM/state/code 순서로 정리한다.
+주의: 위 리소스의 실제 state 제거는 이 문서만으로 수행하지 않는다. KMS key
+ring/crypto key는 GCP 특성상 삭제가 제한될 수 있으므로, 승인 후 `terraform
+state rm`으로 dev root와 `vault-k8s` state에서만 제거하고(`destroy`가 아님),
+keyring은 비용이 발생하지 않는 미사용 상태로 남긴다.
 
 ## 필수 GCP API
 
@@ -1688,7 +1690,7 @@ GCP 특성상 삭제가 제한될 수 있으므로, #478에서 사용 여부와 
 | `networkconnectivity.googleapis.com` | Redis Cluster PSC Service Connection Policy (#129) |
 | `serviceconsumermanagement.googleapis.com` | Redis Cluster service connectivity automation (#129) |
 | `container.googleapis.com` | GKE |
-| `cloudkms.googleapis.com` | Vault auto-unseal KMS key (#132) |
+| `cloudkms.googleapis.com` | Vault auto-unseal KMS key(#132) — 코드는 #478에서 삭제됐으나 live KMS 리소스가 남아 있어 당분간 필요 |
 | `dns.googleapis.com` | 내부 private DNS zone (#48) |
 | `iap.googleapis.com` | bastion IAP TCP forwarding (#47) |
 | `oslogin.googleapis.com` | bastion OS Login SSH (#47) — 미활성 시 publickey 거부(#57) |

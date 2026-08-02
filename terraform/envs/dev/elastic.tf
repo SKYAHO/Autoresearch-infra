@@ -1,6 +1,6 @@
 # #102 Elasticsearch GCS snapshot 기반. ES 설치/repository 등록은
 # terraform/admin/elastic-k8s가 담당하고, dev root는 GCP 측(bucket, GSA,
-# WI)만 관리한다 — vault.tf(#132)와 동일 분리.
+# WI)만 관리한다 — GCP 기반과 K8s 설치를 별도 root로 분리하는 저장소 관례를 따른다.
 
 resource "google_storage_bucket" "es_snapshots" {
   name                        = local.es_snapshot_bucket_name

@@ -53,7 +53,6 @@
   - `secret_manager.tf` — Secret Manager 리소스와 resource-level IAM
   - `bastion.tf` — #47 IAP 전용 bastion host
   - `dns.tf` — #48 Airflow ILB 예약 내부 IP + private DNS zone
-  - `vault.tf` — #132 Vault auto-unseal용 KMS key/GSA/WI
   - `elastic.tf` — #102 Elasticsearch GCS snapshot bucket/GSA
   - `github_actions.tf` — WIF pusher SA 4종(각각 최소권한·repo@ref 제한): GAR
     pusher, app image pusher, Airflow deployer(container.clusterViewer),
@@ -63,7 +62,7 @@
     `code-archive.yml@main` workflow_ref 제한, 버킷 objectAdmin) + 파드 read IAM
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
   `airflow-k8s`(Airflow 경계), `argocd-k8s`(ArgoCD), `monitoring-k8s`(모니터링),
-  `vault-k8s`(#134 Vault), `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK),
+  `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK),
   `autoresearch-k8s`(앱 namespace/KSA 경계), 팀원 GKE 접근 IAM은 `gke-team-access`.
 - 재사용 module은 `terraform/modules/` (현재 미사용, staging/prod 분리 시 추출)
 - GitHub Actions는 `.github/workflows/`: `lint.yml`(actionlint, required
