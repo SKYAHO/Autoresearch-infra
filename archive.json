@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T12:44:32Z",
+  "generated_at": "2026-08-02T13:19:35Z",
   "reports": [
+    {
+      "number": 510,
+      "title": "feat: Experiment API migration 배포 추가",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-08-02T13:19:22Z",
+      "summary_ko": [
+        "Experiment API v0 배포 전 Alembic DB 마이그레이션을 자동 수행하는 ArgoCD PreSync Job을 신규 추가하였습니다.",
+        "검증된 이미지 디제스트(digest)를 API, Runner, Migration 등 5개 컨테이너 참조에 원자적으로 동일하게 반영하였습니다.",
+        "마이그레이션 및 이미지 계약 검증 스크립트와 통합 테스트, 운영 런북 및 배포 문서를 함께 업데이트하였습니다."
+      ],
+      "report_url": "pr/510/"
+    },
     {
       "number": 500,
       "title": "chore: 사용하지 않는 Vault 구성 완전 제거",
