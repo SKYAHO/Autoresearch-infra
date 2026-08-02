@@ -53,14 +53,19 @@ locals {
   redis_service_connection_policy_name = "${local.resource_prefix}-redis-psc"
   redis_server_ca_secret_id            = "${local.resource_prefix}-redis-server-ca"
 
-  gke_cluster_name = "${local.resource_prefix}-gke"
-  gke_node_sa_name = "${local.resource_prefix}-gke-nodes"
-  gke_app_sa_name  = "${local.resource_prefix}-app"
-  mlflow_sa_name   = "${local.resource_prefix}-mlflow"
+  gke_cluster_name           = "${local.resource_prefix}-gke"
+  gke_node_sa_name           = "${local.resource_prefix}-gke-nodes"
+  gke_app_sa_name            = "${local.resource_prefix}-app"
+  experiment_runtime_sa_name = "${local.resource_prefix}-exp-runtime"
+  mlflow_sa_name             = "${local.resource_prefix}-mlflow"
   # Google service account account_id는 30자 제한이 있으므로 workload의 긴
   # Kubernetes 이름 대신 짧은 orch-api/orch-runner 식별자를 사용한다.
   agent_orchestration_api_sa_name    = "${local.resource_prefix}-orch-api"
   agent_orchestration_runner_sa_name = "${local.resource_prefix}-orch-runner"
+  # 실험 Job은 API·Codex Runner와 다른 GSA를 사용한다. 결과 버킷 object 생성만
+  # 허용하고 Secret Manager·Cloud SQL·Kubernetes API 권한은 부여하지 않는다.
+  experiment_job_sa_name         = "${local.resource_prefix}-exp-job"
+  experiment_results_bucket_name = "${var.project_id}-${local.resource_prefix}-experiment-results"
   # #226: 앱팀이 수동 생성한 기존 버킷명(${project_id}-${name_prefix}-mlflow-artifacts)을
   # 그대로 adopt한다. feast 버킷과 동일하게 project_id를 포함해 전역 유일성 확보.
   mlflow_artifacts_bucket                            = "${var.project_id}-${var.name_prefix}-mlflow-artifacts"
@@ -91,14 +96,16 @@ locals {
 
   # #424 Feast apply의 prod 경로는 기존 버킷 루트를 그대로 보존한다. dev는
   # 별도 버킷 루트를 사용해 bucket-level IAM에서 환경 경계를 강제한다.
-  feast_dev_dataset_id        = "feast_offline_store_dev"
-  feast_prod_registry_path    = "gs://${local.feast_registry_bucket}/registry.db"
-  feast_prod_staging_location = "gs://${local.feast_staging_bucket}/"
-  feast_dev_registry_path     = "gs://${local.feast_dev_registry_bucket}/registry.db"
-  feast_dev_staging_location  = "gs://${local.feast_dev_staging_bucket}/"
+  feast_dev_dataset_id                  = "feast_offline_store_dev"
+  feast_prod_registry_path              = "gs://${local.feast_registry_bucket}/registry.db"
+  feast_prod_staging_location           = "gs://${local.feast_staging_bucket}/"
+  feast_dev_registry_path               = "gs://${local.feast_dev_registry_bucket}/registry.db"
+  feast_dev_staging_location            = "gs://${local.feast_dev_staging_bucket}/"
+  experiment_runtime_experiments_prefix = "experiments/"
   # #238 코드 아카이브 배포 버킷·업로더 SA. 버킷명은 이슈 예시(project_id 포함, 전역 유일).
-  code_artifacts_bucket = "${var.project_id}-code-artifacts"
-  code_uploader_sa_name = "${local.resource_prefix}-code-uploader"
+  code_artifacts_bucket          = "${var.project_id}-code-artifacts"
+  code_uploader_sa_name          = "${local.resource_prefix}-code-uploader"
+  experiment_runtime_code_prefix = "code/"
   raw_data_prefixes = {
     youtube_raw            = "data_lake/youtube_trending_kr/"
     users_raw              = "asset/virtual_user/"
@@ -110,10 +117,12 @@ locals {
     virtual_users          = "asset/virtual_user/"
     personas_raw_snapshots = "data/raw/personas/"
   }
-  gke_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
+  gke_workload_identity_principal                = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
+  experiment_runtime_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.experiment_runtime_k8s_namespace}/${var.experiment_runtime_k8s_service_account}]"
 
   agent_orchestration_api_workload_identity_principal    = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_api_k8s_service_account}]"
   agent_orchestration_runner_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_runner_k8s_service_account}]"
+  experiment_job_workload_identity_principal             = "${var.project_id}.svc.id.goog[${var.experiment_job_k8s_namespace}/${var.experiment_job_k8s_service_account}]"
 
   mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
 

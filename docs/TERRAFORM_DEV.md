@@ -1623,6 +1623,32 @@ Environment 설정을 대신 수행하지 않습니다.
 namespace를 참조해 인증이나 Job 생성에 실패합니다. 환경별 리소스 삭제는 데이터
 백업과 destroy 항목의 별도 승인을 전제로 하며, state를 직접 조작하지 않습니다.
 
+## Paired Feast 실험 runtime 격리 (#485) — dev 전용·Job 생성 비활성
+
+`terraform/envs/dev`의 `experiment_runtime_contract`와
+`terraform/admin/autoresearch-k8s`의 `experiment_runtime_kubernetes_contract`는
+admin output의 `namespace`/`service_account`와 전용 runtime GSA의 dev-only 계약을
+함께 제공합니다(기본 namespace/KSA는 모두 `experiment-runtime`). 현재 두 output의
+`job_creation_enabled`는 모두 **`false`**입니다.
+Airflow는 값이 `false`이면 Job manifest 또는 Kubernetes `create` 요청을 만들지
+않고 실행을 중단해야 합니다. Airflow는 observer Role만 가지며 runtime KSA도
+`jobs.create` 권한이 없습니다.
+
+dev output은 Feast registry/staging 및 MLflow artifact의 `experiments/` URI root,
+code archive의 `code/` URI root, `feast_offline_store_dev` dataset ID를 공개합니다.
+Airflow는 `experiments/<comparison_id>/`를 비교 단위 prefix로 사용하고,
+`CODE_ARCHIVE_SHA`와 `code/<CODE_ARCHIVE_SHA>.tar.gz`를 일치시켜야 합니다. IAM은
+`experiments/`와 `code/` root까지만 강제하므로 comparison ID·condition·SHA의
+세분화는 고정 Job 템플릿과 입력 검증의 책임입니다.
+
+Job 생성 권한과 TTL/deadline을 추가하는 후속 변경의 apply gate는
+[`runbooks/2026-08-02-paired-feast-experiment-runtime.md`](runbooks/2026-08-02-paired-feast-experiment-runtime.md)를
+따릅니다. 특히 production registry/BigQuery/Redis CA 접근이 403으로 실패하는지,
+public external HTTPS egress가 없는지, node allocatable/autoscaler가 quota를
+수용하는지, BigQuery query에 partition filter와 `maximum_bytes_billed`가 있는지를
+승인 전에 확인합니다. 롤백은 Airflow trigger를 먼저 중지한 뒤 승인된 apply로 이
+변경의 IAM/KSA/namespace만 제거하며 기존 production 리소스는 건드리지 않습니다.
+
 ## Vault auto-unseal 기반 — 폐기 이력 (#132, #412, #478)
 
 HashiCorp Vault dev 도입 설계와 과거 구성은

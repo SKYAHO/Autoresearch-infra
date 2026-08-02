@@ -83,7 +83,7 @@ variable "elasticsearch_version" {
   default     = "9.2.0"
 }
 
-# --- #293 Kibana Google 로그인 (oauth2-proxy + anonymous access) ---
+# --- #293 Kibana Google 로그인 (oauth2-proxy + Kibana basic 인증) ---
 
 # #323 kibana_anonymous_role 변수는 제거됐다 — Kibana 9.2에서 deprecated된
 # elasticsearch_anonymous_user 대신 실제 fileRealm 사용자를 쓰면서, anonymous

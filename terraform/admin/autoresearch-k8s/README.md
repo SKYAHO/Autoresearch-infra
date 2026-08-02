@@ -9,9 +9,14 @@ Kubernetes 측 경계를 별도 state로 관리합니다.
   NetworkPolicy
 - `feast-apply-dev`, `feast-apply-prod` namespace + 환경별 KSA + GitHub Actions용
   Job RBAC + 전용 egress/ingress NetworkPolicy (#424, `feast_apply.tf`)
+- `experiment-runtime` namespace + Workload Identity KSA + observer-only Airflow RBAC +
+  ResourceQuota/LimitRange + Private Google APIs 전용 NetworkPolicy (#485,
+  `experiment_runtime.tf`)
 - Agent Orchestration API·Codex Runner 전용 KSA. 실제 Deployment/Service/PVC와
   Agent 전용 NetworkPolicy는 `deploy/agent-orchestration/`의 ArgoCD plain manifest가
   소유하며, 이 root의 기존 namespace-wide egress 정책에서는 제외한다.
+- `autoresearch-experiments` namespace, 실험 Job 전용 KSA, 제한된 API 관찰 RBAC,
+  Pod Security `restricted`, quota·LimitRange, 기본 차단 NetworkPolicy (#484)
 
 GCP Redis Cluster, PSC subnet/policy, TLS CA Secret Manager, app GSA와 Workload
 Identity IAM member는 `terraform/envs/dev`에서 관리합니다. 애플리케이션
@@ -64,6 +69,77 @@ scripts/terraform-env --environment dev --root terraform/admin/autoresearch-k8s 
 `apply`는 dev Redis Cluster apply 완료, live namespace import 여부, NetworkPolicy
 영향과 사용자 승인을 확인한 뒤에만 수행합니다.
 
+## Auto Research 실험 Job 경계 (#484)
+
+실험마다 별도 Kubernetes Job을 만들되, 일반 앱 namespace와 실행 신원을 공유하지
+않습니다. 이 root는 Kubernetes 경계만, `terraform/envs/dev`는 결과 버킷과 GCP
+Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정 Job 템플릿·허용
+이미지 digest 검증·상태 watcher를 담당합니다.
+
+| 구분 | 값 | 의도 |
+|---|---|---|
+| namespace | `autoresearch-experiments` | 실험 Pod와 기존 앱을 분리 |
+| Job KSA | `experiment-job` | 결과 버킷 쓰기 전용 Workload Identity |
+| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용. 이 RBAC를 실제로 쓰려면 API Pod의 egress에 Kubernetes API 경로가 있어야 한다 — 해당 정책은 이 root가 아니라 `deploy/agent-orchestration/network-policy.yaml`이 소유한다(#484에서 services CIDR·control plane CIDR TCP 443 추가) |
+| Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
+| 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
+
+`experiment-job` KSA에는 Kubernetes RoleBinding을 만들지 않고, Kubernetes API 토큰
+자동 마운트(`automount_service_account_token`)도 `false`로 둡니다. Workload Identity의
+GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부에 Kubernetes 토큰이
+필요하지 않습니다.
+
+### Job 생성 권한 활성화 조건
+
+`enable_experiment_job_creation` 기본값은 `false`입니다. 이 상태에서 API KSA는 Job,
+Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수 없습니다. 아래 조건을
+모두 충족하고 별도 보안 검토·승인을 받은 경우에만 local `terraform.tfvars`에서
+`true`로 변경합니다.
+
+1. API가 사용자 입력을 Job manifest로 그대로 전달하지 않고 고정 템플릿만 사용한다.
+2. 이미지가 mutable tag가 아닌 허용 목록의 digest인지 검증한다.
+3. Job 이름·label·결과 GCS prefix·CPU/메모리·`backoffLimit: 0`은 API의 고정 템플릿이
+   강제하고, `activeDeadlineSeconds`·TTL은 아래 4번 정책이 서버 측에서 강제한다.
+   CPU/메모리는 namespace ResourceQuota·LimitRange가 함께 상한을 건다.
+4. 이 root의 `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy가
+   ServiceAccount 변경, digest 없는 image(`initContainers` 포함), `batch-od`
+   nodeSelector/toleration 계약 위반(빈 목록 포함), 승인된 Artifact Registry 밖
+   이미지, `automountServiceAccountToken: true`, `activeDeadlineSeconds`·
+   `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. 두 시간
+   필드를 정책에 둔 것은 완료 Job이 quota를 무기한 점유하는 경로를 막기 위해서다
+   (API KSA에 `delete`가 없어 회수 수단이 TTL뿐이다). Pod Security `restricted`는
+   privileged·host namespace 등 별도 위험 필드를 거부한다.
+5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
+   수행한다.
+6. `batch-od`는 #297의 재시도 내성이 없는 Action Log shard KPO와 공유하므로, 전용
+   실험 node pool을 만들거나 해당 KPO와의 capacity·우선순위 경합 계획을 승인한다.
+
+권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
+Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
+중인 Job·Pod·GCS 업로드를 중단하지 않습니다. 취소는 API에 `delete` 권한을 추가하지
+않은 현재 MVP에서는 제공하지 않으며, 종료·quota 회수는 `activeDeadlineSeconds`와 TTL
+controller에 의존합니다. namespace, KSA, 결과 버킷을 롤백 수단으로 삭제하지 않습니다.
+
+### 네트워크와 용량 상한
+
+실험 namespace는 외부 HTTPS, Cloud SQL, Redis, MLflow를 기본 허용하지 않습니다.
+결과 업로드는 Private Google APIs VIP `199.36.153.8/30`의 TCP 443만 사용합니다.
+새 목적지가 필요하면 목적지 CIDR/selector, 포트, GSA IAM, 데이터 분류를 함께
+검토하는 별도 이슈가 필요합니다.
+
+초기 dev 상한은 Job·Pod 각각 2개, 총 request/limit 2 vCPU/4 GiB입니다.
+`count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로, 실제 제출
+병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request/limit은
+500m/1 GiB이고, 단일 컨테이너는 1 vCPU/2 GiB를 넘을 수 없습니다. Job 템플릿과
+admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` toleration을
+강제해야 합니다. `batch-od`는 #297 Action Log shard KPO와 공유하는 min 0/max 2
+on-demand pool이므로 일반 앱 pool 압박은 막지만, 실험 실행 시 해당 KPO가 Pending이
+될 수 있습니다. Job 생성 권한을 활성화하기 전에는 전용 실험 pool 또는 capacity·우선순위
+계획을 별도로 승인하고, batch-od node/pod Pending·autoscaler·CPU/memory를 관측해야
+합니다. 운영 검증 절차와 Job manifest 계약은
+[`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
+따릅니다.
+
 ## NetworkPolicy
 
 NetworkPolicy는 namespace 전체 pod를 egress isolation 대상으로 삼습니다.
@@ -92,6 +168,42 @@ MLflow tracking 규칙(#302)은 Inference Server 파드가 `RERANK_MODEL_SOURCE=
 위해 namespace selector 규칙을 함께 둡니다(기존 DNS 규칙과 동일한 이중 패턴).
 모델 artifact는 `mlflow-artifacts:/` 스킴으로 MLflow 서버를 경유하므로 파드가
 GCS에 직접 접근할 필요는 없습니다.
+
+## Paired Feast experiment runtime 경계 (#485)
+
+`experiment-runtime` namespace는 일반 앱, Airflow 일반 배치, Feast apply Job과
+분리됩니다. `experiment-runtime` KSA는 dev root의
+`autoresearch-dev-exp-runtime` GSA에만 연결하며, 기본값을 override하면 두 root의
+output이 같은 email을 가리키는지 plan 전에 대조합니다.
+
+namespace에는 Pod Security Admission `restricted`를 enforce/audit/warn으로 적용하고,
+동시 Job/Pod 4개, requests 4 vCPU/8 GiB, limits 8 vCPU/16 GiB의 ResourceQuota를
+둡니다. 컨테이너 LimitRange는 request 1 vCPU/2 GiB, default/max 2 vCPU/4 GiB입니다.
+이 quota는 namespace 사용량 상한일 뿐 GKE node allocatable capacity나 autoscaler
+확장을 예약·보장하지 않습니다. 실제 Job 활성화 전에는 node pool capacity를 별도로
+확인해야 합니다.
+
+`experiment-runtime-airflow-observer` Role은 실제 in-cluster Airflow
+`airflow/airflow` KSA 하나에만 Job/Pod get/list/watch와 Pod log get을 허용합니다.
+`autoresearch-batch` KPO KSA와 Helm chart 소유 `airflow-scheduler` KSA에는 이
+RoleBinding을 추가하지 않습니다. 첫 변경에서는 Airflow observer KSA와 runtime KSA
+모두 `jobs.create`를 갖지 않으며 output의 `job_creation_enabled`도 `false`입니다.
+생성 Job의 KSA, immutable image digest, deadline/TTL, restricted Pod 사양을 검증하는
+ValidatingAdmissionPolicy가 적용·검증되기 전에는 create 권한을 켜지 않습니다. runtime
+KSA에는 RoleBinding이 없습니다.
+
+ingress는 전면 차단합니다. egress는 kube-dns, GKE metadata
+`169.254.169.254:80`·`169.254.169.252:987/988`, Private Google APIs VIP
+`199.36.153.8/30:443`만 허용합니다. 외부 `0.0.0.0/0:443`, Redis PSC, Cloud SQL,
+MLflow egress와 Secret 접근 경로는 포함하지 않습니다.
+
+적용 전에는 dev/admin output의 identity 계약과 fail-closed 상태를 확인합니다.
+
+```bash
+terraform -chdir=terraform/envs/dev output experiment_runtime_contract
+terraform -chdir=terraform/admin/autoresearch-k8s output \
+  experiment_runtime_kubernetes_contract
+```
 
 ## Cluster 및 hash tag smoke test
 

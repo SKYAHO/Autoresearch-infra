@@ -16,6 +16,51 @@ oauth2-proxy Service(4180)를 로컬 4181로 접속한다(MLflow 로컬 4180과 
 사용자)로 로그인**한다. Kibana anonymous 자동 로그인은 9.2 호환성 문제로 폐기했다
 (#323). 로컬 HTTP port-forward라 Kibana secure cookie는 비활성이다. `elastic` 비번은
 `autoresearch-es-elastic-user` Secret에서 회수(문서/PR/채팅 미기재).
+허용 목록은 `kibana-oauth` Secret의 `authenticated-emails` 키에서 주입되며,
+oauth2-proxy는 이 파일만 이메일 접근 제한으로 사용한다.
+
+Terraform apply 전에 Secret 형식과 항목 수만 확인한다(값은 출력하지 않는다). 결과가
+실패하면 apply하지 말고 Secret의 `authenticated-emails`를 실제 팀원 이메일 한 줄씩으로
+수정한 뒤 다시 확인한다.
+
+```bash
+kubectl -n elastic get secret kibana-oauth \
+  -o jsonpath='{.data.authenticated-emails}' | base64 -d |
+  awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
+```
+
+이 preflight는 **형식과 항목 수만** 보장한다. 목록이 현재 팀 구성과 일치하는지,
+초기 예시 주소(`someone@gmail.com` 등)가 남아 있지 않은지는 검사하지 않는다.
+`--email-domain=*` 제거 이후 이 목록이 유일한 접근 경계이므로, 목록에서 빠진 팀원은
+로그인이 막히고 남아 있는 옛 주소는 계속 허용된다. `entries=N`이 예상 인원과 다르면
+값을 출력하지 말고 인원수로 대조한 뒤 진행한다. 예시 주소 잔존은 값 노출 없이 아래로
+확인한다(`placeholder_like=0`이어야 한다).
+
+```bash
+kubectl -n elastic get secret kibana-oauth \
+  -o jsonpath='{.data.authenticated-emails}' | base64 -d |
+  awk 'BEGIN{ph=0;other=0} { sub(/\r$/,""); if($0==""||$0~/^#/) next; if ($0 ~ /@example\.(com|org|net)$/ || $0 ~ /^(someone|user|admin)@/) ph++; else other++ } END{ print "placeholder_like=" ph "  other=" other }'
+```
+
+허용 목록에서 사용자를 제거할 때는 `authenticated-emails`를 갱신한 뒤
+`kibana-oauth-proxy` rollout restart와 완료 확인을 수행한다. oauth2-proxy v7.7.1은
+보호된 요청마다 세션 이메일을 allowlist로 재검사하므로, 제거된 사용자는 새 목록이
+반영된 pod에 다음 요청을 보낼 때 cookie가 삭제되고 403으로 거부된다. 계정 제거에는
+cookie-secret 회전이 필요하지 않다. 전체 사용자의 강제 재로그인이나 cookie 유출 대응은
+`elastic-k8s` README의 **전원 세션 무효화** 절차를 따른다.
+
+`elastic-k8s`는 수동 Terraform apply 경로이고 dev root drift workflow의 감시 대상도
+아니므로, apply 전 live pod는 저장소 설정과 다른 인가 상태로 남을 수 있다. CI 정적 검사는
+저장소 설정만 보장하며 클러스터 반영을 증명하지 않는다. plan상 변경은 Deployment의 in-place update이고,
+기본 RollingUpdate는 새 pod의 readiness를 기다려 교체하지만 `replicas: 1` 환경에서는
+스케줄·Secret 오류 시 서비스 단절이 가능하므로 운영 창에서 수행한다. operator는 승인된
+apply 뒤 `rollout status`와 아래 명령으로 실제 args에 `--email-domain`이 없는지 확인한 후
+허용·미허용 계정 smoke test를 수행한다(Secret 값은 출력하지 않는다).
+
+```bash
+kubectl -n elastic get deployment kibana-oauth-proxy \
+  -o jsonpath='{.spec.template.spec.containers[0].args}'
+```
 
 ```bash
 kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180

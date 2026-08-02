@@ -624,6 +624,7 @@ Airflow 기본 component와 batch pod는 서로 다른 GCP service account를 �
 | `autoresearch/autoresearch-app` | `autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com` | 앱 DB secret과 Redis CA 조회, cluster 한정 IAM 연결 token 발급 (#129, apply·검증 완료) |
 | `airflow/airflow` | `autoresearch-dev-airflow@autoresearch-503903.iam.gserviceaccount.com` | Airflow metadata DB, DAG/log bucket, OAuth secret |
 | `airflow/autoresearch-batch` | `autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com` | batch API key secret, raw data bucket, Feast GCS/BigQuery, Cloud Run proxy invoker |
+| `autoresearch-experiments/experiment-job` | `autoresearch-dev-exp-job@autoresearch-503903.iam.gserviceaccount.com` | Auto Research 결과 전용 GCS 버킷 객체 생성만; Kubernetes RBAC·Secret·DB·Redis 권한 없음 (#484, apply 전) |
 
 `autoresearch-batch` annotation은 아래 값이어야 한다.
 
