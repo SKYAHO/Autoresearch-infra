@@ -1,7 +1,5 @@
 terraform {
-  # >= 1.7.0: removed 블록(state에서만 분리, destroy 없이 forget) 사용 —
-  # #478 Vault 리소스 제거가 첫 사용처.
-  required_version = ">= 1.7.0"
+  required_version = ">= 1.6.0"
 
   required_providers {
     google = {

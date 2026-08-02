@@ -252,13 +252,14 @@ resource "google_project_iam_member" "dev_apply_roles" {
     "roles/run.admin",                                # Cloud Run v2 + service IAM
     "roles/servicenetworking.networksAdmin",          # Cloud SQL PSA peering
     "roles/networkconnectivity.consumerNetworkAdmin", # Redis PSC service connection policy
-    "roles/cloudkms.admin",                           # #478: vault_removed.tf 미대상 4개 중
-    # google_kms_crypto_key_iam_member.vault_unseal의 destroy(setIamPolicy)에
-    # 유일하게 필요. 다른 role은 KMS 리소스 IAM을 포함하지 않는다. 이 destroy가
-    # 포함된 apply가 승인·적용된 뒤 별도 PR/이슈로 이 role을 다시 회수한다 —
-    # 같은 apply에서 회수와 destroy를 동시에 두면 Terraform 병렬 실행 순서에
-    # 따라 destroy가 403으로 실패할 수 있다(권한 회수-destroy 동시 apply의
-    # ordering hazard, docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
+    "roles/cloudkms.admin",                           # #478: google_kms_crypto_key_iam_member.
+    # vault_unseal의 destroy(setIamPolicy)에 우선 필요하고, 승인 apply 이후에는
+    # kms_vault_orphan.tf가 남겨 둔 key ring/crypto key 2개를 계속 관리(drift
+    # 감지 refresh, 향후 rotation/IAM 변경 발생 시 update)하는 데 상시
+    # 필요하다 — 다른 role은 KMS 리소스 IAM/속성 변경을 포함하지 않는다.
+    # 그래서 이 role은 destroy 완료 후에도 **회수하지 않는다**(1차 리비전은
+    # 별도 후속 PR에서 회수 예정이었으나, kms_vault_orphan.tf 설계로 전환하며
+    # 폐기 — docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
   ])
   project = var.project_id
   role    = each.value

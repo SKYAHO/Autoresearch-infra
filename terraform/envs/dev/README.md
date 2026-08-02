@@ -31,7 +31,7 @@
 - IAP 전용 bastion host(`bastion.tf`, 외부 IP 없음) (#47/#50)
 - Airflow internal ILB 예약 내부 IP(`terraform output airflow_ilb_ip`)와 private DNS zone `dev.autoresearch.internal`(`dns.tf`) (#48/#51)
 - Airflow Google OAuth client 자격증명용 Secret Manager secret metadata (#54/#55)
-- Vault dev auto-unseal: 운영 경로는 #412에서 폐기, `vault.tf` 코드는 #478에서 삭제됐으나 승인 apply 전까지는 dev root state에 6개 리소스가 전부 남아 있음(KMS key ring/crypto key 2개는 forget 예정, GSA/WI 바인딩/custom role/key IAM binding 4개는 destroy 예정, `vault_removed.tf` 참고)
+- Vault dev auto-unseal: 운영 경로는 #412에서 폐기, `vault.tf` 코드는 #478에서 삭제됐으나 승인 apply 전까지는 dev root state에 6개 리소스가 전부 남아 있음(KMS key ring/crypto key 2개는 `kms_vault_orphan.tf`로 config 유지 — GCP에서 삭제 불가능한 리소스라 rotation만 제거하고 영구 관리, GSA/WI 바인딩/custom role/key IAM binding 4개는 destroy 예정)
 - Elasticsearch GCS snapshot 기반(`elastic.tf`): snapshot bucket, snapshot GSA + Workload Identity, bucket IAM (#102)
 - GitHub Actions WIF pusher SA(`github_actions.tf`): GAR/app image push, Airflow deployer
   (#121/#157/#187), 환경별 Feast apply SA(#424)
@@ -79,7 +79,7 @@ apply 경계는 코드에 구성되었지만 이 변경에서 실제 GCP/Kuberne
 | Bastion | `autoresearch-dev-bastion` (IAP 전용, 외부 IP 없음, #47/#50) |
 | DNS/ILB | private DNS zone `dev.autoresearch.internal`, Airflow ILB 예약 내부 IP `terraform output airflow_ilb_ip` (#48/#51) |
 | IAM | GKE node SA, app SA, Airflow SA, Airflow batch SA, 실험 Job SA, Cloud SQL/Secret/BigQuery/GCS/Workload Identity 권한 |
-| KMS | key ring `vault`, crypto key `vault_unseal` (#132, Vault 폐기·#478로 코드는 삭제됐으나 승인 apply 전까지 6개(2개 forget 예정 + GSA/WI 바인딩/custom role/key IAM binding 4개 destroy 예정) 모두 state에 남아 있음) |
+| KMS | key ring `vault`, crypto key `vault_unseal` (#132, Vault 폐기·`kms_vault_orphan.tf`로 영구 config 유지(rotation 제거, `prevent_destroy`) — 나머지 GSA/WI 바인딩/custom role/key IAM binding 4개는 승인 apply 시 destroy 예정, 그때까지 state에 남아 있음) |
 | Elastic snapshot | ES snapshot GCS bucket, snapshot GSA + Workload Identity (#102) |
 | CI pusher | GAR pusher SA, app image pusher SA, Airflow deployer SA, 코드 아카이브 업로더 SA, dev/prod Feast apply SA(WIF, #121/#157/#187/#238/#424) |
 

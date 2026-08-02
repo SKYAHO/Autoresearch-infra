@@ -1656,43 +1656,42 @@ Vault 운영 경로를 폐기**했다. 새 클러스터(#404)에는 Vault가 배
 `vault-k8s`는 admin-apply ROOTS에서도 제외돼 있었다. **#478에서 dev root의
 `vault.tf`와 `terraform/admin/vault-k8s/` root 코드를 저장소에서 완전히
 삭제했다.** 아래 KMS keyring/key·GSA·WI·IAM 리소스는 코드 삭제만으로는
-사라지지 않고 dev root state에 여전히 존재한다. `google_kms_crypto_key`의
-`prevent_destroy`는 리소스 블록 자체가 삭제된 뒤로는 보호막이 되지 않으므로
-(config가 없으면 lifecycle 검사가 실행되지 않는다), KMS key ring/crypto key
-**2개**만 `removed` 블록(`terraform/envs/dev/vault_removed.tf`,
-`lifecycle { destroy = false }`)으로 destroy 시도 자체를 막아 뒀다.
-나머지 GSA·WI 바인딩·custom role·key IAM binding **4개**는 `removed` 블록을
-두지 않았다 — Vault는 #412에서 영구 폐기됐고 git history로 언제든
-재생성 가능하므로, forget보다 실제 destroy가 최소 권한 원칙에 맞다(상세
-근거는 아래 설계 문서 참조). 즉 승인 후 apply는 **forget 2건 + destroy
-4건**으로 계획된다 — "GCP 쪽 변경 없음"이 아니다. 이 절은 그 정리가
-끝날 때까지의 이력과 잔여 자산을 설명하는 참고 문서다.
+사라지지 않고 dev root state에 여전히 존재한다.
+
+KMS key ring/crypto key **2개**는 GCP에서 애초에 삭제가 불가능한 리소스라(
+keyring은 삭제 API 자체가 없고, crypto key destroy는 리소스 자체 삭제는
+거부되지만 모든 CryptoKeyVersion의 파기를 실제로 예약한다), `removed`
+블록으로 Terraform 관리 밖으로 내보내는(forget) 방안 대신
+`terraform/envs/dev/kms_vault_orphan.tf`에 리소스 블록을 그대로 남기고
+`rotation_period`만 제거했다 — forget하면 state·config·drift 감지
+어디에도 남지 않아 이후 IAM 재바인딩이나 rotation 재활성화를 아무도
+감지할 수 없기 때문이다(claude-review 6차 지적). `prevent_destroy`는
+블록이 config에 있는 한 계속 작동한다.
+나머지 GSA·WI 바인딩·custom role·key IAM binding **4개**는 이 파일에
+포함하지 않았다 — Vault는 #412에서 영구 폐기됐고 git history로 언제든
+재생성 가능하므로, config 유지보다 실제 destroy가 최소 권한 원칙에 맞다.
+즉 승인 후 apply는 **key ring/crypto key 2개는 rotation 제거만 반영(0
+또는 1 to change) + 나머지 4개 destroy**로 계획된다 — "GCP 쪽 변경
+없음"이 아니다. 이 절은 그 정리가 끝날 때까지의 이력과 잔여 자산을
+설명하는 참고 문서다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d. keyring은 GCP 특성상 영구 삭제 불가. `removed` 블록으로 destroy 시도 자체를 막아 둠(코드는 삭제됐으나 live/state에는 존재) — **forget 대상** |
+| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | keyring은 GCP 특성상 영구 삭제 불가. `kms_vault_orphan.tf`에서 rotation 제거 + `prevent_destroy`로 영구 관리 — **config 유지, destroy·forget 아님** |
 | GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음. 코드는 삭제됐고 config 부재 상태로 남아 있어 승인 후 apply 시 **실제 destroy 대상** |
 | WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. namespace는 live에 없음(#404 재구축 이후 미배포). **실제 destroy 대상** |
 | KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족. **실제 destroy 대상**(key IAM binding + custom role 리소스 자체 둘 다) |
 
-주의: 위 리소스의 실제 state 제거는 이 문서만으로 수행하지 않는다. 승인
-후 `removed` 블록을 포함한 dev root apply를 실행하면 key ring/crypto key
-2개는 destroy 없이 state에서만 분리(forget)되고, 나머지 GSA/WI
-바인딩/custom role/key IAM binding 4개는 실제로 GCP에서 삭제된다.
-forget된 key는 "비용이 발생하지 않는 미사용 상태"가 아니다 — 아래 표의
-`rotation = 90d` 설정은 forget 후에도 live 리소스에 그대로 남아 GCP가
-90일마다 새 `CryptoKeyVersion`을 자동 생성하고, ENABLED 상태의 key
-version은 개별 과금 대상이다(software key 기준 버전당 월 $0.06). 그
-시점부터는 code에도 state에도 이 리소스가 없어 `terraform-drift.yml`도
-감지하지 못하므로, forget apply **전에** rotation을 해제하는 것을
-권장한다(그 시점엔 아직 state에 있어 절차가 명확하고, Terraform 밖 수동
-조작 창을 만들지 않는다):
-
-```bash
-gcloud kms keys update vault-unseal \
-  --keyring=autoresearch-dev-vault --location=asia-northeast3 \
-  --remove-rotation-schedule
-```
+주의: 위 리소스의 실제 state 정리는 이 문서만으로 수행하지 않는다. 승인
+후 dev root apply를 실행하면 key ring/crypto key 2개는 config에 남은 채
+rotation 속성만 in-place update되고(위 표의 `rotation = 90d`가 이 apply로
+제거된다 — GCP가 이후 신규 `CryptoKeyVersion`을 자동 생성하지 않으므로
+개별 과금(software key 기준 버전당 월 $0.06)도 그 시점부터 멈춘다), 나머지
+GSA/WI 바인딩/custom role/key IAM binding 4개는 실제로 GCP에서 삭제된다.
+`kms_vault_orphan.tf`가 config에 남아 있는 한 이 2개 리소스는
+`terraform-drift.yml`의 정기 drift 감지 대상에 계속 포함된다(수동
+`gcloud kms keys update --remove-rotation-schedule` 절차 불필요 — apply
+자체가 그 동작을 대체한다).
 
 상세 근거는
 `docs/superpowers/specs/2026-08-02-vault-removal-design.md`의 "dev root
@@ -1715,7 +1714,7 @@ state 분리 전략" 절을 참조한다.
 | `networkconnectivity.googleapis.com` | Redis Cluster PSC Service Connection Policy (#129) |
 | `serviceconsumermanagement.googleapis.com` | Redis Cluster service connectivity automation (#129) |
 | `container.googleapis.com` | GKE |
-| `cloudkms.googleapis.com` | Vault auto-unseal KMS key(#132) — 코드는 #478에서 삭제됐으나 live KMS 리소스가 남아 있어 당분간 필요 |
+| `cloudkms.googleapis.com` | Vault auto-unseal KMS key(#132) — Vault 코드는 #478에서 삭제됐으나, key ring/crypto key는 `kms_vault_orphan.tf`로 영구 관리하므로 계속 필요 |
 | `dns.googleapis.com` | 내부 private DNS zone (#48) |
 | `iap.googleapis.com` | bastion IAP TCP forwarding (#47) |
 | `oslogin.googleapis.com` | bastion OS Login SSH (#47) — 미활성 시 publickey 거부(#57) |

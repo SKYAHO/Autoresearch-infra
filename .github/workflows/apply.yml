@@ -219,11 +219,16 @@ jobs:
               # move+change 병존(이동+동시 속성 변경) 케이스의 주소 이동
               # 사실이 요약에서 누락되지 않게 한다. 두 헤더 모두 리소스
               # 주소만 담고 있어 속성값 비공개 원칙을 깨지 않는다.
-              # 'will no longer be managed by Terraform'은 #478에서 추가 —
-              # removed 블록(forget) 대상의 plan 헤더가 이 문구라 위 패턴
-              # 어디에도 매칭되지 않았다(terraform-drift.yml과 동일한 버그,
-              # 실측으로 확인). 이 승인 게이트가 apply Environment reviewer가
-              # 실제로 읽는 화면이라 drift 알림보다 영향이 크다.
+              # 'will no longer be managed by Terraform'은 #478 작업 중
+              # 추가 — removed 블록(forget) 대상의 plan 헤더가 이 문구라
+              # 위 패턴 어디에도 매칭되지 않았다(terraform-drift.yml과
+              # 동일한 버그, 실측으로 확인). #478 자체는 최종적으로
+              # removed 블록 대신 config 유지(kms_vault_orphan.tf,
+              # prevent_destroy)로 설계를 바꿔 이 문구를 만들지 않지만,
+              # 이 저장소의 다른 root가 향후 removed 블록을 쓸 때를 대비한
+              # 일반 방어 fix로 유지한다. 이 승인 게이트가 apply
+              # Environment reviewer가 실제로 읽는 화면이라 drift 알림보다
+              # 영향이 크다.
               grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# .+ will no longer be managed by Terraform|^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
@@ -320,11 +325,16 @@ jobs:
               # move+change 병존(이동+동시 속성 변경) 케이스의 주소 이동
               # 사실이 요약에서 누락되지 않게 한다. 두 헤더 모두 리소스
               # 주소만 담고 있어 속성값 비공개 원칙을 깨지 않는다.
-              # 'will no longer be managed by Terraform'은 #478에서 추가 —
-              # removed 블록(forget) 대상의 plan 헤더가 이 문구라 위 패턴
-              # 어디에도 매칭되지 않았다(terraform-drift.yml과 동일한 버그,
-              # 실측으로 확인). 이 승인 게이트가 apply Environment reviewer가
-              # 실제로 읽는 화면이라 drift 알림보다 영향이 크다.
+              # 'will no longer be managed by Terraform'은 #478 작업 중
+              # 추가 — removed 블록(forget) 대상의 plan 헤더가 이 문구라
+              # 위 패턴 어디에도 매칭되지 않았다(terraform-drift.yml과
+              # 동일한 버그, 실측으로 확인). #478 자체는 최종적으로
+              # removed 블록 대신 config 유지(kms_vault_orphan.tf,
+              # prevent_destroy)로 설계를 바꿔 이 문구를 만들지 않지만,
+              # 이 저장소의 다른 root가 향후 removed 블록을 쓸 때를 대비한
+              # 일반 방어 fix로 유지한다. 이 승인 게이트가 apply
+              # Environment reviewer가 실제로 읽는 화면이라 drift 알림보다
+              # 영향이 크다.
               grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# .+ will no longer be managed by Terraform|^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
