@@ -287,6 +287,28 @@ variable "gke_app_k8s_service_account" {
   default     = "autoresearch-app"
 }
 
+variable "experiment_runtime_k8s_namespace" {
+  description = "Paired Feast experiment runtime GSA에 Workload Identity로 매핑할 Kubernetes namespace."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_namespace) >= 1 && length(var.experiment_runtime_k8s_namespace) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_namespace))
+    error_message = "experiment_runtime_k8s_namespace must be a valid Kubernetes namespace name."
+  }
+}
+
+variable "experiment_runtime_k8s_service_account" {
+  description = "Paired Feast experiment runtime GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "experiment-runtime"
+
+  validation {
+    condition     = length(var.experiment_runtime_k8s_service_account) >= 1 && length(var.experiment_runtime_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_runtime_k8s_service_account))
+    error_message = "experiment_runtime_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
 variable "agent_orchestration_db_name" {
   description = "Agent Orchestration 전용 Cloud SQL database 이름."
   type        = string
@@ -350,6 +372,62 @@ variable "mlflow_k8s_service_account" {
   description = "MLflow GSA에 Workload Identity로 매핑할 Kubernetes service account."
   type        = string
   default     = "mlflow"
+}
+
+variable "experiment_job_k8s_namespace" {
+  description = "Auto Research 실험 Job 전용 Kubernetes namespace. admin/autoresearch-k8s와 같은 값을 사용한다."
+  type        = string
+  default     = "autoresearch-experiments"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_job_k8s_namespace))
+    error_message = "experiment_job_k8s_namespace은 유효한 Kubernetes namespace 이름이어야 합니다."
+  }
+}
+
+variable "experiment_job_k8s_service_account" {
+  description = "결과 저장 Workload Identity에 매핑할 실험 Job Kubernetes service account."
+  type        = string
+  default     = "experiment-job"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.experiment_job_k8s_service_account))
+    error_message = "experiment_job_k8s_service_account는 유효한 Kubernetes service account 이름이어야 합니다."
+  }
+}
+
+variable "experiment_results_bucket_location" {
+  description = "실험 결과 전용 GCS 버킷 location."
+  type        = string
+  default     = "asia-northeast3"
+}
+
+variable "experiment_results_bucket_storage_class" {
+  description = "실험 결과 전용 GCS 버킷 storage class."
+  type        = string
+  default     = "STANDARD"
+}
+
+variable "experiment_results_object_retention_days" {
+  description = "실험 결과 live 객체 보존 일수. 결과 조회·감사와 비용 상한을 위해 1일 이상 정수만 허용한다."
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.experiment_results_object_retention_days >= 1 && floor(var.experiment_results_object_retention_days) == var.experiment_results_object_retention_days
+    error_message = "experiment_results_object_retention_days는 1 이상의 정수여야 합니다."
+  }
+}
+
+variable "experiment_results_noncurrent_version_retention_days" {
+  description = "실험 결과의 archived generation 보존 일수. live 삭제 후 운영자 복구 창을 제공한다."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.experiment_results_noncurrent_version_retention_days >= 1 && floor(var.experiment_results_noncurrent_version_retention_days) == var.experiment_results_noncurrent_version_retention_days
+    error_message = "experiment_results_noncurrent_version_retention_days는 1 이상의 정수여야 합니다."
+  }
 }
 
 variable "mlflow_bucket_location" {
