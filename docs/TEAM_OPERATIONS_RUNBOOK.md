@@ -461,8 +461,11 @@ kubectl auth can-i patch configmaps -n loadtest --as="$runner_gsa"     # yes
 kubectl auth can-i get pods/exec -n loadtest --as="$runner_gsa"        # no
 kubectl auth can-i delete jobs -n loadtest --as="$runner_gsa"          # no
 kubectl auth can-i get services --subresource=proxy \
-  --resource-name=kube-prometheus-stack-prometheus \
+  --resource-name=http:kube-prometheus-stack-prometheus:9090 \
   -n monitoring --as="$snapshot_gsa"                                   # yes
+kubectl auth can-i get services --subresource=proxy \
+  --resource-name=kube-prometheus-stack-prometheus \
+  -n monitoring --as="$snapshot_gsa"                                   # no
 kubectl auth can-i get services --subresource=proxy \
   --resource-name=other-service -n monitoring --as="$snapshot_gsa"     # no
 ```
