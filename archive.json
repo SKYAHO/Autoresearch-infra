@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T06:09:56Z",
+  "generated_at": "2026-08-02T06:13:04Z",
   "reports": [
+    {
+      "number": 502,
+      "title": "fix: rerank baseline serving digest 복원",
+      "author": "bbungjun",
+      "merged_at": "2026-08-02T06:12:41Z",
+      "summary_ko": [
+        "서빙 배포 매니페스트의 컨테이너 이미지 digest를 rerank baseline 이미지 버전으로 복원합니다.",
+        "이전 승격 작업으로 변경되었던 서빙 이미지를 부하테스트 기준 이미지(sha256:f323791e...)로 재설정합니다.",
+        "실제 클러스터 배포 이미지를 일치시켜 loadtest 실행 시 정확한 baseline 성능 비교가 가능하도록 합니다."
+      ],
+      "report_url": "pr/502/"
+    },
     {
       "number": 499,
       "title": "feat: ArgoCD OIDC Secret Manager 정본 2종을 IaC로 편입",
