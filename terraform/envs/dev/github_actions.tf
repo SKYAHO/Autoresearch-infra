@@ -237,12 +237,20 @@ moved {
 # 2개를 다루는 모든 dev root apply(이번 승인 apply와 향후 rotation
 # 재도입·IAM 재바인딩 등)를 `dev_apply` SA가 실행하므로 영구 유지한다 —
 # **drift 감지(terraform-drift.yml)와는 무관**하다(그쪽은 project-level
-# `roles/viewer`만 가진 `CI_SA`로 돈다). 근거 조사 전체는
-# docs/superpowers/specs/2026-08-02-vault-removal-design.md(claude-review
-# 7차 지적) 참조. project 전체 key에 대한 cryptoKeyVersions.destroy까지
-# 포함해 실제 필요(keyRings.get + cryptoKeys.get/update/setIamPolicy)보다
-# 넓지만, 이 PR 범위의 custom role 축소는 하지 않는다(같은 문서 8차
-# 지적 — 후속 검토 여지로 남겨 둠).
+# `roles/viewer`만 가진 `CI_SA`로 돈다). apply 정상 상태에서 실제 호출되는
+# API는 keyRings.get + cryptoKeys.get/update/setIamPolicy뿐이다.
+# `roles/cloudkms.viewer`는 get/list만 있고 update/setIamPolicy가 없어
+# 부족하다(rotation 값 변경, 향후 key IAM 재바인딩에 필요). 다만
+# `cloudkms.admin`은 project 내 다른 모든 key까지 포함해
+# cryptoKeyVersions.destroy(비가역)까지 부여한다 — IAM 자체는 이 초과분을
+# 이 2개 리소스로 제한하지 못한다(role은 project 단위, 더 좁은 predefined
+# role은 update/setIamPolicy가 없음). 실제 방어선은 코드 쪽 2겹이다:
+# ①이 2개 리소스의 `prevent_destroy`가 Terraform 경로의 destroy를 막고,
+# ②`apply.yml`의 사람 승인 게이트가 이 SA로 실행되는 모든 apply를 리뷰
+# 없이 실행되지 않게 막는다 — SA 자격 자체가 Terraform 밖에서 직접
+# 오남용되는 경로까지는 어느 쪽도 막지 못한다. custom role로 좁히는 후속
+# 작업은 하지 않는다(근거 조사 전체는
+# docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
 resource "google_project_iam_member" "dev_apply_roles" {
   for_each = toset([
     "roles/compute.networkAdmin",                     # VPC/subnet/router/NAT/route/firewall/address

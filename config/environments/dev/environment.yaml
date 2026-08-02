@@ -50,4 +50,22 @@ state:
     # git 워킹트리에 조용히 생겨 혼란을 준다 — 반드시 spec 문서의
     # "승인 후 실행할 vault-k8s admin root state 정리 절차"대로 root
     # 코드를 먼저 복원한 뒤 실행한다.
+    #
+    # 이 항목이 자동 워크플로우에서 실행되지 않는다는 보장(claude-review
+    # 10차 지적): `apply.yml`의 `ADMIN_ROOTS`는 vault-k8s를 정적으로
+    # 제외한 목록이라(같은 파일 주석 참조) 이 항목이 여기 남아 있어도
+    # apply job이 이 root를 순회하지 않는다. `lint.yml`이 실행하는
+    # `scripts/test-environment-catalog.rb`는 임시 디렉터리에 쓴 합성
+    # YAML로 카탈로그 로딩 로직만 검증할 뿐, 실 `terraform/admin/vault-k8s`
+    # 디렉터리나 `terraform init`을 건드리지 않는다 — 즉 두 CI 경로 모두
+    # 이 항목 존재로 인한 실 위험이 없고, 위험은 사람이 이 root를 대상으로
+    # 직접 CLI 명령을 실행할 때만 있다(위 경고가 그 경로용).
+    #
+    # 정리 시점: 이 파일, `scripts/environment_catalog.rb`의
+    # `TERRAFORM_ROOTS`/`ROOT_VARIABLE_KEYS`, `scripts/test-environment-catalog.rb`의
+    # 픽스처까지 총 3곳이 vault-k8s를 참조한다. 승인 apply +
+    # `terraform/admin/vault-k8s` state 정리(4개 `state rm`) 완료 후
+    # 이 3곳을 함께 제거한다 — 체크리스트는
+    # docs/superpowers/specs/2026-08-02-vault-removal-design.md의
+    # "승인 후 실행할 vault-k8s admin root state 정리 절차" 절 참조.
     terraform/admin/vault-k8s: admin/vault-k8s/

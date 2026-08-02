@@ -201,19 +201,25 @@ kubectl -n vault exec vault-0 -- vault status   # Sealed false 확인
 제거 → PVC 정리 → (필요 시에만) dev root KMS key 정리. 순서를 어기면
 Raft 데이터 복호화가 영구 불능이 된다.
 
-## 머지~승인 apply 사이 예상 drift (claude-review 9차 지적, #478)
+## 머지~승인 apply 사이 예상 drift (claude-review 9/10차 지적, #478)
 
 `terraform/envs/dev/vault.tf` 삭제(#478) 머지 후, 승인 apply(`kms_vault_orphan.tf`의
 rotation 제거 update + 아래 4개 destroy)를 실행하기 전까지는
-`terraform-drift.yml`이 매일 09:23 KST에 이 4개 리소스를 drift로 감지한다:
+`terraform-drift.yml`이 매일 09:23 KST에 **아래 5개 리소스**를 drift로
+감지한다 — `google_kms_crypto_key.vault_unseal`도 포함된다(claude-review
+10차 지적으로 정정: 머지 직후 config에는 `rotation_period`가 이미 빠져
+있지만 live/state에는 아직 기존 `rotation_period = "7776000s"`가 남아
+있으므로, 이 리소스도 **in-place update 대상**으로 매일 plan에 함께
+잡힌다 — 승인 apply가 실행해야 할 변경 자체가 정확히 이 상태다):
 
-- `google_service_account.vault`
-- `google_service_account_iam_member.vault_wi`
-- `google_project_iam_custom_role.vault_unseal`
-- `google_kms_crypto_key_iam_member.vault_unseal`
+- `google_kms_crypto_key.vault_unseal` (in-place update, rotation 제거)
+- `google_service_account.vault` (destroy)
+- `google_service_account_iam_member.vault_wi` (destroy)
+- `google_project_iam_custom_role.vault_unseal` (destroy)
+- `google_kms_crypto_key_iam_member.vault_unseal` (destroy)
 
-**동작**: `terraform plan -detailed-exitcode`는 이 4개 destroy만 있고
-add/change가 0이므로 exitcode `2`를 반환한다. workflow의 "결과 판정" 스텝은
+**동작**: `terraform plan -detailed-exitcode`는 이 1개 update + 4개
+destroy 때문에 exitcode `2`를 반환한다. workflow의 "결과 판정" 스텝은
 exitcode가 `0`이 아니면 무조건 `exit 1`이므로 **job 자체가 매일 실패
 처리된다**(정상 동작, 실제 오류 아님). 이슈는 `[DRIFT] dev root
 코드-인프라 불일치` 제목 + `bug`/`terraform`/`gcp` 라벨로 첫날 1회만
@@ -221,11 +227,14 @@ exitcode가 `0`이 아니면 무조건 `exit 1`이므로 **job 자체가 매일 
 (같은 제목의 이슈가 매일 새로 생기지는 않는다).
 
 **진짜 새 drift와 구분하는 방법**: 각 코멘트의 "변경 리소스 요약" 블록에는
-resource 주소가 그대로 남는다(`# google_service_account.vault will be
-destroyed` 형태). 매일 코멘트 내용이 정확히 위 4개 주소 + `Plan: 0 to
-add, 0 to change, 4 to destroy.`와 같다면 승인 apply 대기 중인 예상
-drift다. 주소가 5개 이상이거나, add/change가 0이 아니거나, destroy
-개수가 4가 아니면 Vault와 무관한 새 drift이므로 별도로 조사한다. 승인
-apply 완료 후에는 이 4개 리소스가 state에서 사라지므로 이 절은 더 이상
-적용되지 않는다 — apply 완료 후 첫 drift 실행이 exitcode 0(또는 다른
-사유의 drift만 남음)인지 확인해 마무리한다.
+resource 주소가 그대로 남는다(`will be destroyed`/`will be updated
+in-place` 헤더 형태 — `terraform-drift.yml`의 allowlist 정규식
+`# .+ will be `가 두 헤더 모두 매치한다). 매일 코멘트 내용이 정확히 위
+5개 주소 + `Plan: 0 to add, 1 to change, 4 to destroy.`와 같다면 승인
+apply 대기 중인 예상 drift다. 주소가 6개 이상이거나, add가 0이 아니거나,
+change/destroy 개수가 각각 1/4가 아니면 Vault와 무관한 새 drift이므로
+별도로 조사한다. 승인 apply 완료 후에는 이 5개 리소스가 모두
+수렴하므로(4개는 state에서 사라지고, crypto key는 in-place update가
+반영돼 더 이상 diff가 없음) 이 절은 더 이상 적용되지 않는다 — apply
+완료 후 첫 drift 실행이 exitcode 0(또는 다른 사유의 drift만 남음)인지
+확인해 마무리한다.

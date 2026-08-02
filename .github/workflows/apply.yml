@@ -221,9 +221,8 @@ jobs:
               # 주소만 담고 있어 속성값 비공개 원칙을 깨지 않는다.
               #
               # 'will no longer be managed by Terraform'(removed 블록/forget
-              # 헤더)은 #478 작업 중 한때 여기서 뺐다가 되돌렸다
-              # (claude-review 7차 지적으로 뺐으나 8차 지적으로 재검토) —
-              # dev root에는 지금 removed 블록이 없어 이 alternative가
+              # 헤더)도 포함한다 — dev root에는 지금 removed 블록이 없어
+              # 이 alternative가
               # 오늘 당장은 매치되지 않지만, `^Plan: [0-9]`는 항상 매치되므로
               # 이 alternative가 빠지면 미래에 dev root에 removed 블록이
               # 하나라도 추가될 때 이 요약이 'Plan: 0 to add, 0 to change,
@@ -336,10 +335,10 @@ jobs:
               # #312류, destroy=false)이 실제로 만드는 plan 헤더라 이 admin
               # roots 스텝에서 매치 동작이 exercise된다. dev root 전용
               # `terraform-plan.yml`/`terraform-drift.yml`/위 dev root
-              # 스텝에도 같은 alternative를 둔다(claude-review 8차 지적 —
-              # dev root에 removed 블록이 없어 오늘은 매치되지 않아도, 빠져
-              # 있으면 미래에 dev root가 removed 블록을 쓸 때 주소 정보가
-              # 조용히 사라지는 실질적 회귀 위험이 있다). 이 승인 게이트가
+              # 스텝에도 같은 alternative를 둔다 — dev root에 removed
+              # 블록이 없어 오늘은 매치되지 않아도, 빠져 있으면 미래에
+              # dev root가 removed 블록을 쓸 때 주소 정보가 조용히
+              # 사라지는 실질적 회귀 위험이 있다. 이 승인 게이트가
               # apply Environment reviewer가 실제로 읽는 화면이라 drift
               # 알림보다 영향이 크다.
               grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# .+ will no longer be managed by Terraform|^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' "$d/plan.txt" || echo '(요약 없음)'

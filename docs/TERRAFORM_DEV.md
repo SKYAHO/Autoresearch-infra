@@ -1670,10 +1670,17 @@ keyring은 삭제 API 자체가 없고, crypto key destroy는 리소스 자체 �
 나머지 GSA·WI 바인딩·custom role·key IAM binding **4개**는 이 파일에
 포함하지 않았다 — Vault는 #412에서 영구 폐기됐고 git history로 언제든
 재생성 가능하므로, config 유지보다 실제 destroy가 최소 권한 원칙에 맞다.
-즉 승인 후 apply는 **key ring/crypto key 2개는 rotation 제거만 반영(0
-또는 1 to change) + 나머지 4개 destroy**로 계획된다 — "GCP 쪽 변경
-없음"이 아니다. 이 절은 그 정리가 끝날 때까지의 이력과 잔여 자산을
-설명하는 참고 문서다.
+즉 승인 후 apply는 **key ring/crypto key 2개 중 crypto key만 rotation
+제거로 in-place update(1 to change, key ring은 변경 없음) + 나머지 4개
+destroy**로 계획된다 — "GCP 쪽 변경 없음"이 아니다. 머지 시점부터 이
+apply 실행 전까지는 이 update가 항상 대기 중이므로(`rotation_period`가
+config에서는 이미 빠졌지만 live/state에는 아직 남아 있음), 그 사이
+매일 도는 `terraform-drift.yml`의 plan에도 이 in-place update가
+`google_kms_crypto_key.vault_unseal will be updated in-place` 형태로
+매번 함께 잡힌다(claude-review 10차 지적 — 자세한 내용은
+`docs/VAULT_OPERATIONS_RUNBOOK.md`의 "머지~승인 apply 사이 예상 drift"
+절 참조). 이 절은 그 정리가 끝날 때까지의 이력과 잔여 자산을 설명하는
+참고 문서다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|

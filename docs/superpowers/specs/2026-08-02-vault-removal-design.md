@@ -77,10 +77,14 @@ root처럼 `removed` 블록을 쓸 수 없는 이유는, 이 PR이 root 디렉�
 
 ## 승인 후 실행할 vault-k8s admin root state 정리 절차 (이 PR에 미포함)
 
-dev root 6개 리소스는 아래 절차 대신 위 "dev root state 분리 전략"의
-`removed` 블록 apply로 처리한다. 이 절차는 `terraform/admin/vault-k8s/`
+dev root 잔여 6개는 `kms_vault_orphan.tf` 유지 2개(rotation 제거
+in-place update) + 일반 destroy 4개로 처리한다(최종 전략, 아래
+"dev root state 분리 전략" 절 참조 — `removed` 블록은 채택하지 않았고
+현재 코드에도 없다). 이 절차는 `terraform/admin/vault-k8s/`
 root(디렉터리 자체가 이 PR로 삭제돼 `removed` 블록을 넣을 config가
-없는 root)의 4개 K8s 리소스 전용이다.
+없는 root)의 4개 K8s 리소스 전용이다(claude-review 10차 지적 — 이전
+서술이 "removed 블록"·"6개"로 남아 있어 같은 문서의 최종 결정과
+충돌했다).
 
 **최초 초안의 절차는 그대로 실행하면 동작하지 않는다**(claude-review
 지적, 2026-08-02 2차). 삭제된 `terraform/admin/vault-k8s/versions.tf`의
@@ -130,6 +134,15 @@ git status --short terraform/admin   # 아무것도 남지 않아야 함
 state가 비면 원격 GCS state 객체도 정리 대상이나, 실제 삭제(버킷 오브젝트
 제거)는 별도로 재확인 후 수행한다.
 
+```bash
+# 5) state 정리 완료 후, 카탈로그 3곳에서 vault-k8s 항목 제거(아래 설명 참조)
+#    - config/environments/dev/environment.yaml (state.roots)
+#    - scripts/environment_catalog.rb (TERRAFORM_ROOTS, ROOT_VARIABLE_KEYS)
+#    - scripts/test-environment-catalog.rb (VALID_CATALOG 픽스처)
+#    제거 후 로컬 검증:
+ruby scripts/test-environment-catalog.rb
+```
+
 **카탈로그에 `vault-k8s` 항목이 남아 있는 이유**: `scripts/environment_catalog.rb`의
 `TERRAFORM_ROOTS`/`ROOT_VARIABLE_KEYS`와
 `config/environments/dev/environment.yaml`의 `state.roots`에는 root
@@ -139,6 +152,19 @@ backend-config 생성에 의존하므로, state 정리가 끝나기 전까지 �
 항목을 지우면 이 복구 절차 자체가 동작하지 않는다. 두 파일 모두에
 "state 정리 완료 전까지 유지" 주석을 남겨 다음 정리 작업에서 실수로
 지워지는 것을 막는다.
+
+**이 항목이 남아 있는 동안 CI가 안전한 이유(claude-review 10차 지적)**:
+`.github/workflows/apply.yml`의 `ADMIN_ROOTS`는 vault-k8s를 정적으로
+제외한 목록이라(같은 파일 주석 참조) 이 카탈로그 항목이 있어도 apply
+job이 이 root를 순회하지 않는다. `.github/workflows/lint.yml`이 실행하는
+`scripts/test-environment-catalog.rb`는 실 디렉터리가 아니라 임시
+디렉터리에 쓴 합성 YAML로 카탈로그 로딩 로직만 검증하므로(`terraform
+init`을 호출하지 않음), 이 항목의 존재 자체로 CI가 실 `vault-k8s`
+디렉터리를 건드릴 경로는 없다. 위험은 사람이 이 root를 대상으로 CLI를
+직접 실행할 때만 있고, 그 경로는 `environment.yaml`의 경고 주석과 이
+절의 절차로 방어한다. **추적**: 카탈로그 3곳(위 5단계)을 지우는 작업은
+이 문서가 그 자체로 체크리스트 역할을 한다 — state 정리(1~4단계) 완료
+직후 5단계를 실행하는 것으로 별도 이슈 없이 이 절차 안에서 완결한다.
 
 ## dev root state 분리 전략 — `removed` 블록에서 config 유지(prevent_destroy)로 (claude-review 지적 반영)
 
@@ -675,6 +701,69 @@ add/change가 0이 아니거나 destroy 개수가 다르면 별도 조사가 필
 새 drift다. 이 판별 기준을 `docs/VAULT_OPERATIONS_RUNBOOK.md`에 새
 절("머지~승인 apply 사이 예상 drift")로 추가하고, `terraform-drift.yml`
 헤더 주석에서 그 절을 참조하도록 했다.
+
+## claude-review 10차 지적 (2026-08-02, PR #500)
+
+라운드 9 수정 후 재요청한 리뷰에서 6건이 지적됐다(라운드 9의 3건에서
+증가 — 5→3→6으로 단조 수렴이 아니었다. 그중 1건은 **라운드 9 수정
+자체의 사실 오류**를 지적한 CRITICAL 항목이었다).
+
+**이해도 확인 답변(1, CRITICAL) — 라운드 9에서 작성한 "머지~승인 apply
+사이 예상 drift" 기준선이 틀렸다는 지적**: 맞다. 라운드 9 문서는
+기준선을 "destroy 대상 4개 주소, `Plan: 0 to add, 0 to change, 4 to
+destroy.`"로 서술했는데, `google_kms_crypto_key.vault_unseal`의
+rotation 제거도 in-place update로 매일 함께 잡힌다는 사실이 빠져
+있었다 — 머지 직후 config에는 이미 `rotation_period`가 없지만 live/
+state에는 승인 apply 전까지 기존 값이 남아 있어, 이 리소스도 매일 plan
+에서 diff로 뜬다. 잘못된 기준선을 쓰면 실제 정상 drift(1 update + 4
+destroy)가 "정의되지 않은 6번째 리소스처럼" 보여 매일 "새 drift"로
+오판될 위험이 있었다. `docs/VAULT_OPERATIONS_RUNBOOK.md`의 해당 절,
+`kms_vault_orphan.tf`의 crypto key 코멘트, `docs/TERRAFORM_DEV.md`의
+"(0 또는 1 to change)"라는 모호한 서술을 모두 "5개 주소, 1 to change +
+4 to destroy"로 정정했다.
+
+**이해도 확인 답변(2) — 위 정정과 짝을 이루는 지적, `TERRAFORM_DEV.md`의
+"GCP 쪽 변경 없음"류 서술 재확인**: 답변(1)의 정정에 포함해 함께
+처리했다 — 승인 apply는 "변경 없음"이 아니라 crypto key 1개
+in-place update를 실제로 수행한다는 점을 명시했다.
+
+**이해도 확인 답변(3) — `roles/cloudkms.admin`이 project 전체 key의
+`cryptoKeyVersions.destroy`까지 포함하는데, 이 초과 권한을 실제로
+제한하는 것이 무엇인지**: 정직하게 답하면 IAM 자체에는 이 초과분을
+kms_vault_orphan.tf의 2개 리소스로 좁힐 방법이 없다(role은 project
+단위 부여이고, 필요한 update/setIamPolicy를 가진 더 좁은 predefined
+role이 없다). 실제 방어는 코드 쪽 2겹뿐이다: ①이 2개 리소스의
+`prevent_destroy`가 Terraform 경로의 destroy를 막고, ②`apply.yml`의
+사람 승인 게이트가 이 SA로 실행되는 모든 apply를 리뷰 없이 실행되지
+않게 막는다. SA 자격 자체가 Terraform 밖에서(예: SA 키 탈취) 직접
+오남용되는 경로는 어느 쪽도 막지 못한다는 한계를 그대로 인정하고
+`github_actions.tf`의 `dev_apply_roles` 주석에 명시했다.
+
+**이해도 확인 답변(4) — `environment.yaml`의 vault-k8s 카탈로그
+항목이 CI에서 실제로 안전한지, 그리고 정리 시점을 추적하는 방법**:
+`apply.yml`의 `ADMIN_ROOTS`가 vault-k8s를 정적으로 제외하고,
+`lint.yml`이 돌리는 `scripts/test-environment-catalog.rb`는 임시
+디렉터리의 합성 YAML만 검증할 뿐 `terraform init`을 호출하지 않으므로
+실 디렉터리를 건드리지 않는다 — 두 경로 모두 실 위험이 없음을
+확인했다. 카탈로그 3곳(`environment.yaml`, `environment_catalog.rb`의
+`TERRAFORM_ROOTS`/`ROOT_VARIABLE_KEYS`, `test-environment-catalog.rb`
+픽스처)을 지우는 작업은 "승인 후 실행할 vault-k8s admin root state
+정리 절차" 안에 5단계로 추가해, 이 문서 자체가 체크리스트 역할을
+하도록 했다(별도 이슈 없이 state rm 직후 실행).
+
+**이해도 확인 답변(5) — 설계 문서 안에서 "removed 블록"·"6개"로 남은
+서술이 최종 결정(kms_vault_orphan.tf 유지 2개 + destroy 4개)과
+충돌한다는 지적**: "승인 후 실행할 vault-k8s admin root state 정리
+절차" 절의 도입부가 초기 설계안 문구를 그대로 남기고 있었다 — 최종
+전략을 반영해 정정했다.
+
+**이해도 확인 답변(6, non-blocking) — 여러 파일의 "claude-review N차
+지적" 회차 인용이 문서 안에서 근거 없이 나열돼 가독성을 해친다는
+지적**: `kms_vault_orphan.tf`를 전체 재작성해 회차 인용 없이 실질
+근거만 남기고 이 설계 문서 하나로 investigative history를 모으도록
+정리했다. `terraform-drift.yml`/`terraform-plan.yml`/`apply.yml`의
+grep 정규식 설명 코멘트에서도 회차 인용을 제거하고 실질 이유(정규식이
+왜 필요한지)만 남겼다.
 
 ## 완료 조건
 

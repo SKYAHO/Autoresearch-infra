@@ -79,8 +79,7 @@ jobs:
           # 렌더링)에서 주소 이동 사실이 누락되지 않게 한다.
           #
           # 'will no longer be managed by Terraform'(removed 블록/forget
-          # 헤더)은 #478 작업 중 한때 뺐다가 되돌렸다(claude-review 7차
-          # 지적으로 뺐으나 8차 지적으로 재검토) — dev root(`terraform/envs/dev`)에는
+          # 헤더)도 포함한다 — dev root(`terraform/envs/dev`)에는
           # 지금 removed 블록이 없어 이 alternative가 오늘 당장은 매치되지
           # 않지만, `^Plan: [0-9]`는 항상 매치되므로 이 alternative가
           # 빠지면 미래에 dev root에 removed 블록이 하나라도 추가될 때
