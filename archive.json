@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-02T03:06:07Z",
+  "generated_at": "2026-08-02T03:28:31Z",
   "reports": [
+    {
+      "number": 489,
+      "title": "fix: oauth2-proxy 이메일 allowlist 우회 제거 (#488)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-02T03:28:12Z",
+      "summary_ko": [
+        "MLflow 및 Kibana의 oauth2-proxy 설정에서 `--email-domain=*` 인자를 제거하여 허용 이메일 목록 거부 우회를 차단했습니다.",
+        "CI `lint` 워크플로우에 정적 검수 스크립트와 self-test를 추가하여 허용 도메인 우회 설정의 재도입을 방지했습니다.",
+        "MLflow 및 Kibana 운영 가이드와 설계 문서에 이메일 허용 목록 사전 점검 및 강제 세션 무효화 절차를 작성했습니다."
+      ],
+      "report_url": "pr/489/"
+    },
     {
       "number": 486,
       "title": "feat: 리랭킹 부하테스트 인프라 격리",
