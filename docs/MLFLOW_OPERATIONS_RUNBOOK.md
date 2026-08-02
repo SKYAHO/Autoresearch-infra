@@ -39,7 +39,7 @@ Secret 형식과 항목 수만 확인한다(값은 출력하지 않는다). 성�
 ```bash
 kubectl -n mlflow get secret mlflow-oauth \
   -o jsonpath='{.data.authenticated-emails}' | base64 -d |
-  awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@]+@[^[:space:]@]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
+  awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
 ```
 
 허용 목록에서 사용자를 제거할 때는 `authenticated-emails`를 갱신한 뒤

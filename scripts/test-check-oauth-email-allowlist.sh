@@ -41,4 +41,28 @@ if ! "$real_grep" -Fq 'run: scripts/test-check-oauth-email-allowlist.sh' \
   exit 1
 fi
 
+fixture="$test_dir/repo"
+mkdir -p "$fixture/deploy/mlflow" "$fixture/terraform/admin/elastic-k8s"
+cp "$repo_root/deploy/mlflow/oauth2-proxy.yaml" "$fixture/deploy/mlflow/"
+cp "$repo_root/terraform/admin/elastic-k8s/oauth2_proxy.tf" \
+  "$fixture/terraform/admin/elastic-k8s/"
+
+printf '%s\n' '            - --email-domain=*' \
+  >> "$fixture/deploy/mlflow/oauth2-proxy.yaml"
+if OAUTH_ALLOWLIST_CHECK_ROOT="$fixture" \
+  "$repo_root/scripts/check-oauth-email-allowlist.sh" > "$test_dir/output" 2>&1; then
+  echo "FAIL: --email-domain 재도입을 잡지 못함" >&2
+  exit 1
+fi
+
+sed -i.bak '$d' "$fixture/deploy/mlflow/oauth2-proxy.yaml"
+rm "$fixture/deploy/mlflow/oauth2-proxy.yaml.bak"
+printf '%s\n' '            dynamic "env_from" {' '              content {}' '            }' \
+  >> "$fixture/terraform/admin/elastic-k8s/oauth2_proxy.tf"
+if OAUTH_ALLOWLIST_CHECK_ROOT="$fixture" \
+  "$repo_root/scripts/check-oauth-email-allowlist.sh" > "$test_dir/output" 2>&1; then
+  echo "FAIL: dynamic env_from을 잡지 못함" >&2
+  exit 1
+fi
+
 echo "PASS: grep 오류는 allowlist 검사 실패로 처리됨"

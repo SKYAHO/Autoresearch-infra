@@ -4,9 +4,14 @@
 # authenticated-emails-file만 이메일 제한으로 사용하도록 정적 검사한다.
 set -eu
 
-# 어느 작업 디렉터리에서 실행해도 저장소 기준으로 검사한다.
-repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
-cd "$repo_root"
+# 어느 작업 디렉터리에서 실행해도 저장소 기준으로 검사한다. self-test는
+# OAUTH_ALLOWLIST_CHECK_ROOT로 격리 fixture를 지정할 수 있다.
+script_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
+repo_root="${OAUTH_ALLOWLIST_CHECK_ROOT:-$script_root}"
+if ! cd "$repo_root"; then
+  echo "ERR 검사 root에 접근할 수 없음 ($repo_root)" >&2
+  exit 1
+fi
 
 FAIL=0
 email_domain_pattern='--email-domain([^[:alnum:]-]|$)'
@@ -106,7 +111,7 @@ check_mapping "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
   'path[[:space:]]*=[[:space:]]*"authenticated-emails"'
 check_no_env_from "MLflow" "deploy/mlflow/oauth2-proxy.yaml" '^[[:space:]]*envFrom:'
 check_no_env_from "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
-  '^[[:space:]]*env_from[[:space:]]*\{'
+  '^[[:space:]]*(env_from[[:space:]]*\{|dynamic[[:space:]]+"env_from"[[:space:]]*\{)'
 
 # 대상이 늘어날 때 domain allowlist나 환경변수 기반 우회 설정이 조용히
 # 추가되지 않도록 deploy/와 terraform/의 배포 manifest·설정을 검사한다.
