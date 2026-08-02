@@ -82,7 +82,13 @@ check_no_env_from() {
     echo "ERR $label: envFrom 기반 Secret 전체 주입은 허용하지 않음 ($file)"
     FAIL=1
   else
-    echo "OK  $label: 명시적 Secret key 주입만 사용"
+    grep_status=$?
+    if [ "$grep_status" -eq 1 ]; then
+      echo "OK  $label: 명시적 Secret key 주입만 사용"
+    else
+      echo "ERR $label: envFrom 검사 실행 실패 (grep exit=$grep_status)"
+      FAIL=1
+    fi
   fi
 }
 
