@@ -1656,22 +1656,28 @@ Vault 운영 경로를 폐기**했다. 새 클러스터(#404)에는 Vault가 배
 `vault-k8s`는 admin-apply ROOTS에서도 제외돼 있었다. **#478에서 dev root의
 `vault.tf`와 `terraform/admin/vault-k8s/` root 코드를 저장소에서 완전히
 삭제했다.** 아래 KMS keyring/key·GSA·WI·IAM 리소스는 코드 삭제만으로는
-사라지지 않고 각 root의 원격 state에 여전히 존재하며, 실제 GCP
-삭제(`terraform state rm` 후 필요 시 콘솔/gcloud 정리)는 별도 승인을 받은
-뒤 진행한다. 이 절은 그 정리가 끝날 때까지의 이력과 잔여 자산을 설명하는
-참고 문서다.
+사라지지 않고 dev root state에 여전히 존재한다. `google_kms_crypto_key`의
+`prevent_destroy`는 리소스 블록 자체가 삭제된 뒤로는 보호막이 되지 않으므로
+(config가 없으면 lifecycle 검사가 실행되지 않는다), 실수로 destroy가
+계획되는 것을 막기 위해 dev root에 6개 리소스 전부에 대한 `removed`
+블록(`terraform/envs/dev/vault_removed.tf`, `lifecycle { destroy = false
+}`)을 이미 코드로 추가해 뒀다. 이 블록을 반영하는 apply(state에서만
+forget, GCP 쪽 변경 없음)는 별도 승인을 받은 뒤 진행한다. 이 절은 그
+정리가 끝날 때까지의 이력과 잔여 자산을 설명하는 참고 문서다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d, key `prevent_destroy`. keyring은 GCP 특성상 삭제 불가. 코드는 삭제됐으나 live/state에는 존재 |
-| GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음. 코드는 삭제됐으나 live/state에는 존재 |
-| WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. namespace는 live에 없음(#404 재구축 이후 미배포) |
-| KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족 |
+| KMS keyring / key | `autoresearch-dev-vault` / `vault-unseal` | rotation 90d. keyring은 GCP 특성상 영구 삭제 불가. `removed` 블록으로 destroy 시도 자체를 막아 둠(코드는 삭제됐으나 live/state에는 존재) |
+| GSA | `autoresearch-dev-vault@…` | gcpckms seal 전용, 다른 권한 없음. `removed` 블록 대상(코드는 삭제됐으나 live/state에는 존재) |
+| WI 바인딩 | `vault/vault` KSA | 운영 경로 폐기. namespace는 live에 없음(#404 재구축 이후 미배포). `removed` 블록 대상 |
+| KMS 권한 | custom role `vaultUnsealKmsAccess`(cryptoKeys.get + useToEncrypt/useToDecrypt) key-level | 사전 정의 role은 `cryptoKeys.get` 미포함이라 부족. `removed` 블록 대상 |
 
-주의: 위 리소스의 실제 state 제거는 이 문서만으로 수행하지 않는다. KMS key
-ring/crypto key는 GCP 특성상 삭제가 제한될 수 있으므로, 승인 후 `terraform
-state rm`으로 dev root와 `vault-k8s` state에서만 제거하고(`destroy`가 아님),
-keyring은 비용이 발생하지 않는 미사용 상태로 남긴다.
+주의: 위 리소스의 실제 state 제거는 이 문서만으로 수행하지 않는다. 승인
+후 `removed` 블록을 포함한 dev root apply를 실행하면 6개 리소스가
+destroy 없이 state에서만 분리(forget)되고, keyring/key는 비용이 발생하지
+않는 미사용 상태로 남는다. 상세 근거는
+`docs/superpowers/specs/2026-08-02-vault-removal-design.md`의 "dev root
+state 분리 전략" 절을 참조한다.
 
 ## 필수 GCP API
 

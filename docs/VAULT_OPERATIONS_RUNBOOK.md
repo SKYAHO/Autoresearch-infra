@@ -1,15 +1,17 @@
 # Vault 운영 Runbook (dev)
 
-> ⚠️ **폐기(#412, 2026-07-29 드랍 확정) → 코드/state 제거 완료(#478)**: Vault는
-> dev에서 더 진행하지 않는다. 새 클러스터(#404 이전 후)에는 helm release·`vault`
-> namespace가 존재하지 않았고, admin-apply ROOTS에서도 제외됐다(#416). #478에서
-> `terraform/envs/dev/vault.tf`와 `terraform/admin/vault-k8s/` root 코드를
-> 완전히 삭제했다(state 정리는 별도 승인 후 `terraform state rm`으로 진행).
-> 아래 내용은 실행 불가한 **이력 보존용**이며, 실 서비스 secret은 GCP Secret
-> Manager가 담당한다.
+> ⚠️ **폐기(#412, 2026-07-29 드랍 확정) → 코드 제거 완료 / state 정리
+> 대기(#478)**: Vault는 dev에서 더 진행하지 않는다. 새 클러스터(#404 이전
+> 후)에는 helm release·`vault` namespace가 존재하지 않았고, admin-apply
+> ROOTS에서도 제외됐다(#416). #478에서 `terraform/envs/dev/vault.tf`와
+> `terraform/admin/vault-k8s/` root 코드를 완전히 삭제했다 — 남은 GCP/K8s
+> state 정리(dev root는 `removed` 블록 apply, vault-k8s는 `terraform state
+> rm`)는 별도 승인 후 진행한다. 아래 내용은 실행 불가한 **이력 보존용**이며,
+> 실 서비스 secret은 GCP Secret Manager가 담당한다.
 
-dev GKE의 Vault(`vault` namespace, #132/#134) 운영 절차. 설치 구성은
-`terraform/admin/vault-k8s/README.md`, 설계는
+dev GKE의 Vault(`vault` namespace, #132/#134) 운영 절차. 설치 구성 문서는
+#478에서 root와 함께 삭제됐다(필요 시 `git log --diff-filter=D --
+terraform/admin/vault-k8s` 이후 git history 참조). 설계는
 `docs/superpowers/specs/2026-07-12-vault-dev-design.md` 참조.
 
 전제: `gcloud` 인증과 dev GKE `kubectl` 컨텍스트(팀 절차는
@@ -193,6 +195,7 @@ kubectl -n vault exec vault-0 -- vault status   # Sealed false 확인
 
 ## 폐기/롤백
 
-`terraform/admin/vault-k8s/README.md`의 롤백 절차를 따른다. 순서 요약:
-release 제거 → PVC 정리 → (필요 시에만) dev root KMS key 정리. 순서를
-어기면 Raft 데이터 복호화가 영구 불능이 된다.
+설치 구성 문서(`terraform/admin/vault-k8s/README.md`)는 #478에서 root와
+함께 삭제됐다 — 필요 시 git history에서 복원한다. 순서 요약: release
+제거 → PVC 정리 → (필요 시에만) dev root KMS key 정리. 순서를 어기면
+Raft 데이터 복호화가 영구 불능이 된다.
