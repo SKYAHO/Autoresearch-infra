@@ -79,19 +79,19 @@ jobs:
           # 누락)이 남는다.
           #
           # 'will no longer be managed by Terraform'(removed 블록/forget
-          # 헤더) 패턴은 #478 작업 중 한때 추가했다가 되돌렸다 — 이
-          # workflow는 dev root(`terraform/envs/dev`)만 대상이고(admin
-          # root는 상단 주석대로 제외), dev root에는 removed 블록이
-          # 없고 #478 최종 설계(config 유지, kms_vault_orphan.tf)도 이
-          # 문구를 만들지 않는다. 반면 removed 블록은 admin root
-          # `monitoring-k8s`/`argo-rollouts-k8s`(helm_release forget,
-          # #307/#312류)에 실제로 존재하는데 이 workflow의 스코프 밖이라
-          # 여기서는 이 패턴을 실제 plan 출력으로 검증할 방법이 없다
-          # (claude-review 7차 지적 — 검증 불가능한 코드는 CI가 회귀를
-          # 못 잡는 사각지대). 같은 패턴이 실제로 exercise되는
-          # `.github/workflows/apply.yml`의 admin root plan 스텝에만
-          # 남겨 뒀다.
-          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^Plan: [0-9]|^No changes\.' \
+          # 헤더)은 #478 작업 중 한때 뺐다가 되돌렸다(claude-review 7차
+          # 지적으로 뺐으나 8차 지적으로 재검토) — dev root(`terraform/envs/dev`)에는
+          # 지금 removed 블록이 없어 이 alternative가 오늘 당장은 매치되지
+          # 않지만, `^Plan: [0-9]`는 항상 매치되므로 이 alternative가
+          # 빠지면 미래에 dev root에 removed 블록이 하나라도 추가될 때
+          # drift 이슈 본문이 'Plan: 0 to add, 0 to change, 0 to destroy,
+          # 1 to forget.'처럼 **몇 개가 forget되는지 총계만 남고 어떤
+          # 리소스인지 주소가 완전히 사라진** 채 올라간다 — 담당자가 그
+          # 이슈만 보고는 원인 리소스를 특정할 수 없다. 이 한 줄은 비용이
+          # 없고, 같은 정규식이 `.github/workflows/apply.yml`의 admin root
+          # plan 스텝에서 `monitoring-k8s`/`argo-rollouts-k8s`의 기존
+          # removed 블록으로 실제 exercise돼 매치 동작 자체는 검증돼 있다.
+          grep -E '^[[:space:]]*# .+ (will be|must be|has moved to) |^[[:space:]]*# \(moved from .+\)$|^[[:space:]]*# .+ will no longer be managed by Terraform|^Plan: [0-9]|^No changes\.' \
             /tmp/plan.out > /tmp/plan.summary || true
           # 이 step 자체는 항상 성공 처리하고 판정은 아래 step에서 한다
           exit 0

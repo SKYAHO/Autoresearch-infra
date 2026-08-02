@@ -232,6 +232,17 @@ moved {
 # dev root가 관리하는 리소스 타입 전수 스캔 기준 role 열거(#341 spec 표).
 # owner/editor 단일 부여 대신 열거해 크기를 명시한다. 부족분은 403-driven으로
 # 실측 보완(#310 compute.viewer 전례)하고 spec에 반영한다.
+#
+# `roles/cloudkms.admin`(#478): kms_vault_orphan.tf의 key ring/crypto key
+# 2개를 다루는 모든 dev root apply(이번 승인 apply와 향후 rotation
+# 재도입·IAM 재바인딩 등)를 `dev_apply` SA가 실행하므로 영구 유지한다 —
+# **drift 감지(terraform-drift.yml)와는 무관**하다(그쪽은 project-level
+# `roles/viewer`만 가진 `CI_SA`로 돈다). 근거 조사 전체는
+# docs/superpowers/specs/2026-08-02-vault-removal-design.md(claude-review
+# 7차 지적) 참조. project 전체 key에 대한 cryptoKeyVersions.destroy까지
+# 포함해 실제 필요(keyRings.get + cryptoKeys.get/update/setIamPolicy)보다
+# 넓지만, 이 PR 범위의 custom role 축소는 하지 않는다(같은 문서 8차
+# 지적 — 후속 검토 여지로 남겨 둠).
 resource "google_project_iam_member" "dev_apply_roles" {
   for_each = toset([
     "roles/compute.networkAdmin",                     # VPC/subnet/router/NAT/route/firewall/address
@@ -249,24 +260,10 @@ resource "google_project_iam_member" "dev_apply_roles" {
     "roles/secretmanager.admin",                      # secret/version/secret IAM
     "roles/artifactregistry.admin",                   # repo + repo IAM
     "roles/dns.admin",                                # zone/record
+    "roles/cloudkms.admin",                           # key ring/crypto key IAM·속성 (#478 잔존 리소스)
     "roles/run.admin",                                # Cloud Run v2 + service IAM
     "roles/servicenetworking.networksAdmin",          # Cloud SQL PSA peering
     "roles/networkconnectivity.consumerNetworkAdmin", # Redis PSC service connection policy
-    "roles/cloudkms.admin",                           # #478: google_kms_crypto_key_iam_member.
-    # vault_unseal의 destroy(setIamPolicy)와 kms_vault_orphan.tf의 rotation
-    # 제거 update(cloudkms.cryptoKeys.update)에 이번 승인 apply에서 우선
-    # 필요하다. **drift 감지(terraform-drift.yml)와는 무관** — drift plan은
-    # `dev_apply`가 아니라 `CI_SA`(project-level `roles/viewer`, 읽기 전용)로
-    # 돌기 때문이다(claude-review 7차 지적으로 정정 — 이전 리비전은 "drift
-    # 감지 refresh"를 근거로 들었으나 사실과 다름). 이 role을 영구 유지하는
-    # 진짜 이유는, kms_vault_orphan.tf의 key ring/crypto key 2개를 다루는
-    # 모든 apply(이번 승인 apply, 그리고 향후 이 2개 리소스에 rotation
-    # 재도입·IAM 재바인딩 등 변경이 생겨 이 root를 다시 apply할 때)를
-    # `dev_apply` SA가 실행하기 때문이다 — 다른 role은 KMS 리소스 IAM/속성
-    # 변경을 포함하지 않는다. 그래서 이 role은 destroy 완료 후에도
-    # **회수하지 않는다**(1차 리비전은 별도 후속 PR에서 회수 예정이었으나,
-    # kms_vault_orphan.tf 설계로 전환하며 폐기 —
-    # docs/superpowers/specs/2026-08-02-vault-removal-design.md 참조).
   ])
   project = var.project_id
   role    = each.value

@@ -546,6 +546,75 @@ key `prevent_destroy` 영구 보존)에서는 이 잔여 과금도 영구적이�
 apply"를 "dev root는 `kms_vault_orphan.tf` 유지 + 잔여 4개 destroy
 apply"로 정정했다.
 
+## claude-review 8차 지적 (2026-08-02, PR #500)
+
+7차 fix 세트 재요청 리뷰에서 5건이 나왔다. 이번 회차는 로컬에서 실제
+동작을 재현·검증(`terraform init` 실측, provider 소스 재확인)해 답했다.
+
+**이해도 확인 답변(1) — `kms_vault_orphan.tf` 헤더가 "이 파일이 존재하는
+한 destroy를 apply가 막아 준다"고 key ring/crypto key를 함께 묶어
+서술하지만, `prevent_destroy`는 crypto key에만 있고 key ring에는 없었다**:
+지적이 맞았다. 지금은 crypto key가 key ring을 참조해 root 전체/key ring
+대상 destroy가 crypto key 쪽 guard에서 먼저 막히지만, 이 파일의 목적
+자체가 "리소스가 개별적으로 config에서 빠져나가 drift 감지 밖으로 조용히
+사라지는 것을 막는" 것이다. key ring은 삭제 API가 없어 destroy가 API
+호출 없이 state 제거로만 끝나므로, 누군가 나중에 key ring 블록만 지우면
+guard 없이는 그 시점부터 감지 대상에서 빠진다 — key ring에도 독립적으로
+`prevent_destroy`를 추가했다.
+
+**이해도 확인 답변(2) — rotation 제거 in-place update가 GCP 실제 상태에
+반영됐는지 확인할 명령이 없고, `next_rotation_time`이 Terraform schema에
+없어 서버 쪽에 남아도 plan/state에 나타나지 않는 사각지대를 어떻게
+다루는지**: 맞는 지적이다. `next_rotation_time`이 tracked 속성이 아니라는
+사실 자체가 "GCP 쪽에서 완전히 안 지워져도 Terraform은 절대 알아채지
+못한다"는 뜻이므로, 승인 apply 직후 `gcloud kms keys describe
+vault-unseal --keyring=<ring> --location=<region> --project=<project>
+--format='value(rotationPeriod,nextRotationTime)'`로 두 값이 비어 있는지
+1회 수동 확인하는 절차를 `kms_vault_orphan.tf` 주석에 추가했다.
+
+**이해도 확인 답변(3) — `will no longer be managed by Terraform` 패턴을
+dev root 스텝에서 뺀 7차 결정이 실제로는 정보 손실을 만드는지, `Plan:`
+요약 라인이 forget을 어떻게 집계하는지**: 재검토 결과 7차 결정을
+뒤집었다. `^Plan: [0-9]`는 forget이 있어도 항상 매치되므로 "몇 개
+forget되는지" 총계 자체는 이 alternative 없이도 남지만, **어떤 리소스
+주소인지는 이 alternative 없이는 완전히 사라진다** — 미래에 dev root에
+`removed` 블록이 하나라도 추가되면 PR 댓글도 drift 이슈 본문도 "1 to
+forget"만 보여주고 원인 리소스를 알려주지 않는다. 이 한 줄은 비용이
+없고 `apply.yml`의 admin root 스텝에서 이미 실제 매치 동작이 검증돼
+있으므로, "오늘 dev root에 removed 블록이 없다"는 이유로 이 안전장치를
+빼는 것은 실익보다 위험이 크다고 판단해 `terraform-drift.yml`/
+`terraform-plan.yml`/`apply.yml`(dev-root 스텝) 3곳 모두에 다시 추가했다.
+
+**이해도 확인 답변(4) — `terraform/admin/vault-k8s/` 디렉터리는 삭제됐지만
+카탈로그(`environment_catalog.rb`의 `TERRAFORM_ROOTS`/
+`config/environments/dev/environment.yaml`)에는 남아 있어, 복원 절차 없이
+바로 `scripts/terraform-env --environment dev --root
+terraform/admin/vault-k8s init`을 실행하면 무슨 일이 벌어지는지**:
+로컬에서 실제로 재현했다. `write_terraform_inputs!`가 `FileUtils.mkdir_p`로
+빈 디렉터리를 조용히 재생성하고 `.environment.auto.tfvars.json`/
+`.environment.backend.hcl`(진짜 bucket/prefix 포함)만 써 넣는다. `.tf`
+파일이 없어 `terraform { backend "gcs" {} }` 블록 선언 자체가 없으므로
+`-backend-config` 값은 아무 backend에도 연결되지 못하고, `terraform init`은
+"Terraform initialized in an empty directory!"로 로컬 상태로 끝난다(실측
+확인 — 원격 backend 연결 없음, live state 접근·변경 전혀 없음). 즉 실
+리소스를 건드리는 위험은 아니지만, 복원 절차를 건너뛰면 코드 없이 입력
+파일만 있는 사용 불가능한 디렉터리가 워킹 트리에 조용히 생겨 운영자를
+혼란스럽게 한다 — `environment.yaml`의 해당 항목에 이 실측 결과와
+"반드시 절차대로 root 코드를 먼저 복원하라"는 경고 주석을 추가했다.
+
+**이해도 확인 답변(5) — `github_actions.tf`에서 `roles/cloudkms.admin`이
+목록 끝으로 옮겨지고, 18줄 근거 주석이 `toset([...])` 리터럴 내부에
+들어가 있어 나머지 `role # 한 줄 사유` 형식과 어긋나 목록을 훑기 어려운
+문제**: 반영했다. `roles/cloudkms.admin`을 원래 위치(`roles/dns.admin`
+다음)로 되돌리고, 다른 항목과 같은 한 줄 사유
+(`# key ring/crypto key IAM·속성 (#478 잔존 리소스)`)만 남겼다. 전체
+근거는 `resource "google_project_iam_member" "dev_apply_roles"` 블록
+바로 위 주석으로 옮겼다. 이 역할이 project 전체 key의
+`cryptoKeyVersions.destroy`까지 포함해 실제 필요(`keyRings.get` +
+`cryptoKeys.get/update/setIamPolicy`)보다 넓다는 지적도 맞다 — 이 PR
+범위에서 custom role로 좁히지는 않되, 후속 검토 여지를 주석에 한 줄
+남겼다.
+
 ## 완료 조건
 
 - [ ] `terraform/envs/dev/vault.tf` 삭제
@@ -581,12 +650,14 @@ apply"로 정정했다.
 - [ ] `docs/VAULT_OPERATIONS_RUNBOOK.md` 배너 갱신(코드 제거 완료, state
       정리는 승인 대기로 정정)
 - [ ] `will no longer be managed by Terraform` allowlist 패턴은
-      `terraform-drift.yml`/`terraform-plan.yml`/`apply.yml`의 dev-root
-      plan 스텝 3곳에서는 되돌린다(dev root는 admin root 제외 스코프이고
-      #478 최종 설계도 이 문구를 만들지 않아 검증 불가능한 죽은 코드였다
-      — claude-review 7차 지적). `apply.yml`의 admin-root plan 스텝
-      1곳에만 남기고, 근거를 `monitoring-k8s`/`argo-rollouts-k8s`의 기존
-      `removed` 블록(helm_release forget)으로 정정한다
+      `terraform-drift.yml`/`terraform-plan.yml`/`apply.yml`(dev-root +
+      admin-root 스텝) 4곳 모두에 둔다 — dev root에는 지금 `removed` 블록이
+      없어 이 alternative가 오늘은 매치되지 않지만, 빠져 있으면 미래에
+      dev root가 `removed` 블록을 쓸 때 `Plan:` 총계만 남고 리소스 주소가
+      완전히 사라지는 실질적 회귀 위험이 있다(claude-review 7차 지적으로
+      뺐다가 8차 지적으로 재추가). admin-root 스텝은
+      `monitoring-k8s`/`argo-rollouts-k8s`의 기존 `removed` 블록(helm_release
+      forget)으로 매치 동작 자체가 실제 검증돼 있다
 - [ ] `scripts/environment_catalog.rb`/`config/environments/dev/environment.yaml`의
       `vault-k8s` 카탈로그 항목 유지 사유 주석 추가
 - [ ] `fmt -check`, `validate`, `git diff --check` 통과
