@@ -29,6 +29,19 @@ kubectl -n elastic get secret kibana-oauth \
   awk 'BEGIN { ok=1; n=0 } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if ($0 !~ /^[^[:space:]@,"]+@[^[:space:]@,"]+$/) ok=0; n++ } END { if (!ok || n == 0) exit 1; print "authenticated-emails format OK, entries=" n }'
 ```
 
+이 preflight는 **형식과 항목 수만** 보장한다. 목록이 현재 팀 구성과 일치하는지,
+초기 예시 주소(`someone@gmail.com` 등)가 남아 있지 않은지는 검사하지 않는다.
+`--email-domain=*` 제거 이후 이 목록이 유일한 접근 경계이므로, 목록에서 빠진 팀원은
+로그인이 막히고 남아 있는 옛 주소는 계속 허용된다. `entries=N`이 예상 인원과 다르면
+값을 출력하지 말고 인원수로 대조한 뒤 진행한다. 예시 주소 잔존은 값 노출 없이 아래로
+확인한다(`placeholder_like=0`이어야 한다).
+
+```bash
+kubectl -n elastic get secret kibana-oauth \
+  -o jsonpath='{.data.authenticated-emails}' | base64 -d |
+  awk 'BEGIN{ph=0;other=0} { sub(/\r$/,""); if($0==""||$0~/^#/) next; if ($0 ~ /@example\.(com|org|net)$/ || $0 ~ /^(someone|user|admin)@/) ph++; else other++ } END{ print "placeholder_like=" ph "  other=" other }'
+```
+
 허용 목록에서 사용자를 제거할 때는 `authenticated-emails`를 갱신한 뒤
 `kibana-oauth-proxy` rollout restart와 완료 확인을 수행한다. oauth2-proxy v7.7.1은
 보호된 요청마다 세션 이메일을 allowlist로 재검사하므로, 제거된 사용자는 새 목록이

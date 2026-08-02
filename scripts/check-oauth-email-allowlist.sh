@@ -72,12 +72,20 @@ check_mapping() {
   key_pattern="$3"
   path_pattern="$4"
 
-  if grep -Eq "$key_pattern" "$file" && grep -Eq "$path_pattern" "$file"; then
-    echo "OK  $label: authenticated-emails Secret 매핑 유지"
-  else
-    echo "ERR $label: authenticated-emails Secret 매핑 누락"
+  for pattern in "$key_pattern" "$path_pattern"; do
+    if grep -Eq "$pattern" "$file"; then
+      continue
+    fi
+    grep_status=$?
+    if [ "$grep_status" -eq 1 ]; then
+      echo "ERR $label: authenticated-emails Secret 매핑 누락"
+    else
+      echo "ERR $label: authenticated-emails 매핑 검사 실행 실패 (grep exit=$grep_status)"
+    fi
     FAIL=1
-  fi
+    return
+  done
+  echo "OK  $label: authenticated-emails Secret 매핑 유지"
 }
 
 check_no_env_from() {
@@ -117,13 +125,20 @@ check_no_env_from "Kibana" "terraform/admin/elastic-k8s/oauth2_proxy.tf" \
 # 추가되지 않도록 deploy/와 terraform/의 배포 manifest·설정을 검사한다.
 # 실제 Secret 값은 정적으로 읽을 수 없으므로, 운영 preflight에서 별도로 확인한다.
 # 새 oauth2-proxy 대상은 check_target/check_mapping/check_no_env_from에 명시적으로
-# 등록하고, k8s/·charts/ 등 새 경로면 이 scan root도 확장해야 한다. 전역 검사는
-# 리터럴 domain 설정만 잡으며, 미등록 대상의 envFrom·config file·동적 값 주입으로
-# 만들어지는 runtime 환경변수까지 자동으로 식별하지는 않는다.
+# 등록하고, k8s/·charts/ 등 새 경로면 이 scan root도 확장해야 한다.
+#
+# 전역 검사는 같은 설정의 세 표기를 모두 잡는다: CLI 플래그(`--email-domain`),
+# 환경변수(`OAUTH2_PROXY_EMAIL_DOMAINS`), 그리고 Helm values의 `extraArgs`나
+# config file에서 쓰는 키 표기(`email-domain:` / `email_domains =`). 두 scan root에
+# 이미 Helm values가 있어(deploy/*/values.yaml, terraform/admin/*/helm-values/*.yaml)
+# 플래그 표기만 막으면 동일한 우회가 조용히 재도입될 수 있다. `email` 뒤가 `s`인
+# `authenticated-emails-file`은 `email[-_]domain`과 매칭되지 않아 오탐되지 않는다.
+# 다만 미등록 대상의 envFrom·동적 값 주입으로 만들어지는 runtime 환경변수까지
+# 자동으로 식별하지는 않는다.
 # GitHub runner 기본 명령인 grep만 사용하며 문서와 Terraform provider cache는 제외한다.
 if grep -REn --exclude='*.md' \
   --exclude-dir='.terraform' \
-  -- "$email_domain_pattern|OAUTH2_PROXY_EMAIL_DOMAINS" deploy terraform; then
+  -- "$email_domain_pattern|OAUTH2_PROXY_EMAIL_DOMAINS|(^|[^[:alnum:]_])email[-_]domains?[[:space:]]*[:=]" deploy terraform; then
   echo "ERR 저장소 manifest/Terraform 설정에 email-domain 또는 OAUTH2_PROXY_EMAIL_DOMAINS가 남아 있음"
   FAIL=1
 else
