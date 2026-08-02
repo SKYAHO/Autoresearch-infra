@@ -48,9 +48,8 @@ variable "eck_values_file_path" {
 }
 
 variable "kibana_ingress_source_cidr" {
-  description = "Kibana(5601)로 ingress를 허용할 VPC 내부 CIDR. kubectl port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet 기본(#116 교훈)."
+  description = "Kibana(5601)로 ingress를 허용할 VPC 내부 CIDR. kubectl port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet을 쓴다(#116 교훈). 값은 카탈로그 network.dev_subnet_cidr가 공급하므로 여기에 default를 두지 않는다 — 두면 카탈로그와 이중 정본이 된다."
   type        = string
-  default     = "10.10.0.0/20"
 
   validation {
     condition     = can(cidrhost(var.kibana_ingress_source_cidr, 0))

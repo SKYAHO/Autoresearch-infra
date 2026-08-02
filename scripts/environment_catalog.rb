@@ -39,7 +39,7 @@ class EnvironmentCatalog
     "terraform/admin/argo-rollouts-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr cluster_master_cidr],
     "terraform/admin/argocd-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr],
     "terraform/admin/autoresearch-k8s" => %w[project_id region zone gke_cluster_name resource_prefix private_services_cidr cluster_services_cidr redis_psc_subnet_cidr],
-    "terraform/admin/elastic-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr cluster_master_cidr],
+    "terraform/admin/elastic-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr cluster_master_cidr kibana_ingress_source_cidr],
     "terraform/admin/gke-team-access" => %w[project_id region name_prefix],
     "terraform/admin/mlflow-k8s" => %w[project_id region zone gke_cluster_name resource_prefix private_services_cidr cluster_services_cidr],
     "terraform/admin/monitoring-k8s" => %w[project_id region zone gke_cluster_name],
@@ -91,7 +91,10 @@ class EnvironmentCatalog
       "gke_services_cidr" => gke.fetch("services_cidr"),
       "cluster_master_cidr" => gke.fetch("master_ipv4_cidr"),
       "cluster_services_cidr" => gke.fetch("services_cidr"),
-      "ui_ingress_source_cidr" => network.fetch("dev_subnet_cidr")
+      "ui_ingress_source_cidr" => network.fetch("dev_subnet_cidr"),
+      # port-forward 트래픽이 노드 IP에서 출발하므로 dev subnet이 정본이다(#116).
+      # vault의 ui_ingress_source_cidr와 같은 값·같은 근거라 함께 카탈로그가 공급한다.
+      "kibana_ingress_source_cidr" => network.fetch("dev_subnet_cidr")
     }
     values.slice(*ROOT_VARIABLE_KEYS.fetch(root))
   end
