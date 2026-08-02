@@ -62,6 +62,7 @@ Dir.mktmpdir("agent-orchestration-api-image-contract-") do |temporary_root|
   FileUtils.cp_r(AgentOrchestrationTimeoutContract::DEPLOY_DIRECTORY, deploy_root)
   api_path = File.join(deploy_root, "agent-orchestration", "api-deployment.yaml")
   runner_path = File.join(deploy_root, "agent-orchestration", "runner-deployment.yaml")
+  migration_path = File.join(deploy_root, "agent-orchestration", "api-migration-job.yaml")
   api_image = AgentOrchestrationTimeoutContract.deployment(api_path).dig(
     "spec", "template", "spec", "containers", 0, "image"
   )
@@ -76,6 +77,50 @@ Dir.mktmpdir("agent-orchestration-api-image-contract-") do |temporary_root|
     next
   end
   raise "Runner bootstrap API image 불일치를 감지하지 못했습니다"
+end
+
+Dir.mktmpdir("agent-orchestration-migration-image-contract-") do |temporary_root|
+  deploy_root = File.join(temporary_root, "deploy")
+  FileUtils.mkdir_p(deploy_root)
+  FileUtils.cp_r(AgentOrchestrationTimeoutContract::DEPLOY_DIRECTORY, deploy_root)
+  api_path = File.join(deploy_root, "agent-orchestration", "api-deployment.yaml")
+  migration_path = File.join(deploy_root, "agent-orchestration", "api-migration-job.yaml")
+  api_image = AgentOrchestrationTimeoutContract.deployment(api_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  File.write(migration_path, File.read(migration_path).sub(api_image, "invalid-image"))
+
+  begin
+    AgentOrchestrationTimeoutContract.check!(temporary_root)
+  rescue AgentOrchestrationTimeoutContract::ContractError
+    next
+  end
+  raise "Migration API image 불일치를 감지하지 못했습니다"
+end
+
+Dir.mktmpdir("agent-orchestration-migration-container-image-contract-") do |temporary_root|
+  deploy_root = File.join(temporary_root, "deploy")
+  FileUtils.mkdir_p(deploy_root)
+  FileUtils.cp_r(AgentOrchestrationTimeoutContract::DEPLOY_DIRECTORY, deploy_root)
+  api_path = File.join(deploy_root, "agent-orchestration", "api-deployment.yaml")
+  migration_path = File.join(deploy_root, "agent-orchestration", "api-migration-job.yaml")
+  api_image = AgentOrchestrationTimeoutContract.deployment(api_path).dig(
+    "spec", "template", "spec", "containers", 0, "image"
+  )
+  File.write(
+    migration_path,
+    File.read(migration_path).sub(
+      "name: migrate\n          image: #{api_image}",
+      "name: migrate\n          image: invalid-image"
+    )
+  )
+
+  begin
+    AgentOrchestrationTimeoutContract.check!(temporary_root)
+  rescue AgentOrchestrationTimeoutContract::ContractError
+    next
+  end
+  raise "Migration container API image 불일치를 감지하지 못했습니다"
 end
 
 puts "Agent Orchestration deployment contract self-test: passed"

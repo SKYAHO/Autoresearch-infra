@@ -4,7 +4,7 @@
 # Agent Orchestration API·Runner의 timeout 및 immutable image 계약을 검증한다.
 # Ruby 표준 라이브러리 Psych로 YAML 객체를 읽어 외부 Python 의존성 없이 실행한다.
 # API와 OAuth Runner가 같은 ConfigMap key를 참조하고, Runner Codex timeout 110초 및
-# 공통 Runner HTTP timeout 120초, API image 세 참조의 동등한 digest pin을 검사한다.
+# 공통 Runner HTTP timeout 120초, API image 다섯 container 참조의 동등한 digest pin을 검사한다.
 
 require "fileutils"
 require "tmpdir"
@@ -57,7 +57,8 @@ module AgentOrchestrationTimeoutContract
 
     api_deployment = deployment(File.join(deploy_directory, "api-deployment.yaml"))
     runner_deployment = deployment(File.join(deploy_directory, "runner-deployment.yaml"))
-    check_image_reference_contract!(api_deployment, runner_deployment)
+    migration_job = job(File.join(deploy_directory, "api-migration-job.yaml"))
+    check_image_reference_contract!(api_deployment, runner_deployment, migration_job)
     check_deployment_reference!(deploy_directory, "api-deployment.yaml", timeout_value)
     runner_environment = check_deployment_reference!(
       deploy_directory,
@@ -125,7 +126,12 @@ module AgentOrchestrationTimeoutContract
     deployment_environment
   end
 
-  def check_image_reference_contract!(api_deployment, runner_deployment)
+  def job(path)
+    documents(path).find { |document| document.fetch("kind") == "Job" } ||
+      raise(ContractError, "Job이 없습니다: #{path}")
+  end
+
+  def check_image_reference_contract!(api_deployment, runner_deployment, migration_job)
     api_image = container_image(api_deployment, "containers", "api")
     api_bootstrap_image = container_image(api_deployment, "initContainers", "bootstrap-db")
     runner_bootstrap_image = container_image(
@@ -134,11 +140,15 @@ module AgentOrchestrationTimeoutContract
       "bootstrap-codex-auth"
     )
     runner_image = container_image(runner_deployment, "containers", "runner")
+    migration_bootstrap_image = container_image(migration_job, "initContainers", "bootstrap-db")
+    migration_image = container_image(migration_job, "containers", "migrate")
 
     {
       "API container image" => api_image,
       "API DB bootstrap image" => api_bootstrap_image,
       "Runner Codex auth bootstrap image" => runner_bootstrap_image,
+      "Migration DB bootstrap image" => migration_bootstrap_image,
+      "Migration container image" => migration_image,
       "Runner container image" => runner_image
     }.each do |description, image|
       unless image.match?(%r{\A.+@sha256:[0-9a-f]{64}\z})
@@ -148,6 +158,8 @@ module AgentOrchestrationTimeoutContract
 
     expect_equal(api_image, api_bootstrap_image, "API DB bootstrap image")
     expect_equal(api_image, runner_bootstrap_image, "Runner Codex auth bootstrap API image")
+    expect_equal(api_image, migration_bootstrap_image, "Migration DB bootstrap API image")
+    expect_equal(api_image, migration_image, "Migration container API image")
   end
 
   def container_image(deployment_document, section, container_name)
