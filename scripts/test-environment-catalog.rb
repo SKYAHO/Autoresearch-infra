@@ -86,7 +86,6 @@ VALID_CATALOG = <<~YAML.freeze
       terraform/admin/gke-team-access: admin/gke-team-access/
       terraform/admin/mlflow-k8s: admin/mlflow-k8s/
       terraform/admin/monitoring-k8s: admin/monitoring-k8s/
-      terraform/admin/vault-k8s: admin/vault-k8s/
 YAML
 
 Dir.mktmpdir("environment-catalog-test-") do |directory|

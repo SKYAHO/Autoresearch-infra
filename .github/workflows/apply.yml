@@ -108,8 +108,8 @@ env:
   # 카탈로그만 바꾼 이전에서 plan 객체가 옛 버킷으로 향한다.
   DEV_ROOT: terraform/envs/dev
   # #307/#312/#314 admin K8s root 7개, namespace 소유 root 먼저·argocd 마지막
-  # (다른 namespace 참조) 순서 유지. gke-team-access(#314)·vault-k8s(#412)는
-  # 기존과 동일하게 제외.
+  # (다른 namespace 참조) 순서 유지. gke-team-access(#314)는 기존과 동일하게
+  # 제외. vault-k8s(#412)는 root 자체가 #478로 완전히 삭제됐다.
   ADMIN_ROOTS: >-
     terraform/admin/autoresearch-k8s
     terraform/admin/airflow-k8s
