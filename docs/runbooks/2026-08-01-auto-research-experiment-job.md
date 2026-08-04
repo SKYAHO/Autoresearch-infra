@@ -324,13 +324,18 @@ CPU/memory request를 관측한다. 이후 Airflow나 다른 컴포넌트가 `ba
 시점에 capacity·우선순위 경합 계획을 다시 검토한다.
 
 이 유휴 상태 전제는 이 저장소 밖(`Autoresearch-airflow`)의 상태에 의존하고, 그
-저장소의 변경은 이 저장소의 CI·리뷰를 거치지 않는다. 게다가 quota 상한(2 vCPU)이
-pool 용량(e2-standard-2 2노드)을 거의 그대로 채우는 구조라 헤드룸이 없다 — Airflow
-DAG 하나가 `node_selector`를 `batch-od`로 override하면 경고 없이 experiment Job 또는
-그 KPO가 Pending에 빠질 수 있다. `batch-od` node/pod Pending 관측(위)을 수동
-확인에서 알림으로 승격하는 안(예: `autoresearch-experiments` namespace 밖 Pod가
-`batch-od` 노드에 뜨면 알림, 또는 `batch-od` 대상 Pending Pod 알림)을 #523의
-후속 체크리스트 항목으로 추적한다.
+저장소의 변경은 이 저장소의 CI·리뷰를 거치지 않는다. 정확한 수치로 다시 쓰면:
+pool 전체 allocatable CPU는 노드 2대 기준 약 3860m이고, 실험 namespace quota는
+`requests.cpu = 2`(2000m)로 그 일부만 쓴다. `LimitRange` 기본 request는 500m라
+실제 experiment 점유는 제출된 Job의 request 값에 따라 다르다. Airflow DAG 하나가
+`node_selector`를 `batch-od`로 override하면, 두 워크로드의 request 합이 그 순간
+가용 노드 용량을 넘어설 때만 경합이 생긴다. 이 계약에는 `priorityClassName`이
+없어 두 워크로드 사이에 선점(preemption) 순서가 없으므로 — 어느 쪽이 Pending으로
+남는지는 우선순위가 아니라 어느 Pod가 나중에 제출돼 가용 용량이 이미 소진된
+상태에 걸리는지(제출 순서·스케줄 타이밍)로 결정된다. `batch-od` node/pod Pending
+관측(위)을 수동 확인에서 알림으로 승격하는 안(예: `autoresearch-experiments`
+namespace 밖 Pod가 `batch-od` 노드에 뜨면 알림, 또는 `batch-od` 대상 Pending Pod
+알림)을 #523의 후속 체크리스트 항목으로 추적한다.
 
 ## Pod Security 버전 갱신
 
