@@ -1,0 +1,85 @@
+# Streamlit UI는 API·Runner와 분리된 read-only 비루트 Pod로 실행한다. 실제 promotion에서는
+# release workflow가 검증한 immutable digest만 이 placeholder에 주입한다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestration-ui
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-ui
+    app.kubernetes.io/part-of: agent-orchestration
+    app.kubernetes.io/component: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-orchestration-ui
+        app.kubernetes.io/part-of: agent-orchestration
+        app.kubernetes.io/component: ui
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ui
+          image: REPLACE_WITH_UI_IMMUTABLE_DIGEST
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8501
+          env:
+            - name: ORCH_UI_API_BASE_URL
+              value: http://agent-orchestration-api:8000
+            - name: ORCH_UI_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  # UI는 기존 API 요청 토큰을 호출용으로만 받고 Secret Manager·Kubernetes API
+                  # 읽기 권한은 갖지 않는다.
+                  name: agent-orchestration-api-token
+                  key: ORCH_API_TOKEN
+            - name: HOME
+              value: /tmp
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: tmp
+          emptyDir: {}

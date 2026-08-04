@@ -69,7 +69,7 @@ deploy/                      # ArgoCD umbrella chart (Terraform helm_release에�
 ├── argo-rollouts/           # argo-rollouts umbrella (Application argo-rollouts, #186)
 ├── mlflow/                  # MLflow plain manifests (Application mlflow, #94)
 ├── serving/                 # Serving plain manifests (Application serving, #302)
-└── agent-orchestration/     # Agent orchestration manifests (Application agent-orchestration, #453)
+└── agent-orchestration/     # Agent orchestration API/Runner/UI manifests (Application agent-orchestration, #453)
 
 docs/
 ├── README.md                # 운영 문서 진입점

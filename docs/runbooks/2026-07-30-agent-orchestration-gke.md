@@ -1,13 +1,13 @@
 # Agent Orchestration GKE 내부 배포 Runbook
 
-Agent Orchestration은 FastAPI API와 Codex Runner를 서로 다른 Pod, Kubernetes
-ServiceAccount(KSA), GCP ServiceAccount(GSA), 파일 시스템으로 분리한 dev 전용
-내부 서비스입니다. API만 Cloud SQL 전용 DB와 DB password Secret Manager 접근 권한을
-가지며, Runner는 Codex OAuth bootstrap 시크릿 하나만 읽습니다.
+Agent Orchestration은 FastAPI API, Codex Runner, Streamlit UI를 서로 다른 Pod와 파일
+시스템으로 분리한 dev 전용 내부 서비스입니다. API만 Cloud SQL 전용 DB와 DB password
+Secret Manager 접근 권한을 가지며, Runner는 Codex OAuth bootstrap 시크릿 하나만 읽고,
+UI는 기존 API 요청 토큰만 환경 변수로 받으며 KSA token과 GCP IAM 권한을 갖지 않습니다.
 
 이 문서는 `deploy/agent-orchestration/`의 immutable digest 주입, OAuth 초기 인증,
-Alembic PreSync migration, ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 저장
-검증·롤백 절차를 다룹니다.
+Alembic PreSync migration, ArgoCD manual sync, 내부 healthcheck, Streamlit port-forward와
+PostgreSQL 저장 검증·롤백 절차를 다룹니다.
 외부 Ingress, LoadBalancer, 사용자별 OAuth, 외부 공개 API는 범위가 아닙니다.
 
 ## 적용 전 조건
@@ -15,11 +15,12 @@ Alembic PreSync migration, ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 
 1. `terraform/envs/dev`와 `terraform/admin/autoresearch-k8s` 변경이 별도 승인된
    Terraform plan을 거쳐 적용되어야 합니다. `agent_orchestration` DB/user, API·Runner
    GSA/KSA, 각 Secret Manager IAM이 먼저 존재해야 합니다.
-2. 앱 저장소 release workflow가 아래의 **검증된 immutable digest** 두 개를 출력해야
+2. 앱 저장소 release workflow가 아래의 **검증된 immutable digest** 세 개를 출력해야
    합니다. tag(`:latest`, `:sha-*` 포함)만으로 배포하지 않습니다.
 
    - `autoresearch-agent-orchestration-api@sha256:...`
    - `autoresearch-agent-orchestration-runner@sha256:...`
+   - `autoresearch-agent-orchestration-ui@sha256:...`
 
 3. `terraform/admin/argocd-k8s`의 `agent-orchestration` Application이 먼저
    적용되어 있어야 합니다. source path는 `deploy/agent-orchestration`, destination은
@@ -49,6 +50,7 @@ Alembic PreSync migration, ArgoCD manual sync, 내부 healthcheck와 PostgreSQL 
 | --- | --- |
 | `REPLACE_WITH_API_IMMUTABLE_DIGEST` | 앱 release workflow API `digest_ref` |
 | `REPLACE_WITH_RUNNER_IMMUTABLE_DIGEST` | 앱 release workflow Runner `digest_ref` |
+| `REPLACE_WITH_UI_IMMUTABLE_DIGEST` | 앱 release workflow UI `digest_ref` |
 | `REPLACE_WITH_PROJECT_ID` | dev Terraform `project_id` |
 | `REPLACE_WITH_DB_PASSWORD_SECRET_ID` | dev output `agent_orchestration_deployment_contract.db_password_secret_id` |
 | `REPLACE_WITH_CODEX_AUTH_BOOTSTRAP_SECRET_ID` | dev output `agent_orchestration_deployment_contract.codex_auth_bootstrap_secret_id` |
@@ -309,9 +311,11 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
   `ORCH_RUNNER_TOKEN`만 전달되고 `ORCH_API_TOKEN`은 전달되지 않습니다.
 - Runner ingress는 API pod label과 node subnet의 kubelet probe만 TCP 8080으로
   허용합니다. Runner Service는 port-forward하거나 외부 노출하지 않습니다.
-- API ingress는 node subnet의 kubelet probe·초기 `kubectl port-forward`만 TCP 8000으로
-  허용하는 default-deny입니다. 이후 in-cluster 호출자를 추가하면 해당 caller
-  label/port만 허용하는 ingress rule을 같은 변경에서 추가합니다.
+- API ingress는 node subnet의 kubelet probe·초기 `kubectl port-forward`와 Streamlit UI
+  Pod label만 TCP 8000으로 허용하는 default-deny입니다. 이후 in-cluster 호출자를 추가하면
+  해당 caller label/port만 허용하는 ingress rule을 같은 변경에서 추가합니다.
+- UI는 ClusterIP TCP 8501로만 제공하며 node subnet ingress, API TCP 8000, DNS만
+  허용한다. Ingress·LoadBalancer·Cloud SQL·Runner·public HTTPS egress는 없다.
 - API egress는 Runner TCP 8080, Cloud SQL TCP 5432, DNS, Workload Identity metadata,
   private Google APIs VIP(`199.36.153.8/30`) TCP 443뿐이고 Runner egress에는 Cloud SQL
   TCP 5432가 없습니다. API는 Codex/OpenAI 직접 호출을 하지 않으므로 전체 인터넷

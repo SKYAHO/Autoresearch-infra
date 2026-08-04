@@ -1,0 +1,17 @@
+# ClusterIP와 팀원 port-forward만 UI 접근 경로다. 외부 Ingress와 LoadBalancer는 만들지 않는다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-orchestration-ui
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-ui
+    app.kubernetes.io/part-of: agent-orchestration
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: agent-orchestration-ui
+  ports:
+    - name: http
+      port: 8501
+      targetPort: http
