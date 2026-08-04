@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ui
-          image: REPLACE_WITH_UI_IMMUTABLE_DIGEST
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-ui@sha256:236eae93c088dbe4605db219dd189810297c267cbcb0bd904d2468c68647ddd9
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
