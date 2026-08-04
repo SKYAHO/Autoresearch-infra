@@ -3,6 +3,33 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-04: raw_data staging cleanup IAM 조건 — GCS 객체 CEL 함수 제약 (#514, PR #517)
+
+- 프로젝트 이전(#404) 중 원자적 게시(copy+delete, GCS엔 rename이 없음)에
+  `storage.objects.delete`가 누락돼 action log 파티션이 오염된 결함을 고쳤다.
+- 최초 설계는 임시 객체명(`.staging-<uuid>` 접미사)만 delete 대상으로 좁히는
+  정규식 조건(`resource.name.matches(...)`)이었으나, `gcloud alpha iam
+  policies lint-condition`으로 실제 GCS 버킷 리소스에 검증한 결과 `matches()`와
+  `contains()` 모두 `undeclared reference` 컴파일 오류로 거부됨을 확인했다.
+  **GCS 객체 IAM 조건은 `startsWith()`/`endsWith()`/`==`만 지원하고 RE2
+  정규식·부분 문자열 매치는 지원하지 않는다.** `terraform validate`/`plan`은
+  CEL을 파싱하지 않으므로 이 실패는 `setIamPolicy` 시점(apply 또는 사전
+  linter 호출)에만 드러난다 — 이후 GCS 객체 IAM 조건을 설계할 때는 이름
+  패턴이 아니라 경로 prefix로 범위를 잡아야 한다.
+- 임시 객체명이 랜덤 UUID로 끝나 `endsWith()`로도 고정할 수 없어, 조건을
+  이름 패턴 대신 `local.raw_data_prefixes.action_logs_raw`
+  (`data_lake/action_log/`) 경로 prefix `startsWith()` 스코핑으로
+  재설계했다.
+- 트레이드오프를 의도적으로 수용했다: 이 prefix 하위에서는 batch SA가
+  staging 임시 객체뿐 아니라 이미 커밋된 최종 객체도 delete/update할 수
+  있다. "완료된 raw 데이터는 삭제·덮어쓰기 불가" 원칙이 이 prefix 안에서는
+  더 이상 IAM으로 보장되지 않고, DAG가 자신이 만든 staging 이름 외에는
+  delete를 호출하지 않는다는 애플리케이션 계약에 의존한다. 다른 raw_data
+  prefix는 이 바인딩의 영향을 받지 않는다.
+- CI를 통한 apply와 라이브 IAM policy 조회로 반영을 확인했다. 이미
+  오염된 기존 파티션의 정리와 다른 raw_data prefix의 동일 결함 노출 여부는
+  이 변경 범위 밖으로 남겼다.
+
 ## 2026-08-02: paired Feast experiment runtime dev 격리 계약 (#485) — 미적용
 
 - paired Feast 실험을 기존 Airflow batch·Feast apply와 분리하기 위해 dev 전용
