@@ -266,6 +266,24 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
   member = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 
+# #514 프로젝트 이전 중 storage.objects.delete 권한이 누락돼 원자적 게시
+# (임시 이름으로 쓰고 최종 이름으로 옮기는 copy+delete, GCS에는 rename이 없음)가
+# 실패하며 action log 파티션이 오염됐다. objectUser(create/get/list/delete/update
+# 포함, IAM 정책 변경 권한은 없음)를 부여하되 batch SA가 스스로 만든 staging
+# 임시 객체(파일명에 `.staging-` 포함)로만 조건 범위를 좁혀, 위 objectCreator의
+# "완료된 raw 데이터는 삭제·덮어쓰기 불가" 원칙을 그대로 유지한다.
+resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_cleanup" {
+  bucket = google_storage_bucket.raw_data.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+
+  condition {
+    title       = "raw-data-staging-cleanup"
+    description = "Allow Airflow batch workloads to delete only their own atomic-publish staging temp objects, never committed raw data."
+    expression  = "resource.name.matches('\\.staging-')"
+  }
+}
+
 # #464 canonical training snapshot publisher/consumer 경계. 기존 MLflow 서버의
 # bucket-wide artifact 권한을 학습 파드에 상속하지 않고, batch GSA에만 prefix
 # 한정 create/read를 부여한다. objectCreator는 기존 객체 overwrite를 막는다.
