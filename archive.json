@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-04T06:59:11Z",
+  "generated_at": "2026-08-04T07:00:28Z",
   "reports": [
+    {
+      "number": 519,
+      "title": "deploy: KST UI 이미지로 승격",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-08-04T07:00:17Z",
+      "summary_ko": [
+        "Streamlit UI 컨테이너 이미지를 KST 시간대 표기 변경이 포함된 최신 불변 다이제스트로 교체했습니다.",
+        "에이전트 오케스트레이션 UI Kubernetes Deployment 매니페스트 파일의 image 태그를 업데이트했습니다.",
+        "배포 반영 시 화면에 표시되는 운영 시간이 한국 표준시(KST) 기준으로 정확히 제공됩니다."
+      ],
+      "report_url": "pr/519/"
+    },
     {
       "number": 516,
       "title": "chore: vault-k8s 카탈로그·backend root 항목 제거",
