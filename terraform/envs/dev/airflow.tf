@@ -277,7 +277,9 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
 # 의도와 다른 임의 1글자 매치가 된다) — 문자 클래스 `[.]`를 쓰면 이스케이프가
 # 아예 필요 없다. 또한 bucket/objects 경로를 명시적으로 anchor해 상위 prefix에
 # 우연히 `.staging-`이 포함된 커밋 완료 객체까지 걸리지 않게 한다(#464 바인딩과
-# 동일 패턴).
+# 동일 패턴). matches()는 RE2 부분 일치라 startsWith만으로는 경로 중간(예: 디렉터리
+# 이름)에 `.staging-`가 와도 걸린다 — 실제 임시 객체명(`part-0.parquet.staging-<uuid>`)은
+# 항상 마지막 path segment 끝에 오므로 `[^/]*$`로 그 위치까지 고정한다.
 resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_cleanup" {
   bucket = google_storage_bucket.raw_data.name
   role   = "roles/storage.objectUser"
@@ -286,7 +288,7 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_clea
   condition {
     title       = "raw-data-staging-cleanup"
     description = "Allow Airflow batch workloads to delete only their own atomic-publish staging temp objects, never committed raw data."
-    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/') && resource.name.matches('[.]staging-')"
+    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/') && resource.name.matches('[.]staging-[^/]*$')"
   }
 }
 
