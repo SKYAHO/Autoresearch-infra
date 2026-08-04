@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-04T06:29:26Z",
+  "generated_at": "2026-08-04T06:36:13Z",
   "reports": [
+    {
+      "number": 516,
+      "title": "chore: vault-k8s 카탈로그·backend root 항목 제거",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-04T06:35:53Z",
+      "summary_ko": [
+        "vault-k8s 원격 상태(state) 정리 완료에 따라 환경 설정 파일 및 스크립트에서 잔여 코드 참조를 완전히 제거했습니다.",
+        "환경 카탈로그 스크립트와 설정 YAML에서 vault-k8s 루트 및 미사용 변수(ui_ingress_source_cidr)를 삭제했습니다.",
+        "배포 워크플로우 주석과 스크립트 테스트 픽스처 데이터까지 정리를 완료하여 관련 이슈(#478)를 완결했습니다."
+      ],
+      "report_url": "pr/516/"
+    },
     {
       "number": 513,
       "title": "feat: 내부 Streamlit UI 배포 추가",
