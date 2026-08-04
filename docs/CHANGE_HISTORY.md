@@ -11,8 +11,9 @@
   정규식 조건(`resource.name.matches(...)`)이었으나, `gcloud alpha iam
   policies lint-condition`으로 실제 GCS 버킷 리소스에 검증한 결과 `matches()`와
   `contains()` 모두 `undeclared reference` 컴파일 오류로 거부됨을 확인했다.
-  **GCS 객체 IAM 조건은 `startsWith()`/`endsWith()`/`==`만 지원하고 RE2
-  정규식·부분 문자열 매치는 지원하지 않는다.** `terraform validate`/`plan`은
+  **검증한 범위에서 GCS 객체 IAM 조건은 `startsWith()`/`endsWith()`/`==`만
+  동작하고, RE2 정규식(`matches()`)·부분 문자열 매치(`contains()`)는
+  지원하지 않는다(그 외 함수는 미검증).** `terraform validate`/`plan`은
   CEL을 파싱하지 않으므로 이 실패는 `setIamPolicy` 시점(apply 또는 사전
   linter 호출)에만 드러난다 — 이후 GCS 객체 IAM 조건을 설계할 때는 이름
   패턴이 아니라 경로 prefix로 범위를 잡아야 한다.
@@ -25,10 +26,12 @@
   있다. "완료된 raw 데이터는 삭제·덮어쓰기 불가" 원칙이 이 prefix 안에서는
   더 이상 IAM으로 보장되지 않고, DAG가 자신이 만든 staging 이름 외에는
   delete를 호출하지 않는다는 애플리케이션 계약에 의존한다. 다른 raw_data
-  prefix는 이 바인딩의 영향을 받지 않는다.
+  prefix는 이 바인딩의 영향을 받지 않는다 — 단, 이 격리는 prefix 값의 끝
+  슬래시에 의존한다(`data_lake/action_log/`가 아니라 `data_lake/action_log`
+  였다면 `data_lake/action_log_quarantine/`까지 범위에 들어온다).
 - CI를 통한 apply와 라이브 IAM policy 조회로 반영을 확인했다. 이미
   오염된 기존 파티션의 정리와 다른 raw_data prefix의 동일 결함 노출 여부는
-  이 변경 범위 밖으로 남겼다.
+  이 변경 범위 밖으로 남겼다 — 후속 추적은 #522.
 
 ## 2026-08-02: paired Feast experiment runtime dev 격리 계약 (#485) — 미적용
 
