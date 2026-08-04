@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-04T07:40:29Z",
+  "generated_at": "2026-08-04T07:46:41Z",
   "reports": [
+    {
+      "number": 517,
+      "title": "fix: airflow-batch SA에 raw-data staging 삭제 권한 추가",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-04T07:46:22Z",
+      "summary_ko": [
+        "Airflow 배치 계정에 raw-data 버킷 내 action log 경로 대상 객체 삭제 및 수정 권한(roles/storage.objectUser)을 추가했습니다.",
+        "GCS IAM 조건의 표현식 제약으로 파일명 접미사 대신 경로 prefix 기준 IAM CEL 조건을 적용했습니다.",
+        "프로젝트 이전 후 원자적 게시(copy+delete) 과정에서 staging 임시 파일이 잔류하던 이슈(#514)를 해결했습니다."
+      ],
+      "report_url": "pr/517/"
+    },
     {
       "number": 519,
       "title": "deploy: KST UI 이미지로 승격",
