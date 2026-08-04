@@ -112,7 +112,10 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
   대응으로 만들었지만 `Autoresearch-airflow`의 어떤 KPO도 현재 이 pool로
   스케줄되지 않는다(#523) — 유휴 상태이므로 별도 경합 계획 없이 실험 Job이
   그대로 쓴다. 다른 컴포넌트가 이 pool을 실제로 쓰기 시작하면 그 변경에서
-  capacity·우선순위 계획을 다시 승인한다.
+  capacity·우선순위 계획을 다시 승인한다. `enable_experiment_job_creation`
+  활성화 직전 재확인 절차는
+  `terraform/admin/autoresearch-k8s/README.md`의 "Job 생성 권한 활성화 조건"
+  6번을 따른다.
 - namespace ResourceQuota로 동시 실행 수·총 CPU·총 메모리 상한 설정
 
 정확한 숫자는 실제 dev GKE quota와 예상 실험 소요량을 확인한 뒤 plan 문서에서
