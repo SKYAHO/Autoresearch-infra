@@ -270,8 +270,14 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
 # (임시 이름으로 쓰고 최종 이름으로 옮기는 copy+delete, GCS에는 rename이 없음)가
 # 실패하며 action log 파티션이 오염됐다. objectUser(create/get/list/delete/update
 # 포함, IAM 정책 변경 권한은 없음)를 부여하되 batch SA가 스스로 만든 staging
-# 임시 객체(파일명에 `.staging-` 포함)로만 조건 범위를 좁혀, 위 objectCreator의
-# "완료된 raw 데이터는 삭제·덮어쓰기 불가" 원칙을 그대로 유지한다.
+# 임시 객체로만 조건 범위를 좁혀, 위 objectCreator의 "완료된 raw 데이터는
+# 삭제·덮어쓰기 불가" 원칙을 그대로 유지한다. `\.staging-`(백슬래시 이스케이프)는
+# HCL이 `\.`로 축약한 뒤 CEL 문자열 리터럴로 다시 파싱되는데, `\.`는 CEL이 정의한
+# 이스케이프 시퀀스가 아니라 setIamPolicy 단계에서 파싱 오류가 나거나(통과해도
+# 의도와 다른 임의 1글자 매치가 된다) — 문자 클래스 `[.]`를 쓰면 이스케이프가
+# 아예 필요 없다. 또한 bucket/objects 경로를 명시적으로 anchor해 상위 prefix에
+# 우연히 `.staging-`이 포함된 커밋 완료 객체까지 걸리지 않게 한다(#464 바인딩과
+# 동일 패턴).
 resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_cleanup" {
   bucket = google_storage_bucket.raw_data.name
   role   = "roles/storage.objectUser"
@@ -280,7 +286,7 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_clea
   condition {
     title       = "raw-data-staging-cleanup"
     description = "Allow Airflow batch workloads to delete only their own atomic-publish staging temp objects, never committed raw data."
-    expression  = "resource.name.matches('\\.staging-')"
+    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/') && resource.name.matches('[.]staging-')"
   }
 }
 
