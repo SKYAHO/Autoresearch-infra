@@ -249,7 +249,7 @@ Redis Cluster/PSC 제거 plan을 따로 검토한다. 실제 삭제와 state 조
 | Versioning | enabled | 원본 overwrite/삭제 실수 대비 |
 | Soft delete | disabled | dev 비용 누적 방지. versioning/lifecycle로 보호 |
 | Noncurrent 정리 | 30일 후 삭제 | prefix와 무관하게 archived(noncurrent) object version 정리 |
-| 접근 주체 | GKE app SA | `roles/storage.objectCreator` + `roles/storage.objectViewer`, 삭제/overwrite 제외 |
+| 접근 주체 | GKE app SA, Airflow SA, Airflow batch SA | `roles/storage.objectCreator` + `roles/storage.objectViewer`, 삭제/overwrite 제외 — **예외**: Airflow batch SA는 `data_lake/action_log/` prefix 안에서만 조건부 `roles/storage.objectUser`(delete/update 포함, #517)도 가짐. 조건·근거는 아래 "Prefix 규칙" 절 참조 |
 | Destroy 보호 | `force_destroy=false`, `prevent_destroy=true` | 원본 데이터 유실 방지. 삭제 필요 시 lifecycle 해제 후 별도 계획 |
 
 ### Prefix 규칙
