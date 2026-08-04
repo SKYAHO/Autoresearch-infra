@@ -269,26 +269,32 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
 # #514 프로젝트 이전 중 storage.objects.delete 권한이 누락돼 원자적 게시
 # (임시 이름으로 쓰고 최종 이름으로 옮기는 copy+delete, GCS에는 rename이 없음)가
 # 실패하며 action log 파티션이 오염됐다. objectUser(create/get/list/delete/update
-# 포함, IAM 정책 변경 권한은 없음)를 부여하되 batch SA가 스스로 만든 staging
-# 임시 객체로만 조건 범위를 좁혀, 위 objectCreator의 "완료된 raw 데이터는
-# 삭제·덮어쓰기 불가" 원칙을 그대로 유지한다. `\.staging-`(백슬래시 이스케이프)는
-# HCL이 `\.`로 축약한 뒤 CEL 문자열 리터럴로 다시 파싱되는데, `\.`는 CEL이 정의한
-# 이스케이프 시퀀스가 아니라 setIamPolicy 단계에서 파싱 오류가 나거나(통과해도
-# 의도와 다른 임의 1글자 매치가 된다) — 문자 클래스 `[.]`를 쓰면 이스케이프가
-# 아예 필요 없다. 또한 bucket/objects 경로를 명시적으로 anchor해 상위 prefix에
-# 우연히 `.staging-`이 포함된 커밋 완료 객체까지 걸리지 않게 한다(#464 바인딩과
-# 동일 패턴). matches()는 RE2 부분 일치라 startsWith만으로는 경로 중간(예: 디렉터리
-# 이름)에 `.staging-`가 와도 걸린다 — 실제 임시 객체명(`part-0.parquet.staging-<uuid>`)은
-# 항상 마지막 path segment 끝에 오므로 `[^/]*$`로 그 위치까지 고정한다.
+# 포함, IAM 정책 변경 권한은 없음)를 부여한다.
+#
+# 당초 `.staging-<uuid>` 접미사만 delete 대상으로 허용하는 조건(`resource.name.matches(...)`)을
+# 시도했으나, `gcloud alpha iam policies lint-condition`으로 실제 GCS 버킷 리소스에 대해
+# 검증한 결과 `matches()`/`contains()` 모두 `undeclared reference` 컴파일 오류로 거부된다
+# (GCS 객체 조건은 `startsWith()`/`endsWith()`/`==`만 지원, RE2 정규식·부분 문자열 매치 불가).
+# `terraform validate`/`plan`은 CEL을 파싱하지 않아 이 실패를 잡지 못하고 setIamPolicy
+# 시점에야 드러난다. 임시 객체명은 끝에 랜덤 UUID가 붙어(`part-0.parquet.staging-<uuid>`)
+# `endsWith()`로도 고정할 수 없으므로, 이름 패턴으로 staging 객체만 골라내는 조건은
+# 현재 지원 함수로 표현이 불가능하다.
+#
+# 따라서 스코프를 이름 패턴이 아니라 **경로 prefix**로 좁힌다(`local.raw_data_prefixes.action_logs_raw`,
+# 이슈가 지목한 실제 오염 경로). 이 prefix 하위에서는 batch SA가 staging 임시 객체뿐 아니라
+# 이미 커밋된 최종 객체도 delete/update할 수 있다 — "완료된 raw 데이터는 삭제·덮어쓰기 불가"
+# 원칙이 IAM으로는 더 이상 이 prefix 안에서 보장되지 않고, DAG가 자신이 만든 staging 이름
+# 외에는 delete를 호출하지 않는다는 애플리케이션 계약에 의존한다. 다른 raw_data prefix
+# (`asset/virtual_user/`, `data/raw/personas/` 등)는 이 바인딩의 영향을 받지 않는다.
 resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_cleanup" {
   bucket = google_storage_bucket.raw_data.name
   role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.airflow_batch.email}"
 
   condition {
-    title       = "raw-data-staging-cleanup"
-    description = "Allow Airflow batch workloads to delete only their own atomic-publish staging temp objects, never committed raw data."
-    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/') && resource.name.matches('[.]staging-[^/]*$')"
+    title       = "raw-data-action-log-delete-update"
+    description = "Allow Airflow batch workloads to delete/update objects under the action_log raw prefix (needed to clean up their own atomic-publish staging temp files; GCS IAM conditions cannot pattern-match the staging filename suffix)."
+    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/${local.raw_data_prefixes.action_logs_raw}')"
   }
 }
 
