@@ -111,8 +111,16 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    privileged·host namespace 등 별도 위험 필드를 거부한다.
 5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
    수행한다.
-6. `batch-od`는 #297의 재시도 내성이 없는 Action Log shard KPO와 공유하므로, 전용
-   실험 node pool을 만들거나 해당 KPO와의 capacity·우선순위 경합 계획을 승인한다.
+6. `batch-od`의 현재 실제 사용자를 확인한다(#523, 2026-08-04 조사). `batch-od`는
+   #297 대응으로 만들어졌지만, `Autoresearch-airflow`의 `AutoresearchBatchPodOperator`는
+   `node_selector`/`tolerations`를 넘기지 않으면 `batch-spot`을 기본값으로 쓰고
+   실제로 이를 override하는 DAG가 없다 — Action Log KPO를 포함해 모든 KPO가 지금도
+   `batch-spot`에서 돈다(#297 이후 채택된 완화책은 pool 이전이 아니라 체크포인트
+   재개 + timeout 연장, #150). 즉 `batch-od`는 현재 다른 워크로드가 없는 유휴
+   pool이며, 이 상태에서는 별도 경합 계획 없이 experiment Job이 그대로 써도 된다.
+   이후 Airflow나 다른 컴포넌트가 `batch-od`에 실제로 스케줄되도록 바뀌면(예:
+   `node_selector`를 명시적으로 override하는 DAG 변경), 그 시점에 capacity·우선순위
+   경합 계획을 다시 검토한다.
 
 권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
 Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
@@ -132,11 +140,14 @@ controller에 의존합니다. namespace, KSA, 결과 버킷을 롤백 수단으
 병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request/limit은
 500m/1 GiB이고, 단일 컨테이너는 1 vCPU/2 GiB를 넘을 수 없습니다. Job 템플릿과
 admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` toleration을
-강제해야 합니다. `batch-od`는 #297 Action Log shard KPO와 공유하는 min 0/max 2
-on-demand pool이므로 일반 앱 pool 압박은 막지만, 실험 실행 시 해당 KPO가 Pending이
-될 수 있습니다. Job 생성 권한을 활성화하기 전에는 전용 실험 pool 또는 capacity·우선순위
-계획을 별도로 승인하고, batch-od node/pod Pending·autoscaler·CPU/memory를 관측해야
-합니다. 운영 검증 절차와 Job manifest 계약은
+강제해야 합니다. `batch-od`는 #297 대응으로 만든 min 0/max 2 on-demand pool이지만,
+현재 `Autoresearch-airflow`의 어떤 KPO도 이 pool로 스케줄되지 않습니다(#523 —
+`AutoresearchBatchPodOperator` 기본값은 `batch-spot`이고 override하는 DAG가 없음).
+따라서 지금은 experiment Job이 이 pool을 사실상 독점하며, quota 상한(2 vCPU/4 GiB)은
+pool 용량(e2-standard-2 2노드) 안에 들어갑니다. 다른 워크로드가 `batch-od`를 실제로
+쓰기 시작하면 그 변경에서 capacity·우선순위 경합 계획을 별도로 승인해야 합니다.
+운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
+절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
 따릅니다.
 

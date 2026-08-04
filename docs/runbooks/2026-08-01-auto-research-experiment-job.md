@@ -312,12 +312,16 @@ API는 새 제출을 차단하고 운영자에게 escalate한다. API는 delete 
 비용 경보나 quota 초과가 발생하면 API 동시 제출 제한을 먼저 낮춘다. namespace quota
 상향은 node 여유, 예상 최대 실행 시간, 비용 상한을 문서화한 별도 이슈에서 검토한다.
 
-`batch-od`는 실험 전용 pool이 아니라 #297의 재시도 내성이 없는 Action Log shard KPO와
-공유한다. 최대 request 1 vCPU인 실험 Job 두 개는 e2-standard-2 allocatable CPU 약
-1930m 기준 서로 다른 두 노드를 점유할 수 있어, pool max 2에서는 Action Log shard가
-`FailedScheduling`/Pending이 될 수 있다. Job 생성 권한 활성화 전 전용 실험 pool 또는
-승인된 capacity·우선순위 계획을 마련한다. 운영 중에는 batch-od node 수, Pending Pod,
-autoscaler 이벤트, CPU/memory request와 Action Log shard 상태를 함께 관측한다.
+`batch-od`는 #297 대응으로 만들었지만, 현재 `Autoresearch-airflow`의 어떤 KPO도 이
+pool로 스케줄되지 않는다(#523, 2026-08-04 조사). `AutoresearchBatchPodOperator`는
+`node_selector`/`tolerations`를 넘기지 않으면 `batch-spot`을 기본값으로 쓰고, 이를
+override하는 DAG가 없다 — Action Log KPO를 포함해 모든 KPO가 지금도 `batch-spot`에서
+돈다(#297 이후 채택된 완화책은 pool 이전이 아니라 체크포인트 재개 + timeout 연장,
+#150). 즉 `batch-od`는 현재 유휴 pool이며 experiment Job이 별도 경합 계획 없이
+그대로 써도 된다. 운영 중에는 batch-od node 수, Pending Pod, autoscaler 이벤트,
+CPU/memory request를 관측한다. 이후 Airflow나 다른 컴포넌트가 `batch-od`에 실제로
+스케줄되도록 바뀌면(예: `node_selector`를 명시적으로 override하는 DAG 변경), 그
+시점에 capacity·우선순위 경합 계획을 다시 검토한다.
 
 ## Pod Security 버전 갱신
 
