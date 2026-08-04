@@ -266,6 +266,38 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
   member = "serviceAccount:${google_service_account.airflow_batch.email}"
 }
 
+# #514 프로젝트 이전 중 storage.objects.delete 권한이 누락돼 원자적 게시
+# (임시 이름으로 쓰고 최종 이름으로 옮기는 copy+delete, GCS에는 rename이 없음)가
+# 실패하며 action log 파티션이 오염됐다. objectUser(create/get/list/delete/update
+# 포함, IAM 정책 변경 권한은 없음)를 부여한다.
+#
+# 당초 `.staging-<uuid>` 접미사만 delete 대상으로 허용하는 조건(`resource.name.matches(...)`)을
+# 시도했으나, `gcloud alpha iam policies lint-condition`으로 실제 GCS 버킷 리소스에 대해
+# 검증한 결과 `matches()`/`contains()` 모두 `undeclared reference` 컴파일 오류로 거부된다
+# (GCS 객체 조건은 `startsWith()`/`endsWith()`/`==`만 지원, RE2 정규식·부분 문자열 매치 불가).
+# `terraform validate`/`plan`은 CEL을 파싱하지 않아 이 실패를 잡지 못하고 setIamPolicy
+# 시점에야 드러난다. 임시 객체명은 끝에 랜덤 UUID가 붙어(`part-0.parquet.staging-<uuid>`)
+# `endsWith()`로도 고정할 수 없으므로, 이름 패턴으로 staging 객체만 골라내는 조건은
+# 현재 지원 함수로 표현이 불가능하다.
+#
+# 따라서 스코프를 이름 패턴이 아니라 **경로 prefix**로 좁힌다(`local.raw_data_prefixes.action_logs_raw`,
+# 이슈가 지목한 실제 오염 경로). 이 prefix 하위에서는 batch SA가 staging 임시 객체뿐 아니라
+# 이미 커밋된 최종 객체도 delete/update할 수 있다 — "완료된 raw 데이터는 삭제·덮어쓰기 불가"
+# 원칙이 IAM으로는 더 이상 이 prefix 안에서 보장되지 않고, DAG가 자신이 만든 staging 이름
+# 외에는 delete를 호출하지 않는다는 애플리케이션 계약에 의존한다. 다른 raw_data prefix
+# (`asset/virtual_user/`, `data/raw/personas/` 등)는 이 바인딩의 영향을 받지 않는다.
+resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_cleanup" {
+  bucket = google_storage_bucket.raw_data.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.airflow_batch.email}"
+
+  condition {
+    title       = "raw-data-action-log-delete-update"
+    description = "Allow Airflow batch workloads to delete/update objects under the action_log raw prefix (needed to clean up their own atomic-publish staging temp files; GCS IAM conditions cannot pattern-match the staging filename suffix)."
+    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/${local.raw_data_prefixes.action_logs_raw}')"
+  }
+}
+
 # #464 canonical training snapshot publisher/consumer 경계. 기존 MLflow 서버의
 # bucket-wide artifact 권한을 학습 파드에 상속하지 않고, batch GSA에만 prefix
 # 한정 create/read를 부여한다. objectCreator는 기존 객체 overwrite를 막는다.
