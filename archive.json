@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-04T05:41:16Z",
+  "generated_at": "2026-08-04T05:50:09Z",
   "reports": [
+    {
+      "number": 513,
+      "title": "feat: 내부 Streamlit UI 배포 추가",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-08-04T05:49:56Z",
+      "summary_ko": [
+        "팀 내부 검증용 Streamlit Experiment Workbench 배포를 위한 GKE Deployment와 ClusterIP Service 매니페스트를 추가했습니다.",
+        "UI Pod는 비루트·read-only 파일시스템 기반으로 제한하며, API 통신(TCP 8000)과 DNS Egress만 허용하는 NetworkPolicy 경계를 설정했습니다.",
+        "이미지 다이제스트 주입, port-forward 기반 내부 접근 및 롤백 절차를 다루는 운영 룬북과 설계 문서를 보강했습니다."
+      ],
+      "report_url": "pr/513/"
+    },
     {
       "number": 508,
       "title": "fix: optimized serving digest 승격",
