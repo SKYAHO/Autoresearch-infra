@@ -249,7 +249,7 @@ Redis Cluster/PSC 제거 plan을 따로 검토한다. 실제 삭제와 state 조
 | Versioning | enabled | 원본 overwrite/삭제 실수 대비 |
 | Soft delete | disabled | dev 비용 누적 방지. versioning/lifecycle로 보호 |
 | Noncurrent 정리 | 30일 후 삭제 | prefix와 무관하게 archived(noncurrent) object version 정리 |
-| 접근 주체 | GKE app SA | `roles/storage.objectCreator` + `roles/storage.objectViewer`, 삭제/overwrite 제외 |
+| 접근 주체 | GKE app SA, Airflow SA, Airflow batch SA | `roles/storage.objectCreator` + `roles/storage.objectViewer`, 삭제/overwrite 제외 — **예외**: Airflow batch SA는 `data_lake/action_log/` prefix 안에서만 조건부 `roles/storage.objectUser`(delete/update 포함, #517)도 가짐. 조건·근거는 아래 "Prefix 규칙" 절 참조 |
 | Destroy 보호 | `force_destroy=false`, `prevent_destroy=true` | 원본 데이터 유실 방지. 삭제 필요 시 lifecycle 해제 후 별도 계획 |
 
 ### Prefix 규칙
@@ -265,9 +265,19 @@ GCS는 폴더 리소스를 따로 만들지 않고 object name prefix를 폴더�
 | 페르소나 원본 스냅샷 | `data/raw/personas/` | `data/raw/personas/nvidia_personas_kr.jsonl` |
 
 이 prefix들은 `locals.raw_data_prefixes`와 `output.raw_data_prefixes`로도 노출된다.
-IAM 조건은 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 맞춘 문서/출력용
-표준이다. 기존 output 소비자가 깨지지 않도록 `youtube_raw`, `users_raw`,
-`action_logs_raw`, `personas_raw` key는 같은 값의 호환 alias로 유지한다.
+대부분은 IAM 조건이 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 맞춘
+문서/출력용 표준이다. 기존 output 소비자가 깨지지 않도록 `youtube_raw`,
+`users_raw`, `action_logs_raw`, `personas_raw` key는 같은 값의 호환 alias로
+유지한다.
+
+**예외 — `action_logs_raw`는 IAM 조건에서 직접 참조된다**(#517,
+`terraform/envs/dev/airflow.tf`의 `airflow_batch_raw_data_staging_cleanup`
+바인딩). 이 값을 바꾸면 Airflow batch SA의 delete/update 권한 범위가 함께
+바뀐다. 끝 슬래시가 격리 경계다 — `data_lake/action_log/`가 아니라
+`data_lake/action_log`였다면 `startsWith()` 매치가 `action_log_quarantine`
+prefix까지 조용히 포함한다. `action_logs`는 같은 값의 alias이지만 IAM
+조건은 `action_logs_raw`만 참조하므로, 두 key 중 하나만 고쳐 값이 갈리면
+이 IAM 조건과 표시용 prefix가 어긋난다.
 
 페르소나 원본 스냅샷은 현재 Airflow DAG가 직접 GCS에 쓰는 경로가 아니라,
 앱 저장소 virtual user 생성 설정의 기본 raw snapshot 경로
@@ -1330,7 +1340,7 @@ Airflow는 두 Terraform root로 나눈다.
 | Secret Manager | `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` | secret payload는 Terraform 밖에서 주입. secret metadata와 Airflow SA/batch SA accessor만 Terraform 관리 |
 | GCS buckets | `autoresearch-503903-autoresearch-dev-airflow-dags`, `...-airflow-logs` | DAG 버전관리 / task log 영속화. `prevent_destroy=true` |
 | Airflow SA 접근 권한 | Cloud SQL client, Secret Manager accessor(Airflow API/OAuth secrets), BigQuery jobUser(project), GCS objectAdmin(dags/logs/feast_registry/feast_staging), GCS objectViewer+objectCreator(raw_data), BigQuery dataEditor(feast_offline_store, data_lake_raw) | raw_data는 읽기+새 객체 생성만 허용해 기존 원본 삭제/덮어쓰기를 차단 |
-| Airflow batch SA 접근 권한 | Secret Manager accessor(YouTube/OpenRouter), BigQuery jobUser(project), GCS objectViewer+objectCreator(raw_data), GCS objectAdmin(feast_registry/feast_staging), BigQuery dataEditor(feast_offline_store, data_lake_raw) | app GSA에서 Airflow API key 접근권을 제거하고 batch 실행에 필요한 권한만 분리 |
+| Airflow batch SA 접근 권한 | Secret Manager accessor(YouTube/OpenRouter), BigQuery jobUser(project), GCS objectViewer+objectCreator(raw_data), 조건부 GCS objectUser(raw_data, `data_lake/action_log/` prefix 한정 — delete/update 포함, #517), GCS objectAdmin(feast_registry/feast_staging), BigQuery dataEditor(feast_offline_store, data_lake_raw) | app GSA에서 Airflow API key 접근권을 제거하고 batch 실행에 필요한 권한만 분리. `action_log` prefix 안에서는 batch SA가 원자적 게시 staging 정리를 위해 삭제/덮어쓰기도 가능 — 바로 위 Airflow SA(비-batch)는 이 조건부 권한이 없어 원본 삭제/덮어쓰기 차단이 그대로 유지된다 |
 
 ### 설치 담당자 Helm 적용 경로
 
