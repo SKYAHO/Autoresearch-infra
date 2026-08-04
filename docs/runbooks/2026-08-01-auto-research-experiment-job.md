@@ -323,6 +323,15 @@ CPU/memory request를 관측한다. 이후 Airflow나 다른 컴포넌트가 `ba
 스케줄되도록 바뀌면(예: `node_selector`를 명시적으로 override하는 DAG 변경), 그
 시점에 capacity·우선순위 경합 계획을 다시 검토한다.
 
+이 유휴 상태 전제는 이 저장소 밖(`Autoresearch-airflow`)의 상태에 의존하고, 그
+저장소의 변경은 이 저장소의 CI·리뷰를 거치지 않는다. 게다가 quota 상한(2 vCPU)이
+pool 용량(e2-standard-2 2노드)을 거의 그대로 채우는 구조라 헤드룸이 없다 — Airflow
+DAG 하나가 `node_selector`를 `batch-od`로 override하면 경고 없이 experiment Job 또는
+그 KPO가 Pending에 빠질 수 있다. `batch-od` node/pod Pending 관측(위)을 수동
+확인에서 알림으로 승격하는 안(예: `autoresearch-experiments` namespace 밖 Pod가
+`batch-od` 노드에 뜨면 알림, 또는 `batch-od` 대상 Pending Pod 알림)을 #523의
+후속 체크리스트 항목으로 추적한다.
+
 ## Pod Security 버전 갱신
 
 현재 enforce 기준은 live GKE control plane의 `v1.35`로 고정했다. 이 pin은 control

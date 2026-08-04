@@ -118,6 +118,11 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    `batch-spot`에서 돈다(#297 이후 채택된 완화책은 pool 이전이 아니라 체크포인트
    재개 + timeout 연장, #150). 즉 `batch-od`는 현재 다른 워크로드가 없는 유휴
    pool이며, 이 상태에서는 별도 경합 계획 없이 experiment Job이 그대로 써도 된다.
+   활성화 전 재확인은 다음 두 가지로 한다:
+   `kubectl get pods -A -o wide --field-selector spec.nodeName=<batch-od 노드>`로
+   `autoresearch-experiments` namespace 밖 Pod가 없는지 확인하고,
+   `gh api "search/code?q=node_selector+OR+tolerations+repo:SKYAHO/Autoresearch-airflow"`로
+   `batch-od`를 override하는 DAG가 여전히 없는지 확인한다.
    이후 Airflow나 다른 컴포넌트가 `batch-od`에 실제로 스케줄되도록 바뀌면(예:
    `node_selector`를 명시적으로 override하는 DAG 변경), 그 시점에 capacity·우선순위
    경합 계획을 다시 검토한다.
@@ -143,9 +148,16 @@ admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` to
 강제해야 합니다. `batch-od`는 #297 대응으로 만든 min 0/max 2 on-demand pool이지만,
 현재 `Autoresearch-airflow`의 어떤 KPO도 이 pool로 스케줄되지 않습니다(#523 —
 `AutoresearchBatchPodOperator` 기본값은 `batch-spot`이고 override하는 DAG가 없음).
-따라서 지금은 experiment Job이 이 pool을 사실상 독점하며, quota 상한(2 vCPU/4 GiB)은
-pool 용량(e2-standard-2 2노드) 안에 들어갑니다. 다른 워크로드가 `batch-od`를 실제로
-쓰기 시작하면 그 변경에서 capacity·우선순위 경합 계획을 별도로 승인해야 합니다.
+따라서 지금은 experiment Job이 이 pool을 사실상 독점합니다. 단, 이 보장은 Job이
+**컨테이너 1개, 노드 1개당 Pod 1개** 기준일 때만 성립합니다 — `LimitRange`는
+`type = "Container"`로 컨테이너당 상한(1 vCPU/2 GiB)만 강제하고 Pod 합계 상한은
+없으므로, 컨테이너 2개짜리 Pod가 2 vCPU를 요청해도 quota·admission을 통과합니다.
+e2-standard-2의 allocatable CPU는 약 1930m(DaemonSet request 제외 전)이라 그런
+Pod는 어느 노드에도 배치되지 못하고 영구 Pending이 됩니다. 고정 템플릿이 실제로
+단일 컨테이너만 만든다는 전제가 깨지면 이 상한이 무너지므로, 다른 워크로드가
+`batch-od`를 실제로 쓰기 시작하는 경우와 별개로 API 템플릿이 다중 컨테이너 Job을
+만들 가능성이 생기면 그 변경에서 capacity·우선순위 경합 계획을 별도로 승인해야
+합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
