@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-04T08:45:08Z",
+  "generated_at": "2026-08-04T11:13:36Z",
   "reports": [
+    {
+      "number": 521,
+      "title": "docs: raw_data staging cleanup IAM 결정을 CHANGE_HISTORY에 기록 (#514)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-04T11:13:20Z",
+      "summary_ko": [
+        "GCS 객체 IAM 조건에서 정규식 CEL 함수 미지원 제약과 경로 prefix 기반 IAM 재설계 결정을 문서화했습니다.",
+        "docs/CHANGE_HISTORY.md에 실측 테스트 결과, CEL 제약 사항, 보안 트레이드오프를 변경 이력으로 기록했습니다.",
+        "docs/TERRAFORM_DEV.md에 action_logs_raw prefix의 IAM 조건 연동 특성 및 Airflow batch SA 권한 예외를 반영했습니다."
+      ],
+      "report_url": "pr/521/"
+    },
     {
       "number": 517,
       "title": "fix: airflow-batch SA에 raw-data staging 삭제 권한 추가",
