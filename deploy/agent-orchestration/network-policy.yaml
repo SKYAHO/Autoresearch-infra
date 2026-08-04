@@ -18,6 +18,16 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # Streamlit UI만 API 요청 토큰으로 내부 Experiment API를 호출한다. UI Service는
+    # ClusterIP·port-forward 전용이며 외부 caller는 이 rule을 만족할 수 없다.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: ui
+              app.kubernetes.io/part-of: agent-orchestration
+      ports:
+        - protocol: TCP
+          port: 8000
     # This CIDR must match dev Terraform var.dev_subnet_cidr. Kubelet probes
     # and kubectl port-forward originate from a node IP, not the caller Pod.
     - from:
@@ -114,6 +124,65 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+---
+# UI Pod는 API TCP 8000과 DNS만 호출한다. UI에는 KSA token·Cloud SQL·Runner·외부 HTTPS
+# egress가 필요 없으므로 기본 차단 경계를 명시적으로 유지한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-ui
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: ui
+      app.kubernetes.io/part-of: agent-orchestration
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # This CIDR must match dev Terraform var.dev_subnet_cidr. Kubelet probes and
+    # kubectl port-forward both originate from a node IP.
+    - from:
+        - ipBlock:
+            cidr: 10.10.0.0/20
+      ports:
+        - protocol: TCP
+          port: 8501
+  egress:
+    # Calico evaluates Service traffic before DNAT in some paths, so the Service
+    # CIDR and API pod selector are both required for the internal API route.
+    - to:
+        - ipBlock:
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: api
+              app.kubernetes.io/part-of: agent-orchestration
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - ipBlock:
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

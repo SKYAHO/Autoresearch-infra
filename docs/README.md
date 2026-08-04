@@ -14,7 +14,7 @@
 | ArgoCD 접속, sync/diff/rollback, 장애 대응, 임의 워크로드 실배포 검증 확인 | [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md) |
 | Argo Rollouts promote/abort/rollback 등 점진 배포 운영 | [`ROLLOUTS_OPERATIONS_RUNBOOK.md`](ROLLOUTS_OPERATIONS_RUNBOOK.md) |
 | MLflow 접속·실험/모델 등록·시크릿 로테이션·백업·장애 대응 | [`MLFLOW_OPERATIONS_RUNBOOK.md`](MLFLOW_OPERATIONS_RUNBOOK.md) |
-| Agent Orchestration API/Runner의 내부 GKE 배포·OAuth bootstrap·저장 검증 | [`runbooks/2026-07-30-agent-orchestration-gke.md`](runbooks/2026-07-30-agent-orchestration-gke.md) |
+| Agent Orchestration API/Runner/Streamlit UI의 내부 GKE 배포·OAuth bootstrap·저장 검증 | [`runbooks/2026-07-30-agent-orchestration-gke.md`](runbooks/2026-07-30-agent-orchestration-gke.md) |
 | Kibana/ELK 로그 검색·운영 절차 확인 | [`KIBANA_OPERATIONS_RUNBOOK.md`](KIBANA_OPERATIONS_RUNBOOK.md) |
 | ArgoCD/Airflow/MLflow/Grafana/Kibana Google OAuth Secret·allowlist 갱신·롤백 | [`OAUTH_OPERATIONS_RUNBOOK.md`](OAUTH_OPERATIONS_RUNBOOK.md) |
 | Vault(폐기 #412 — 이력 보존용) | [`VAULT_OPERATIONS_RUNBOOK.md`](VAULT_OPERATIONS_RUNBOOK.md) |
