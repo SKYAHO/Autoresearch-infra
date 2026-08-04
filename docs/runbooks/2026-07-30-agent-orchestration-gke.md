@@ -5,6 +5,13 @@ Agent Orchestration은 FastAPI API, Codex Runner, Streamlit UI를 서로 다른 
 Secret Manager 접근 권한을 가지며, Runner는 Codex OAuth bootstrap 시크릿 하나만 읽고,
 UI는 기존 API 요청 토큰만 환경 변수로 받으며 KSA token과 GCP IAM 권한을 갖지 않습니다.
 
+UI는 사용자별 인증을 제공하지 않습니다. 따라서 `agent-orchestration-ui` Service에
+`kubectl port-forward`할 RBAC를 가진 내부 팀원은 API 요청 토큰을 직접 알지 않아도 UI가
+주입받은 토큰으로 `/chat`을 호출할 수 있습니다. 이는 Codex/OpenAI 비용 발생과
+`chat_interactions` 기록을 수행할 수 있는 dev 내부 권한 경계입니다. 포트포워드 권한은
+신뢰된 팀원에게만 부여하고, 외부 Ingress·LoadBalancer·공용 사용자 접근은 도입하지
+않습니다.
+
 이 문서는 `deploy/agent-orchestration/`의 immutable digest 주입, OAuth 초기 인증,
 Alembic PreSync migration, ArgoCD manual sync, 내부 healthcheck, Streamlit port-forward와
 PostgreSQL 저장 검증·롤백 절차를 다룹니다.

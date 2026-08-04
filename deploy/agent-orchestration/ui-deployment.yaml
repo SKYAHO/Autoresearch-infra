@@ -82,4 +82,5 @@ spec:
               drop: ["ALL"]
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
