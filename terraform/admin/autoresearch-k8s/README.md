@@ -133,7 +133,14 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    dags/`로 확인하고 확인한 commit SHA를 이 문서나 이슈에 기록한다 — 이 PR은
    `Autoresearch-airflow@c775fc6baeb762fc9280607e428f637a2773dc9a`(2026-08-04,
    `main`)에서 확인했고, `dags/feast_materialize/dag.py`가 `node_selector={}`로
-   기본값을 해제하지만 대상은 일반 app pool이며 `batch-od`가 아니다.
+   기본값을 해제하지만 대상은 일반 app pool이며 `batch-od`가 아니다. 이 grep이
+   두 축(override 존재 여부·`AutoresearchBatchPodOperator` 기본값 자체)을 모두
+   덮는 근거는 기본값을 정의하는 `dags/common/batch_pod_operator.py`도 `dags/`
+   하위에 있어, 기본값이 `batch-spot`에서 `batch-od`로 바뀌면 그 파일에 문자열
+   `batch-od`가 나타나 같은 grep에 잡히기 때문이다. `kubectl` 조회는 실행 순간에
+   존재하는 Pod만 보이므로 KPO처럼 짧게 살아 있다 사라지는 Pod를 놓칠 수 있어
+   런타임 스냅숏 확인일 뿐이고, 판단의 근거는 어디까지나 DAG 코드 기준인 이
+   grep이다.
    이후 Airflow나 다른 컴포넌트가 `batch-od`에 실제로 스케줄되도록 바뀌면(예:
    `node_selector`를 명시적으로 override하는 DAG 변경), 그 시점에 capacity·우선순위
    경합 계획을 다시 검토한다.
@@ -170,13 +177,17 @@ admission이 강제하는 `activeDeadlineSeconds`(1~3600초)가 `status.startTim
 흐르므로 스케줄 여부와 무관하게 `DeadlineExceeded`로 종료되고 `ttlSecondsAfterFinished`
 경과 후 TTL controller가 quota를 회수합니다 — 즉 최대 (deadline+TTL) 동안
 `count/jobs.batch` 슬롯을 점유했다가 자동으로 회수되며, 수동 회수가 필요한 "영구"
-상태는 아닙니다. 다만 ResourceQuota는 스케줄 여부와 무관하게 제출 시점의 request
-합계로 집계되므로, 이 Pod 하나가 `requests.cpu = 2` 전체를 요청하면 그 (deadline+TTL)
-구간 동안 정상적인 단일 컨테이너 실험 Job의 신규 제출도 admission에서 quota 초과로
-함께 거부됩니다 — 최악의 경우 최대 2시간(1시간+1시간) 동안 experiment Job 기능
-전체가 자기잠식(self-DoS)됩니다. 고정 템플릿이 실제로 단일 컨테이너만 만든다는
-전제가 깨지면(API 템플릿이 다중 컨테이너 Job을 만들 가능성이 생기면) 이 배치
-전제도 함께 재검토합니다.
+상태는 아닙니다. `requests.cpu`/`requests.memory`/`pods` quota는 비terminal Pod만
+집계합니다 — `DeadlineExceeded`가 되면 Job controller가 active Pod를 삭제해 그
+즉시(최대 deadline인 3600초 시점) 이 세 quota가 회수되고, `count/jobs.batch`만 Job
+객체 자체가 남아 있는 TTL 만료까지(추가로 최대 3600초) 슬롯 하나를 점유합니다.
+따라서 이 Pod 하나가 `requests.cpu = 2` 전체를 요청했다면: (1) deadline까지 최대
+1시간은 CPU quota가 소진돼 정상적인 단일 컨테이너 실험 Job의 신규 제출도 admission에서
+거부되는 완전 자기잠식(self-DoS) 구간이고, (2) 그 이후 TTL까지 최대 1시간은 CPU
+quota는 비었지만 `count/jobs.batch`가 2 중 1만 남아 동시 실행 슬롯이 2→1로 줄어드는
+성능 저하 구간입니다 — 기능 전체가 막히는 창은 최대 1시간입니다. 고정 템플릿이
+실제로 단일 컨테이너만 만든다는 전제가 깨지면(API 템플릿이 다중 컨테이너 Job을
+만들 가능성이 생기면) 이 배치 전제도 함께 재검토합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
