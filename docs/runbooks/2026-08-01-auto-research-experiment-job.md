@@ -332,10 +332,17 @@ pool 전체 allocatable CPU는 노드 2대 기준 약 3860m이고, 실험 namesp
 가용 노드 용량을 넘어설 때만 경합이 생긴다. 이 계약에는 `priorityClassName`이
 없어 두 워크로드 사이에 선점(preemption) 순서가 없으므로 — 어느 쪽이 Pending으로
 남는지는 우선순위가 아니라 어느 Pod가 나중에 제출돼 가용 용량이 이미 소진된
-상태에 걸리는지(제출 순서·스케줄 타이밍)로 결정된다. `batch-od` node/pod Pending
-관측(위)을 수동 확인에서 알림으로 승격하는 안(예: `autoresearch-experiments`
-namespace 밖 Pod가 `batch-od` 노드에 뜨면 알림, 또는 `batch-od` 대상 Pending Pod
-알림)을 #523의 후속 체크리스트 항목으로 추적한다.
+상태에 걸리는지(제출 순서·스케줄 타이밍)로 결정된다. Pending은 자동으로 사라지지
+않고, 상대 워크로드의 Pod가 끝나 용량이 비어야 풀린다 — experiment Job 쪽은
+admission이 강제하는 `activeDeadlineSeconds`(최대 3600초)로 상한이 있지만, KPO
+쪽 재시도·timeout 정책은 이 저장소가 아니라 `Autoresearch-airflow`가 정하므로
+이 문서가 그 대기 시간을 보장하지 않는다. 즉 이 문단은 그런 경합에서 #297이
+재현되지 않는다고 주장하지 않는다 — 오히려 실제로 이런 경합이 생기면 #297
+재현 여부를 포함해 그 시점에 capacity·우선순위 계획을 별도로 다시 승인해야
+한다는 것이 위 재검토 요구의 근거다. `batch-od` node/pod Pending 관측(위)을
+수동 확인에서 알림으로 승격하는 안(예: `autoresearch-experiments` namespace
+밖 Pod가 `batch-od` 노드에 뜨면 알림, 또는 `batch-od` 대상 Pending Pod 알림)을
+#523의 후속 체크리스트 항목으로 추적한다.
 
 ## Pod Security 버전 갱신
 

@@ -85,6 +85,18 @@ resource "kubernetes_limit_range_v1" "experiment_jobs" {
         memory = "2Gi"
       }
     }
+
+    # Pod 합계 상한. 컨테이너별 상한(위)만으로는 컨테이너 여러 개짜리 Pod가
+    # 총합으로 노드 allocatable을 넘겨 admission은 통과하고 스케줄만 영구
+    # Pending되는 경로가 열린다(#523). 값은 문서가 명시한 단일 컨테이너 계약과
+    # 동일해 현재 고정 템플릿에는 영향이 없다.
+    limit {
+      type = "Pod"
+      max = {
+        cpu    = "1"
+        memory = "2Gi"
+      }
+    }
   }
 
   depends_on = [kubernetes_namespace_v1.experiment_jobs]

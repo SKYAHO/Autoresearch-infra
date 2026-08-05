@@ -129,21 +129,31 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    필드셀렉터를 걸어 실제 배치 기준으로 한 번 더 확인한다. GitHub REST 코드
    검색은 `OR` 불리언을 지원하지 않고 기본 브랜치만 best-effort로 색인해 "결과
    없음"이 부재의 증거가 되지 못하므로, 대신 `Autoresearch-airflow`를
-   `git clone --depth 1`한 뒤 `grep -rn "batch-od\|node_selector=\|tolerations="
-   dags/`로 확인하고 확인한 commit SHA를 이 문서나 이슈에 기록한다 — 이 PR은
+   `git clone --depth 1`한 뒤 저장소 전체에서 `grep -rn "batch-od"`로 확인한다.
+   범위를 `dags/`로 좁히거나 `node_selector=`/`tolerations=` 같은 kwargs 리터럴
+   패턴만 찾으면 Helm chart values의 worker/base pod template,
+   `pod_template_file`, KubernetesExecutor `executor_config` 등 `dags/` 밖에서
+   주입되는 경로나 변수 경유 대입을 놓칠 수 있다 — 문자열 `batch-od` 자체를
+   저장소 전체에서 찾는 편이 부재 증명에 더 안전하다. 확인한 commit SHA는 이
+   문서와 이슈에 기록한다 — 이 PR은
    `Autoresearch-airflow@c775fc6baeb762fc9280607e428f637a2773dc9a`(2026-08-04,
    `main`)에서 확인했고, `dags/feast_materialize/dag.py`가 `node_selector={}`로
    기본값을 해제하지만 대상은 일반 app pool이며 `batch-od`가 아니다. 이 grep이
    두 축(override 존재 여부·`AutoresearchBatchPodOperator` 기본값 자체)을 모두
-   덮는 근거는 기본값을 정의하는 `dags/common/batch_pod_operator.py`도 `dags/`
-   하위에 있어, 기본값이 `batch-spot`에서 `batch-od`로 바뀌면 그 파일에 문자열
-   `batch-od`가 나타나 같은 grep에 잡히기 때문이다. `kubectl` 조회는 실행 순간에
-   존재하는 Pod만 보이므로 KPO처럼 짧게 살아 있다 사라지는 Pod를 놓칠 수 있어
-   런타임 스냅숏 확인일 뿐이고, 판단의 근거는 어디까지나 DAG 코드 기준인 이
-   grep이다.
+   덮는 근거는 기본값을 정의하는 `dags/common/batch_pod_operator.py`도 같은
+   저장소 안에 있어, 기본값이 `batch-spot`에서 `batch-od`로 바뀌면 그 파일에
+   문자열 `batch-od`가 나타나 같은 grep에 잡히기 때문이다. `kubectl` 조회는 실행
+   순간에 존재하는 Pod만 보이므로 KPO처럼 짧게 살아 있다 사라지는 Pod를 놓칠 수
+   있어 런타임 스냅숏 확인일 뿐이고, 판단의 근거는 어디까지나 DAG 코드 기준인 이
+   grep이다. 이 문서에 박힌 SHA·날짜는 이 PR 작성 시점 확인 결과일 뿐이다 —
+   `enable_experiment_job_creation`을 실제로 켜기 직전에는 이 문서를 고치지 않고
+   이슈 #523에 그 시점 재확인 결과(SHA·날짜·`kubectl` 조회 결과)를 댓글로 남긴다.
+   문서의 SHA만 보고 "이미 확인됨"으로 오독해 재확인을 생략하지 않기 위해서다.
    이후 Airflow나 다른 컴포넌트가 `batch-od`에 실제로 스케줄되도록 바뀌면(예:
    `node_selector`를 명시적으로 override하는 DAG 변경), 그 시점에 capacity·우선순위
-   경합 계획을 다시 검토한다.
+   경합 계획을 다시 검토한다. 유휴 전제가 깨졌는지 알려줄 신호가 현재는 이
+   수동 확인뿐이므로, `batch-od` 대상 Pending Pod나 `autoresearch-experiments`
+   밖 Pod에 대한 알림 도입 여부를 활성화 전에 판단한다.
 
 권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
 Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
@@ -166,28 +176,13 @@ admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` to
 강제해야 합니다. `batch-od`는 #297 대응으로 만든 min 0/max 2 on-demand pool이지만,
 현재 `Autoresearch-airflow`의 어떤 KPO도 이 pool로 스케줄되지 않습니다(#523 —
 `AutoresearchBatchPodOperator` 기본값은 `batch-spot`이고 override하는 DAG가 없음).
-따라서 지금은 experiment Job이 이 pool을 사실상 독점합니다. 단, `LimitRange`는
-`type = "Container"`로 컨테이너당 상한(1 vCPU/2 GiB)만 강제하고 Pod 합계 상한은
-없으므로, 컨테이너 2개짜리 Pod가 2 vCPU를 요청해도 quota·admission을 통과합니다.
-e2-standard-2의 allocatable CPU는 약 1930m(DaemonSet request 제외 전)이라 그런
-Pod는 어느 노드에도 스케줄되지 못하고 Pending으로 남습니다. namespace
-ResourceQuota(`requests.cpu = 2`, `pods = 2`)가 총 CPU 상한은 그대로 유지하므로
-무너지는 것은 "노드당 1 Pod가 실제로 스케줄된다"는 배치 전제일 뿐입니다. 이 Job은
-admission이 강제하는 `activeDeadlineSeconds`(1~3600초)가 `status.startTime` 기준으로
-흐르므로 스케줄 여부와 무관하게 `DeadlineExceeded`로 종료되고 `ttlSecondsAfterFinished`
-경과 후 TTL controller가 quota를 회수합니다 — 즉 최대 (deadline+TTL) 동안
-`count/jobs.batch` 슬롯을 점유했다가 자동으로 회수되며, 수동 회수가 필요한 "영구"
-상태는 아닙니다. `requests.cpu`/`requests.memory`/`pods` quota는 비terminal Pod만
-집계합니다 — `DeadlineExceeded`가 되면 Job controller가 active Pod를 삭제해 그
-즉시(최대 deadline인 3600초 시점) 이 세 quota가 회수되고, `count/jobs.batch`만 Job
-객체 자체가 남아 있는 TTL 만료까지(추가로 최대 3600초) 슬롯 하나를 점유합니다.
-따라서 이 Pod 하나가 `requests.cpu = 2` 전체를 요청했다면: (1) deadline까지 최대
-1시간은 CPU quota가 소진돼 정상적인 단일 컨테이너 실험 Job의 신규 제출도 admission에서
-거부되는 완전 자기잠식(self-DoS) 구간이고, (2) 그 이후 TTL까지 최대 1시간은 CPU
-quota는 비었지만 `count/jobs.batch`가 2 중 1만 남아 동시 실행 슬롯이 2→1로 줄어드는
-성능 저하 구간입니다 — 기능 전체가 막히는 창은 최대 1시간입니다. 고정 템플릿이
-실제로 단일 컨테이너만 만든다는 전제가 깨지면(API 템플릿이 다중 컨테이너 Job을
-만들 가능성이 생기면) 이 배치 전제도 함께 재검토합니다.
+따라서 지금은 experiment Job이 이 pool을 사실상 독점합니다. `LimitRange`는 컨테이너당
+상한(`type = "Container"`, 1 vCPU/2 GiB)과 별도로 Pod 합계 상한(`type = "Pod"`, 동일
+1 vCPU/2 GiB)도 강제하므로, 컨테이너 2개짜리 Pod가 합쳐서 2 vCPU를 요청하면 스케줄
+실패가 아니라 admission 시점에 거부됩니다 — e2-standard-2 allocatable(약 1930m)을
+넘겨 영구 Pending으로 남는 경로 자체가 열리지 않습니다(#523). 고정 템플릿이 실제로
+단일 컨테이너만 만든다는 전제가 깨져 향후 sidecar 등 다중 컨테이너 Pod가 필요해지면
+이 Pod 상한이 먼저 걸리므로, 그 변경에서 상한 값을 함께 재검토합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
