@@ -17,7 +17,12 @@ metadata:
     app.kubernetes.io/component: api
 spec:
   backoffLimit: 1
-  activeDeadlineSeconds: 180
+  # 이 예산은 스케줄링 + 새 digest image pull + Secret Manager를 호출하는 initContainer
+  # + 미적용 revision 전체 적용을 모두 포함한다. #525 첫 실행은 노드에 캐시되지 않은
+  # 이미지를 받아 revision 3개를 적용하므로, 실측이 없는 상태에서 180초는 여유가
+  # 없다고 판단해 300초로 올렸다. DeadlineExceeded는 자동 재시도되지 않고 rollout
+  # 전체를 막으므로 부족한 쪽보다 넉넉한 쪽의 비용이 작다.
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:
@@ -36,7 +41,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: bootstrap-db
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:76092067b2dbe638e2e351cb11275e0f1f2c7e3dfd2d6b4b92c2db6a4a0bf74e
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:0471c6ea3f7e73c0bbe5e077088432a701ed26eb5f32b4f72dc7425c95ddb197
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -66,7 +71,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: migrate
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:76092067b2dbe638e2e351cb11275e0f1f2c7e3dfd2d6b4b92c2db6a4a0bf74e
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:0471c6ea3f7e73c0bbe5e077088432a701ed26eb5f32b4f72dc7425c95ddb197
           imagePullPolicy: IfNotPresent
           command:
             - python
