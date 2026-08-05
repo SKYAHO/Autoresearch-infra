@@ -14,8 +14,19 @@ GitHub App 생성은 조직 GitHub UI에서 운영자가 수동으로 먼저 해
 
 1. 조직 Settings → Developer settings → GitHub Apps → New GitHub App.
 2. Repository permissions: **Actions: Read and write**,
-   **Administration: Read and write**(셀프 호스티드 러너 등록에 필요한
-   최소 권한). 그 외 권한은 추가하지 않는다.
+   **Administration: Read and write**. `Administration`은 repo 범위 App
+   권한 중 가장 강한 축으로 branch protection/ruleset 수정, 저장소 설정
+   변경까지 포함하지만, repo 범위 셀프 호스티드 러너 등록·해제 API가
+   요구하는 최소 권한이라 채택한다(#533 리뷰). org 수준 설치 +
+   `Organization self-hosted runners: Read and write`로 `Administration`
+   없이 우회하는 대안도 있으나, org 전체 러너 관리 권한을 얻는 쪽이라 이
+   PoC(repo 하나 범위)에는 더 넓은 권한이 된다 — 채택하지 않는다. 그 외
+   권한은 추가하지 않는다.
+   - **blast radius**: 이 App private key가 유출되면 `SKYAHO/Autoresearch-infra`
+     저장소의 설정·branch protection·러너 등록을 임의로 바꿀 수 있다(코드
+     자체를 push할 권한은 없음 — `contents` 권한 미부여). 유출 의심 시
+     GitHub App 설정에서 즉시 **Generate a private key**로 키를 폐기하고,
+     2~3단계를 반복해 새 키로 교체한다.
 3. Webhook은 비활성화한다(ARC 컨트롤러가 직접 poll — 이 PoC 범위에서는
    webhook 불필요).
 4. 생성 후 **App ID**를 기록한다.
@@ -85,21 +96,28 @@ rm -rf "$sdir"; trap - EXIT
 
 ## 4. 반영 확인
 
-ARC 스케일셋 리스너 Pod는 이 Secret을 시작 시에만 읽는다. Secret을 갱신한
-뒤에는 리스너 Pod를 재시작해야 새 값이 반영된다:
+ARC 스케일셋 리스너(`AutoscalingListener`) Pod는 이 Secret을 시작 시에만
+읽는다. 리스너는 컨트롤러가 직접 만드는 **단독 Pod**라 Deployment가 없다 —
+`kubectl rollout restart deployment`는 대상을 찾지 못하고
+`no resources found`로 끝난다(#533 리뷰). 리스너 Pod를 지우면 컨트롤러가
+새 Secret 값으로 즉시 재생성한다:
 
 ```bash
-kubectl -n actions-runner rollout restart deployment \
-  -l app.kubernetes.io/part-of=gha-rs
+kubectl -n actions-runner delete pod \
+  -l actions.github.com/scale-set-name=actions-runner-poc,app.kubernetes.io/component=runner-scale-set-listener
 ```
 
-정확한 리소스 이름은 스케일셋 배포(Task 4 ArgoCD Application) 이후
-`kubectl -n actions-runner get pods`로 확인한다.
+라벨 셀렉터는 스케일셋 배포(Task 4 ArgoCD Application) 이후
+`kubectl -n actions-runner get pods --show-labels`로 실제 값을 확인하고
+필요하면 위 명령을 갱신한다. `set -e`가 없는 절차이므로 이 명령이 실패해도
+스크립트는 계속 진행된다 — 출력에서 `deleted`를 직접 확인한다.
 
 ## 범위 밖
 
 - App 권한 확장(웹훅, 조직 전체 설치 등)은 이 PoC 범위가 아니다.
-- Private key 로테이션 자동화는 다루지 않는다 — 재발급 시 2~4단계를 그대로
-  반복한다.
+- Private key 로테이션 자동화는 다루지 않는다. `.pem`은 Secret Manager와
+  K8s Secret 양쪽에 모두 저장되므로, 키를 재발급했다면 둘 다 새 값으로
+  갱신해야 한다 — 2단계(Secret Manager)부터 3단계(K8s Secret), 4단계(리스너
+  Pod 재기동으로 반영 확인)까지 순서대로 그대로 반복한다.
 - GSA에 `secretmanager.secretAccessor`를 부여하는 대안은 채택하지 않는다
   (`argocd_google_oidc_client` 패턴 유지, Task 1 설계 근거 참조).

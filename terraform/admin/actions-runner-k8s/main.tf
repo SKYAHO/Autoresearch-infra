@@ -35,12 +35,13 @@ resource "kubernetes_service_account_v1" "actions_runner_controller" {
   }
 }
 
-# 러너(listener/ephemeral runner) Pod 신원. GCP API를 직접 호출하지 않으므로
-# GSA를 공유하지 않고 WI annotation도 붙이지 않는다 — 표준 관례대로 automount만
-# 끈다. PoC 워크플로우가 이 KSA로 실행된다.
-resource "kubernetes_service_account_v1" "actions_runner_listener" {
+# ephemeral runner Pod 전용 신원(scale-set chart의 template.spec에만 연결,
+# variables.tf 주석 참고). AutoscalingListener Pod는 chart가 자체 생성하는
+# 별도 SA를 쓰므로 이 automount=false는 listener Pod의 K8s API 접근에는
+# 영향을 주지 않는다 — 표준 관례대로 automount만 끈다.
+resource "kubernetes_service_account_v1" "actions_runner_runner" {
   metadata {
-    name      = var.actions_runner_listener_ksa
+    name      = var.actions_runner_runner_ksa
     namespace = kubernetes_namespace_v1.actions_runner.metadata[0].name
   }
 
@@ -48,8 +49,13 @@ resource "kubernetes_service_account_v1" "actions_runner_listener" {
 }
 
 # 러너 Pod는 checkout·build tooling으로 experiment Job보다 무거우므로 여유를
-# 둔다. scale-set chart의 maxRunners와 짝(pair)을 이룬다 — 값 변경 시 함께
-# 바꾼다(variables.tf actions_runner_max_pods 주석 참고).
+# 둔다. scale-set chart의 maxRunners와 짝(pair)을 이루되, 컨트롤러/리스너
+# 상주 Pod 2개 몫(locals.actions_runner_control_plane_pods)을 더한다(#533
+# 리뷰) — 값 변경 시 maxRunners와 actions_runner_max_pods를 함께 바꾼다.
+# cpu/memory hard 값은 LimitRange의 컨테이너 기본 request/limit(500m/1Gi,
+# 1cpu/2Gi)에 quota_pods를 곱한 값이다 — quota_pods개째 Pod까지는 기본값으로
+# 스케줄되고, 그 이상은 초과 Pod가 Pending("exceeded quota" 이벤트)에 머물러
+# workflow가 job 대기(queued)로 관측된다(즉시 실패가 아님).
 resource "kubernetes_resource_quota_v1" "actions_runner" {
   metadata {
     name      = "actions-runner-quota"
@@ -58,11 +64,11 @@ resource "kubernetes_resource_quota_v1" "actions_runner" {
 
   spec {
     hard = {
-      "pods"            = tostring(var.actions_runner_max_pods)
-      "requests.cpu"    = "4"
-      "requests.memory" = "8Gi"
-      "limits.cpu"      = "4"
-      "limits.memory"   = "8Gi"
+      "pods"            = tostring(local.actions_runner_quota_pods)
+      "requests.cpu"    = "${local.actions_runner_quota_pods * 0.5}"
+      "requests.memory" = "${local.actions_runner_quota_pods}Gi"
+      "limits.cpu"      = tostring(local.actions_runner_quota_pods)
+      "limits.memory"   = "${local.actions_runner_quota_pods * 2}Gi"
     }
   }
 
@@ -111,14 +117,18 @@ resource "kubernetes_network_policy_v1" "actions_runner_ingress" {
 }
 
 # 기본 egress를 차단하고 experiment_jobs.tf 4규칙(DNS, GKE metadata, WI
-# metadata, PGA)을 재사용한 뒤, 이 namespace 전용 2규칙을 더한다:
-# - cluster_services_cidr:443 — PoC 워크플로우의 K8s API 서버(kubernetes.default.svc)
-#   접근 검증용. GitHub-hosted 러너에서는 도달 불가능해 VPC 내부망 접근의
-#   증명이 된다.
-# - 0.0.0.0/0:443 — GitHub Actions 서비스(러너 등록·job polling)는 IP 대역이
-#   넓고 자주 바뀌어 고정 CIDR allowlist 관례를 적용할 수 없다. 포트를 443만
-#   허용하는 이름 있는 예외로 남긴다. GitHub IP allowlist로 좁히는 강화는
-#   범위 밖(#533 설계 문서 참고).
+# metadata, PGA)을 재사용한 뒤, 이 namespace 전용 규칙을 더한다:
+# - cluster_services_cidr:443 + cluster_master_cidr:443 — PoC 워크플로우의
+#   K8s API 서버(kubernetes.default.svc) 접근 검증용. kube-proxy/Dataplane V2가
+#   서비스 VIP를 control plane(master) 주소로 post-DNAT하므로 두 CIDR 모두
+#   필요하다(#138 패턴, argo-rollouts-k8s/elastic-k8s와 동일). GitHub-hosted
+#   러너에서는 도달 불가능해 VPC 내부망 접근의 증명이 된다.
+# - 0.0.0.0/0:443(RFC1918 3종 except) — GitHub Actions 서비스(러너 등록·job
+#   polling)는 IP 대역이 넓고 자주 바뀌어 고정 CIDR allowlist 관례를 적용할
+#   수 없다. except로 사내 사설 대역을 빼지 않으면 이 규칙이 위 K8s API
+#   규칙까지 무의미하게 덮어써, Task 7의 "K8s API egress 규칙만 제거 → timeout"
+#   음성 대조군이 성립하지 않는다(#533 리뷰). GitHub IP allowlist로 더 좁히는
+#   강화는 범위 밖(#533 설계 문서 참고).
 resource "kubernetes_network_policy_v1" "actions_runner_egress" {
   metadata {
     name      = "actions-runner-egress"
@@ -224,7 +234,7 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
       }
     }
 
-    # PoC: K8s API 서버(in-cluster only) 접근 검증.
+    # PoC: K8s API 서버(in-cluster, 서비스 VIP 경유) 접근 검증.
     egress {
       to {
         ip_block {
@@ -238,11 +248,32 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
       }
     }
 
-    # GitHub Actions 서비스 연결(러너 등록/job polling). 이름 있는 예외 — 위 주석 참고.
+    # K8s API post-DNAT 목적지(master) 대비 (#138 패턴).
+    egress {
+      to {
+        ip_block {
+          cidr = var.cluster_master_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "443"
+      }
+    }
+
+    # GitHub Actions 서비스 연결(러너 등록/job polling). 사설 대역(RFC1918)은
+    # except로 빼서 위 K8s API 규칙과 겹치지 않게 한다 — 겹치면 그 규칙을
+    # 제거해도 이 규칙이 대신 통과시켜 Task 7 음성 대조군이 무효화된다.
     egress {
       to {
         ip_block {
           cidr = "0.0.0.0/0"
+          except = [
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+          ]
         }
       }
 

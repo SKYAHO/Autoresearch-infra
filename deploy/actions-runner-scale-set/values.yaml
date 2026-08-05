@@ -10,8 +10,9 @@ gha-runner-scale-set:
   # docs/runbooks/2026-08-05-actions-runner-github-app-secret.md.
   githubConfigSecret: actions-runner-github-app
 
-  # terraform/admin/actions-runner-k8s ResourceQuota(pods=4)와 짝을 이룬다.
-  # 값을 바꿀 때는 그 root의 actions_runner_max_pods도 함께 바꾼다.
+  # terraform/admin/actions-runner-k8s ResourceQuota(pods=maxRunners+2, 컨트롤러/
+  # 리스너 상주 Pod 몫 포함)와 짝을 이룬다. 값을 바꿀 때는 그 root의
+  # actions_runner_max_pods도 함께 바꾼다.
   maxRunners: 4
   minRunners: 0
 
@@ -24,8 +25,10 @@ gha-runner-scale-set:
     namespace: actions-runner
     name: actions-runner-controller
 
-  # 러너(listener/ephemeral runner) Pod 신원. Terraform이 만든 automount=false
-  # KSA를 그대로 쓴다 — GCP API를 직접 호출하지 않으므로 WI annotation은 없다.
+  # ephemeral runner Pod 전용 신원(#533 리뷰) — Terraform이 만든 automount=false
+  # KSA를 그대로 쓴다. AutoscalingListener Pod는 이 값의 영향을 받지 않는다 —
+  # chart가 자체 SA(listener RBAC 포함)를 자동 생성한다. GCP API를 직접
+  # 호출하지 않으므로 WI annotation은 없다.
   template:
     spec:
-      serviceAccountName: actions-runner-listener
+      serviceAccountName: actions-runner-runner

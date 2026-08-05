@@ -180,8 +180,21 @@ modify `terraform/README.md`(admin root 목록에 `terraform/admin/README.md`가
 - [ ] 이슈에서 만든 브랜치로 Draft PR을 생성한다(PR 템플릿 준수, 범위 밖 항목
       명시).
 - [ ] `lint`(actionlint) CI 통과 확인.
+- [ ] `deploy/actions-runner-controller/Chart.yaml`의 OCI Helm dependency(#533
+      리뷰)가 실제로 당겨지는지 사전 확인: ArgoCD repo-server의 Helm 버전이 OCI
+      dependency(`oci://ghcr.io/...`)를 지원하는지, `argocd` namespace의 egress
+      NetworkPolicy가 `ghcr.io:443`을 허용하는지 — Application `Synced` 실패 시
+      1순위 의심 지점으로 기록해둔다.
 - [ ] 사용자 승인 후 `apply.yml`(`scope: admin`) dispatch → ArgoCD UI에서 두
       Application `Synced`/`Healthy` 확인 → 런북대로 GitHub App/Secret 수동 주입 →
-      `actions-runner-poc.yml` 실행해 성공 확인 → NetworkPolicy 임시 제거 후
-      재실행해 timeout(실패) 확인 → 원복.
+      `actions-runner-poc.yml` 실행해 성공 확인.
+- [ ] NetworkPolicy 음성 대조군: `kubernetes_network_policy_v1.actions_runner_egress`
+      **리소스 전체를 지우지 않는다** — selector 대상 Pod에 걸린 policy가
+      0개가 되면 K8s는 해당 방향을 기본 allow-all로 처리해 오히려 더 뚫리고
+      timeout이 재현되지 않는다(#533 리뷰 대응 중 자체 발견). 대신
+      `cluster_services_cidr`/`cluster_master_cidr` 443 egress 블록 2개만
+      일시적으로 주석 처리(0.0.0.0/0 GitHub 규칙은 RFC1918 `except`로 내부
+      대역을 이미 빼놨으므로 그대로 둬도 K8s API 경로를 대신 뚫어주지 않는다)
+      → `terraform apply` → 재실행해 timeout(실패) 확인 → 두 블록 원복 →
+      `terraform apply`로 복구.
 - [ ] 리뷰 반영 후 squash merge, 이슈 자동 close 확인.

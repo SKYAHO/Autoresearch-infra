@@ -34,7 +34,7 @@ class EnvironmentCatalog
       project_id region zone environment name_prefix dev_subnet_cidr private_services_cidr redis_psc_subnet_cidr
       gke_master_ipv4_cidr gke_pods_cidr gke_services_cidr
     ],
-    "terraform/admin/actions-runner-k8s" => %w[project_id region zone gke_cluster_name resource_prefix cluster_services_cidr],
+    "terraform/admin/actions-runner-k8s" => %w[project_id region zone gke_cluster_name resource_prefix cluster_services_cidr cluster_master_cidr],
     "terraform/admin/airflow-k8s" => %w[project_id region zone gke_cluster_name resource_prefix private_services_cidr cluster_services_cidr redis_psc_subnet_cidr],
     "terraform/admin/argo-rollouts-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr cluster_master_cidr],
     "terraform/admin/argocd-k8s" => %w[project_id region zone gke_cluster_name cluster_services_cidr],

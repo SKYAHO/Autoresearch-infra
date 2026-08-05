@@ -7,11 +7,14 @@ GitHub Actions 셀프 호스티드 러너(ARC, Actions Runner Controller)의 Kub
 - KSA `actions-runner-controller`(Workload Identity → GSA
   `autoresearch-dev-runner`, automount 기본값 유지 — 컨트롤러가 K8s API를 직접
   관리해야 하므로 이 root의 "automount=false 기본" 원칙에 대한 의도적 예외)
-- KSA `actions-runner-listener`(automount=false, GCP API 미사용 — PoC
-  워크플로우가 이 KSA로 실행됨)
-- ResourceQuota `pods=4`(scale-set chart `maxRunners`와 짝) + LimitRange
+- KSA `actions-runner-runner`(automount=false, GCP API 미사용 — ephemeral
+  runner Pod 전용. AutoscalingListener Pod는 chart가 자체 생성하는 별도 SA를
+  쓴다)
+- ResourceQuota `pods=maxRunners+2`(컨트롤러/리스너 상주 Pod 몫 포함, scale-set
+  chart `maxRunners`와 짝) + LimitRange
 - ingress 전면 차단 + egress deny-by-default(DNS, GKE/WI metadata, Private
-  Google Access, K8s API 서버 443, GitHub 443 예외)
+  Google Access, K8s API 서버 443(서비스 VIP+master CIDR 둘 다), GitHub 443
+  예외(사내 사설 대역 except))
 
 chart(ARC 컨트롤러/러너)는 이 root가 아니라 **ArgoCD Application**
 (`deploy/actions-runner-controller`, `deploy/actions-runner-scale-set`)이
@@ -30,8 +33,11 @@ chart(ARC 컨트롤러/러너)는 이 root가 아니라 **ArgoCD Application**
 scripts/terraform-env --environment dev --root terraform/admin/actions-runner-k8s init
 scripts/terraform-env --environment dev --root terraform/admin/actions-runner-k8s apply \
   -var project_id=<PROJECT_ID> -var cluster_services_cidr=<GKE_SERVICES_CIDR> \
-  -var private_googleapis_cidr=<PGA_CIDR>
+  -var cluster_master_cidr=<GKE_MASTER_CIDR>
 ```
+
+`private_googleapis_cidr`는 canonical 값(`199.36.153.8/30`)이 default라 보통
+넘기지 않아도 된다.
 
 ## operator secret 주입 (ARC 설치 전 필수)
 
