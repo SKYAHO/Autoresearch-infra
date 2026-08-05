@@ -3,6 +3,46 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-05: agent-orchestration v0.7.0 롤아웃과 API GitHub egress 경계 변경 (#525) — sync 대기
+
+
+- "digest만 갱신하면 된다"는 최초 진단이 틀렸음을 앱 저장소 `73bf762` 검증으로
+  확인했다. 그대로 올리면 API Pod가 **CrashLoopBackOff** 된다. `load_settings()`가
+  uvicorn lifespan startup에서 호출되므로(`app/main.py:95-99`) 새 필수 환경변수 4종이
+  비면 첫 요청 500이 아니라 기동 자체가 실패한다.
+- 그중 셋(`ORCH_GITHUB_REPOSITORY`, `ORCH_EXPERIMENT_DATASET_SOURCE`,
+  `ORCH_EXPERIMENT_TRAINING_CONFIG_REF`)은 시크릿이 아니라 발행 이슈 본문에 박히는
+  평문 좌표라 manifest 리터럴로 채웠다. 앱 `.env.example`의 예시 `ctr_training_v1`은
+  실재하지 않아, BigQuery에 실재하는 `training_entity`를 썼다.
+- `ORCH_GITHUB_TOKEN`만 대체 불가였다. Secret Manager 17개·클러스터 Secret 3개 중
+  GitHub 자격이 없다. **GitHub App은 installation token이 1시간 만료라 정적 env를
+  1회만 읽는 이 앱과 맞지 않아** fine-grained PAT을 기존 요청 토큰과 같은
+  운영자 등록 Kubernetes Secret으로 주입한다. 발행 이슈 작성자가 개인 계정이 되는
+  점은 감수했다.
+- **API에 public HTTPS egress를 열지 않는다는 기존 경계를 바꿨다.** 발행이
+  `gh issue create` subprocess이고 `gh`가 `HTTPS_PROXY`를 화이트리스트에서 제외해
+  proxy로 대체할 수 없다. Calico라 FQDN 규칙도 못 쓴다. GitHub meta CIDR 24개
+  고정안은 그중 20개가 `/32`이고 수시 교체돼 **예고 없이 502로 깨지므로** 기각하고,
+  공개 인터넷 443 + RFC1918/RFC6598 `except` 방식을 택했다. dev CIDR 변수가 바뀌어도
+  함께 고칠 필요가 없다.
+- Alembic 선행 실행은 새로 만들 것이 없었다. `api-migration-job.yaml`이 이미
+  ArgoCD PreSync hook + `sync-wave: "-1"`이다. 다만 현재 고정 리비전에 대한 마지막
+  ArgoCD 작업이 UI Deployment 하나만 대상으로 한 **선택 sync**여서 hook이 돌지
+  않았다. 전체 sync가 아니면 migration이 건너뛰어진다는 점을 plan·runbook에 못박았다.
+- Runner는 기능상 무관하나(발행 경로에서 LLM 호출이 제거됨) 릴리스 정합성을 위해
+  함께 승격했다. 실패 시 Runner 컨테이너만 이전 digest로 되돌릴 수 있다.
+- 릴리스 → 롤아웃 연결 자동화는 범위에서 제외하고 #526으로 분리했다. GKE 경로는
+  머지 뒤에도 Variable 갱신 + admin apply + manual sync가 남아, Airflow처럼 승격 PR만
+  자동화하면 "PR은 열렸는데 배포는 안 된" 상태가 새로 생긴다는 점이 분리 근거다.
+
+## 2026-08-05: infra main merge 기반 Agent Orchestration 자동 sync (#526)
+
+- Agent Orchestration Application도 enabled 상태에서 infra `main`을 추적하고
+  automated sync한다. 기존 고정 SHA GitHub Variable과 수동 target revision 갱신은 제거했다.
+- prune·self-heal은 계속 비활성화하고, enabled=false는 존재하지 않는 ref를 유지하는
+  비상 차단 스위치다. 이후 배포 manifest는 기존 PR·CI 검토 후 main merge로 반영하며,
+  rollback은 이전 manifest commit을 main에 반영해 ArgoCD sync 상태를 확인한다.
+
 ## 2026-08-05: Agent Orchestration API 실험 Job 생성 권한 활성화 (#523)
 
 - #484/#485/#497로 이미 구축된 `autoresearch-experiments` 실행 경계의 go-live

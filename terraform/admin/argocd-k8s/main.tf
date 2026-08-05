@@ -499,34 +499,30 @@ resource "kubernetes_manifest" "application_agent_orchestration" {
       source = {
         repoURL = var.infra_repo_url
         path    = "deploy/agent-orchestration"
-        # Default는 의도적으로 존재하지 않는 ref다. digest/DB schema 권한이 준비되기
-        # 전에는 수동 sync를 눌러도 manifest를 조회할 수 없어 부분 배포가 일어나지
-        # 않는다. enabled=true와 40자리 배포 commit SHA가 함께 있어야만 동기화된다.
-        targetRevision = var.agent_orchestration_deployment_enabled ? var.agent_orchestration_target_revision : "agent-orchestration-disabled"
+        # enabled일 때는 검토·merge된 infra main을 추적한다. 이후 manifest 변경은
+        # ArgoCD가 자동 sync하지만 prune·self-heal은 의도적으로 사용하지 않는다.
+        targetRevision = var.agent_orchestration_deployment_enabled ? "main" : "agent-orchestration-disabled"
       }
       destination = {
         server    = "https://kubernetes.default.svc"
         namespace = var.app_namespace
       }
-      syncPolicy = {
-        syncOptions = [
-          "CreateNamespace=false",
-        ]
-      }
+      syncPolicy = merge(
+        {
+          syncOptions = ["CreateNamespace=false"]
+        },
+        var.agent_orchestration_deployment_enabled ? {
+          automated = {
+            prune    = false
+            selfHeal = false
+          }
+        } : {},
+      )
     }
   }
 
   lifecycle {
     # variable validation은 자기 변수만 참조할 수 있으므로, enable flag와 SHA의
-    # 조합 검증은 이 resource precondition에서 수행한다. 빈 ref가 ArgoCD의
-    # 기본 branch 추적 등으로 해석될 여지를 Terraform apply 전에 차단한다.
-    precondition {
-      condition = (
-        !var.agent_orchestration_deployment_enabled ||
-        can(regex("^[0-9a-f]{40}$", var.agent_orchestration_target_revision))
-      )
-      error_message = "agent_orchestration_deployment_enabled requires agent_orchestration_target_revision to be a full lowercase 40-character commit SHA."
-    }
   }
 
   depends_on = [helm_release.argo_cd]

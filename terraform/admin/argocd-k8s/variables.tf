@@ -154,22 +154,8 @@ variable "serving_target_revision" {
   default     = "main"
 }
 
-variable "agent_orchestration_target_revision" {
-  description = "Agent Orchestration Application이 추적할 40자리 infra 배포 commit SHA. agent_orchestration_deployment_enabled=true일 때 필수다."
-  type        = string
-  default     = ""
-
-  validation {
-    condition = (
-      var.agent_orchestration_target_revision == "" ||
-      can(regex("^[0-9a-f]{40}$", var.agent_orchestration_target_revision))
-    )
-    error_message = "agent_orchestration_target_revision must be empty or a full lowercase 40-character commit SHA."
-  }
-}
-
 variable "agent_orchestration_deployment_enabled" {
-  description = "Agent Orchestration Application source를 sync 가능 상태로 전환한다. immutable digest·DB runtime 권한 migration이 검증되기 전에는 false를 유지한다."
+  description = "Agent Orchestration Application의 비상 배포 차단 스위치다. true면 main을 자동 sync하고 false면 존재하지 않는 ref를 유지한다."
   type        = bool
   default     = false
 }
