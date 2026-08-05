@@ -88,18 +88,22 @@ GitHub Actions, GitHub App.
 **Files:** Create `deploy/actions-runner-controller/Chart.yaml` (+`values.yaml`),
 `deploy/actions-runner-scale-set/Chart.yaml` (+`values.yaml`).
 
-- [ ] `deploy/actions-runner-controller/Chart.yaml`: `dependencies`에
+- [x] `deploy/actions-runner-controller/Chart.yaml`: `dependencies`에
       `repository: oci://ghcr.io/actions/actions-runner-controller-charts`,
-      `name: gha-runner-scale-set-controller`, 최신 안정 `version` 고정. `values.yaml`에
-      `flags.watchSingleNamespace = <actions-runner namespace>`.
-- [ ] `deploy/actions-runner-scale-set/Chart.yaml`: 같은 저장소의
-      `gha-runner-scale-set` dependency. `values.yaml`에 `githubConfigUrl`(조직/저장소
-      URL), `githubConfigSecret: <Task 1/런북에서 만든 기존 Secret 이름>`,
-      `controllerServiceAccount`(Task 2 KSA 참조), `maxRunners`(Task 2 quota와
-      일치), `runnerScaleSetName`(PoC 워크플로우의 `runs-on` 라벨과 일치).
-- [ ] `deploy/monitoring/Chart.lock`처럼 `Chart.lock`은 커밋하고 `charts/*.tgz`는
-      `.gitignore` 규칙(`deploy/*/charts/`)에 맡긴다.
-- [ ] `docs: 셀프 호스티드 러너 ARC umbrella chart 추가`로 커밋한다(코드 변경
+      `name: gha-runner-scale-set-controller`, `version: 0.14.2` 고정. `values.yaml`에
+      `flags.watchSingleNamespace = actions-runner`.
+- [x] `deploy/actions-runner-scale-set/Chart.yaml`: 같은 저장소의
+      `gha-runner-scale-set` dependency. `values.yaml`에 `githubConfigUrl`(이 저장소
+      URL, repo 범위), `githubConfigSecret: actions-runner-github-app`(Task 6
+      런북이 만들 기존 Secret 이름), `controllerServiceAccount`(Task 2 KSA 참조),
+      `maxRunners: 4`(Task 2 quota와 일치), `runnerScaleSetName:
+      actions-runner-poc`(Task 5 PoC 워크플로우의 `runs-on:` 단일 문자열과 일치
+      — array 형태 `[self-hosted, ...]`가 아니라 scale set 이름 그대로임을 chart
+      실측으로 확인, 계획 작성 시의 가정을 구현 중 정정).
+- [x] `deploy/monitoring/Chart.lock`처럼 `Chart.lock`은 `helm dependency update`로
+      생성해 커밋하고 `charts/*.tgz`는 `.gitignore` 규칙(`deploy/*/charts/`)에
+      맡긴다(`git add -n`으로 제외 확인).
+- [x] `docs: 셀프 호스티드 러너 ARC umbrella chart 추가`로 커밋한다(코드 변경
       없음 — chart 정의만이므로 fmt/validate 대상 아님, YAML lint만 확인).
 
 ### Task 4: argocd-k8s — Application 2개 + AppProject 확장
