@@ -111,8 +111,63 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    privileged·host namespace 등 별도 위험 필드를 거부한다.
 5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
    수행한다.
-6. `batch-od`는 #297의 재시도 내성이 없는 Action Log shard KPO와 공유하므로, 전용
-   실험 node pool을 만들거나 해당 KPO와의 capacity·우선순위 경합 계획을 승인한다.
+6. `batch-od`의 현재 실제 사용자를 확인한다(#523, 2026-08-04 조사). `batch-od`는
+   #297 대응으로 만들어졌지만, `Autoresearch-airflow`의 `AutoresearchBatchPodOperator`는
+   `node_selector`/`tolerations`를 넘기지 않으면 `batch-spot`을 기본값으로 쓰고
+   실제로 이를 override하는 DAG가 없다 — Action Log KPO를 포함해 모든 KPO가 지금도
+   `batch-spot`에서 돈다(#297 이후 채택된 완화책은 pool 이전이 아니라 체크포인트
+   재개 + timeout 연장, #150). 즉 `batch-od`는 현재 다른 워크로드가 없는 유휴
+   pool이며, 이 상태에서는 별도 경합 계획 없이 experiment Job이 그대로 써도 된다.
+   활성화 전 재확인은 다음 두 가지로 한다. `batch-od`는 min/max node count가
+   0/2라 평시 노드가 0대이므로 `spec.nodeName` 기준 조회는 무의미하다 — 대신
+   `kubectl get pods -A -o json | jq '.items[] | select(.spec.nodeSelector."cloud.google.com/gke-nodepool"=="batch-od") | .metadata.namespace'`로
+   노드 존재 여부와 무관하게 `batch-od`를 nodeSelector로 지정한 Pod가
+   `autoresearch-experiments` namespace 밖에 있는지 확인한다. 이 조회는
+   nodeSelector 매칭 기준이라 taint를 tolerate하지만 nodeSelector가 없는 Pod는
+   잡지 못한다 — 노드가 실제로 떠 있는 시점에는 `kubectl get nodes -l
+   cloud.google.com/gke-nodepool=batch-od` 후 그 노드명으로 `spec.nodeName`
+   필드셀렉터를 걸어 실제 배치 기준으로 한 번 더 확인한다. GitHub REST 코드
+   검색은 `OR` 불리언을 지원하지 않고 기본 브랜치만 best-effort로 색인해 "결과
+   없음"이 부재의 증거가 되지 못하므로, 대신 `Autoresearch-airflow`를
+   `git clone --depth 1`한 뒤 저장소 전체에서 `grep -rn "batch-od"`로 확인한다.
+   범위를 `dags/`로 좁히거나 `node_selector=`/`tolerations=` 같은 kwargs 리터럴
+   패턴만 찾으면 Helm chart values의 worker/base pod template,
+   `pod_template_file`, KubernetesExecutor `executor_config` 등 `dags/` 밖에서
+   주입되는 경로나 변수 경유 대입을 놓칠 수 있다 — 문자열 `batch-od` 자체를
+   저장소 전체에서 찾는 편이 부재 증명에 더 안전하다. 확인한 commit SHA는 이
+   문서와 이슈에 기록한다 — 이 PR은
+   `Autoresearch-airflow@c775fc6baeb762fc9280607e428f637a2773dc9a`(2026-08-04,
+   `main`)에서 확인했고, `dags/feast_materialize/dag.py`가 `node_selector={}`로
+   기본값을 해제하지만 대상은 일반 app pool이며 `batch-od`가 아니다. 이 grep이
+   두 축(override 존재 여부·`AutoresearchBatchPodOperator` 기본값 자체)을 모두
+   덮는 근거는 기본값을 정의하는 `dags/common/batch_pod_operator.py`도 같은
+   저장소 안에 있어, 기본값이 `batch-spot`에서 `batch-od`로 바뀌면 그 파일에
+   문자열 `batch-od`가 나타나 같은 grep에 잡히기 때문이다. `kubectl` 조회는 실행
+   순간에 존재하는 Pod만 보이므로 KPO처럼 짧게 살아 있다 사라지는 Pod를 놓칠 수
+   있어 런타임 스냅숏 확인일 뿐이고, 판단의 근거는 어디까지나 DAG 코드 기준인 이
+   grep이다. 이 문서에 박힌 SHA·날짜는 이 PR 작성 시점 확인 결과일 뿐이다 —
+   `enable_experiment_job_creation`을 실제로 켜기 직전에는 이 문서를 고치지 않고
+   이슈 #523에 그 시점 재확인 결과(SHA·날짜·`kubectl` 조회 결과)를 댓글로 남긴다.
+   문서의 SHA만 보고 "이미 확인됨"으로 오독해 재확인을 생략하지 않기 위해서다.
+   이후 Airflow나 다른 컴포넌트가 `batch-od`에 실제로 스케줄되도록 바뀌면(예:
+   `node_selector`를 명시적으로 override하는 DAG 변경), 그 시점에 capacity·우선순위
+   경합 계획을 다시 검토한다. 유휴 전제가 깨졌는지 알려줄 신호가 현재는 이
+   수동 확인뿐이므로, `batch-od` 대상 Pending Pod나 `autoresearch-experiments`
+   밖 Pod에 대한 알림 도입 여부를 활성화 전에 판단한다.
+
+   이 유휴 전제는 이 root의 어떤 서버 측 제어로도 강제되지 않는다.
+   `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy는
+   `autoresearch-experiments` namespace에만 바인딩돼 있어 `batch-od`를 experiment
+   전용으로 만들지 않으며, 다른 workload가 이 pool을 쓰지 못하게 막는 GKE 측
+   제약(taint 없는 nodeSelector 기반 pool이라 toleration만 맞으면 누구나 스케줄
+   가능)도 없다. 즉 `Autoresearch-airflow`에서 이 전제를 깨는 변경(예: DAG의
+   `node_selector` override)은 이 저장소의 리뷰·CI를 전혀 거치지 않는다. 문서에
+   박은 SHA·날짜 시점과 실제 활성화 시점 사이, 그리고 활성화 이후에 그런 변경이
+   생기는 경우 모두 자동 감지 경로가 없다 — 유일한 감지 수단은 활성화 직전
+   수동 재확인(이 문단 위 절차)과, 활성화 이후에는 위에서 판단하기로 한
+   Pending/foreign-workload 알림뿐이다. 알림 도입을 활성화 전에 판단해야 한다고
+   못 박은 이유가 이것이다 — 알림이 없으면 활성화 이후 이 전제가 깨져도 알아챌
+   수단이 없다.
 
 권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
 Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
@@ -132,11 +187,43 @@ controller에 의존합니다. namespace, KSA, 결과 버킷을 롤백 수단으
 병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request/limit은
 500m/1 GiB이고, 단일 컨테이너는 1 vCPU/2 GiB를 넘을 수 없습니다. Job 템플릿과
 admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` toleration을
-강제해야 합니다. `batch-od`는 #297 Action Log shard KPO와 공유하는 min 0/max 2
-on-demand pool이므로 일반 앱 pool 압박은 막지만, 실험 실행 시 해당 KPO가 Pending이
-될 수 있습니다. Job 생성 권한을 활성화하기 전에는 전용 실험 pool 또는 capacity·우선순위
-계획을 별도로 승인하고, batch-od node/pod Pending·autoscaler·CPU/memory를 관측해야
-합니다. 운영 검증 절차와 Job manifest 계약은
+강제해야 합니다. `batch-od`는 #297 대응으로 만든 min 0/max 2 on-demand pool이지만,
+현재 `Autoresearch-airflow`의 어떤 KPO도 이 pool로 스케줄되지 않습니다(#523 —
+`AutoresearchBatchPodOperator` 기본값은 `batch-spot`이고 override하는 DAG가 없음).
+따라서 지금은 experiment Job이 이 pool을 사실상 독점합니다. `LimitRange`는 컨테이너당
+상한(`type = "Container"`, 1 vCPU/2 GiB)과 별도로 Pod 합계 상한(`type = "Pod"`, 동일
+1 vCPU/2 GiB)도 강제합니다 — 컨테이너 request 합계와 limit 합계 양쪽 모두 이 값을
+넘을 수 없습니다. 단, 같은 root의 `autoresearch-experiment-job-contract` 정책은
+컨테이너 `resources`를 검사하지 않으므로, 컨테이너 2개짜리 Pod의 Job `create` 자체는
+API KSA 요청 수준에서는 성공합니다. 거부되는 것은 그 뒤 Job controller가 템플릿으로
+만드는 Pod입니다 — Pod 합계가 상한을 넘으면 LimitRange가 Pod 생성을 막고 Job에
+`FailedCreate` 이벤트가 비동기로 남습니다. Job controller는 Pod 생성을 계속
+재시도하지만 Pod 객체 자체가 만들어지지 않으므로 `requests.cpu`/`requests.memory`/
+`pods`/`limits.*` quota는 전혀 소비되지 않고 `count/jobs.batch`만 평소처럼
+점유됩니다. 이 Job도 다른 Job과 동일하게 `activeDeadlineSeconds`(최대 3600초,
+`status.startTime` 기준)로 상한이 걸려 있어 e2-standard-2 allocatable(약 1930m)을
+넘겨 노드에 스케줄되지 못하는 Pending Pod가 대기하는 경우와 마찬가지로 deadline+TTL로
+종료됩니다 — 이 LimitRange가 새로운 시간 상한을 만드는 것은 아닙니다. `status.startTime`은
+Pod 생성 성공 여부와 무관하게 Job controller가 Job을 처음 처리하는 시점에 설정되므로,
+Pod가 한 번도 만들어지지 못해도 `activeDeadlineSeconds` 타이머는 정상적으로 돕니다.
+실제 효과는 (1) 잘못된 Pod가 `pods`/`requests.cpu`/`requests.memory`/`limits.*` quota를
+전혀 점유하지 않게 하는 것과 (2) 스케줄러의 `FailedScheduling`/Pending 대신 admission
+단계의 명확한 `FailedCreate` 사유를 남기는 것뿐입니다(#523) — **`count/jobs.batch`
+슬롯 점유는 이 변경과 무관하게 그대로**이므로, "정상 실험 Job 제출까지 막는 상황을
+없앤다"는 뜻은 아닙니다. `count/jobs.batch=2`가 이런 Job으로 모두 채워지면 세 번째
+`create`는 이 LimitRange 도입 전과 동일하게 `Forbidden` quota 초과로 즉시(동기)
+거부되며, 회수 주체는 TTL controller(deadline 최대 3600초 + TTL 최대 3600초 = 슬롯당
+최대 2시간, 위 "초기 dev 상한" 문단과 동일한 병목)입니다 — API KSA에는 `delete`가
+없어 그 전에 수동 회수는 break-glass 관리자 권한으로만 가능합니다(runbook "장애 처리와
+롤백" 참조). 고정 템플릿이 실제로 단일 컨테이너만 만든다는 전제가 깨져
+향후 sidecar 등 다중 컨테이너 Pod가 필요해지면 이 Pod 상한이 먼저 걸리므로, 그
+변경에서 상한 값을 함께 재검토합니다. 이 상한은 컨테이너 상한과 동일한 값이라
+헤드룸이 0입니다 — 컨테이너가 하나라도 추가되면(의도적이든 GCS FUSE CSI 같은
+주입형 sidecar든) 거부됩니다. 이 namespace에는 현재 sidecar를 주입하는 mutating
+webhook이 없으므로, 값을 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를
+명시적 제약으로 유지합니다.
+운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
+절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
 따릅니다.
 
