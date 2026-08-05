@@ -1,0 +1,15 @@
+# #533 ARC(Actions Runner Controller) 컨트롤러 umbrella chart — ArgoCD Application이
+# 이 경로를 source로 배포한다. 상류 OCI chart를 dependency로 감싸 버전 pin과
+# values를 한곳에서 관리한다. ArgoCD가 sync 시 `helm dependency build`를 자동
+# 수행하므로 charts/를 vendor하지 않는다.
+apiVersion: v2
+name: autoresearch-actions-runner-controller
+description: GitHub Actions 셀프 호스티드 러너(ARC) 컨트롤러 umbrella chart
+type: application
+version: 0.1.0
+appVersion: "0.14.2"
+
+dependencies:
+  - name: gha-runner-scale-set-controller
+    version: 0.14.2
+    repository: oci://ghcr.io/actions/actions-runner-controller-charts
