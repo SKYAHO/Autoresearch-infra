@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-05T06:08:38Z",
+  "generated_at": "2026-08-05T06:21:40Z",
   "reports": [
+    {
+      "number": 529,
+      "title": "fix: raw-data staging cleanup IAM 조건을 publish_staging_raw로 재스코핑",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-05T06:21:26Z",
+      "summary_ko": [
+        "앱 저장소 변경으로 원자적 게시 임시 파일 위치가 변경됨에 따라 Airflow 배치 작업용 GCS IAM 삭제 조건 스코프를 수정했습니다.",
+        "IAM 조건을 임시 파일 전용 경로로 재스코핑하여 이미 완료된 데이터에 대한 삭제·덮어쓰기 권한을 차단하고 최소 권한 원칙을 강화했습니다.",
+        "IAM 조건 및 데이터 경로 계약 회귀를 방지하기 위해 CI lint 스크립트와 셀프 테스트를 새로 도입했습니다."
+      ],
+      "report_url": "pr/529/"
+    },
     {
       "number": 524,
       "title": "docs: batch-od 유휴 상태 반영해 실험 Job capacity 서술 수정 (#523)",
