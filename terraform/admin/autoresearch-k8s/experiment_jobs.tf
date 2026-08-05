@@ -179,46 +179,65 @@ resource "kubernetes_role_binding_v1" "experiment_job_observer" {
 
 # Kubernetes RBAC만으로는 Job 내부 image·volume·환경 변수를 제한할 수 없다. 따라서
 # 이 Role은 고정 템플릿·허용 digest·admission 검증이 앱/클러스터에 적용됐다는 별도
-# 검토가 끝날 때까지 기본 false로 유지한다.
-resource "kubernetes_role_v1" "experiment_job_creator" {
+# 검토(#523)를 마친 뒤에만 활성화하며, 문제 발생 시 되돌리는 스위치로 유지한다.
+#
+# #539에서 이 권한의 주체를 API KSA에서 launcher KSA로 옮겼다. API는 사용자 입력을
+# 받고 gh CLI를 subprocess로 실행하며 공개 인터넷 443으로 나가는 넓은 표면적의
+# 컴포넌트인 반면, launcher는 외부 입력도 인터넷 egress도 없이 1분마다 DB를 읽고
+# Job을 만들고 종료하는 단일 목적 CronJob이다. Job 생성 권한은 좁은 쪽이 갖는다.
+# API는 상태 조회용 experiment-job-observer만 유지한다.
+#
+# 동사는 launcher가 실제로 호출하는 세 개뿐이다(계획서는 Pods·Events read도
+# 제안했지만 launcher 코드에 해당 호출이 없어 최소 권한으로 뺐다 — 필요해지면 그
+# 시점에 추가한다).
+#   list   → 실행 중 Job 수를 세어 동시 실행 상한을 지킨다
+#   get    → 같은 이름 Job이 이미 있는지 확인해 중복 생성을 막는다
+#   create → Job을 제출한다
+# delete·update·patch는 주지 않는다. 회수는 activeDeadlineSeconds와 TTL controller가
+# 담당한다.
+resource "kubernetes_role_v1" "experiment_job_launcher" {
   for_each = var.enable_experiment_job_creation ? toset(["enabled"]) : toset([])
 
   metadata {
-    name      = "experiment-job-creator"
+    name      = "experiment-job-launcher"
     namespace = kubernetes_namespace_v1.experiment_jobs.metadata[0].name
   }
 
   rule {
     api_groups = ["batch"]
     resources  = ["jobs"]
-    verbs      = ["create"]
+    verbs      = ["create", "get", "list"]
   }
 }
 
-resource "kubernetes_role_binding_v1" "experiment_job_creator" {
+# Role은 Job이 존재하는 experiment namespace에 두고, 주체인 KSA는 app namespace에
+# 있다. RoleBinding은 권한이 적용될 namespace에 놓이며 subject에 KSA의 namespace를
+# 명시한다.
+resource "kubernetes_role_binding_v1" "experiment_job_launcher" {
   for_each = var.enable_experiment_job_creation ? toset(["enabled"]) : toset([])
 
   metadata {
-    name      = "experiment-job-creator"
+    name      = "experiment-job-launcher"
     namespace = kubernetes_namespace_v1.experiment_jobs.metadata[0].name
   }
 
   role_ref {
     api_group = "rbac.authorization.k8s.io"
     kind      = "Role"
-    name      = kubernetes_role_v1.experiment_job_creator[each.key].metadata[0].name
+    name      = kubernetes_role_v1.experiment_job_launcher[each.key].metadata[0].name
   }
 
   subject {
     kind      = "ServiceAccount"
-    name      = kubernetes_service_account_v1.agent_orchestration_api.metadata[0].name
+    name      = kubernetes_service_account_v1.agent_orchestration_launcher.metadata[0].name
     namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
   }
 }
 
-# API KSA가 손상돼도 Job create 권한만으로 실행 신원·이미지·스케줄 위치를 바꾸지
-# 못하도록 Kubernetes API 서버에서 거부한다. 이 정책은 create 권한을 기본 false로
-# 두는 것과 별개인 방어 심층화이며, 활성화 전제조건의 서버 측 강제 소유자는 이 root다.
+# Job create 권한을 가진 주체(#539 이후 launcher KSA)가 손상돼도 실행 신원·이미지·
+# 스케줄 위치를 바꾸지 못하도록 Kubernetes API 서버에서 거부한다. 이 정책은 create
+# 권한 플래그와 별개인 방어 심층화이며, 활성화 전제조건의 서버 측 강제 소유자는 이
+# root다. 아래 주석의 "손상된 제출자"는 create 권한을 가진 그 주체를 가리킨다.
 resource "kubernetes_manifest" "experiment_job_admission_policy" {
   manifest = {
     apiVersion = "admissionregistration.k8s.io/v1"
@@ -285,13 +304,13 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "has(object.spec.template.spec.tolerations) && object.spec.template.spec.tolerations.size() == 1 && object.spec.template.spec.tolerations.all(t, has(t.key) && t.key == 'workload' && (!has(t.operator) || t.operator == 'Equal') && has(t.value) && t.value == '${var.experiment_job_node_pool}' && has(t.effect) && t.effect == 'NoSchedule')"
           message    = "실험 Job은 workload=batch-od:NoSchedule toleration 하나만 사용해야 합니다."
         },
-        # quota 회수의 서버 측 강제. 이 root는 API KSA에 delete를 주지 않고
+        # quota 회수의 서버 측 강제. 이 root는 제출자 KSA에 delete를 주지 않고
         # enable_experiment_job_creation=false 롤백도 실행 중 Job을 멈추지 않으므로,
         # 두 필드가 없으면 count/jobs.batch=2가 영구 점유돼 회수 경로가 break-glass
         # 관리자 권한밖에 남지 않는다. 상한 3600초는 runbook의 Job 계약과 같은 값이다.
         # KSA의 automount_service_account_token=false는 Pod spec이 되돌릴 수 있는
         # "기본값"일 뿐이고 Pod Security restricted도 이 필드를 통제하지 않는다.
-        # 손상된 API가 template에서 true로 덮어쓰는 경로를 서버에서 닫는다.
+        # 손상된 제출자가 template에서 true로 덮어쓰는 경로를 서버에서 닫는다.
         {
           expression = "!has(object.spec.template.spec.automountServiceAccountToken) || object.spec.template.spec.automountServiceAccountToken == false"
           message    = "실험 Job은 ServiceAccount token을 mount할 수 없습니다."
@@ -299,7 +318,7 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # suspend: true로 제출된 Job은 Pod를 만들지 않고 activeDeadlineSeconds
         # 타이머도 돌지 않는다(suspend 시 status.startTime이 리셋된다). TTL은
         # Complete/Failed Job에만 적용되므로, 아래 두 시간 검증을 모두 만족하면서도
-        # count/jobs.batch 슬롯을 무기한 점유하는 Job이 만들어진다. 손상된 API를
+        # count/jobs.batch 슬롯을 무기한 점유하는 Job이 만들어진다. 손상된 제출자를
         # 가정하는 이 정책의 위협 모델에서는 Job 2개만으로 실험 실행이 영구 정지된다.
         {
           expression = "!has(object.spec.suspend) || object.spec.suspend == false"
