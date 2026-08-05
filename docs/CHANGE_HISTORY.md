@@ -3,6 +3,33 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-05: GitHub Actions 셀프 호스티드 러너(ARC) PoC 인프라 구성 (#533) — PR 대기
+
+- GCP(GSA/WI/Secret Manager 컨테이너)는 dev root, Kubernetes(namespace/KSA/
+  quota/NetworkPolicy)는 신규 admin root `actions-runner-k8s`, ArgoCD
+  Application(chart 설치)는 `argocd-k8s`로 3분리했다 — elastic.tf와 동일한
+  GCP/K8s root 분리 관례.
+- GitHub App 자격 증명은 `argocd_google_oidc_client`(#289) 패턴을 그대로
+  따른다: Terraform은 빈 Secret Manager 컨테이너만 만들고, 컨트롤러 GSA에
+  `secretmanager.secretAccessor`를 부여하지 않는다. 값은 운영자가 조직
+  GitHub UI에서 App을 만든 뒤 `gcloud`/`kubectl`로 직접 K8s Secret에 주입한다
+  (`docs/runbooks/2026-08-05-actions-runner-github-app-secret.md`).
+- 러너(listener/ephemeral runner) Pod는 GCP API를 직접 호출하지 않으므로 WI
+  KSA·GSA를 공유하지 않는다 — 컨트롤러 KSA만 Workload Identity를 쓴다.
+- ARC 컨트롤러 chart의 `flags.watchSingleNamespace`를 실측 확인해 채택했다
+  (0.14.2 chart 소스 grep): cluster-scoped ClusterRole 대신 namespace 범위
+  Role만 렌더링돼 RBAC이 `actions-runner` namespace로 좁혀진다. 남는
+  cluster-scoped 리소스는 chart의 CRD 4종뿐이다.
+- PoC 워크플로우(`actions-runner-poc.yml`)의 `runs-on`은 array
+  (`[self-hosted, <label>]`)가 아니라 scale set 이름 단일 문자열이 ARC의 실제
+  컨벤션이다. 기본 러너 이미지에 `kubectl`이 없어 `curl`로
+  `kubernetes.default.svc/healthz` 도달성만 확인한다(401/403도 성공 신호,
+  timeout만 실패).
+- `apply.yml`/`test-environment-catalog.rb` 등 admin root 카탈로그 등록
+  지점이 여러 곳에 흩어져 있어(`config/environments/dev/environment.yaml`,
+  `scripts/environment_catalog.rb`, 테스트 fixture) 구현 중 두 곳의 누락을
+  발견해 정정했다 — 신규 admin root 추가 시 체크리스트로 남긴다.
+
 ## 2026-08-05: agent-orchestration v0.7.0 롤아웃과 API GitHub egress 경계 변경 (#525) — sync 대기
 
 

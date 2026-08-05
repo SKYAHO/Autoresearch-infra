@@ -160,14 +160,20 @@ GitHub Actions, GitHub App.
 ### Task 6: 런북·문서 갱신
 
 **Files:** Create `docs/runbooks/2026-08-05-actions-runner-github-app-secret.md`;
-modify `terraform/admin/README.md`(admin root 목록), `docs/CHANGE_HISTORY.md`.
+modify `terraform/README.md`(admin root 목록에 `terraform/admin/README.md`가
+없어 대상 변경 — 실제 admin root 목록은 `terraform/README.md`와 `CLAUDE.md`가
+관리), `CLAUDE.md`, `docs/CHANGE_HISTORY.md`.
 
-- [ ] 런북에 GitHub App 생성(조직 UI, 수동) → Secret Manager 값 채우기
-      (`gcloud secrets versions add`) → K8s Secret 생성
-      (`kubectl create secret generic ... --from-env-file`, `--from-literal` 금지,
-      #213 컨벤션) 순서를 기록한다.
-- [ ] admin root 목록 문서에 `actions-runner-k8s` 추가.
-- [ ] `docs: 셀프 호스티드 러너 ARC PoC 런북 추가`로 커밋한다.
+- [x] 런북에 GitHub App 생성(조직 UI, 수동) → Secret Manager 값 채우기
+      (`gcloud secrets versions add`) → K8s Secret 생성 순서를 기록한다.
+      private key가 여러 줄 PEM이라 `--from-env-file`(#213, 한 줄 KEY=VALUE만
+      지원)로는 옮길 수 없어, agent-orchestration #525 런북과 같은
+      `--from-file` 패턴(key별 임시 파일)을 쓴다 — `--from-literal`은 여전히
+      금지.
+- [x] admin root 목록 문서(`terraform/README.md`, `CLAUDE.md`)에
+      `actions-runner-k8s` 추가. `terraform/admin/README.md`는 애초에 존재하지
+      않아 계획 작성 시의 경로 가정을 정정한다.
+- [x] `docs: 셀프 호스티드 러너 ARC PoC 런북 추가`로 커밋한다.
 
 ### Task 7: Draft PR과 검증
 
