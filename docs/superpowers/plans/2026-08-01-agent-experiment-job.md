@@ -91,6 +91,7 @@
 - Job KSA는 `automount_service_account_token=false`로 설정합니다. GKE metadata server 기반 Workload Identity는 Pod source identity와 KSA annotation을 사용하므로 컨테이너 Kubernetes API token이 필요하지 않습니다. Kubernetes RoleBinding은 만들지 않습니다.
 - namespace ResourceQuota 기본값은 `count/jobs.batch=2`, `pods=2`, `requests.cpu=2`, `requests.memory=4Gi`, `limits.cpu=2`, `limits.memory=4Gi`입니다. `batch-od` 전용 node pool의 min 0/max 2에 맞춘 상한입니다.
 - LimitRange 기본값은 container request/default limit `500m/1Gi`, max `1 CPU/2Gi`로 고정합니다.
+  (#523에서 Pod 합계 상한 `type = "Pod"`을 컨테이너 상한과 동일한 `1 CPU/2Gi`로 추가했습니다.)
 
 - [ ] **1단계: namespace·KSA·quota·limitrange 리소스를 추가합니다.**
 

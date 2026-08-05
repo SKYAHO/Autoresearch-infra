@@ -106,11 +106,19 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
   시도 ID를 가진 별도 Job으로 생성
 - `activeDeadlineSeconds`: 무제한 실행 금지
 - `ttlSecondsAfterFinished`: 종료 Job 자동 정리 기간 설정
-- CPU·메모리 requests/limits 필수. 초기 단일 컨테이너 상한은 1 vCPU/2 GiB
+- CPU·메모리 requests/limits 필수. 초기 단일 컨테이너 상한은 1 vCPU/2 GiB이며,
+  `LimitRange`의 Pod 합계 상한도 동일한 1 vCPU/2 GiB로 헤드룸이 0이다(#523) —
+  컨테이너가 하나라도 추가되면 `FailedCreate`로 거부되므로, 이 namespace에는
+  sidecar를 주입하는 mutating webhook을 두지 않는다
 - `batch-od` nodeSelector 및 `workload=batch-od:NoSchedule` toleration 필수. 일반
-  앱 pool과 컴퓨트 경계를 분리하며, admission 검증이 이를 강제한다. 다만 이 pool은
-  #297 Action Log shard KPO와 공유하므로 Job 생성 권한 활성화 전 전용 pool 또는
-  capacity·우선순위 경합 계획을 별도 승인한다.
+  앱 pool과 컴퓨트 경계를 분리하며, admission 검증이 이를 강제한다. 이 pool은 #297
+  대응으로 만들었지만 `Autoresearch-airflow`의 어떤 KPO도 현재 이 pool로
+  스케줄되지 않는다(#523) — 유휴 상태이므로 별도 경합 계획 없이 실험 Job이
+  그대로 쓴다. 다른 컴포넌트가 이 pool을 실제로 쓰기 시작하면 그 변경에서
+  capacity·우선순위 계획을 다시 승인한다. `enable_experiment_job_creation`
+  활성화 직전 재확인 절차는
+  `terraform/admin/autoresearch-k8s/README.md`의 "Job 생성 권한 활성화 조건"
+  6번을 따른다.
 - namespace ResourceQuota로 동시 실행 수·총 CPU·총 메모리 상한 설정
 
 정확한 숫자는 실제 dev GKE quota와 예상 실험 소요량을 확인한 뒤 plan 문서에서

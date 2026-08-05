@@ -35,9 +35,11 @@ resource "kubernetes_service_account_v1" "experiment_job" {
   automount_service_account_token = false
 }
 
-# 실험은 일반 앱 pool이 아니라 batch-od pool에 고정한다. 이 pool은 Action Log shard
-# KPO와 공유하므로, 생성 권한 활성화 전에 별도의 용량·우선순위 계획을 승인해야 한다.
-# quota는 pool의
+# 실험은 일반 앱 pool이 아니라 batch-od pool에 고정한다. 이 pool은 #297 대응으로
+# 만들었지만 Autoresearch-airflow의 어떤 KPO도 현재 이 pool로 스케줄되지 않는다
+# (#523) — 유휴 상태이므로 별도 경합 계획 없이 실험 Job이 그대로 쓴다. 다른
+# 컴포넌트가 이 pool을 실제로 쓰기 시작하면 그 변경에서 capacity·우선순위 계획을
+# 다시 승인한다. quota는 pool의
 # e2-standard-2 두 노드(min 0/max 2)에서 각각 한 Job이 안정적으로 실행되는
 # 보수적 상한이다. 완료 Job도 TTL 전에는 quota에 포함되므로 무한 재시도·대량 제출로
 # batch 비용이 늘어나는 경로를 차단한다.
@@ -78,6 +80,38 @@ resource "kubernetes_limit_range_v1" "experiment_jobs" {
         cpu    = "500m"
         memory = "1Gi"
       }
+      max = {
+        cpu    = "1"
+        memory = "2Gi"
+      }
+    }
+
+    # Pod 합계 상한. 컨테이너별 상한(위)만으로는 컨테이너 여러 개짜리 Pod가
+    # 총합으로 노드 allocatable을 넘겨 Pod 생성까지는 통과하고 스케줄만
+    # deadline+TTL까지 Pending으로 묶여 `pods`/`requests.cpu` quota를 점유하는
+    # 경로가 열린다(#523). 이 상한은 그 Pod 생성 자체를 LimitRange가 막아
+    # `FailedCreate` 이벤트로 즉시 드러내고 해당 quota 소비를 없앤다 — Job
+    # `create` 자체(ValidatingAdmissionPolicy)는 이 값을 검사하지 않으므로
+    # 여전히 성공하고, `count/jobs.batch` quota는 이 상한과 무관하게 평소처럼
+    # 점유된다. 값은 문서가 명시한 단일 컨테이너 계약과 동일해 현재 고정
+    # 템플릿에는 영향이 없다.
+    #
+    # initContainers 계산: k8s는 일반 initContainer(순차 실행)를 app 컨테이너
+    # 합계와 max() 비교하므로, initContainer 1개(1 vCPU) + app 컨테이너 1개
+    # (1 vCPU)는 max(1,1)=1로 이 상한 경계값에 걸려 통과한다. 반면
+    # `restartPolicy: Always`인 native sidecar initContainer는 app 컨테이너와
+    # 동시에 떠 있어 합산(sum) 대상이 되므로 같은 조합이 2 vCPU로 상한을
+    # 넘겨 거부된다. 현재 고정 템플릿과 admission 정책은 단일 컨테이너만
+    # 만들므로 두 경로 다 지금은 발생하지 않는다.
+    #
+    # 헤드룸 0: 이 값을 컨테이너 상한과 동일하게 둬 컨테이너가 하나라도 추가되면
+    # (의도적 sidecar든 GCS FUSE CSI 같은 주입형 sidecar든) 무조건 거부된다.
+    # 이 namespace에는 현재 sidecar를 주입하는 mutating webhook이 없다 — 값을
+    # 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를 제약으로
+    # 유지한다. 다중 컨테이너 Pod가 실제로 필요해지면 그 변경에서 상한 값을
+    # 함께 재검토한다.
+    limit {
+      type = "Pod"
       max = {
         cpu    = "1"
         memory = "2Gi"

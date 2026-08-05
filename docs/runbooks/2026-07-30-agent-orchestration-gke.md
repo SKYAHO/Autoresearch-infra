@@ -48,6 +48,24 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
    Terraform drift만으로 자동 갱신되지 않습니다. 불일치하면 sync하지 말고 새
    manifest commit에 현재 output을 반영한 뒤 target SHA → reviewed admin apply →
    manual sync 전체 순서를 다시 수행합니다.
+6. v0.7.0 이상을 sync하기 전에 Kubernetes Secret `agent-orchestration-github-token`이
+   먼저 존재해야 합니다. 아래
+   [이슈 발행 GitHub 토큰 등록](#이슈-발행-github-토큰-등록-525) 절차를 따릅니다.
+   API는 `load_settings()`를 uvicorn lifespan startup에서 호출하므로, 아래 필수
+   환경변수 중 하나라도 비어 있으면 첫 요청 500이 아니라 **Pod 기동 자체가
+   실패**합니다.
+
+   | 환경변수 | 출처 | 현재 값 |
+   | --- | --- | --- |
+   | `ORCH_GITHUB_TOKEN` | Secret `agent-orchestration-github-token` | 운영자 등록 |
+   | `ORCH_GITHUB_REPOSITORY` | 발행 대상 저장소 | `SKYAHO/Autoresearch` |
+   | `ORCH_EXPERIMENT_DATASET_SOURCE` | Feast offline store 좌표 | `feast://feast_offline_store/training_entity` |
+   | `ORCH_EXPERIMENT_TRAINING_CONFIG_REF` | 앱 저장소 학습 설정 | `src/pipeline/config.yaml@main` |
+
+   뒤의 세 값은 시크릿이 아니라 manifest 리터럴이며, 발행되는 이슈 본문에 문자열로
+   박히는 좌표입니다. 실재하지 않는 이름을 넣어도 API는 기동하므로, 값이 바뀌면
+   실제 BigQuery 테이블·앱 저장소 파일과 대조합니다. 기간은 발행 시점에 서버가
+   계산해 붙이므로 `ORCH_EXPERIMENT_DATASET_SOURCE`에 날짜를 넣지 않습니다.
 
 `deploy/agent-orchestration/*.yaml`의 `REPLACE_WITH_*` 문자열이 하나라도 남아
 있으면 의도적으로 배포하지 않습니다. release digest와 Terraform output을 확인한
@@ -74,10 +92,15 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
 Experiment API v0를 포함한 API image는 `api-migration-job.yaml`의 ArgoCD `PreSync`
 hook을 통해 API rollout 전에 `alembic upgrade head`를 실행합니다. Job은 API와 같은
 immutable digest와 기존 `agent-orchestration-api` KSA의 DB bootstrap만 재사용합니다.
-따라서 OAuth PVC, `ORCH_API_TOKEN`, `ORCH_RUNNER_TOKEN`은 Job에 전달되지 않으며, 새
-IAM·DB 권한·외부 egress도 추가하지 않습니다. Job Pod는 API와 같은 label을 써 기존 API
-NetworkPolicy가 허용한 Cloud SQL·DNS·Workload Identity·Private Google APIs 경로만
-사용합니다.
+따라서 OAuth PVC, `ORCH_API_TOKEN`, `ORCH_RUNNER_TOKEN`, `ORCH_GITHUB_TOKEN`은 Job에
+전달되지 않으며, 새 IAM·DB 권한도 추가하지 않습니다.
+
+Job Pod는 API와 같은 label을 쓰므로 `agent-orchestration-api-egress`의 `podSelector`에
+매칭되어 **API의 egress 경계를 그대로 상속합니다**. 즉 Cloud SQL·DNS·Workload
+Identity·Private Google APIs뿐 아니라 Kubernetes API 443과, #525에서 추가한 공개 인터넷
+443까지 함께 상속합니다. Job은 `alembic upgrade head`만 실행하므로 이 경로들을 쓰지
+않지만, "Job에는 외부 egress가 없다"고 가정하지 마십시오. Job에만 더 좁은 경계를
+적용하려면 별도 label과 NetworkPolicy를 같은 변경에서 추가해야 합니다.
 
 `alembic` 실행 세부 구현은 앱 image 계약에 의존합니다. promotion 전에 대상 source의
 API Dockerfile과 `bootstrap_secrets` 구현을 대조해 다음을 확인합니다.
@@ -91,10 +114,26 @@ API Dockerfile과 `bootstrap_secrets` 구현을 대조해 다음을 확인합니
   release에서 이 Job command와 runbook을 함께 갱신해야 합니다.
 
 현재 dev DB에는 `alembic_version`이 없으므로 #483의 `down_revision = None`인 initial
-revision `0001_experiment_tables`부터 적용됩니다. 이 revision은 experiment 관련 네
-table만 additive하게 생성해야 하며, 기존 `chat_interactions` table·sequence는 변경해서는
+revision `0001_experiment_tables`부터 적용됩니다. 이 Job은 이 클러스터에서 아직 한 번도
+실행된 적이 없습니다 — `ccf90bf`에서 매니페스트가 들어왔지만, 그 뒤 ArgoCD 작업이 UI
+Deployment 하나만 대상으로 한 선택 sync였고 선택 sync는 PreSync hook을 건너뜁니다.
+
+`upgrade head`는 단일 revision이 아니라 **미적용 revision 전체를 순서대로** 적용합니다.
+v0.7.0 기준 체인은 분기 없이 선형입니다.
+
+| revision | 만드는 것 |
+| --- | --- |
+| `0001_experiment_tables` | `experiments`, `experiment_events`, `experiment_logs`, `experiment_metadata` |
+| `0002_create_experiment_steps` | `experiment_steps` |
+| `0003_experiment_issue_lineage` | `experiments`에 `issue_body`/`issue_title`/`issue_number`/`issue_branch`/`issue_published_at` 5컬럼 + index |
+
+세 revision 모두 additive여야 하며, 기존 `chat_interactions` table·sequence는 변경해서는
 안 됩니다. Experiment table schema의 source of truth는 Alembic이고, 기존 `/chat` table은
 API startup의 `ensure_schema()`가 계속 담당합니다.
+
+중간 revision에서 중단되면 DB가 부분 적용 상태로 남습니다. Alembic은 revision 단위로
+`alembic_version`을 갱신하므로 다음 sync의 `upgrade head`가 남은 revision부터 이어서
+적용합니다. 이때도 downgrade하지 않습니다.
 
 `PreSync` Job이 실패하면 ArgoCD sync는 API·Runner rollout 전에 중단됩니다. 임의로
 Deployment를 먼저 sync하거나 migration을 API startup에 숨기지 않습니다. Job은
@@ -299,6 +338,43 @@ Kubernetes Secret입니다.
 `autoresearch` namespace의 `view` 권한에는 Secret read가 포함되지 않습니다. 토큰을
 호출자에게 전달할 별도 보관·배포 방식은 팀의 승인된 비밀 관리 절차를 따릅니다.
 
+## 이슈 발행 GitHub 토큰 등록 (#525)
+
+`POST /experiments/{id}/issue`는 `gh issue create`를 subprocess로 실행하며,
+`ORCH_GITHUB_TOKEN`을 `GH_TOKEN`으로 전달합니다. 이 값은 API Pod가 startup에서 읽는
+필수 환경변수라, **Secret이 없으면 Pod가 기동하지 못합니다.** v0.7.0 이상을 sync하기
+전에 반드시 먼저 등록합니다.
+
+토큰은 `SKYAHO/Autoresearch` 저장소 하나에만 `Issues: Read and write` 권한을 준
+fine-grained PAT입니다. `contents: write`나 `repo` 스코프 토큰을 넣지 않습니다 — 이
+토큰으로 코드를 쓸 수 없어야 한다는 것이 앱 저장소 spec의 격리 전제입니다.
+
+```bash
+umask 077
+token_file="$(mktemp)"
+printf '%s' '<fine-grained PAT>' > "$token_file"   # 끝에 개행을 넣지 않습니다
+
+kubectl -n autoresearch create secret generic agent-orchestration-github-token \
+  --from-file=ORCH_GITHUB_TOKEN="$token_file"
+
+rm -f "$token_file"
+```
+
+`_require_env`가 `strip()` 후 빈 문자열을 거부하므로 개행·공백만 든 값은 startup
+실패로 이어집니다. `--from-literal` 대신 위처럼 개행 없는 파일을 쓰는 이유입니다.
+
+앞의 두 요청 토큰과 마찬가지로 payload를 manifest, Git, Terraform state, shell
+history에 넣지 않으며 API GSA에 Secret Manager accessor를 추가하지 않습니다. 이
+Secret은 API Pod에만 mount하며 UI·Runner에는 전달하지 않습니다.
+
+회전은 같은 명령에 `--dry-run=client -o yaml | kubectl apply -f -`를 붙여 수행하고,
+API Pod를 재기동해야 새 값이 적용됩니다(startup에 1회만 읽습니다).
+
+`gh`가 발행에 실패하면 API는 502를 반환합니다. 토큰이 잘못됐어도 startup은 통과하므로
+(형식 검증이 없습니다) 등록 직후
+[공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)로 실제 발행을
+확인합니다.
+
 ## 배포 및 확인
 
 ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다. 이 단계 전에
@@ -310,9 +386,11 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
 - Experiment API를 포함하는 promotion에서는 API digest가 API container, API DB
   bootstrap, Runner OAuth bootstrap, PreSync migration Job의 두 container까지 다섯 image
   reference에 모두 같은 값으로 pin돼 있습니다.
-- API에는 `agent-orchestration-api` KSA와 DB runtime `emptyDir`만 있고 OAuth PVC가
-  없습니다. API에는 `ORCH_API_TOKEN`과 `ORCH_RUNNER_TOKEN`만 전달되며 OAuth
-  bootstrap Secret은 전달되지 않습니다.
+- API에는 `agent-orchestration-api` KSA, DB runtime `emptyDir`, `/tmp` `emptyDir`만
+  있고 OAuth PVC가 없습니다. API에는 `ORCH_API_TOKEN`, `ORCH_RUNNER_TOKEN`,
+  그리고 #525에서 추가한 `ORCH_GITHUB_TOKEN` 세 Secret만 전달되며 OAuth bootstrap
+  Secret은 전달되지 않습니다. `ORCH_GITHUB_TOKEN`은 API Pod에만 전달하고 UI·Runner
+  에는 전달하지 않습니다.
 - Runner에는 `agent-orchestration-runner` KSA와 1Gi `ReadWriteOnce` PVC만 있으며,
   DB URL·DB password·Cloud SQL secret reference가 없습니다. Runner에는
   `ORCH_RUNNER_TOKEN`만 전달되고 `ORCH_API_TOKEN`은 전달되지 않습니다.
@@ -324,9 +402,31 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
 - UI는 ClusterIP TCP 8501로만 제공하며 node subnet ingress, API TCP 8000, DNS만
   허용한다. Ingress·LoadBalancer·Cloud SQL·Runner·public HTTPS egress는 없다.
 - API egress는 Runner TCP 8080, Cloud SQL TCP 5432, DNS, Workload Identity metadata,
-  private Google APIs VIP(`199.36.153.8/30`) TCP 443뿐이고 Runner egress에는 Cloud SQL
-  TCP 5432가 없습니다. API는 Codex/OpenAI 직접 호출을 하지 않으므로 전체 인터넷
-  HTTPS egress를 열지 않습니다.
+  private Google APIs VIP(`199.36.153.8/30`) TCP 443, Kubernetes API TCP 443,
+  그리고 #525에서 추가한 공개 인터넷 TCP 443이고, Runner egress에는 Cloud SQL
+  TCP 5432가 없습니다. API는 Codex/OpenAI 직접 호출을 여전히 하지 않습니다.
+- **#525 이전까지 API에는 public HTTPS egress가 없었습니다.** 이슈 발행이
+  `gh issue create` subprocess로 `api.github.com` TCP 443에 직접 나가야 하고, `gh`가
+  전달 환경변수를 화이트리스트로 제한해 `HTTPS_PROXY`를 넘기지 않으므로 proxy로
+  대체할 수 없어 이 경계를 바꿨습니다. 이 클러스터의 NetworkPolicy provider는
+  Calico라 FQDN 규칙을 쓸 수 없고, GitHub이 게시하는 api 대역 24개 중 20개가 /32라
+  수시로 교체되므로 고정 CIDR은 예고 없이 발행을 502로 만듭니다. 그래서 공개 인터넷
+  443을 열되 사설·링크로컬 대역(`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
+  `100.64.0.0/10`, `169.254.0.0/16`, `127.0.0.0/8`)을 `except`로 제외합니다. 이 목록은
+  RFC1918/RFC6598 기준이라 dev CIDR 변수가 바뀌어도 함께 고칠 필요가 없습니다.
+  Runner는 Codex 호출 때문에 이미 같은 `0.0.0.0/0` TCP 443을 갖고 있습니다.
+- 이 규칙이 넓히는 범위를 정확히 봐 두십시오. 사설 대역 목적지(Runner, Cloud SQL,
+  in-cluster ClusterIP, private Google APIs VIP)는 `except`로 계속 차단되므로 그
+  위협 모델은 유지됩니다. 다만 이 클러스터는 GKE DNS 엔드포인트가
+  `allow_external_traffic = true`(`terraform/envs/dev/gke.tf:151-155`)라 공개 주소를
+  가지므로, 이 규칙은 API Pod에서 그 엔드포인트로 가는 **네트워크 경로를 새로
+  엽니다**. 실제 도달에는 여전히 `container.clusters.connect` IAM이 필요하고 API
+  GSA에는 그 권한이 없습니다. 공개 IP 엔드포인트 쪽은 `master_authorized_networks`가
+  비어 있어 별도로 막혀 있습니다. 이 두 전제가 바뀌면 이 egress 규칙을 다시
+  평가해야 합니다.
+- API 컨테이너는 `readOnlyRootFilesystem: true`를 유지하되 `/tmp`에 64Mi emptyDir을
+  mount합니다. `gh`가 호출마다 `HOME`·`GH_CONFIG_DIR`·`TMPDIR`용과 issue body 파일용
+  임시 디렉터리를 만들기 때문이며, 이것이 없으면 발행이 실패합니다.
 - Runner의 `CODEX_TIMEOUT_SEC`은 110초이고, API와 Runner는
   `agent-orchestration-runner-timeout` ConfigMap의 같은 `CODEX_RUNNER_TIMEOUT_SEC` key를
   `valueFrom.configMapKeyRef`로 주입받아 모두 120초를 사용합니다. Runner는 기동 시
@@ -469,6 +569,45 @@ test "$list_status" = "200"
 이 gate는 Experiment table 생성과 API DB session 연결을 함께 증명합니다. 더 상세한
 상태 event·log·promotion 계약은 앱 저장소 OpenAPI와 #483 테스트를 기준으로 확인하며,
 운영 smoke test에 실제 실험 입력·사용자 데이터·LLM prompt를 넣지 않습니다.
+
+### 이슈 발행 gate (#525 이후 필수)
+
+**위의 두 gate는 이슈 발행 경로를 전혀 검증하지 못합니다.** 스코프가 잘못된 PAT,
+egress `except` 오설정, `/tmp` 미마운트는 셋 다 `/chat`과 `POST /experiments`를 통과한
+뒤 발행 시점에만 502로 드러납니다. v0.7.0 이상을 sync한 뒤에는 아래를 반드시
+수행합니다.
+
+먼저 `/openapi.json`에 두 경로가 실제로 노출됐는지 확인합니다. 이것이 이번 롤아웃의
+직접 증거입니다.
+
+```bash
+(
+openapi_file="$(mktemp)" || exit 1
+trap 'rm -f "$openapi_file"' EXIT
+trap 'exit 1' HUP INT TERM
+chmod 600 "$openapi_file" || exit 1
+
+curl --fail --silent --output "$openapi_file" http://127.0.0.1:8000/openapi.json || exit 1
+python3 -c 'import json, sys; paths = json.load(open(sys.argv[1], encoding="utf-8"))["paths"]; assert "/experiments/{experiment_id}/issue" in paths; assert "/experiments/{experiment_id}/steps" in paths' \
+  "$openapi_file"
+)
+```
+
+그다음 위 smoke test에서 만든 실험 id로 실제 발행을 1회 수행합니다. 발행은 대상
+저장소에 실제 이슈를 만드므로, 확인 후 해당 이슈를 닫고 `auto-experiment` label이
+붙었는지 함께 확인합니다. 발행 경로는 자동 재시도하지 않는 것이 앱 spec의 결정이므로
+실패해도 같은 실험으로 반복 호출하지 않습니다.
+
+| 응답 | 원인 | 확인할 곳 |
+| --- | --- | --- |
+| 201 | 정상 | 대상 저장소의 새 `[AR]` 이슈 |
+| 502 `authentication_failed` | PAT이 잘못됐거나 만료 | Secret `agent-orchestration-github-token` |
+| 502 `label_missing` | 대상 저장소에 `auto-experiment` label 없음 | `gh label list --repo <owner/repo>` |
+| 502 (timeout·연결 실패) | egress 또는 `/tmp` 문제 | `agent-orchestration-api-egress`, API Pod의 `/tmp` mount |
+| 429 | `ORCH_ISSUE_DAILY_LIMIT` 초과 | DB의 `issue_published_at` 24시간 내 건수 |
+
+이 gate가 실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로
+멈춥니다.
 
 ## 롤백과 보안 확인
 
