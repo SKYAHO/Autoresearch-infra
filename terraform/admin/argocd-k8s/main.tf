@@ -252,14 +252,27 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
           server    = "https://kubernetes.default.svc"
           namespace = var.app_namespace
         },
+        {
+          # #533 러너 namespace는 terraform/admin/actions-runner-k8s가 소유(ns/KSA/NP).
+          # ArgoCD는 deploy/actions-runner-controller, deploy/actions-runner-scale-set만
+          # 이 namespace에 배포한다.
+          server    = "https://kubernetes.default.svc"
+          namespace = var.actions_runner_namespace
+        },
       ]
       # #183 kube-prometheus-stack이 요구하는 cluster-wide kind만 허용.
+      # #533 ARC CRD 4종(actions.github.com apiGroup) 추가. ClusterRole/
+      # ClusterRoleBinding은 위에서 이미 허용돼 컨트롤러 chart의 RBAC도 커버한다.
       clusterResourceWhitelist = [
         { group = "apiextensions.k8s.io", kind = "CustomResourceDefinition" },
         { group = "rbac.authorization.k8s.io", kind = "ClusterRole" },
         { group = "rbac.authorization.k8s.io", kind = "ClusterRoleBinding" },
         { group = "admissionregistration.k8s.io", kind = "ValidatingWebhookConfiguration" },
         { group = "admissionregistration.k8s.io", kind = "MutatingWebhookConfiguration" },
+        { group = "actions.github.com", kind = "AutoscalingRunnerSet" },
+        { group = "actions.github.com", kind = "AutoscalingListener" },
+        { group = "actions.github.com", kind = "EphemeralRunnerSet" },
+        { group = "actions.github.com", kind = "EphemeralRunner" },
       ]
     }
   }
@@ -526,4 +539,109 @@ resource "kubernetes_manifest" "application_agent_orchestration" {
   }
 
   depends_on = [helm_release.argo_cd]
+}
+
+# #533 ARC 컨트롤러 Application — infra repo의 deploy/actions-runner-controller
+# umbrella chart(gha-runner-scale-set-controller)를 배포한다. namespace/KSA는
+# actions-runner-k8s root가 먼저 소유하므로 CreateNamespace=false.
+resource "kubernetes_manifest" "application_actions_runner_controller" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "actions-runner-controller"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/actions-runner-controller"
+        targetRevision = var.actions_runner_controller_target_revision
+        helm = {
+          releaseName = "actions-runner-controller"
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.actions_runner_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
+        syncOptions = [
+          "ServerSideApply=true",
+          "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [helm_release.argo_cd]
+}
+
+# #533 ARC 스케일셋 Application — infra repo의 deploy/actions-runner-scale-set
+# umbrella chart(gha-runner-scale-set)를 배포한다. 스케일셋 chart는 컨트롤러가
+# 설치하는 CRD(AutoscalingRunnerSet 등)를 전제하므로, 컨트롤러 Application을
+# depends_on으로 앞세운다. 이는 Terraform이 두 Application 객체의 생성 순서만
+# 보장할 뿐 ArgoCD sync 완료까지 기다리지 않으므로(이 root 어디도 wait_for를
+# 쓰지 않는 것과 동일 한계), 실제 CRD 설치 완료 확인은 Task 7 런/PR 검증에서
+# ArgoCD UI로 컨트롤러 Application이 Synced/Healthy인지 사람이 확인한다.
+resource "kubernetes_manifest" "application_actions_runner_scale_set" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "actions-runner-scale-set"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/actions-runner-scale-set"
+        targetRevision = var.actions_runner_scale_set_target_revision
+        helm = {
+          releaseName = "actions-runner-scale-set"
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.actions_runner_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
+        syncOptions = [
+          "ServerSideApply=true",
+          "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [
+    helm_release.argo_cd,
+    kubernetes_manifest.application_actions_runner_controller,
+  ]
 }

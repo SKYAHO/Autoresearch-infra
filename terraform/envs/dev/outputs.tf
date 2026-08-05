@@ -508,3 +508,14 @@ output "rerank_loadtest_github_actions_identities" {
     workflow_ref    = var.rerank_loadtest_workflow_ref
   }
 }
+
+output "actions_runner_contract" {
+  description = "셀프 호스티드 러너(ARC) 컨트롤러 GSA/WI 좌표와 GitHub App Secret Manager 컨테이너 이름(#533). Secret 값 자체는 포함하지 않는다."
+  value = {
+    controller_gcp_service_account_email   = google_service_account.actions_runner_controller.email
+    controller_workload_identity_principal = local.actions_runner_controller_workload_identity_principal
+    kubernetes_namespace                   = var.actions_runner_namespace
+    kubernetes_controller_service_account  = var.actions_runner_controller_ksa
+    github_app_secret_ids                  = [for s in google_secret_manager_secret.actions_runner_github_app : s.secret_id]
+  }
+}

@@ -659,6 +659,18 @@ variable "es_k8s_service_account" {
   default     = "elasticsearch"
 }
 
+variable "actions_runner_namespace" {
+  description = "셀프 호스티드 러너(ARC) Workload Identity 매핑용 Kubernetes namespace(#533). 실제 namespace는 terraform/admin/actions-runner-k8s가 관리."
+  type        = string
+  default     = "actions-runner"
+}
+
+variable "actions_runner_controller_ksa" {
+  description = "ARC 컨트롤러 매니저 Pod의 Workload Identity 매핑용 Kubernetes service account 이름(#533)."
+  type        = string
+  default     = "actions-runner-controller"
+}
+
 variable "batch_spot_gke_node_pool_name" {
   description = "KPO batch 전용 Spot node pool 이름(#173)."
   type        = string

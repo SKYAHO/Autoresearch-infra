@@ -153,6 +153,11 @@ locals {
   es_snapshot_sa_name            = "${local.resource_prefix}-es-snapshot"
   es_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.elastic_k8s_namespace}/${var.es_k8s_service_account}]"
 
+  # #533 ARC 컨트롤러 매니저 Pod의 Workload Identity subject. 러너(listener/ephemeral
+  # runner) Pod 자체는 GCP API를 직접 호출하지 않으므로 이 GSA를 공유하지 않는다.
+  actions_runner_controller_sa_name                     = "${local.resource_prefix}-runner"
+  actions_runner_controller_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.actions_runner_namespace}/${var.actions_runner_controller_ksa}]"
+
   # #424 검증된 환경 map에서 WI subject를 파생한다. Task 2의 환경별 GSA IAM
   # binding이 이 map을 직접 소비하므로 namespace/KSA 계약이 변경되면 같은
   # 환경의 subject만 함께 바뀐다.

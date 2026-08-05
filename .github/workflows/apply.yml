@@ -1,6 +1,6 @@
 # #451 apply workflow 단일 진입점. admin-apply(#307/#312)·dev-apply(#341)·
 # terraform-apply(#448 재사용 워크플로우) 3개 파일을 이 하나로 통합했다.
-# 한 번의 dispatch가 dev root + admin root 7개(총 8개) 전체를 plan하고,
+# 한 번의 dispatch가 dev root + admin root 8개(총 9개) 전체를 plan하고,
 # **승인 1회**로 전체를 apply한다(`scope: all`, 기본값).
 #
 # ## 전제 조건 — merge 전 반드시 확인
@@ -35,7 +35,7 @@
 #    보호하고, 다른 root의 apply로 바뀐 live 조회 값(data source)까지는
 #    잡아내지 못한다 — 그래서 코드가 아니라 운영 규칙(scope 분리)으로 막는다.
 #
-# ## apply 순서 — dev root 먼저, admin root 7개 나중
+# ## apply 순서 — dev root 먼저, admin root 8개 나중
 #
 # admin root(K8s namespace/RBAC 등)는 dev root가 만드는 GKE 클러스터·VPC에
 # 의존한다. #436에서 겪은 함정을 피하려면 dev root가 항상 먼저 끝나 있어야
@@ -61,7 +61,7 @@
 #
 # ## 부분 실패 시 복구
 #
-# admin root 7개 중 하나가 실패하면 나머지는 적용되지 않은 채 job이
+# admin root 8개 중 하나가 실패하면 나머지는 적용되지 않은 채 job이
 # 종료되고, `Cleanup plans`(if: always())가 이번 run의 admin plan 객체를
 # 전부 지운다 — 즉 "실패 지점부터 이어서" 적용할 수 없고, 원인을 고친 뒤
 # 전체(또는 `scope: admin`)를 재dispatch해야 한다. 이미 성공한 root는 다음
@@ -107,7 +107,7 @@ env:
   # GITHUB_ENV로 내보낸다). 여기에 버킷을 하드코딩하면 카탈로그와 이중 정본이 돼,
   # 카탈로그만 바꾼 이전에서 plan 객체가 옛 버킷으로 향한다.
   DEV_ROOT: terraform/envs/dev
-  # #307/#312/#314 admin K8s root 7개, namespace 소유 root 먼저·argocd 마지막
+  # #307/#312/#314/#533 admin K8s root 8개, namespace 소유 root 먼저·argocd 마지막
   # (다른 namespace 참조) 순서 유지. gke-team-access(#314)는 기존과 동일하게
   # 제외. vault-k8s(#412)는 root 자체가 #478로 완전히 삭제됐다.
   ADMIN_ROOTS: >-
@@ -117,6 +117,7 @@ env:
     terraform/admin/elastic-k8s
     terraform/admin/mlflow-k8s
     terraform/admin/argo-rollouts-k8s
+    terraform/admin/actions-runner-k8s
     terraform/admin/argocd-k8s
   # 두 root 그룹이 공유하는 변수. 이름이 겹치지 않는다는 불변식은 #449 리뷰에서
   # 실측 확인됨(양방향 충돌 0건) — 어긴 root가 생기면 이 env 블록을 재검토한다.

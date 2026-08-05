@@ -41,6 +41,12 @@
 - Auto Research 실험 결과 전용 GCS 버킷과 실험 Job Workload Identity
   (`experiment_jobs.tf`, 객체 생성 전용 권한)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
+- 셀프 호스티드 러너(ARC) PoC 컨트롤러 GSA + Workload Identity + GitHub App 자격
+  증명용 Secret Manager 컨테이너(`actions_runner.tf`, #533). K8s 설치(namespace/
+  KSA/NetworkPolicy)는 `terraform/admin/actions-runner-k8s`가 별도 state로 관리.
+  **선행 조건**: GitHub App은 조직 GitHub UI에서 수동으로 먼저 생성해야 하며,
+  Secret 값 채우기와 K8s Secret 생성은
+  `docs/runbooks/2026-08-05-actions-runner-github-app-secret.md` 런북을 따른다.
 
 ## 로컬 실행
 

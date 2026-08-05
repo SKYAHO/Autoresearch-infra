@@ -78,6 +78,7 @@ VALID_CATALOG = <<~YAML.freeze
     bucket: autoresearch-503903-dev-tfstate
     roots:
       terraform/envs/dev: dev/
+      terraform/admin/actions-runner-k8s: admin/actions-runner-k8s/
       terraform/admin/airflow-k8s: admin/airflow-k8s/
       terraform/admin/argo-rollouts-k8s: admin/argo-rollouts-k8s/
       terraform/admin/argocd-k8s: admin/argocd-k8s/

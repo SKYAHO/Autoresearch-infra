@@ -11,12 +11,14 @@ AppProject와 샘플 Application을 추가했다.
 | `argocd` namespace | 예 | `prevent_destroy`로 실수 삭제 방지 |
 | ArgoCD Helm release | 예 | chart `argo-cd` `10.1.3` pin (#84) |
 | ArgoCD Helm values | 예 | `helm-values/argo-cd.values.yaml` |
-| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). 샘플 제거 후 infra repo Application 전용(#183). sourceRepos=infra repo, destinations=`monitoring`·`kube-system`(control-plane exporter)·`argo-rollouts`(#186)·`mlflow`(#94)·`autoresearch`(#302), cluster-wide는 필요한 kind만 |
+| AppProject `autoresearch-dev` | 예 | repo/destination 허용 경계 (#85). 샘플 제거 후 infra repo Application 전용(#183). sourceRepos=infra repo, destinations=`monitoring`·`kube-system`(control-plane exporter)·`argo-rollouts`(#186)·`mlflow`(#94)·`autoresearch`(#302)·`actions-runner`(#533), cluster-wide는 필요한 kind만(ARC CRD 4종 포함) |
 | Application `monitoring` | 예 (#183) | infra repo `deploy/monitoring` umbrella chart, automated sync(#460, prune 없음). helm_release에서 이관 |
 | Application `argo-rollouts` | 예 (#186) | infra repo `deploy/argo-rollouts` umbrella chart, automated sync(#460, prune 없음). helm_release에서 이관 |
 | Application `mlflow` | 예 (#94) | infra repo `deploy/mlflow` plain 매니페스트, automated sync(#460, prune 없음). 신규 배포(adopt 아님) |
 | Application `serving` | 예 (#302) | infra repo `deploy/serving`(Deployment/Service/ServiceMonitor) plain 매니페스트, destination `var.app_namespace`(`autoresearch-k8s` 소유), automated sync(#460, prune 없음). 신규 배포(adopt 아님). 이미지 digest는 앱 저장소 `release.yml`이 GAR에 push한 값 |
 | Application `agent-orchestration` | 예 (#453/#526) | infra repo `deploy/agent-orchestration` plain 매니페스트, destination `var.app_namespace`, enabled일 때 main automated sync(prune·selfHeal 없음). API/Runner image는 immutable digest만 사용 |
+| Application `actions-runner-controller` | 예 (#533) | infra repo `deploy/actions-runner-controller` umbrella chart(ARC 컨트롤러), destination `var.actions_runner_namespace`(`actions-runner-k8s` 소유), automated sync(prune·selfHeal 없음). 신규 배포 |
+| Application `actions-runner-scale-set` | 예 (#533) | infra repo `deploy/actions-runner-scale-set` umbrella chart(ARC 스케일셋), destination `var.actions_runner_namespace`, automated sync(prune·selfHeal 없음), 컨트롤러 Application에 `depends_on`(CRD 선행 설치 보장). GitHub App Secret은 운영자가 별도 주입(런북) |
 | Secret payload | 아니오 | Secret Manager 또는 운영자 주입 |
 
 ## 설치 구성 (#84)
@@ -335,7 +337,8 @@ kubectl -n argocd get cm argocd-rbac-cm -o jsonpath='{.data.policy\.csv}' \
   namespace는 `prevent_destroy`로 남는다.
 - chart 버전 롤백은 `argo_cd_chart_version`을 이전 버전으로 되돌려 apply한다.
 - **주의**: 이 root는 `monitoring`(#183)·`argo-rollouts`(#186)·`mlflow`(#94)·
-  `serving`(#302)·`agent-orchestration`(#453) Application을 관리한다. ArgoCD를
+  `serving`(#302)·`agent-orchestration`(#453)·`actions-runner-controller`·
+  `actions-runner-scale-set`(#533) Application을 관리한다. ArgoCD를
   삭제하면 이 Application들이 관리하는 스택이 sync/self-heal 없이 남으므로,
-  release 삭제 전 다섯 Application의 live 상태와 영향 범위를 먼저 확인한다
+  release 삭제 전 일곱 Application의 live 상태와 영향 범위를 먼저 확인한다
   (워크로드 pod 자체는 prune off라 즉시 삭제되지 않지만 GitOps 관리가 끊긴다).

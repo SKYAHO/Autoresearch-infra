@@ -66,7 +66,9 @@
 - Kubernetes admin root는 `terraform/admin/` 하위에서 별도 state로 관리합니다:
   `airflow-k8s`(Airflow 경계), `argocd-k8s`(ArgoCD), `monitoring-k8s`(모니터링),
   `argo-rollouts-k8s`(#88 Rollouts), `elastic-k8s`(#97 ECK/ELK), `mlflow-k8s`(#94 MLflow),
-  `autoresearch-k8s`(앱 namespace/KSA 경계), 팀원 GKE 접근 IAM은 `gke-team-access`.
+  `autoresearch-k8s`(앱 namespace/KSA 경계), `actions-runner-k8s`(#533 셀프
+  호스티드 러너 ARC namespace/KSA/quota/NetworkPolicy 경계), 팀원 GKE 접근
+  IAM은 `gke-team-access`.
   `vault-k8s`는 #412에서 운영 제외됐고 #478에서 root 디렉터리가 삭제됐다
   (원격 state 잔여 4개 정리만 승인 대기 — `terraform/README.md` 참조).
 - 재사용 module은 `terraform/modules/` (현재 미사용, staging/prod 분리 시 추출)
