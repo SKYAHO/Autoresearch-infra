@@ -510,6 +510,16 @@ variable "raw_data_noncurrent_version_retention_days" {
   default     = 30
 }
 
+# #522 raw 원자적 게시(copy+delete)가 delete 호출 전 크래시하면 IAM 권한과
+# 무관하게 staging 임시 객체가 살아남는다. age 기반 삭제로 이 고아 경로를 자동
+# 회수한다 — `_publish_staging/`는 임시 객체 전용 prefix라 age 기반 삭제가
+# 안전하게 성립하는 몇 안 되는 경우다.
+variable "raw_data_publish_staging_orphan_retention_days" {
+  description = "GCS raw bucket _publish_staging/ prefix 아래 LIVE 객체를 정상 게시 소요 시간보다 넉넉히 지난 뒤 삭제하는 일수(#522 고아 staging 안전망)."
+  type        = number
+  default     = 1
+}
+
 variable "bigquery_location" {
   description = "dev BigQuery dataset location."
   type        = string

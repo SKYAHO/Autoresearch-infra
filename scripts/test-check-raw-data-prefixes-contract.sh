@@ -50,6 +50,39 @@ if run_check; then
 fi
 mv "$fixture/terraform/envs/dev/airflow.tf.bak" "$fixture/terraform/envs/dev/airflow.tf"
 
+# publish_staging_raw 값 자체가 앱 저장소 계약값에서 벗어나는 회귀. alias 검사나
+# trailing slash 검사는 이를 잡지 못한다 — 이 key는 alias 쌍이 없고 슬래시는
+# 유지되기 때문이다.
+sed -E -i.bak \
+  's#(^[[:space:]]*publish_staging_raw[[:space:]]*=[[:space:]]*")_publish_staging/"#\1staging/"#' \
+  "$fixture/terraform/envs/dev/locals.tf"
+if run_check; then
+  echo "FAIL: publish_staging_raw 값이 앱 저장소 계약값에서 벗어난 회귀를 잡지 못함" >&2
+  exit 1
+fi
+mv "$fixture/terraform/envs/dev/locals.tf.bak" "$fixture/terraform/envs/dev/locals.tf"
+
+# expression은 action_logs_raw로 되돌아갔는데, 주석에 dotted 참조 형태
+# (`local.raw_data_prefixes.publish_staging_raw`, 이 파일 L283이 다른 key로
+# 이미 쓰는 표기)가 남아 있는 경우. 파일 전체를 훑는 grep -q라면 주석만 보고
+# 공허하게 통과한다 — expression 라인에 앵커해야 잡을 수 있다.
+printf '%s\n' '# 참고용 주석: local.raw_data_prefixes.publish_staging_raw' \
+  >> "$fixture/terraform/envs/dev/airflow.tf"
+sed -E -i.bak \
+  -e '/airflow_batch_raw_data_staging_cleanup/,/^}/{' \
+  -e '/expression/ s#publish_staging_raw#action_logs_raw#' \
+  -e '}' \
+  "$fixture/terraform/envs/dev/airflow.tf"
+if ! grep -Fq 'local.raw_data_prefixes.publish_staging_raw' "$fixture/terraform/envs/dev/airflow.tf"; then
+  echo "FAIL: 테스트 fixture 준비 실패 — 주석에 dotted 참조가 남아 있어야 함" >&2
+  exit 1
+fi
+if run_check; then
+  echo "FAIL: 주석에만 남은 dotted 참조로 expression 회귀를 놓침(공허한 통과)" >&2
+  exit 1
+fi
+mv "$fixture/terraform/envs/dev/airflow.tf.bak" "$fixture/terraform/envs/dev/airflow.tf"
+
 # 위 회귀 케이스들이 항진 실패가 아님을 원복 후 재확인한다.
 if ! run_check; then
   echo "FAIL: 회귀 원복 후 fixture가 다시 통과하지 못함" >&2

@@ -60,13 +60,27 @@ check_alias_pair youtube_raw youtube_trending_kr
 check_alias_pair users_raw virtual_users
 check_alias_pair personas_raw personas_raw_snapshots
 
-# #522: staging cleanup IAM 조건이 action_logs_raw(최종 committed 데이터 prefix)로
-# 되돌아가면, 앱이 실제로 staging 객체를 쓰는 publish_staging_raw 삭제 권한이
-# 없어져 원자적 게시가 다시 실패한다.
-if grep -q 'local\.raw_data_prefixes\.publish_staging_raw' "$airflow_file"; then
-  echo "OK  airflow.tf: staging cleanup 조건이 publish_staging_raw를 참조"
+# publish_staging_raw는 다른 alias와 달리 pin할 근거가 있는 cross-repo 데이터
+# 계약이다 — 앱 저장소(`Autoresearch`)의 PUBLISH_STAGING_PREFIX와 값이 어긋나면
+# 이 IAM 조건이 앱이 실제로 쓰는 경로를 커버하지 못해 #522가 그대로 재현된다.
+expected_publish_staging_raw="_publish_staging/"
+actual_publish_staging_raw="$(get_value publish_staging_raw)"
+if [ "$actual_publish_staging_raw" = "$expected_publish_staging_raw" ]; then
+  echo "OK  raw_data_prefixes: publish_staging_raw가 앱 저장소 계약값과 일치 ($expected_publish_staging_raw)"
 else
-  echo "ERR airflow.tf: staging cleanup 조건이 publish_staging_raw를 참조하지 않음"
+  echo "ERR raw_data_prefixes: publish_staging_raw($actual_publish_staging_raw) != 앱 저장소 계약값($expected_publish_staging_raw)"
+  FAIL=1
+fi
+
+# #522: staging cleanup IAM 조건의 expression이 action_logs_raw(최종 committed
+# 데이터 prefix)로 되돌아가면, 앱이 실제로 staging 객체를 쓰는
+# publish_staging_raw 삭제 권한이 없어져 원자적 게시가 다시 실패한다. 주석에도
+# 같은 문자열이 등장하므로(위 근본 원인 설명), 파일 전체가 아니라 expression
+# 라인에만 앵커해 주석만 있고 실제 참조가 없는 경우를 공허하게 통과시키지 않는다.
+if grep -qE '^[[:space:]]*expression[[:space:]]*=.*local\.raw_data_prefixes\.publish_staging_raw' "$airflow_file"; then
+  echo "OK  airflow.tf: staging cleanup 조건의 expression이 publish_staging_raw를 참조"
+else
+  echo "ERR airflow.tf: staging cleanup 조건의 expression이 publish_staging_raw를 참조하지 않음"
   FAIL=1
 fi
 
