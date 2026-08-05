@@ -293,7 +293,11 @@ Artifact Registry 접근은 Job 제출 전에 검증한다.
    `activeDeadlineSeconds` 종료를 기다린다.
 2. 이미지 pull 실패, Pending, OOMKilled, deadline 초과, 애플리케이션 exit code를
    구분해 원인을 조사한다. API는 해당 Job/Pod Event에서 `ImagePullBackOff`,
-   `FailedScheduling`, `FailedCreate`를 확인한다. 실패한 Job을 자동 재시도하지 않는다.
+   `FailedScheduling`, `FailedCreate`를 확인한다. `FailedCreate`는 quota 초과
+   외에 `experiment_jobs.tf`의 Pod 합계 `LimitRange`(컨테이너 합계가 1 vCPU/2 GiB를
+   넘음) 위반으로도 발생할 수 있다 — 이 경우 Pod 자체가 생성되지 않으므로
+   `pods`/`requests.cpu` quota는 소비되지 않는다(#523). 실패한 Job을 자동
+   재시도하지 않는다.
 3. 권한 또는 Job 명세 취약점이 의심되면 `enable_experiment_job_creation`을 `false`로 되돌리는 Terraform 변경을 검토하고, 승인된 apply로 반영한다.
 4. 결과 버킷, namespace, KSA, GSA를 삭제하지 않는다. 삭제는 감사·재현·다른 실행의 복구를 훼손할 수 있으므로 별도 변경과 승인 절차가 필요하다.
 5. 수정된 템플릿과 digest로 새 시도 ID의 Job을 만든다. 같은 prefix를 재사용하지 않는다.
@@ -312,12 +316,37 @@ API는 새 제출을 차단하고 운영자에게 escalate한다. API는 delete 
 비용 경보나 quota 초과가 발생하면 API 동시 제출 제한을 먼저 낮춘다. namespace quota
 상향은 node 여유, 예상 최대 실행 시간, 비용 상한을 문서화한 별도 이슈에서 검토한다.
 
-`batch-od`는 실험 전용 pool이 아니라 #297의 재시도 내성이 없는 Action Log shard KPO와
-공유한다. 최대 request 1 vCPU인 실험 Job 두 개는 e2-standard-2 allocatable CPU 약
-1930m 기준 서로 다른 두 노드를 점유할 수 있어, pool max 2에서는 Action Log shard가
-`FailedScheduling`/Pending이 될 수 있다. Job 생성 권한 활성화 전 전용 실험 pool 또는
-승인된 capacity·우선순위 계획을 마련한다. 운영 중에는 batch-od node 수, Pending Pod,
-autoscaler 이벤트, CPU/memory request와 Action Log shard 상태를 함께 관측한다.
+`batch-od`는 #297 대응으로 만들었지만, 현재 `Autoresearch-airflow`의 어떤 KPO도 이
+pool로 스케줄되지 않는다(#523, 2026-08-04 조사). `AutoresearchBatchPodOperator`는
+`node_selector`/`tolerations`를 넘기지 않으면 `batch-spot`을 기본값으로 쓰고, 이를
+override하는 DAG가 없다 — Action Log KPO를 포함해 모든 KPO가 지금도 `batch-spot`에서
+돈다(#297 이후 채택된 완화책은 pool 이전이 아니라 체크포인트 재개 + timeout 연장,
+#150). 즉 `batch-od`는 현재 유휴 pool이며 experiment Job이 별도 경합 계획 없이
+그대로 써도 된다. 운영 중에는 batch-od node 수, Pending Pod, autoscaler 이벤트,
+CPU/memory request를 관측한다. 이후 Airflow나 다른 컴포넌트가 `batch-od`에 실제로
+스케줄되도록 바뀌면(예: `node_selector`를 명시적으로 override하는 DAG 변경), 그
+시점에 capacity·우선순위 경합 계획을 다시 검토한다.
+
+이 유휴 상태 전제는 이 저장소 밖(`Autoresearch-airflow`)의 상태에 의존하고, 그
+저장소의 변경은 이 저장소의 CI·리뷰를 거치지 않는다. 정확한 수치로 다시 쓰면:
+pool 전체 allocatable CPU는 노드 2대 기준 약 3860m이고, 실험 namespace quota는
+`requests.cpu = 2`(2000m)로 그 일부만 쓴다. `LimitRange` 기본 request는 500m라
+실제 experiment 점유는 제출된 Job의 request 값에 따라 다르다. Airflow DAG 하나가
+`node_selector`를 `batch-od`로 override하면, 두 워크로드의 request 합이 그 순간
+가용 노드 용량을 넘어설 때만 경합이 생긴다. 이 계약에는 `priorityClassName`이
+없어 두 워크로드 사이에 선점(preemption) 순서가 없으므로 — 어느 쪽이 Pending으로
+남는지는 우선순위가 아니라 어느 Pod가 나중에 제출돼 가용 용량이 이미 소진된
+상태에 걸리는지(제출 순서·스케줄 타이밍)로 결정된다. Pending은 자동으로 사라지지
+않고, 상대 워크로드의 Pod가 끝나 용량이 비어야 풀린다 — experiment Job 쪽은
+admission이 강제하는 `activeDeadlineSeconds`(최대 3600초)로 상한이 있지만, KPO
+쪽 재시도·timeout 정책은 이 저장소가 아니라 `Autoresearch-airflow`가 정하므로
+이 문서가 그 대기 시간을 보장하지 않는다. 즉 이 문단은 그런 경합에서 #297이
+재현되지 않는다고 주장하지 않는다 — 오히려 실제로 이런 경합이 생기면 #297
+재현 여부를 포함해 그 시점에 capacity·우선순위 계획을 별도로 다시 승인해야
+한다는 것이 위 재검토 요구의 근거다. `batch-od` node/pod Pending 관측(위)을
+수동 확인에서 알림으로 승격하는 안(예: `autoresearch-experiments` namespace
+밖 Pod가 `batch-od` 노드에 뜨면 알림, 또는 `batch-od` 대상 Pending Pod 알림)을
+#523의 후속 체크리스트 항목으로 추적한다.
 
 ## Pod Security 버전 갱신
 
