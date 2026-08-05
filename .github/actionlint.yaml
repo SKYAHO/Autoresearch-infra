@@ -1,0 +1,6 @@
+# #533 셀프 호스티드 러너(ARC) PoC의 커스텀 runs-on 라벨을 actionlint에 알린다.
+# 라벨은 deploy/actions-runner-scale-set/values.yaml의 runnerScaleSetName과
+# 일치해야 한다.
+self-hosted-runner:
+  labels:
+    - actions-runner-poc

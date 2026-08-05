@@ -133,17 +133,29 @@ GitHub Actions, GitHub App.
 
 ### Task 5: CI apply 배선과 PoC 워크플로우
 
-**Files:** modify `.github/workflows/apply.yml`; create
-`.github/workflows/actions-runner-poc.yml`.
+**Files:** modify `.github/workflows/apply.yml`,
+`scripts/test-environment-catalog.rb`; create
+`.github/workflows/actions-runner-poc.yml`, `.github/actionlint.yaml`.
 
-- [ ] `apply.yml`의 `ADMIN_ROOTS`에 `terraform/admin/actions-runner-k8s`를
-      `argocd-k8s` 앞에 추가하고 주석의 "admin K8s root 7개"를 8개로, 이슈 번호를
-      갱신한다.
-- [ ] `actions-runner-poc.yml`: `on: workflow_dispatch`만, `runs-on: [self-hosted,
-      <scale-set 라벨>]`, 단일 job·단일 step으로 `kubernetes.default.svc`
-      `/healthz` 읽기 전용 호출. 결과를 workflow summary에 출력한다.
-- [ ] 로컬에 `actionlint`가 있으면 두 워크플로우 파일에 대해 실행한다.
-- [ ] `feat: CI apply에 러너 root 추가 및 PoC 워크플로우 작성`으로 커밋한다.
+- [x] `apply.yml`의 `ADMIN_ROOTS`에 `terraform/admin/actions-runner-k8s`를
+      `argocd-k8s` 앞에 추가하고 주석 3곳("admin K8s root 7개"류)을 8개로,
+      이슈 번호(#533)를 갱신한다.
+- [x] `test-environment-catalog.rb`의 fixture `state.roots`에도
+      `actions-runner-k8s` 항목을 추가한다 — 실제 카탈로그는 Task 2에서 이미
+      갱신했지만 이 테스트는 별도 fixture를 쓰므로 누락 시
+      `validate_state!`가 실패한다(Task 5 착수 중 발견, 구현 중 정정).
+- [x] `actions-runner-poc.yml`: `on: workflow_dispatch`만, `runs-on:
+      actions-runner-poc`(scale set 이름 단일 문자열 — array 형태
+      `[self-hosted, ...]`가 아님, Task 3에서 확인한 실제 ARC 컨벤션). 단일
+      job·단일 step으로 `kubernetes.default.svc/healthz`를 인증 없이 `curl`로
+      호출한다(기본 러너 이미지에 `kubectl`이 없어 `curl`로 정정). 401/403도
+      "연결 성공"으로 판단하고, timeout/connection refused만 실패로 처리한다.
+      결과를 `$GITHUB_STEP_SUMMARY`에 출력한다.
+- [x] `.github/actionlint.yaml`에 `self-hosted-runner.labels`로
+      `actions-runner-poc`를 등록한다 — 없으면 CI의 `lint`(raven-actions/
+      actionlint) required check가 알 수 없는 라벨로 실패한다.
+- [x] 로컬 `actionlint`로 두 워크플로우 파일 검증(exit 0 확인).
+- [x] `feat: CI apply에 러너 root 추가 및 PoC 워크플로우 작성`으로 커밋한다.
 
 ### Task 6: 런북·문서 갱신
 
