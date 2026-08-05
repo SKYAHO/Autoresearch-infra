@@ -56,25 +56,30 @@ GitHub Actions, GitHub App.
 
 ### Task 2: admin root — 러너 namespace/KSA/quota/NetworkPolicy
 
-**Files:** Create `terraform/admin/actions-runner-k8s/{versions,main,variables,outputs,terraform.tfvars.example,README}.tf` (또는 `.md`).
+**Files:** Create `terraform/admin/actions-runner-k8s/{versions,main,variables,locals,outputs,terraform.tfvars.example,README}.tf` (또는 `.md`); modify
+`config/environments/dev/environment.yaml`, `scripts/environment_catalog.rb`
+(카탈로그 wrapper `scripts/terraform-env`가 알려진 root만 허용하므로 신규 root는
+두 파일 모두에 등록해야 `init -backend=false`가 동작한다 — 계획 작성 시 누락된
+필수 단계, 구현 중 정정).
 
-- [ ] `versions.tf`: backend `gcs {}`, `google >=5,<8`, `kubernetes >=2.20` provider
+- [x] `versions.tf`: backend `gcs {}`, `google >=5,<8`, `kubernetes >=2.20` provider
       (mlflow-k8s 스캐폴드와 동일, `helm` provider 없음).
-- [ ] `main.tf`: `kubernetes_namespace_v1.actions_runner`(PSA `baseline`
+- [x] `main.tf`: `kubernetes_namespace_v1.actions_runner`(PSA `baseline`
       enforce/audit/warn); `kubernetes_service_account_v1.actions_runner_controller`
       (automount 기본값 유지, 이유 주석); `kubernetes_service_account_v1.actions_runner_listener`
-      (`automount_service_account_token=false` + WI annotation).
-- [ ] `kubernetes_resource_quota_v1`/`kubernetes_limit_range_v1`을
-      `experiment_jobs.tf` 형태로 추가하되 `pods=3~5`로 여유를 두고, scale-set
+      (`automount_service_account_token=false`, WI annotation 없음 — 러너 Pod는
+      GCP API를 직접 호출하지 않으므로 GSA를 공유하지 않는다, Task 1과 동일 정정).
+- [x] `kubernetes_resource_quota_v1`/`kubernetes_limit_range_v1`을
+      `experiment_jobs.tf` 형태로 추가하되 `pods=4`로 여유를 두고, scale-set
       chart의 `maxRunners`와 짝을 이뤄야 한다는 주석을 남긴다.
-- [ ] ingress NetworkPolicy(전면 차단) + egress NetworkPolicy(`experiment_jobs.tf`
-      4규칙 재사용 + `var.cluster_services_cidr:443` + `0.0.0.0/0:443` 예외,
-      각각 이유 주석 포함).
-- [ ] `outputs.tf`에 namespace/KSA 2종/NetworkPolicy 이름을 하나의 named contract
+- [x] ingress NetworkPolicy(전면 차단) + egress NetworkPolicy(`experiment_jobs.tf`
+      4규칙 재사용 + 같은 namespace 통신(mlflow-k8s 패턴) +
+      `var.cluster_services_cidr:443` + `0.0.0.0/0:443` 예외, 각각 이유 주석 포함).
+- [x] `outputs.tf`에 namespace/KSA 2종/NetworkPolicy 이름을 하나의 named contract
       output으로 공개한다(`feast_apply_environments` 스타일).
-- [ ] `terraform.tfvars.example`, `README.md`(경계 설명 + "5~7단계는 범위 밖" 명시)
+- [x] `terraform.tfvars.example`, `README.md`(경계 설명 + "5~7단계는 범위 밖" 명시)
       작성.
-- [ ] `terraform -chdir=terraform/admin/actions-runner-k8s fmt -check -recursive`,
+- [x] `terraform -chdir=terraform/admin/actions-runner-k8s fmt -check -recursive`,
       `init -backend=false -input=false`, `validate` 성공 후
       `feat: 셀프 호스티드 러너 Kubernetes 격리 경계 추가`로 커밋한다.
 
