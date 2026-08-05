@@ -1,3 +1,5 @@
+> **아카이브 문서:** 2026-07 시점 원문입니다. 현재 운영 절차와 프로젝트 값은 `TEAM_OPERATIONS_RUNBOOK.md`·`TERRAFORM_DEV.md`를 우선하며, 이 문서의 명령을 현재 환경에 그대로 실행하지 않습니다.
+
 # #5 dev GKE 클러스터 설계 (Design Spec)
 
 - 이슈: [#5 [FEAT] dev GKE 소형 클러스터 Terraform 구성](https://github.com/SKYAHO/Autoresearch-infra/issues/5)

@@ -1,3 +1,5 @@
+> **아카이브 문서:** 2026-07 시점 원문입니다. 현재 운영 절차와 프로젝트 값은 `TEAM_OPERATIONS_RUNBOOK.md`·`TERRAFORM_DEV.md`를 우선하며, 이 문서의 명령을 현재 환경에 그대로 실행하지 않습니다.
+
 # dev Bastion Host 구현 계획 (#47)
 
 > Status: Done (PR #50 merged, 2026-07-08 apply 완료) | Issue: #47 | Spec: `../specs/2026-07-08-bastion-host-design.md`

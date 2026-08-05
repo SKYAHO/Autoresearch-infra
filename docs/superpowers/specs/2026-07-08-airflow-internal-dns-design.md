@@ -1,3 +1,5 @@
+> **아카이브 문서:** 2026-07 시점 원문입니다. 현재 운영 절차와 프로젝트 값은 `TEAM_OPERATIONS_RUNBOOK.md`·`TERRAFORM_DEV.md`를 우선하며, 이 문서의 명령을 현재 환경에 그대로 실행하지 않습니다.
+
 # Airflow UI 내부 노출 설계 (#48)
 
 > Status: Done (구현·apply 완료) | Issue: #48 | Last Updated: 2026-07-09

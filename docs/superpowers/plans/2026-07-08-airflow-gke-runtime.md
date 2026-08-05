@@ -1,3 +1,5 @@
+> **아카이브 문서:** 2026-07 시점 원문입니다. 현재 운영 절차와 프로젝트 값은 `TEAM_OPERATIONS_RUNBOOK.md`·`TERRAFORM_DEV.md`를 우선하며, 이 문서의 명령을 현재 환경에 그대로 실행하지 않습니다.
+
 # Airflow GKE Runtime Drift 구현 계획
 
 > **에이전트 작업자 안내:** 이 계획은 작업 단위로 추적합니다. 단계는 체크박스
