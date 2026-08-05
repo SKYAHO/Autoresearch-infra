@@ -155,6 +155,20 @@ Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수
    수동 확인뿐이므로, `batch-od` 대상 Pending Pod나 `autoresearch-experiments`
    밖 Pod에 대한 알림 도입 여부를 활성화 전에 판단한다.
 
+   이 유휴 전제는 이 root의 어떤 서버 측 제어로도 강제되지 않는다.
+   `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy는
+   `autoresearch-experiments` namespace에만 바인딩돼 있어 `batch-od`를 experiment
+   전용으로 만들지 않으며, 다른 workload가 이 pool을 쓰지 못하게 막는 GKE 측
+   제약(taint 없는 nodeSelector 기반 pool이라 toleration만 맞으면 누구나 스케줄
+   가능)도 없다. 즉 `Autoresearch-airflow`에서 이 전제를 깨는 변경(예: DAG의
+   `node_selector` override)은 이 저장소의 리뷰·CI를 전혀 거치지 않는다. 문서에
+   박은 SHA·날짜 시점과 실제 활성화 시점 사이, 그리고 활성화 이후에 그런 변경이
+   생기는 경우 모두 자동 감지 경로가 없다 — 유일한 감지 수단은 활성화 직전
+   수동 재확인(이 문단 위 절차)과, 활성화 이후에는 위에서 판단하기로 한
+   Pending/foreign-workload 알림뿐이다. 알림 도입을 활성화 전에 판단해야 한다고
+   못 박은 이유가 이것이다 — 알림이 없으면 활성화 이후 이 전제가 깨져도 알아챌
+   수단이 없다.
+
 권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
 Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
 중인 Job·Pod·GCS 업로드를 중단하지 않습니다. 취소는 API에 `delete` 권한을 추가하지
@@ -189,12 +203,25 @@ API KSA 요청 수준에서는 성공합니다. 거부되는 것은 그 뒤 Job 
 점유됩니다. 이 Job도 다른 Job과 동일하게 `activeDeadlineSeconds`(최대 3600초,
 `status.startTime` 기준)로 상한이 걸려 있어 e2-standard-2 allocatable(약 1930m)을
 넘겨 노드에 스케줄되지 못하는 Pending Pod가 대기하는 경우와 마찬가지로 deadline+TTL로
-종료됩니다 — 이 LimitRange가 새로운 시간 상한을 만드는 것은 아닙니다. 실제 효과는
-(1) 잘못된 Pod가 `pods`/`requests.cpu` quota를 점유해 정상 실험 Job 제출까지 막는
-상황을 없애는 것과 (2) 스케줄러의 `FailedScheduling`/Pending 대신 admission 단계의
-명확한 `FailedCreate` 사유를 남기는 것입니다(#523). 고정 템플릿이 실제로 단일
-컨테이너만 만든다는 전제가 깨져 향후 sidecar 등 다중 컨테이너 Pod가 필요해지면 이
-Pod 상한이 먼저 걸리므로, 그 변경에서 상한 값을 함께 재검토합니다.
+종료됩니다 — 이 LimitRange가 새로운 시간 상한을 만드는 것은 아닙니다. `status.startTime`은
+Pod 생성 성공 여부와 무관하게 Job controller가 Job을 처음 처리하는 시점에 설정되므로,
+Pod가 한 번도 만들어지지 못해도 `activeDeadlineSeconds` 타이머는 정상적으로 돕니다.
+실제 효과는 (1) 잘못된 Pod가 `pods`/`requests.cpu`/`requests.memory`/`limits.*` quota를
+전혀 점유하지 않게 하는 것과 (2) 스케줄러의 `FailedScheduling`/Pending 대신 admission
+단계의 명확한 `FailedCreate` 사유를 남기는 것뿐입니다(#523) — **`count/jobs.batch`
+슬롯 점유는 이 변경과 무관하게 그대로**이므로, "정상 실험 Job 제출까지 막는 상황을
+없앤다"는 뜻은 아닙니다. `count/jobs.batch=2`가 이런 Job으로 모두 채워지면 세 번째
+`create`는 이 LimitRange 도입 전과 동일하게 `Forbidden` quota 초과로 즉시(동기)
+거부되며, 회수 주체는 TTL controller(deadline 최대 3600초 + TTL 최대 3600초 = 슬롯당
+최대 2시간, 위 "초기 dev 상한" 문단과 동일한 병목)입니다 — API KSA에는 `delete`가
+없어 그 전에 수동 회수는 break-glass 관리자 권한으로만 가능합니다(runbook "장애 처리와
+롤백" 참조). 고정 템플릿이 실제로 단일 컨테이너만 만든다는 전제가 깨져
+향후 sidecar 등 다중 컨테이너 Pod가 필요해지면 이 Pod 상한이 먼저 걸리므로, 그
+변경에서 상한 값을 함께 재검토합니다. 이 상한은 컨테이너 상한과 동일한 값이라
+헤드룸이 0입니다 — 컨테이너가 하나라도 추가되면(의도적이든 GCS FUSE CSI 같은
+주입형 sidecar든) 거부됩니다. 이 namespace에는 현재 sidecar를 주입하는 mutating
+webhook이 없으므로, 값을 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를
+명시적 제약으로 유지합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를

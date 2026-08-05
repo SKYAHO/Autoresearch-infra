@@ -106,7 +106,10 @@ API가 생성하는 Job은 아래 계약을 만족해야 한다.
   시도 ID를 가진 별도 Job으로 생성
 - `activeDeadlineSeconds`: 무제한 실행 금지
 - `ttlSecondsAfterFinished`: 종료 Job 자동 정리 기간 설정
-- CPU·메모리 requests/limits 필수. 초기 단일 컨테이너 상한은 1 vCPU/2 GiB
+- CPU·메모리 requests/limits 필수. 초기 단일 컨테이너 상한은 1 vCPU/2 GiB이며,
+  `LimitRange`의 Pod 합계 상한도 동일한 1 vCPU/2 GiB로 헤드룸이 0이다(#523) —
+  컨테이너가 하나라도 추가되면 `FailedCreate`로 거부되므로, 이 namespace에는
+  sidecar를 주입하는 mutating webhook을 두지 않는다
 - `batch-od` nodeSelector 및 `workload=batch-od:NoSchedule` toleration 필수. 일반
   앱 pool과 컴퓨트 경계를 분리하며, admission 검증이 이를 강제한다. 이 pool은 #297
   대응으로 만들었지만 `Autoresearch-airflow`의 어떤 KPO도 현재 이 pool로

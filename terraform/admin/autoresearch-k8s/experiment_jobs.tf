@@ -92,8 +92,24 @@ resource "kubernetes_limit_range_v1" "experiment_jobs" {
     # 경로가 열린다(#523). 이 상한은 그 Pod 생성 자체를 LimitRange가 막아
     # `FailedCreate` 이벤트로 즉시 드러내고 해당 quota 소비를 없앤다 — Job
     # `create` 자체(ValidatingAdmissionPolicy)는 이 값을 검사하지 않으므로
-    # 여전히 성공한다. 값은 문서가 명시한 단일 컨테이너 계약과 동일해 현재 고정
+    # 여전히 성공하고, `count/jobs.batch` quota는 이 상한과 무관하게 평소처럼
+    # 점유된다. 값은 문서가 명시한 단일 컨테이너 계약과 동일해 현재 고정
     # 템플릿에는 영향이 없다.
+    #
+    # initContainers 계산: k8s는 일반 initContainer(순차 실행)를 app 컨테이너
+    # 합계와 max() 비교하므로, initContainer 1개(1 vCPU) + app 컨테이너 1개
+    # (1 vCPU)는 max(1,1)=1로 이 상한 경계값에 걸려 통과한다. 반면
+    # `restartPolicy: Always`인 native sidecar initContainer는 app 컨테이너와
+    # 동시에 떠 있어 합산(sum) 대상이 되므로 같은 조합이 2 vCPU로 상한을
+    # 넘겨 거부된다. 현재 고정 템플릿과 admission 정책은 단일 컨테이너만
+    # 만들므로 두 경로 다 지금은 발생하지 않는다.
+    #
+    # 헤드룸 0: 이 값을 컨테이너 상한과 동일하게 둬 컨테이너가 하나라도 추가되면
+    # (의도적 sidecar든 GCS FUSE CSI 같은 주입형 sidecar든) 무조건 거부된다.
+    # 이 namespace에는 현재 sidecar를 주입하는 mutating webhook이 없다 — 값을
+    # 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를 제약으로
+    # 유지한다. 다중 컨테이너 Pod가 실제로 필요해지면 그 변경에서 상한 값을
+    # 함께 재검토한다.
     limit {
       type = "Pod"
       max = {

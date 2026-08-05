@@ -293,7 +293,11 @@ Artifact Registry 접근은 Job 제출 전에 검증한다.
    `activeDeadlineSeconds` 종료를 기다린다.
 2. 이미지 pull 실패, Pending, OOMKilled, deadline 초과, 애플리케이션 exit code를
    구분해 원인을 조사한다. API는 해당 Job/Pod Event에서 `ImagePullBackOff`,
-   `FailedScheduling`, `FailedCreate`를 확인한다. 실패한 Job을 자동 재시도하지 않는다.
+   `FailedScheduling`, `FailedCreate`를 확인한다. `FailedCreate`는 quota 초과
+   외에 `experiment_jobs.tf`의 Pod 합계 `LimitRange`(컨테이너 합계가 1 vCPU/2 GiB를
+   넘음) 위반으로도 발생할 수 있다 — 이 경우 Pod 자체가 생성되지 않으므로
+   `pods`/`requests.cpu` quota는 소비되지 않는다(#523). 실패한 Job을 자동
+   재시도하지 않는다.
 3. 권한 또는 Job 명세 취약점이 의심되면 `enable_experiment_job_creation`을 `false`로 되돌리는 Terraform 변경을 검토하고, 승인된 apply로 반영한다.
 4. 결과 버킷, namespace, KSA, GSA를 삭제하지 않는다. 삭제는 감사·재현·다른 실행의 복구를 훼손할 수 있으므로 별도 변경과 승인 절차가 필요하다.
 5. 수정된 템플릿과 digest로 새 시도 ID의 Job을 만든다. 같은 prefix를 재사용하지 않는다.
