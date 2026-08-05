@@ -372,7 +372,7 @@ variable "experiment_job_gcp_service_account_email" {
 }
 
 variable "enable_experiment_job_creation" {
-  description = "Agent Orchestration API의 실험 Job 생성 권한 활성화 여부. 고정 템플릿·허용 digest·admission 검증 완료 전에는 false를 유지한다."
+  description = "Agent Orchestration API의 실험 Job 생성 권한 활성화 여부. #523 선행 조건(고정 템플릿·허용 digest·admission 검증, NetworkPolicy sync 재확인, negative dry-run 4종 재실행 — 이슈 댓글 기록 완료) 충족 후 true로 전환했다."
   type        = bool
-  default     = false
+  default     = true
 }
