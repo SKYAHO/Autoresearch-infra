@@ -177,18 +177,28 @@ modify `terraform/README.md`(admin root 목록에 `terraform/admin/README.md`가
 
 ### Task 7: Draft PR과 검증
 
-- [ ] 이슈에서 만든 브랜치로 Draft PR을 생성한다(PR 템플릿 준수, 범위 밖 항목
+- [x] 이슈에서 만든 브랜치로 Draft PR을 생성한다(PR 템플릿 준수, 범위 밖 항목
       명시).
-- [ ] `lint`(actionlint) CI 통과 확인.
-- [ ] `deploy/actions-runner-controller/Chart.yaml`의 OCI Helm dependency(#533
+- [x] `lint`(actionlint) CI 통과 확인.
+- [x] `deploy/actions-runner-controller/Chart.yaml`의 OCI Helm dependency(#533
       리뷰)가 실제로 당겨지는지 사전 확인: ArgoCD repo-server의 Helm 버전이 OCI
       dependency(`oci://ghcr.io/...`)를 지원하는지, `argocd` namespace의 egress
       NetworkPolicy가 `ghcr.io:443`을 허용하는지 — Application `Synced` 실패 시
-      1순위 의심 지점으로 기록해둔다.
-- [ ] 사용자 승인 후 `apply.yml`(`scope: admin`) dispatch → ArgoCD UI에서 두
+      1순위 의심 지점으로 기록해둔다. 실제로는 apply 이후 두 Application 모두
+      `Synced`/`Healthy`로 확인되어 문제 없었다.
+- [x] 사용자 승인 후 `apply.yml`(`scope: admin`) dispatch → ArgoCD UI에서 두
       Application `Synced`/`Healthy` 확인 → 런북대로 GitHub App/Secret 수동 주입 →
-      `actions-runner-poc.yml` 실행해 성공 확인.
-- [ ] NetworkPolicy 음성 대조군: `kubernetes_network_policy_v1.actions_runner_egress`
+      `actions-runner-poc.yml` 실행해 성공 확인(run 31001992204, `probe` job
+      success — `curl https://kubernetes.default.svc/healthz` 도달 확인). 첫
+      apply는 승인 대기(~1h16m)로 `google_client_config` access token(TTL
+      3600s)이 만료돼 `actions-runner-k8s` 1개 root만 실패(다른 admin root는
+      no-op diff라 무영향) — 재승인으로 재실행해 해결, 코드 변경 불필요.
+      최초 PoC 실행 시 listener Pod가 `EphemeralRunnerSet ... not found`로
+      크래시루프(컨트롤러 재기동을 여러 번 강제하며 생긴 `AutoscalingListener`
+      CR의 stale `ephemeralRunnerSetName` 참조) — `kubectl delete
+      autoscalinglistener`로 CR을 지워 컨트롤러가 현재 `EphemeralRunnerSet`
+      이름으로 재생성하게 하여 해결.
+- [x] NetworkPolicy 음성 대조군: `kubernetes_network_policy_v1.actions_runner_egress`
       **리소스 전체를 지우지 않는다** — selector 대상 Pod에 걸린 policy가
       0개가 되면 K8s는 해당 방향을 기본 allow-all로 처리해 오히려 더 뚫리고
       timeout이 재현되지 않는다(#533 리뷰 대응 중 자체 발견). 대신
@@ -196,5 +206,10 @@ modify `terraform/README.md`(admin root 목록에 `terraform/admin/README.md`가
       일시적으로 주석 처리(0.0.0.0/0 GitHub 규칙은 RFC1918 `except`로 내부
       대역을 이미 빼놨으므로 그대로 둬도 K8s API 경로를 대신 뚫어주지 않는다)
       → `terraform apply` → 재실행해 timeout(실패) 확인 → 두 블록 원복 →
-      `terraform apply`로 복구.
+      `terraform apply`로 복구. 별도 실험 issue #535 + PR #536(제거)/#537(원복)로
+      진행(apply.yml의 WIF pusher SA가 `ref: main`으로 제한돼 있어 임시
+      브랜치에서 직접 dispatch가 거부됨 — 반드시 main 머지 경로로 적용해야
+      함을 확인). 결과: 규칙 제거 후 `actions-runner-poc.yml`(run 31003870227)
+      이 curl exit code 28(timeout)로 실패, 원복 후 재실행(run 31004579554)은
+      성공 — 두 규칙이 K8s API 접근의 실제 게이트임을 확인.
 - [ ] 리뷰 반영 후 squash merge, 이슈 자동 close 확인.
