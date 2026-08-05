@@ -159,3 +159,21 @@ variable "agent_orchestration_deployment_enabled" {
   type        = bool
   default     = false
 }
+
+variable "actions_runner_namespace" {
+  description = "#533 셀프 호스티드 러너(ARC) namespace(actions-runner-k8s 소유). ArgoCD destination으로 허용한다."
+  type        = string
+  default     = "actions-runner"
+}
+
+variable "actions_runner_controller_target_revision" {
+  description = "ARC 컨트롤러 Application이 추적할 infra repo ref(#533). 최초 sync는 -var로 병합 커밋 SHA를 pin한다."
+  type        = string
+  default     = "main"
+}
+
+variable "actions_runner_scale_set_target_revision" {
+  description = "ARC 스케일셋 Application이 추적할 infra repo ref(#533). 최초 sync는 -var로 병합 커밋 SHA를 pin한다."
+  type        = string
+  default     = "main"
+}

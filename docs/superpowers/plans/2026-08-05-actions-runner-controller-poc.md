@@ -108,24 +108,26 @@ GitHub Actions, GitHub App.
 
 ### Task 4: argocd-k8s — Application 2개 + AppProject 확장
 
-**Files:** modify `terraform/admin/argocd-k8s/main.tf`.
+**Files:** modify `terraform/admin/argocd-k8s/{main,variables,outputs,README}.md/.tf`.
 
-- [ ] `appproject_autoresearch_dev`의 `destinations`에 새 러너 namespace 추가,
+- [x] `appproject_autoresearch_dev`의 `destinations`에 새 러너 namespace 추가,
       `clusterResourceWhitelist`에 ARC CRD 4종
       (`AutoscalingRunnerSet`/`EphemeralRunnerSet`/`EphemeralRunner`/`AutoscalingListener`,
-      `actions.github.com` apiGroup) + 컨트롤러 ClusterRole/ClusterRoleBinding
-      kind 추가.
-- [ ] `kubernetes_manifest "application_actions_runner_controller"`:
+      `actions.github.com` apiGroup) 추가. ClusterRole/ClusterRoleBinding kind는
+      이미 whitelist에 있어 재추가 불필요(컨트롤러 chart RBAC도 커버).
+- [x] `kubernetes_manifest "application_actions_runner_controller"`:
       `application_monitoring`과 동일 구조, `spec.source.path =
       "deploy/actions-runner-controller"`, `helm.releaseName` 명시 고정,
       `syncPolicy.automated = {prune=false, selfHeal=false}`, retry 백오프,
       `syncOptions = ["ServerSideApply=true", "CreateNamespace=false"]`,
       `depends_on = [helm_release.argo_cd]`.
-- [ ] `kubernetes_manifest "application_actions_runner_scale_set"`: 동일 구조 +
-      `depends_on`에 컨트롤러 Application을 추가해 CRD 존재를 보장한다(또는
-      sync-wave annotation으로 순서 고정 — 구현 시 ArgoCD provider가 어느 쪽을
-      안정적으로 지원하는지 확인 후 선택).
-- [ ] `terraform -chdir=terraform/admin/argocd-k8s fmt -check -recursive`,
+- [x] `kubernetes_manifest "application_actions_runner_scale_set"`: 동일 구조 +
+      `depends_on`에 컨트롤러 Application을 추가해 Terraform 생성 순서를
+      보장한다. sync-wave annotation은 채택하지 않음 — 이 root의 다른
+      `kubernetes_manifest`도 `wait_for`를 쓰지 않아 Terraform이 실제 ArgoCD
+      sync 완료까지 기다리는 보장은 어차피 없으므로, CRD 설치 완료 확인은
+      Task 7에서 ArgoCD UI로 사람이 확인하는 절차로 남긴다.
+- [x] `terraform -chdir=terraform/admin/argocd-k8s fmt -check -recursive`,
       `validate` 성공 후 `feat: ArgoCD에 셀프 호스티드 러너 ARC Application 추가`로
       커밋한다.
 
