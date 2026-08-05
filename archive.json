@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-05T11:51:41Z",
+  "generated_at": "2026-08-05T11:52:07Z",
   "reports": [
+    {
+      "number": 536,
+      "title": "exp: NetworkPolicy K8s API egress 음성 대조군 (#535)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-05T11:51:27Z",
+      "summary_ko": [
+        "GitHub Actions 러너에서 Kubernetes API 서버로 향하는 443 포트 Egress 허용 규칙 2개를 일시적으로 주석 처리하였습니다.",
+        "이전 워크플로우 성공 사례가 실제로 해당 Egress 허용 규칙에 의존하는지 입증하기 위한 음성 대조군 실험입니다.",
+        "정책 전체를 삭제하면 기본 전체 허용으로 우회되므로 개별 규칙만 차단하였으며, 검증 직후 원복될 예정입니다."
+      ],
+      "report_url": "pr/536/"
+    },
     {
       "number": 534,
       "title": "feat: 셀프 호스티드 러너(ARC) PoC 인프라 구성 (#533)",
