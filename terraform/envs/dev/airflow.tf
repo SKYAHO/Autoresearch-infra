@@ -280,21 +280,29 @@ resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_creator" {
 # `endsWith()`로도 고정할 수 없으므로, 이름 패턴으로 staging 객체만 골라내는 조건은
 # 현재 지원 함수로 표현이 불가능하다.
 #
-# 따라서 스코프를 이름 패턴이 아니라 **경로 prefix**로 좁힌다(`local.raw_data_prefixes.action_logs_raw`,
-# 이슈가 지목한 실제 오염 경로). 이 prefix 하위에서는 batch SA가 staging 임시 객체뿐 아니라
-# 이미 커밋된 최종 객체도 delete/update할 수 있다 — "완료된 raw 데이터는 삭제·덮어쓰기 불가"
-# 원칙이 IAM으로는 더 이상 이 prefix 안에서 보장되지 않고, DAG가 자신이 만든 staging 이름
-# 외에는 delete를 호출하지 않는다는 애플리케이션 계약에 의존한다. 다른 raw_data prefix
-# (`asset/virtual_user/`, `data/raw/personas/` 등)는 이 바인딩의 영향을 받지 않는다.
+# 따라서 스코프를 이름 패턴이 아니라 **경로 prefix**로 좁혔었다(`local.raw_data_prefixes.action_logs_raw`,
+# 당시 이슈가 지목한 실제 오염 경로).
+#
+# #522 후속: 앱 저장소(`Autoresearch`) 자신의 PR #517(이 저장소 PR #517과는 별개 —
+# 저장소마다 번호가 독립적이다)이 이 조건이 머지되기 1시간 전에 이미 staging 객체
+# 위치를 파티션 안(`<dest>.staging-<uuid>`)에서 버킷 루트의 고정 prefix
+# (`_publish_staging/<uuid>.tmp`)로 옮겼다. `action_logs_raw`에 스코프한 조건은
+# 앱이 실제로 만드는 staging 객체를 커버하지 못해 delete가 계속 403으로 실패했고,
+# 라이브 확인(2026-08-05)에서 고아 staging 객체 1개가 실제로 발견됐다. 이제는
+# `publish_staging_raw`로 스코프를 옮긴다 — 부수 효과로 이미 커밋된 action log
+# 최종 객체(`data_lake/action_log/`)에는 더 이상 delete/update 권한이 없어,
+# "완료된 raw 데이터는 삭제·덮어쓰기 불가" 원칙이 IAM 수준에서도 다시 성립한다.
+# 다른 raw_data prefix(`asset/virtual_user/`, `data/raw/personas/` 등)는 이
+# 바인딩의 영향을 받지 않는다.
 resource "google_storage_bucket_iam_member" "airflow_batch_raw_data_staging_cleanup" {
   bucket = google_storage_bucket.raw_data.name
   role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.airflow_batch.email}"
 
   condition {
-    title       = "raw-data-action-log-delete-update"
-    description = "Allow Airflow batch workloads to delete/update objects under the action_log raw prefix (needed to clean up their own atomic-publish staging temp files; GCS IAM conditions cannot pattern-match the staging filename suffix)."
-    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/${local.raw_data_prefixes.action_logs_raw}')"
+    title       = "raw-data-publish-staging-delete-update"
+    description = "Allow Airflow batch workloads to delete/update objects under the shared atomic-publish staging prefix (needed to clean up their own temp files; GCS IAM conditions cannot pattern-match the staging filename suffix)."
+    expression  = "resource.type == 'storage.googleapis.com/Object' && resource.name.startsWith('projects/_/buckets/${google_storage_bucket.raw_data.name}/objects/${local.raw_data_prefixes.publish_staging_raw}')"
   }
 }
 

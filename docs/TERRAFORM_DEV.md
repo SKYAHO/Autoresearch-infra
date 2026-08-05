@@ -249,7 +249,8 @@ Redis Cluster/PSC 제거 plan을 따로 검토한다. 실제 삭제와 state 조
 | Versioning | enabled | 원본 overwrite/삭제 실수 대비 |
 | Soft delete | disabled | dev 비용 누적 방지. versioning/lifecycle로 보호 |
 | Noncurrent 정리 | 30일 후 삭제 | prefix와 무관하게 archived(noncurrent) object version 정리 |
-| 접근 주체 | GKE app SA, Airflow SA, Airflow batch SA | `roles/storage.objectCreator` + `roles/storage.objectViewer`, 삭제/overwrite 제외 — **예외**: Airflow batch SA는 `data_lake/action_log/` prefix 안에서만 조건부 `roles/storage.objectUser`(delete/update 포함, #517)도 가짐. 조건·근거는 아래 "Prefix 규칙" 절 참조 |
+| Staging 고아 정리 | `_publish_staging/` LIVE 객체 1일 후 삭제 | 원자적 게시 임시 객체가 delete 호출 전 크래시로 남는 경우의 안전망(#522). `var.raw_data_publish_staging_orphan_retention_days` |
+| 접근 주체 | GKE app SA, Airflow SA, Airflow batch SA | `roles/storage.objectCreator` + `roles/storage.objectViewer`, 삭제/overwrite 제외 — **예외**: Airflow batch SA는 `_publish_staging/` prefix 안에서만 조건부 `roles/storage.objectUser`(delete/update 포함, #522)도 가짐. 조건·근거는 아래 "Prefix 규칙" 절 참조 |
 | Destroy 보호 | `force_destroy=false`, `prevent_destroy=true` | 원본 데이터 유실 방지. 삭제 필요 시 lifecycle 해제 후 별도 계획 |
 
 ### Prefix 규칙
@@ -263,21 +264,26 @@ GCS는 폴더 리소스를 따로 만들지 않고 object name prefix를 폴더�
 | 액션 로그 원본 | `data_lake/action_log/` | `data_lake/action_log/dt=2026-07-07/part-0.parquet` |
 | 액션 로그 격리 | `data_lake/action_log_quarantine/` | `data_lake/action_log_quarantine/dt=2026-07-07/quarantine.jsonl` |
 | 페르소나 원본 스냅샷 | `data/raw/personas/` | `data/raw/personas/nvidia_personas_kr.jsonl` |
+| 원자적 게시 임시 staging | `_publish_staging/` | `_publish_staging/f05f3f4afda348e9a89f1dd30f3e6e49.tmp`. 파티션 밖 버킷 루트 고정 prefix(#522) — 어느 `dt=` 파티션에도 속하지 않는다 |
 
 이 prefix들은 `locals.raw_data_prefixes`와 `output.raw_data_prefixes`로도 노출된다.
 대부분은 IAM 조건이 아니며, 앱 DAG와 운영 문서가 같은 경로를 보도록 맞춘
 문서/출력용 표준이다. 기존 output 소비자가 깨지지 않도록 `youtube_raw`,
 `users_raw`, `action_logs_raw`, `personas_raw` key는 같은 값의 호환 alias로
-유지한다.
+유지한다. `scripts/check-raw-data-prefixes-contract.sh`가 CI에서 이 alias
+값 일치·trailing slash·아래 IAM 조건의 참조 대상을 회귀 검사한다.
 
-**예외 — `action_logs_raw`는 IAM 조건에서 직접 참조된다**(#517,
+**예외 — `publish_staging_raw`는 IAM 조건에서 직접 참조된다**(#522,
 `terraform/envs/dev/airflow.tf`의 `airflow_batch_raw_data_staging_cleanup`
 바인딩). 이 값을 바꾸면 Airflow batch SA의 delete/update 권한 범위가 함께
-바뀐다. 끝 슬래시가 격리 경계다 — `data_lake/action_log/`가 아니라
-`data_lake/action_log`였다면 `startsWith()` 매치가 `action_log_quarantine`
-prefix까지 조용히 포함한다. `action_logs`는 같은 값의 alias이지만 IAM
-조건은 `action_logs_raw`만 참조하므로, 두 key 중 하나만 고쳐 값이 갈리면
-이 IAM 조건과 표시용 prefix가 어긋난다.
+바뀐다. 끝 슬래시가 격리 경계다 — `_publish_staging/`가 아니라
+`_publish_staging`이었다면 `startsWith()` 매치가 같은 접두 문자열을 가진
+다른 prefix까지 조용히 포함할 수 있다. `action_logs_raw`는 #514/PR #517
+당시 이 IAM 조건이 참조하던 값이었으나, 앱 저장소(`Autoresearch`) 자신의
+PR #517이 먼저 staging 위치를 `_publish_staging/`(버킷 루트, 파티션 밖)로
+옮기면서 더 이상 IAM 조건과 무관해졌다(#522) — 지금은 최종 committed
+action log 데이터 prefix일 뿐이며, 바꿔도 Airflow batch SA의 delete/update
+권한 범위에는 영향이 없다.
 
 페르소나 원본 스냅샷은 현재 Airflow DAG가 직접 GCS에 쓰는 경로가 아니라,
 앱 저장소 virtual user 생성 설정의 기본 raw snapshot 경로

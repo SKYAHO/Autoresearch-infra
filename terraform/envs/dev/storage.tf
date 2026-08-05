@@ -27,6 +27,23 @@ resource "google_storage_bucket" "raw_data" {
     }
   }
 
+  # #522 원자적 게시(copy+delete)가 delete 호출 전 크래시하면(파드 OOMKill, Job
+  # 타임아웃 등) IAM 권한이 맞아도 staging 임시 객체가 영구히 남는다. delete가
+  # 아예 호출되지 않는 실패는 IAM으로 막을 수 없어, age 기반 삭제로 회수한다.
+  # `_publish_staging/`는 임시 객체 전용 prefix라 이 age 기반 규칙이 안전하게
+  # 성립하는 몇 안 되는 경우다(정상 게시 중인 객체를 지우지 않도록 여유를 둔다).
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+
+    condition {
+      age            = var.raw_data_publish_staging_orphan_retention_days
+      matches_prefix = [local.raw_data_prefixes.publish_staging_raw]
+      with_state     = "LIVE"
+    }
+  }
+
   labels = {
     data_class = "raw"
     purpose    = "original-data"

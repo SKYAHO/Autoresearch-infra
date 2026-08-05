@@ -63,6 +63,38 @@
 - 활성화 이후 `kubectl auth can-i` 검증표 실행·기록과 앱 저장소 교차 확인은
   이슈 #523에 남은 별도 후속 작업이다.
 
+## 2026-08-05: raw_data staging cleanup IAM 조건 재스코핑 + 계약 lint (#522)
+
+- #514/PR #517 후속. 앱 저장소(`Autoresearch`) 자신의 PR #517(이 저장소 PR
+  #517과는 번호만 같고 별개 — 저장소마다 번호가 독립적이다)이 이 IAM 조건이
+  머지되기 약 1시간 전에 이미 action log 원자적 게시의 임시 staging 객체
+  위치를 파티션 안(`<dest>.staging-<uuid>`)에서 버킷 루트의 고정 prefix
+  (`_publish_staging/<uuid>.tmp`)로 옮겼다. `action_logs_raw`에 스코프한
+  delete 조건은 앱이 실제로 만드는 staging 객체를 커버하지 못해 delete가
+  계속 403으로 실패했고, 라이브 확인 결과 고아 staging 객체 1개
+  (`_publish_staging/f05f3f4afda348e9a89f1dd30f3e6e49.tmp`, 2026-08-04 게시분)가
+  실제로 발견됐다.
+- `local.raw_data_prefixes`에 `publish_staging_raw = "_publish_staging/"`을
+  추가하고, `airflow_batch_raw_data_staging_cleanup` IAM 조건의 스코프를
+  `action_logs_raw`에서 `publish_staging_raw`로 옮겼다. 부수 효과로 이미
+  커밋된 action log 최종 객체(`data_lake/action_log/`)에는 더 이상
+  delete/update 권한이 없어, "완료된 raw 데이터는 삭제·덮어쓰기 불가" 원칙이
+  IAM 수준에서도 다시 성립한다(#514 항목에 남긴 트레이드오프 해소). 다른
+  raw_data prefix(`asset/virtual_user/`, `data/raw/personas/`,
+  `data_lake/youtube_trending_kr/`, `data_lake/action_log_quarantine/`)는
+  앱 저장소의 실제 publish 코드(`autoresearch/action_logs/daily.py`)를
+  확인한 결과 같은 copy+delete 원자적 게시 패턴을 쓰지 않아 이 결함에
+  노출되지 않는다.
+- `scripts/check-raw-data-prefixes-contract.sh` + 자체 self-test를 추가해
+  `raw_data_prefixes`의 alias 값 일치(`action_logs_raw`/`action_logs` 등)와
+  trailing slash, 그리고 IAM 조건의 `publish_staging_raw` 참조 유지를 CI
+  lint에서 검증한다. `terraform validate`/`plan`은 CEL 조건도, HCL 리터럴
+  문자열의 의미 계약도 검증하지 않으므로 회귀가 plan diff의 문자열 한 글자
+  차이로만 드러나는 문제(PR #521 리뷰 지적)를 막는다.
+- 발견된 고아 staging 객체 1개는 라이브에서 직접 삭제해 정리했다.
+
+
+
 ## 2026-08-04: raw_data staging cleanup IAM 조건 — GCS 객체 CEL 함수 제약 (#514, PR #517)
 
 - 프로젝트 이전(#404) 중 원자적 게시(copy+delete, GCS엔 rename이 없음)에
