@@ -35,6 +35,14 @@
   머지 뒤에도 Variable 갱신 + admin apply + manual sync가 남아, Airflow처럼 승격 PR만
   자동화하면 "PR은 열렸는데 배포는 안 된" 상태가 새로 생긴다는 점이 분리 근거다.
 
+## 2026-08-05: infra main merge 기반 Agent Orchestration 자동 sync (#526)
+
+- Agent Orchestration Application도 enabled 상태에서 infra `main`을 추적하고
+  automated sync한다. 기존 고정 SHA GitHub Variable과 수동 target revision 갱신은 제거했다.
+- prune·self-heal은 계속 비활성화하고, enabled=false는 존재하지 않는 ref를 유지하는
+  비상 차단 스위치다. 이후 배포 manifest는 기존 PR·CI 검토 후 main merge로 반영하며,
+  rollback은 이전 manifest commit을 main에 반영해 ArgoCD sync 상태를 확인한다.
+
 ## 2026-08-04: raw_data staging cleanup IAM 조건 — GCS 객체 CEL 함수 제약 (#514, PR #517)
 
 - 프로젝트 이전(#404) 중 원자적 게시(copy+delete, GCS엔 rename이 없음)에

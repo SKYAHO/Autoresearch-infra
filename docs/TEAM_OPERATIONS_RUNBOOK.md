@@ -393,8 +393,8 @@ alias만 재지정한 경우에도 재시작이 없으면 이전 모델이 계�
 
 | 구분 | 절차 |
 |---|---|
-| 배포 | 앱 저장소 `release.yml`이 이미지를 GAR에 push해 digest 확보 → infra repo PR로 `deployment.yaml`의 digest 갱신 → merge → ArgoCD에서 diff 확인 후 manual sync |
-| 롤백 | 이전 digest로 되돌리는 커밋 → merge → ArgoCD manual sync. git 이력이 곧 배포 이력이다 |
+| 배포 | immutable digest를 포함한 infra manifest PR 검토 → main merge → ArgoCD automated sync 확인 |
+| 롤백 | 이전 digest로 되돌리는 커밋 → merge → ArgoCD 자동 sync 상태 확인. git 이력이 곧 배포 이력이다 |
 
 ## Rerank serving 부하테스트 격리 (#482)
 
