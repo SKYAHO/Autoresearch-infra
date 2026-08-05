@@ -178,11 +178,23 @@ admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` to
 `AutoresearchBatchPodOperator` 기본값은 `batch-spot`이고 override하는 DAG가 없음).
 따라서 지금은 experiment Job이 이 pool을 사실상 독점합니다. `LimitRange`는 컨테이너당
 상한(`type = "Container"`, 1 vCPU/2 GiB)과 별도로 Pod 합계 상한(`type = "Pod"`, 동일
-1 vCPU/2 GiB)도 강제하므로, 컨테이너 2개짜리 Pod가 합쳐서 2 vCPU를 요청하면 스케줄
-실패가 아니라 admission 시점에 거부됩니다 — e2-standard-2 allocatable(약 1930m)을
-넘겨 영구 Pending으로 남는 경로 자체가 열리지 않습니다(#523). 고정 템플릿이 실제로
-단일 컨테이너만 만든다는 전제가 깨져 향후 sidecar 등 다중 컨테이너 Pod가 필요해지면
-이 Pod 상한이 먼저 걸리므로, 그 변경에서 상한 값을 함께 재검토합니다.
+1 vCPU/2 GiB)도 강제합니다 — 컨테이너 request 합계와 limit 합계 양쪽 모두 이 값을
+넘을 수 없습니다. 단, 같은 root의 `autoresearch-experiment-job-contract` 정책은
+컨테이너 `resources`를 검사하지 않으므로, 컨테이너 2개짜리 Pod의 Job `create` 자체는
+API KSA 요청 수준에서는 성공합니다. 거부되는 것은 그 뒤 Job controller가 템플릿으로
+만드는 Pod입니다 — Pod 합계가 상한을 넘으면 LimitRange가 Pod 생성을 막고 Job에
+`FailedCreate` 이벤트가 비동기로 남습니다. Job controller는 Pod 생성을 계속
+재시도하지만 Pod 객체 자체가 만들어지지 않으므로 `requests.cpu`/`requests.memory`/
+`pods`/`limits.*` quota는 전혀 소비되지 않고 `count/jobs.batch`만 평소처럼
+점유됩니다. 이 Job도 다른 Job과 동일하게 `activeDeadlineSeconds`(최대 3600초,
+`status.startTime` 기준)로 상한이 걸려 있어 e2-standard-2 allocatable(약 1930m)을
+넘겨 노드에 스케줄되지 못하는 Pending Pod가 대기하는 경우와 마찬가지로 deadline+TTL로
+종료됩니다 — 이 LimitRange가 새로운 시간 상한을 만드는 것은 아닙니다. 실제 효과는
+(1) 잘못된 Pod가 `pods`/`requests.cpu` quota를 점유해 정상 실험 Job 제출까지 막는
+상황을 없애는 것과 (2) 스케줄러의 `FailedScheduling`/Pending 대신 admission 단계의
+명확한 `FailedCreate` 사유를 남기는 것입니다(#523). 고정 템플릿이 실제로 단일
+컨테이너만 만든다는 전제가 깨져 향후 sidecar 등 다중 컨테이너 Pod가 필요해지면 이
+Pod 상한이 먼저 걸리므로, 그 변경에서 상한 값을 함께 재검토합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
