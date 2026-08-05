@@ -116,6 +116,13 @@ locals {
     action_log_quarantine  = "data_lake/action_log_quarantine/"
     virtual_users          = "asset/virtual_user/"
     personas_raw_snapshots = "data/raw/personas/"
+    # #522 앱 저장소 PR #517(`Autoresearch`)이 action log 원자적 게시의 임시
+    # staging 객체를 파티션 안(`<dest>.staging-<uuid>`)에서 버킷 루트의 이
+    # 고정 prefix(`_publish_staging/<uuid>.tmp`)로 옮겼다. 삭제 IAM 조건도
+    # 이 prefix를 대상으로 삼아야 한다 — 이전처럼 action_logs_raw prefix에
+    # 스코프하면 앱이 실제로 만드는 staging 객체를 지울 수 없다(라이브
+    # 확인 결과 고아 객체 1개 발생, 2026-08-05 조사).
+    publish_staging_raw = "_publish_staging/"
   }
   gke_workload_identity_principal                = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
   experiment_runtime_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.experiment_runtime_k8s_namespace}/${var.experiment_runtime_k8s_service_account}]"

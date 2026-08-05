@@ -32,6 +32,13 @@ jobs:
       - name: Run oauth2-proxy email allowlist self-test
         run: scripts/test-check-oauth-email-allowlist.sh
 
+      # #522 raw_data_prefixes trailing slash·alias 값·staging IAM 참조 회귀 검증.
+      - name: Check raw_data_prefixes contract
+        run: scripts/check-raw-data-prefixes-contract.sh
+
+      - name: Run raw_data_prefixes contract self-test
+        run: scripts/test-check-raw-data-prefixes-contract.sh
+
       # #478 claude-review 14차 지적: plan 요약 allowlist 정규식이 4곳(apply.yml
       # dev/admin root 스텝 + terraform-plan.yml + terraform-drift.yml)에
       # 복제돼 있어 한 곳만 갱신되면 CI 없이 조용히 어긋난다.
