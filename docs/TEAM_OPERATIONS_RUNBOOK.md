@@ -393,8 +393,16 @@ alias만 재지정한 경우에도 재시작이 없으면 이전 모델이 계�
 
 | 구분 | 절차 |
 |---|---|
-| 배포 | 앱 저장소 `release.yml`이 이미지를 GAR에 push해 digest 확보 → infra repo PR로 `deployment.yaml`의 digest 갱신 → merge → ArgoCD에서 diff 확인 후 manual sync |
+| 배포 | 앱 저장소 `release.yml`이 검증한 immutable digest로 infra **Draft PR**을 자동 생성 → 사람이 diff·CI를 검토해 merge → serving은 automated sync, MLflow는 ArgoCD diff 확인 후 manual sync |
 | 롤백 | 이전 digest로 되돌리는 커밋 → merge → ArgoCD manual sync. git 이력이 곧 배포 이력이다 |
+
+Agent Orchestration도 같은 Draft PR에 API 5곳·UI·Runner digest를 함께 갱신한다. 그러나
+merge만으로는 배포되지 않는다. merge commit의 40자리 SHA를
+`AGENT_ORCHESTRATION_TARGET_REVISION`에 설정하고 reviewed admin apply를 완료한 뒤,
+ArgoCD diff를 검토해 manual sync한다. 자동화는 PR 생성까지만 하며 Variable 변경,
+Terraform apply, ArgoCD sync와 자동 merge를 수행하지 않는다. GitHub App installation은
+`Autoresearch-infra`만 대상으로 허용해야 하며, 토큰 발급 실패 시 PAT나 넓은 설치 범위로
+우회하지 않는다.
 
 ## Rerank serving 부하테스트 격리 (#482)
 

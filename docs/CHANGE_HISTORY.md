@@ -3,6 +3,16 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-05: GKE 이미지 digest 승격 Draft PR 경계 (#526)
+
+- 앱 release workflow가 검증한 immutable digest만 infra Draft PR로 전달하도록 설계했다.
+  현재 자동 범위는 serving·Agent Orchestration API 5참조·UI·Runner이며, API 다섯
+  참조의 불일치는 PR 생성 전에 실패한다. MLflow는 release workflow의 검증 digest
+  출력이 없어 수동 PR로 유지하고, 별도 release job 도입 뒤 확장한다.
+- 교차 저장소 쓰기는 `Autoresearch-infra` 하나로 제한한 GitHub App installation token만
+  사용한다. 자동 merge, Terraform apply, target revision 변경, ArgoCD sync는 수행하지
+  않는다. MLflow와 Agent Orchestration의 수동 후속 배포 절차를 runbook에 명시했다.
+
 ## 2026-08-04: raw_data staging cleanup IAM 조건 — GCS 객체 CEL 함수 제약 (#514, PR #517)
 
 - 프로젝트 이전(#404) 중 원자적 게시(copy+delete, GCS엔 rename이 없음)에
