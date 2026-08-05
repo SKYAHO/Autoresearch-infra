@@ -235,32 +235,34 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
     }
 
     # PoC: K8s API 서버(in-cluster, 서비스 VIP 경유) 접근 검증.
-    egress {
-      to {
-        ip_block {
-          cidr = var.cluster_services_cidr
-        }
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "443"
-      }
-    }
+    # #535 NetworkPolicy 음성 대조군 — 일시 주석 처리. 실험 종료 후 원복한다.
+    # egress {
+    #   to {
+    #     ip_block {
+    #       cidr = var.cluster_services_cidr
+    #     }
+    #   }
+    #
+    #   ports {
+    #     protocol = "TCP"
+    #     port     = "443"
+    #   }
+    # }
 
     # K8s API post-DNAT 목적지(master) 대비 (#138 패턴).
-    egress {
-      to {
-        ip_block {
-          cidr = var.cluster_master_cidr
-        }
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "443"
-      }
-    }
+    # #535 NetworkPolicy 음성 대조군 — 일시 주석 처리. 실험 종료 후 원복한다.
+    # egress {
+    #   to {
+    #     ip_block {
+    #       cidr = var.cluster_master_cidr
+    #     }
+    #   }
+    #
+    #   ports {
+    #     protocol = "TCP"
+    #     port     = "443"
+    #   }
+    # }
 
     # GitHub Actions 서비스 연결(러너 등록/job polling). 사설 대역(RFC1918)은
     # except로 빼서 위 K8s API 규칙과 겹치지 않게 한다 — 겹치면 그 규칙을
