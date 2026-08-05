@@ -38,6 +38,16 @@ locals {
   # dev root local과 같은 짧은 `-exp-job` 규칙으로 파생하며, 예외만 변수로 override한다.
   experiment_job_gcp_service_account_email = var.experiment_job_gcp_service_account_email != "" ? var.experiment_job_gcp_service_account_email : "${var.resource_prefix}-exp-job@${var.project_id}.iam.gserviceaccount.com"
 
+  # #539 branch-bootstrap Job의 고정 컨테이너·volume 이름. 이 값들은 애플리케이션
+  # 저장소 `agent_orchestration/launcher/jobs.py`의 상수와 정확히 같아야 한다 —
+  # 불일치하면 launcher가 만드는 모든 Job이 admission에서 거부된다. 이름을 서버 측에
+  # 고정하는 이유는 private key를 마운트하는 컨테이너를 "순서"가 아니라 "정체"로
+  # 식별하기 위해서다.
+  experiment_branch_bootstrap_init_container = "github-token-minter"
+  experiment_branch_bootstrap_app_container  = "branch-bootstrap"
+  experiment_branch_writer_key_volume        = "github-app-private-key"
+  experiment_branch_token_volume             = "github-token"
+
   # 기본 허용 prefix는 이 프로젝트의 Artifact Registry Docker 저장소다
   # (예: asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/).
   experiment_job_allowed_image_prefixes = coalesce(

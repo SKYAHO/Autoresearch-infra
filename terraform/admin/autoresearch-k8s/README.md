@@ -114,7 +114,21 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
    ServiceAccount 변경, digest 없는 image(`initContainers` 포함), `batch-od`
    nodeSelector/toleration 계약 위반(빈 목록 포함), 승인된 Artifact Registry 밖
    이미지, `automountServiceAccountToken: true`, `activeDeadlineSeconds`·
-   `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. 두 시간
+   `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. #539에서
+   branch-bootstrap Pod 형태 계약 6종을 추가했다 — initContainer는
+   `github-token-minter` 하나, 컨테이너는 `branch-bootstrap` 하나, volume은 승인된
+   Secret volume과 `medium: Memory` 1Mi token volume 두 개뿐이며, **GitHub App
+   private key volume은 initContainer에만 `readOnly`로 mount할 수 있고 본
+   컨테이너에는 mount할 수 없다.** 본 컨테이너의 token volume도 `readOnly`여야
+   한다. 여섯 번째 규칙은 `envFrom`과 `env[].valueFrom`을 양쪽 컨테이너 모두에서
+   금지한다 — volume 계약만 두면 `secretKeyRef`로 키를 환경 변수에 바로 주입해
+   앞의 다섯 규칙을 모두 통과할 수 있고, Pod Security `restricted`도 Secret 참조
+   방식은 통제하지 않기 때문이다. 고정 템플릿은 양쪽 모두 리터럴 값만 쓰므로
+   잃는 기능이 없다. 이 규칙들이 강제하는 것은 "키는 initContainer까지, 본 컨테이너는 만료되는
+   token만"이라는 자격 증명 경계이며, 그 경계를 만드는 launcher 코드는 다른
+   저장소에 있어 이 저장소의 리뷰를 거치지 않으므로 서버 측에서 한 번 더 강제한다.
+   이름 고정은 이 namespace를 사실상 branch-bootstrap 전용으로 만든다 — 다른 형태의
+   실험 Job이 필요해지면 그 변경에서 이 규칙들을 먼저 넓힌다. 두 시간
    필드를 정책에 둔 것은 완료 Job이 quota를 무기한 점유하는 경로를 막기 위해서다
    (제출자 KSA에 `delete`가 없어 회수 수단이 TTL뿐이다 — #539 이후 그 주체는
    launcher KSA다). Pod Security `restricted`는
@@ -227,11 +241,15 @@ Pod가 한 번도 만들어지지 못해도 `activeDeadlineSeconds` 타이머는
 최대 2시간, 위 "초기 dev 상한" 문단과 동일한 병목)입니다 — 제출자 KSA(#539 이후
 launcher KSA)에는 `delete`가
 없어 그 전에 수동 회수는 break-glass 관리자 권한으로만 가능합니다(runbook "장애 처리와
-롤백" 참조). 고정 템플릿이 실제로 단일 컨테이너만 만든다는 전제가 깨져
-향후 sidecar 등 다중 컨테이너 Pod가 필요해지면 이 Pod 상한이 먼저 걸리므로, 그
-변경에서 상한 값을 함께 재검토합니다. 이 상한은 컨테이너 상한과 동일한 값이라
-헤드룸이 0입니다 — 컨테이너가 하나라도 추가되면(의도적이든 GCS FUSE CSI 같은
-주입형 sidecar든) 거부됩니다. 이 namespace에는 현재 sidecar를 주입하는 mutating
+롤백" 참조). #539의 branch-bootstrap Job은 initContainer 1개 + app 컨테이너 1개인데,
+Kubernetes가 일반(non-sidecar) initContainer를 app 컨테이너 합계와 `max()`로 비교하므로
+Pod 합계는 500m/1 GiB로 상한 안에 들어옵니다. 다만 이는 여유가 아니라 "sidecar가
+아니어서" 통과하는 것이라, token-minter를 native sidecar(`restartPolicy: Always`)로
+바꾸면 합산 대상이 되어 이 상한에 먼저 걸립니다. 그런 변경에서는 상한 값을 함께
+재검토합니다. 이 상한은 컨테이너 상한과 동일한 값이라
+헤드룸이 0입니다 — 승인된 두 컨테이너 외에 하나라도 추가되면(의도적이든 GCS FUSE
+CSI 같은 주입형 sidecar든) 거부되며, admission 정책이 그 이전에 제출 자체를
+막습니다. 이 namespace에는 현재 sidecar를 주입하는 mutating
 webhook이 없으므로, 값을 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를
 명시적 제약으로 유지합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증

@@ -93,16 +93,23 @@ resource "kubernetes_limit_range_v1" "experiment_jobs" {
     # `FailedCreate` 이벤트로 즉시 드러내고 해당 quota 소비를 없앤다 — Job
     # `create` 자체(ValidatingAdmissionPolicy)는 이 값을 검사하지 않으므로
     # 여전히 성공하고, `count/jobs.batch` quota는 이 상한과 무관하게 평소처럼
-    # 점유된다. 값은 문서가 명시한 단일 컨테이너 계약과 동일해 현재 고정
-    # 템플릿에는 영향이 없다.
+    # 점유된다.
     #
     # initContainers 계산: k8s는 일반 initContainer(순차 실행)를 app 컨테이너
     # 합계와 max() 비교하므로, initContainer 1개(1 vCPU) + app 컨테이너 1개
     # (1 vCPU)는 max(1,1)=1로 이 상한 경계값에 걸려 통과한다. 반면
     # `restartPolicy: Always`인 native sidecar initContainer는 app 컨테이너와
     # 동시에 떠 있어 합산(sum) 대상이 되므로 같은 조합이 2 vCPU로 상한을
-    # 넘겨 거부된다. 현재 고정 템플릿과 admission 정책은 단일 컨테이너만
-    # 만들므로 두 경로 다 지금은 발생하지 않는다.
+    # 넘겨 거부된다.
+    #
+    # #539의 branch-bootstrap Job은 정확히 전자에 해당한다 — initContainer
+    # `github-token-minter` 1개 + app 컨테이너 `branch-bootstrap` 1개이고,
+    # 두 컨테이너 모두 LimitRange 기본값(500m/1Gi)을 받으므로 Pod 합계는
+    # max(500m, 500m)=500m, max(1Gi, 1Gi)=1Gi로 상한 안에 들어온다. 다만 이는
+    # 여유가 아니라 "sidecar가 아니어서" 통과하는 것이므로, token-minter를
+    # native sidecar(`restartPolicy: Always`)로 바꾸는 변경은 이 상한에 먼저
+    # 걸린다. 같은 root의 admission 정책이 initContainer·app 컨테이너를 각각
+    # 하나로 못 박아 그 이상은 애초에 제출되지 않는다.
     #
     # 헤드룸 0: 이 값을 컨테이너 상한과 동일하게 둬 컨테이너가 하나라도 추가되면
     # (의도적 sidecar든 GCS FUSE CSI 같은 주입형 sidecar든) 무조건 거부된다.
@@ -331,6 +338,71 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         {
           expression = "has(object.spec.ttlSecondsAfterFinished) && object.spec.ttlSecondsAfterFinished >= 0 && object.spec.ttlSecondsAfterFinished <= 3600"
           message    = "실험 Job은 ttlSecondsAfterFinished를 0~3600초로 명시해야 합니다."
+        },
+        # ── #539 branch-bootstrap Pod 형태 계약 ──────────────────────────────
+        #
+        # 위 규칙들은 "누가·어디서·어떤 이미지로" 도는지를 강제한다. 아래 다섯 개는
+        # "private key가 어느 컨테이너까지 보이는지"를 강제한다. 이 Phase에서
+        # 마운트되는 branch-writer App private key는 `SKYAHO/Autoresearch`의
+        # Contents write 권한을 가지므로, 유출 시 저장소에 임의 코드를 push할 수
+        # 있다 — 이 namespace가 다루는 시크릿 중 영향 범위가 가장 크다.
+        #
+        # 설계상 키는 initContainer에서만 보이고, 본 컨테이너는 그 결과물인 1시간
+        # 만료 installation token만 받는다. 그 분리를 만드는 것은 애플리케이션
+        # 저장소의 launcher 코드(`launcher/jobs.py`)인데, 그 코드는 이 저장소의
+        # 리뷰·CI를 거치지 않는다. 따라서 같은 계약을 서버 측에서 한 번 더 강제한다.
+        #
+        # 주의: 이 정책은 namespace 전체에 바인딩되므로, 아래 이름 고정은 이
+        # namespace를 사실상 branch-bootstrap 전용으로 만든다. 다른 형태의 실험
+        # Job이 필요해지면 그 변경에서 이 규칙들을 먼저 넓혀야 한다.
+        {
+          expression = "has(object.spec.template.spec.initContainers) && object.spec.template.spec.initContainers.size() == 1 && object.spec.template.spec.initContainers[0].name == '${local.experiment_branch_bootstrap_init_container}'"
+          message    = "실험 Job은 initContainer로 ${local.experiment_branch_bootstrap_init_container} 하나만 사용해야 합니다."
+        },
+        {
+          expression = "object.spec.template.spec.containers.size() == 1 && object.spec.template.spec.containers[0].name == '${local.experiment_branch_bootstrap_app_container}'"
+          message    = "실험 Job은 컨테이너로 ${local.experiment_branch_bootstrap_app_container} 하나만 사용해야 합니다."
+        },
+        # volume 목록 자체를 두 개로 못 박는다. 개수를 열어두면 승인된 두 volume을
+        # 그대로 둔 채 hostPath·다른 Secret·PVC를 추가하는 경로가 남는다(Pod
+        # Security restricted가 hostPath는 막지만 다른 Secret은 막지 않는다).
+        #
+        # sizeLimit을 문자열 '1Mi'로 비교하는 것은 Quantity가 제출된 표기를 그대로
+        # 보존해 왕복하기 때문이다. 고정 템플릿이 리터럴 "1Mi"를 보내므로 일치하며,
+        # 같은 값을 다른 표기(예: "1048576")로 바꾸는 템플릿 변경은 의도적으로
+        # 거부된다 — 이 계약은 "값이 같음"이 아니라 "템플릿이 그대로임"을 확인한다.
+        {
+          expression = "has(object.spec.template.spec.volumes) && object.spec.template.spec.volumes.size() == 2 && object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_writer_key_volume}' && has(v.secret) && has(v.secret.secretName) && v.secret.secretName == '${var.experiment_branch_writer_secret_name}') && object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_token_volume}' && has(v.emptyDir) && has(v.emptyDir.medium) && v.emptyDir.medium == 'Memory' && has(v.emptyDir.sizeLimit) && v.emptyDir.sizeLimit == '1Mi')"
+          message    = "실험 Job은 ${var.experiment_branch_writer_secret_name} Secret volume과 medium=Memory 1Mi token volume 두 개만 사용해야 합니다."
+        },
+        # 이 정책의 핵심 규칙이다. private key volume은 initContainer만, 그것도
+        # readOnly로 마운트할 수 있다. 본 컨테이너는 GitHub과 실제로 통신하며 더
+        # 오래 사는 쪽이라, 여기가 손상됐을 때 얻는 것이 "만료되는 token"인지
+        # "영구 private key"인지가 이 규칙 하나로 갈린다.
+        {
+          expression = "(!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, has(c.volumeMounts) && c.volumeMounts.exists_one(m, m.name == '${local.experiment_branch_writer_key_volume}' && has(m.readOnly) && m.readOnly == true))) && object.spec.template.spec.containers.all(c, !has(c.volumeMounts) || c.volumeMounts.all(m, m.name != '${local.experiment_branch_writer_key_volume}'))"
+          message    = "GitHub App private key volume은 initContainer에만 readOnly로 mount해야 하며 본 컨테이너에는 mount할 수 없습니다."
+        },
+        # volume 계약만으로는 키가 본 컨테이너에 도달하는 경로를 다 막지 못한다.
+        # `env[].valueFrom.secretKeyRef`나 `envFrom[].secretRef`는 volume을 전혀
+        # 쓰지 않고 Secret 값을 환경 변수로 바로 주입하므로 위 다섯 규칙을 모두
+        # 통과한다. Pod Security restricted도 Secret 참조 방식은 통제하지 않는다.
+        #
+        # Secret 이름만 금지하지 않고 `valueFrom`/`envFrom` 자체를 막는다. 이름
+        # 기반 금지는 "다른 이름의 더 강한 권한 Secret"으로 우회되지만, 고정
+        # 템플릿은 양쪽 컨테이너 모두 리터럴 `value`만 쓰므로(App ID, installation
+        # ID, 파일 경로, 봉인 좌표) 잃는 것이 없다. 시크릿은 오직 initContainer의
+        # readOnly volume 하나를 통해서만 Pod에 들어온다.
+        {
+          expression = "(!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))) && object.spec.template.spec.containers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))"
+          message    = "실험 Job은 환경 변수로 Secret·ConfigMap 값을 주입할 수 없습니다(envFrom과 valueFrom 금지). 시크릿은 승인된 initContainer volume 경로만 사용합니다."
+        },
+        # 본 컨테이너는 token을 읽기만 한다. 쓰기 가능하게 마운트되면 컨테이너가
+        # 자기 token 파일을 덮어써 initContainer가 만든 자격 증명 경로를 우회할 수
+        # 있고, 사후 조사에서 어떤 token이 쓰였는지도 확정할 수 없게 된다.
+        {
+          expression = "object.spec.template.spec.containers.all(c, has(c.volumeMounts) && c.volumeMounts.exists_one(m, m.name == '${local.experiment_branch_token_volume}' && has(m.readOnly) && m.readOnly == true))"
+          message    = "본 컨테이너는 token volume을 readOnly로만 mount해야 합니다."
         },
       ]
     }

@@ -402,6 +402,21 @@ variable "experiment_job_gcp_service_account_email" {
 # #539에서 이 플래그의 주체가 API KSA에서 launcher KSA로 바뀌었다. 변수 이름은
 # 주체를 담고 있지 않아 그대로 두되(로컬 tfvars·runbook·CHANGE_HISTORY의 참조가
 # 깨지지 않는다), 아래 설명과 outputs의 필드 이름으로 새 주체를 드러낸다.
+# #539 branch-writer GitHub App private key를 담는 Kubernetes Secret 이름. 값(PEM)은
+# Terraform이 관리하지 않고 runbook의 수동 주입 절차로만 넣는다. 이 변수는 admission이
+# "이 Secret 하나만 마운트할 수 있다"를 강제하는 데 쓰인다 — 이름을 고정하지 않으면
+# 손상된 제출자가 더 강한 권한의 다른 App 키 Secret을 같은 위치에 마운트할 수 있다.
+variable "experiment_branch_writer_secret_name" {
+  description = "branch-bootstrap Job이 마운트할 수 있는 유일한 GitHub App private key Kubernetes Secret 이름. 값은 Terraform이 관리하지 않는다."
+  type        = string
+  default     = "autoresearch-experiment-branch-writer-app"
+
+  validation {
+    condition     = length(var.experiment_branch_writer_secret_name) >= 1 && length(var.experiment_branch_writer_secret_name) <= 253 && can(regex("^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$", var.experiment_branch_writer_secret_name))
+    error_message = "experiment_branch_writer_secret_name must be a valid Kubernetes Secret name."
+  }
+}
+
 variable "enable_experiment_job_creation" {
   description = "실험 브랜치 launcher KSA의 Job 생성 권한 활성화 여부. #523 선행 조건(고정 템플릿·허용 digest·admission 검증, NetworkPolicy sync 재확인, negative dry-run 4종 재실행 — 이슈 댓글 기록 완료) 충족 후 true로 전환했고, #539에서 주체만 API KSA → launcher KSA로 옮겼다. 문제 발생 시 false로 되돌리는 것이 CronJob 중지 다음의 롤백 수단이다."
   type        = bool
