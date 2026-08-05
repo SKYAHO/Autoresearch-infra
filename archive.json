@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-05T17:44:26Z",
+  "generated_at": "2026-08-05T17:49:32Z",
   "reports": [
+    {
+      "number": 543,
+      "title": "docs: 초기 spec·plan 원문 복구",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-05T17:49:15Z",
+      "summary_ko": [
+        "과거 PR에서 삭제되었던 초기 인프라 설계 스펙 문서 10종과 구현 계획 문서 10종을 원문 그대로 복구하였습니다.",
+        "복구된 문서들은 과거 의사결정 이력 및 맥락을 제공하며 실제 GCP 인프라 상태에는 어떠한 영향을 주지 않습니다.",
+        "현행 인프라 운영 및 개발 절차는 기존 정본 문서인 TEAM_OPERATIONS_RUNBOOK.md 및 TERRAFORM_DEV.md를 우선합니다."
+      ],
+      "report_url": "pr/543/"
+    },
     {
       "number": 538,
       "title": "docs: Task 7 라이브 검증 결과 기록 (#535)",
