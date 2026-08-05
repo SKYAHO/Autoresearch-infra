@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-05T12:05:02Z",
+  "generated_at": "2026-08-05T12:14:45Z",
   "reports": [
+    {
+      "number": 538,
+      "title": "docs: Task 7 라이브 검증 결과 기록 (#535)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-05T12:14:30Z",
+      "summary_ko": [
+        "Actions Runner Controller(ARC) PoC 작업 중 Task 7의 라이브 검증 결과를 계획 문서에 기록하였습니다.",
+        "승인 대기 중 발생한 Access Token 만료 대응 및 Listener Pod 크래시 원인 분석 결과를 명시하였습니다.",
+        "NetworkPolicy 음성 대조군 실험 결과(Kubernetes API 통신 차단 및 복구 검증)를 추가 기록하였습니다."
+      ],
+      "report_url": "pr/538/"
+    },
     {
       "number": 537,
       "title": "fix: NetworkPolicy K8s API egress 음성 대조군 원복 (#535)",
