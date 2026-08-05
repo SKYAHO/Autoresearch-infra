@@ -39,12 +39,14 @@ GitHub Actions, GitHub App.
       정의한다.
 - [ ] `actions_runner.tf`에 `google_service_account.actions_runner_controller`와
       Workload Identity binding(`google_service_account_iam_member`)을 만든다.
-- [ ] `google_secret_manager_secret` 3개(`actions-runner-github-app-id`,
+- [x] `google_secret_manager_secret` 3개(`actions-runner-github-app-id`,
       `-installation-id`, `-private-key`)를 `replication.auto{}` +
-      `lifecycle.prevent_destroy = true`로 만들고, 각각에
-      `roles/secretmanager.secretAccessor`를 컨트롤러 GSA에 부여한다. 값은
-      Terraform이 관리하지 않는다(주석으로 명시, `argocd_google_oidc_client`와
-      동일 패턴).
+      `lifecycle.prevent_destroy = true`로 만든다. 값은 Terraform이 관리하지
+      않는다(주석으로 명시, `argocd_google_oidc_client`와 동일 패턴). ARC 러너는
+      이 값을 Secret Manager API가 아니라 운영자가 만드는 네이티브 K8s Secret으로
+      소비하므로(`argocd_google_oidc_client`도 동일) 컨트롤러 GSA에
+      `secretmanager.secretAccessor`를 부여하지 않는다 — 계획 작성 시의 가정을
+      구현 중 정정.
 - [ ] `actions_runner_contract` output에 GSA email, WI principal, 3개 Secret
       Manager secret_id만 넣는다. README에 GitHub App 생성은 조직 GitHub UI에서
       수동으로 선행돼야 한다고 기록한다.
