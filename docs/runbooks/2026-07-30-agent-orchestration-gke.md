@@ -375,6 +375,82 @@ API Pod를 재기동해야 새 값이 적용됩니다(startup에 1회만 읽습�
 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)로 실제 발행을
 확인합니다.
 
+## baseline-reader GitHub App 자격 증명 등록 (#539)
+
+실험 이슈를 발행하기 **전에** API가 `heads/dev` SHA를 읽어
+`experiments.base_dev_sha`에 봉인합니다. 그 조회에 baseline-reader GitHub App을
+사용합니다. 앞 절의 `ORCH_GITHUB_TOKEN`(이슈 발행용 PAT)과는 **별개의 자격
+증명**이며 서로 대체할 수 없습니다.
+
+이 App은 `SKYAHO/Autoresearch` 저장소 **하나에만** 설치하고 권한은 `Contents:
+Read-only` **하나만** 부여합니다. 브랜치를 실제로 만드는 branch-writer App
+(`Contents: Read and write`)은 완전히 다른 App이며, 그쪽 절차는
+[실험 Job runbook](2026-08-01-auto-research-experiment-job.md)에 있습니다. 두 App을
+하나로 합치면 "SHA를 읽기만 하는 경로"가 쓰기 권한을 갖게 되므로 분리를
+유지합니다.
+
+API Pod는 세 값을 startup에서 읽으므로 **Secret이 없으면 Pod가 기동하지
+못합니다.** 이 배선을 포함한 API digest를 sync하기 전에 반드시 먼저 등록합니다.
+
+| 환경변수 | 출처 | Secret key |
+|---|---|---|
+| `ORCH_BASELINE_GITHUB_APP_ID` | Secret | `app-id` |
+| `ORCH_BASELINE_GITHUB_APP_INSTALLATION_ID` | Secret | `installation-id` |
+| `ORCH_BASELINE_GITHUB_APP_PRIVATE_KEY_PATH` | manifest 리터럴 | (없음) |
+| private key 파일 | Secret volume | `private-key.pem` |
+
+App ID와 installation ID는 비밀이 아니지만, App 생성 전에는 값을 알 수 없어
+manifest에 리터럴로 박을 수 없습니다. `#533` actions-runner와 같이 private key와
+한 Secret에 함께 두고 운영자가 주입합니다.
+
+installation ID는 App 설치 후 설치 페이지 URL
+(`https://github.com/settings/installations/<installation-id>`) 또는 App 관리
+화면에서 확인합니다. App ID는 App 설정 페이지 상단에 있습니다.
+
+PEM은 여러 줄이라 `--from-env-file`(한 줄 `KEY=VALUE`만 지원)로는 옮길 수
+없습니다. 세 값 모두 `--from-file`로 넣습니다.
+
+```bash
+umask 077
+sdir="$(mktemp -d)"          # 고정 경로 금지 — 공유 호스트 심링크/선점 위험
+trap 'rm -rf "$sdir"' EXIT
+
+printf '%s' '<App ID>'          > "$sdir/app-id"           # 끝에 개행 없음
+printf '%s' '<installation ID>' > "$sdir/installation-id"  # 끝에 개행 없음
+cp /path/to/downloaded.pem        "$sdir/private-key.pem"
+
+kubectl -n autoresearch create secret generic agent-orchestration-baseline-reader-app \
+  --from-file=app-id="$sdir/app-id" \
+  --from-file=installation-id="$sdir/installation-id" \
+  --from-file=private-key.pem="$sdir/private-key.pem" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+rm -rf "$sdir"; trap - EXIT
+shred -u /path/to/downloaded.pem    # 다운로드한 원본 즉시 파기
+```
+
+`--dry-run=client -o yaml | kubectl apply -f -`를 쓰는 이유는 키 재발급 시에도
+멱등하기 위해서입니다(`create` 단독은 이미 있으면 `AlreadyExists`로 실패합니다).
+
+두 ID는 `_required_positive_env_int`가 `strip()` 후 파싱하므로 파일 끝 개행이
+섞여도 동작하지만, 다른 Secret과 표기를 맞추기 위해 개행 없이 넣습니다.
+
+private key는 환경 변수가 아니라 `/var/run/secrets/baseline-reader/private-key.pem`
+파일로만 전달합니다. 환경 변수는 하위 프로세스로 상속되고 crash dump·프로세스
+목록에 노출될 수 있어 PEM을 담기에 부적절합니다. 이 Secret은 API 컨테이너에만
+mount하며 DB bootstrap initContainer·UI·Runner에는 전달하지 않습니다.
+
+volume의 `defaultMode`는 8진수 `0440`입니다. Secret 파일 소유자가 `root:fsGroup`
+이라 `0400`으로 두면 `fsGroup: 10001`로 도는 API 프로세스가 읽지 못합니다.
+
+회전은 같은 명령을 다시 실행한 뒤 API Pod를 재기동합니다(startup에 1회만
+읽습니다). 키를 재발급했다면 GitHub App 쪽 이전 키도 폐기합니다.
+
+Secret이 없는 상태로 sync하면 새 Pod가 `CreateContainerConfigError`(env) 또는
+`FailedMount`(volume)로 멈춥니다. `replicas: 1`의 기본 RollingUpdate는 새 Pod가
+Ready가 될 때까지 기존 Pod를 종료하지 않으므로 서비스는 유지되고 롤아웃만
+정체됩니다.
+
 ## 배포 및 확인
 
 ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다. 이 단계 전에
@@ -386,11 +462,13 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
 - Experiment API를 포함하는 promotion에서는 API digest가 API container, API DB
   bootstrap, Runner OAuth bootstrap, PreSync migration Job의 두 container까지 다섯 image
   reference에 모두 같은 값으로 pin돼 있습니다.
-- API에는 `agent-orchestration-api` KSA, DB runtime `emptyDir`, `/tmp` `emptyDir`만
-  있고 OAuth PVC가 없습니다. API에는 `ORCH_API_TOKEN`, `ORCH_RUNNER_TOKEN`,
-  그리고 #525에서 추가한 `ORCH_GITHUB_TOKEN` 세 Secret만 전달되며 OAuth bootstrap
-  Secret은 전달되지 않습니다. `ORCH_GITHUB_TOKEN`은 API Pod에만 전달하고 UI·Runner
-  에는 전달하지 않습니다.
+- API에는 `agent-orchestration-api` KSA, DB runtime `emptyDir`, `/tmp` `emptyDir`,
+  그리고 #539에서 추가한 baseline-reader private key Secret volume만 있고 OAuth
+  PVC가 없습니다. API에는 `ORCH_API_TOKEN`, `ORCH_RUNNER_TOKEN`, #525의
+  `ORCH_GITHUB_TOKEN`, #539의 baseline-reader Secret 네 개만 전달되며 OAuth
+  bootstrap Secret은 전달되지 않습니다. 이 네 개는 모두 API Pod에만 전달하고
+  UI·Runner에는 전달하지 않습니다. baseline-reader Secret volume은 API 컨테이너
+  에만 mount되고 DB bootstrap initContainer에는 없습니다.
 - Runner에는 `agent-orchestration-runner` KSA와 1Gi `ReadWriteOnce` PVC만 있으며,
   DB URL·DB password·Cloud SQL secret reference가 없습니다. Runner에는
   `ORCH_RUNNER_TOKEN`만 전달되고 `ORCH_API_TOKEN`은 전달되지 않습니다.
