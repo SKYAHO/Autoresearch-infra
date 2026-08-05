@@ -29,9 +29,11 @@
   좁힌다(현재 `pod_selector {}`로 namespace 전체 선택 — 실측 후 실제 라벨
   키/값으로 교정).
 - 신규 `kubernetes_network_policy_v1.feast_apply_runner_egress`(`for_each`
-  dev/prod): 공용 4규칙 + K8s API는 두 environment 공통, prod만 Redis PSC
-  블록(discovery + data node 포트, `feast_apply.tf` 106~180행과 동일 구조)을
-  조건부로 추가(`each.key == "prod" ? [...] : []` 패턴, dynamic block).
+  dev/prod): DNS(x2)·GKE metadata·WI metadata·PGA·GitHub `0.0.0.0/0:443`
+  예외는 두 environment 공통, K8s API 규칙은 포함하지 않는다(`feast apply`가
+  호출하지 않음 — PoC 전용 규칙과 구분). prod만 Redis PSC 블록(discovery +
+  data node 포트, `feast_apply.tf` 160~183행과 동일 구조)을 조건부로 추가
+  (`each.key == "prod" ? [...] : []` 패턴, dynamic block).
 
 **완료 조건**: `terraform -chdir=terraform/admin/actions-runner-k8s fmt -check
 -recursive`, `validate` 통과. `plan` 결과에서 기존 `actions-runner-poc`
@@ -42,8 +44,11 @@
 
 `deploy/actions-runner-scale-set-feast-dev/`, `-feast-prod/`를
 `deploy/actions-runner-scale-set/`(기존 PoC용) 복제로 만든다. 각
-`values.yaml`에서 `runnerScaleSetName`, `githubConfigUrl`(동일 저장소 유지),
-`template.spec.serviceAccountName`(Task 2의 새 KSA)만 environment별로 바꾼다.
+`values.yaml`에서 `runnerScaleSetName`, `template.spec.serviceAccountName`
+(Task 2의 새 KSA)를 environment별로 바꾸고, **`githubConfigUrl`은 PoC와
+다르게 앱 저장소(`https://github.com/SKYAHO/Autoresearch`)를 가리킨다** —
+`feast-apply.yml`이 그 저장소에 있으므로 러너가 그 저장소 job을 받으려면
+그 저장소 스코프로 등록해야 한다.
 
 `terraform/admin/argocd-k8s/main.tf`에 `kubernetes_manifest.application_*`
 2개 추가(기존 `application_monitoring`/scale-set Application 패턴 그대로:
@@ -51,6 +56,15 @@
 selfHeal=false}`, retry 백오프, `syncOptions =
 ["ServerSideApply=true","CreateNamespace=false"]`). 컨트롤러 Application에
 대한 `depends_on`(sync-wave)도 기존 scale-set Application과 동일하게 건다.
+`variables.tf`에 두 Application용 `target_revision` 변수(기존
+`actions_runner_scale_set_target_revision`과 동일 패턴)를 추가한다.
+
+**선행 조건(수동, 런북에 추가)**: GitHub App 설치 범위를
+`docs/runbooks/2026-08-05-actions-runner-github-app-secret.md`에 따라
+`SKYAHO/Autoresearch`(앱 저장소)까지 확장해야 한다 — 같은 계정 소유라 기존
+Installation의 "Repository access"에 추가하기만 하면 되고, Installation
+ID·Secret 값은 그대로다. 이 단계 전에는 feast-dev/prod 스케일셋이 앱
+저장소의 job을 전혀 받지 못한다(리스너는 뜨지만 job이 배정되지 않음).
 
 **완료 조건**: `terraform -chdir=terraform/admin/argocd-k8s validate` 통과.
 CI apply(`scope: admin`) 실행 후 ArgoCD UI에서 두 Application이

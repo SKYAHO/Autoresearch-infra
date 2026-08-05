@@ -59,9 +59,22 @@ namespace/quota/limitrange 보일러플레이트가 3배가 된다). 대신:
 - ArgoCD Application 2개 추가: `deploy/actions-runner-scale-set-feast-dev/`,
   `-feast-prod/`(기존 `deploy/actions-runner-scale-set/` chart를 복제,
   `runnerScaleSetName`/`serviceAccountName`만 environment별로 다르게). ARC
-  컨트롤러는 cluster 전역 1개를 그대로 공유한다. GitHub App 자격 증명 Secret도
-  같은 저장소 대상이므로 기존 `actions-runner-github-app` Secret을 그대로
-  참조한다(App 재생성 불필요).
+  컨트롤러는 cluster 전역 1개를 그대로 공유한다.
+- **`githubConfigUrl`은 이 저장소가 아니라 앱 저장소를 가리킨다.**
+  `feast-apply.yml`은 `SKYAHO/Autoresearch`(앱 저장소)에 있으므로, 그 저장소가
+  이 러너 스케일셋에 job을 배정하려면 `githubConfigUrl:
+  https://github.com/SKYAHO/Autoresearch`로 등록해야 한다(PoC 스케일셋은
+  `.../Autoresearch-infra`를 가리키는 것과 다름 — 스케일셋마다 대상 저장소가
+  다를 수 있다는 점을 명확히 한다).
+- **GitHub App 설치 범위를 앱 저장소로 확장해야 한다(수동, 1회).** 현재 App은
+  `SKYAHO/Autoresearch-infra`에만 설치돼 있다(`docs/runbooks/2026-08-05-actions-runner-github-app-secret.md`
+  1단계 5번). 같은 GitHub 계정(`SKYAHO`) 소유 저장소이므로 새 App 설치나 새
+  Secret Manager 컨테이너 없이, 기존 설치(Installation)의 "Repository access"에
+  `Autoresearch` 저장소를 추가하기만 하면 된다(Installation ID는 그대로 —
+  Secret Manager/K8s Secret 값 갱신 불필요). 이 단계는 런북에 추가하고, 완료
+  전에는 feast-dev/prod 스케일셋이 앱 저장소의 job을 받지 못한다(선행 조건).
+  GitHub App 자격 증명 Secret 자체는 기존 `actions-runner-github-app` Secret을
+  그대로 참조한다(재생성 불필요).
 
 **NetworkPolicy는 스케일셋 라벨로 분리한다(신규 namespace 대신).** 같은
 namespace를 세 스케일셋(PoC/feast-dev/feast-prod)이 공유하므로, 각
@@ -69,9 +82,12 @@ NetworkPolicy의 `pod_selector.match_labels`를 `actions.github.com/scale-set-na
 (chart가 러너 Pod에 붙이는 라벨, ArgoCD 배포 후 `kubectl get pods --show-labels`로
 실측 확인)로 스코프해 서로 겹치지 않게 한다:
 
-- `feast-apply-dev` 스케일셋 egress = 기존 `actions_runner_egress`의 공용
-  4규칙(DNS, GKE metadata, WI metadata, PGA) + K8s API. Redis 규칙은 포함하지
-  않는다.
+- `feast-apply-dev` 스케일셋 egress = DNS(x2), GKE metadata, WI metadata,
+  PGA(GCS/BigQuery용 `restricted.googleapis.com`), GitHub Actions 서비스용
+  `0.0.0.0/0:443`(RFC1918 except, ARC 러너 등록·job polling에 필수 — PoC와
+  동일 예외). **K8s API 서버 규칙은 포함하지 않는다** — `feast apply`는
+  `kubectl`/K8s API를 호출하지 않으므로 PoC 전용 규칙(`kubernetes.default.svc`
+  검증용)을 최소 권한 원칙상 상속하지 않는다. Redis 규칙도 포함하지 않는다.
 - `feast-apply-prod` 스케일셋 egress = 위 + Redis Cluster PSC. `feast_apply.tf`의
   prod 전용 블록(discovery `var.redis_discovery_port` + data node
   `var.redis_node_port_start`~`redis_node_port_end`, `var.redis_psc_subnet_cidr`)과

@@ -645,3 +645,106 @@ resource "kubernetes_manifest" "application_actions_runner_scale_set" {
     kubernetes_manifest.application_actions_runner_controller,
   ]
 }
+
+# #541 5단계: feast apply 전용 러너 스케일셋 2개. PoC와 같은 컨트롤러를
+# 공유하되 별도 스케일셋으로 분리해(terraform/admin/actions-runner-k8s의
+# 스케일셋별 KSA/NetworkPolicy 스코프와 대응) blast radius를 가른다.
+# githubConfigUrl은 deploy/actions-runner-scale-set-feast-{dev,prod}/values.yaml에서
+# 앱 저장소(SKYAHO/Autoresearch)를 가리킨다 — feast-apply.yml이 거기 있다.
+resource "kubernetes_manifest" "application_actions_runner_scale_set_feast_dev" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "actions-runner-scale-set-feast-dev"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/actions-runner-scale-set-feast-dev"
+        targetRevision = var.actions_runner_scale_set_feast_dev_target_revision
+        helm = {
+          releaseName = "actions-runner-scale-set-feast-dev"
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.actions_runner_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
+        syncOptions = [
+          "ServerSideApply=true",
+          "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [
+    helm_release.argo_cd,
+    kubernetes_manifest.application_actions_runner_controller,
+  ]
+}
+
+resource "kubernetes_manifest" "application_actions_runner_scale_set_feast_prod" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "actions-runner-scale-set-feast-prod"
+      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
+    }
+    spec = {
+      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
+      source = {
+        repoURL        = var.infra_repo_url
+        path           = "deploy/actions-runner-scale-set-feast-prod"
+        targetRevision = var.actions_runner_scale_set_feast_prod_target_revision
+        helm = {
+          releaseName = "actions-runner-scale-set-feast-prod"
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = var.actions_runner_namespace
+      }
+      syncPolicy = {
+        automated = {
+          prune    = false
+          selfHeal = false
+        }
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "30s"
+            factor      = 2
+            maxDuration = "5m"
+          }
+        }
+        syncOptions = [
+          "ServerSideApply=true",
+          "CreateNamespace=false",
+        ]
+      }
+    }
+  }
+
+  depends_on = [
+    helm_release.argo_cd,
+    kubernetes_manifest.application_actions_runner_controller,
+  ]
+}

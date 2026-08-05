@@ -550,6 +550,37 @@ Environment 값을 쓴다. prod 좌표가 repo-level vars와 `prod` Environment 
 해당한다. 앱 워크플로우의 필수 변수 검사는 값이 **비어 있는 경우만** 잡고, 값이
 그럴듯하게 틀린 경우는 잡지 못한다.
 
+##### 셀프 호스티드 러너 이관 좌표 (#541)
+
+`feast apply`를 GHA hosted runner → GKE Job으로 간접 실행하던 경로(#346, 위
+"Job namespace"/"Job KSA" 행)를 대체할 셀프 호스티드 러너(ARC) 좌표를
+`actions-runner-k8s`(이 저장소)에 만들었다. **`feast_apply.tf`의 GKE Job 경로는
+지우지 않았다** — 롤백 여유를 위해 bake 기간 동안 유지하고, 실제 폐기는 별도
+이슈에서 다룬다.
+
+| 좌표 | `dev` | `prod` |
+| --- | --- | --- |
+| 러너 스케일셋 이름(`runs-on` 라벨) | `feast-apply-dev` | `feast-apply-prod` |
+| KSA(`actions-runner` namespace) | `feast-apply-dev-runner` | `feast-apply-prod-runner` |
+| WI로 가장하는 GSA | `github_actions_feast_apply_dev_service_account_email`(기존 #424 GSA 재사용) | `github_actions_feast_apply_prod_service_account_email`(기존 #424 GSA 재사용) |
+| NetworkPolicy egress | DNS·GKE/WI metadata·PGA·GitHub Actions 서비스만(K8s API 제외) | 좌측 + Redis Cluster PSC(discovery 6379, data node 11000-13047) |
+
+앱 저장소(`SKYAHO/Autoresearch`)의 `feast-apply.yml`이 이 좌표를 쓰려면 다음이
+**선행 조건**이며, 둘 다 이 저장소 범위 밖(앱 저장소 작업)이다:
+
+1. **environment 표현식 버그 수정.** 2026-07-30부터 매 main push마다
+   `environment: ... || github.ref_name`이 빈 `"main"` GitHub Environment로
+   풀려 `feast-apply.yml`이 실패하고 있다. 같은 표현식 패턴이 러너 라벨
+   선택에도 쓰이면 잘못된 러너로 잡힐 수 있으므로, 이 버그를 먼저 고치지
+   않고 `runs-on: feast-apply-${{ environment }}`를 얹으면 증상만 이전된다.
+2. **`feast-apply.yml`에 `runs-on: feast-apply-${{ inputs.environment }}`
+   추가.** 현재는 `ubuntu-latest`(hosted)에서 실행 후 GKE Job으로 위임하는
+   2단 구조다.
+
+GitHub App 설치 범위를 앱 저장소로 확장하는 절차(1회, 수동)는
+`docs/runbooks/2026-08-05-actions-runner-github-app-secret.md`의 5단계를
+따른다.
+
 #### 운영 제약과 한계
 
 - **dev/prod apply는 `main`의 정확한 `feast-apply.yml`로만 가능하다.** dev는
@@ -1806,6 +1837,7 @@ PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자�
   - **secret 노출은 step 단위로 좁힌다**: admin root 전용 allowlist(#305, 삭제 시 접근 상실이라 폴백 없음) TF_VAR는 admin root를 다루는 step의 `env:`에만 선언한다. dev root apply step(dev-apply SA)의 프로세스 환경에는 이 secret들이 없다(#449 리뷰에서 지적된 "노출면 확대" 우려를 단일 job 구조에서도 같은 원칙으로 유지).
   - **plan 경로**는 `apply-plans/<root>/<run_id>.tfplan` 단일 prefix로 통일됐다(dev root의 `<root>`는 `dev`). **회수 절차**(승인 전 상세 diff 확인용): `gcloud storage cp gs://autoresearch-503903-dev-tfstate/apply-plans/<root>/<run_id>.tfplan /tmp/p.tfplan` → 해당 root 디렉터리에서 **CI와 같은 버전**(1.13.5)의 terraform으로 `terraform show -no-color /tmp/p.tfplan`(버전이 다르면 plan 파일을 읽지 못한다). **왕복 검증(dispatch → plan 성공 확인 → `gh run cancel`) 후 정리**: 취소 run은 apply job의 cleanup이 돌지 않아 plan 객체가 남는다(dev 1건 + admin 7건, 총 8건). 다음 dispatch 시 `Cleanup stale plans`가 어차피 지우지만, plan 바이너리는 민감 속성값을 포함할 수 있으므로 노출 창을 좁히려면 검증 직후 수동 삭제한다 — 실행 주체는 CI SA가 아니라 **state 버킷 objectAdmin을 가진 운영자 계정**(로컬 `gcloud`)이다. concurrency group이 `apply` 하나뿐이라 이 prefix를 쓰는 동시 run은 없다(#448 불변식 ①이 단일 진입점에서 자동 충족).
   - **로컬 tfvars apply는 break-glass로만** 사용한다. `terraform import`가 필요한 변경은 CI가 수행하지 못하므로 로컬 break-glass로 선행한다.
+  - **runner는 항상 `ubuntu-latest`(GitHub hosted), 셀프 호스티드로 옮기지 않는다(#541 6단계, 의도적 결정)**: `feast apply`(#541 5단계)는 self-hosted ARC 러너로 옮기지만 이 workflow는 그대로 둔다. 셀프 호스티드 러너는 admin root가 apply하는 그 GKE 클러스터 안의 Pod라, 옮기면 "apply가 자기 자신이 도는 인프라를 바꾸는" 순환 의존과 ARC 장애가 apply 가용성까지 끌고 내려가는 위험이 생긴다. `apply` Environment의 6인 승인 게이트도 hosted runner 격리를 전제로 한다.
 
 필요 GitHub variables: `GCP_PROJECT_ID`, `WIF_POOL_ID`, `WIF_PROVIDER_ID`, `CI_SA_EMAIL`(plan/drift), `ADMIN_APPLY_SA_EMAIL`(#307), `DEV_APPLY_SA_EMAIL`(#341). Secrets(#307/#312, JSON 리스트): `ARGOCD_ADMIN_USER_EMAILS`, `AUTORESEARCH_VIEWER_USER_EMAILS`, `AIRFLOW_INSTALLER_USER_EMAILS`, `MONITORING_PORT_FORWARD_USER_EMAILS`, `MLFLOW_VIEWER_USER_EMAILS`(+optional `ARGOCD_READONLY_USER_EMAILS`). Environment: `apply`(#451) 하나로 required reviewers 6인 — 옛 `admin-apply`·`dev-apply` Environment는 사용하지 않지만 이력 보존을 위해 남겨 둔다.
 
