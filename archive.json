@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-05T12:04:29Z",
+  "generated_at": "2026-08-05T12:05:02Z",
   "reports": [
+    {
+      "number": 537,
+      "title": "fix: NetworkPolicy K8s API egress 음성 대조군 원복 (#535)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-05T12:04:11Z",
+      "summary_ko": [
+        "GitHub Actions 러너의 음성 대조군 실험을 위해 주석 처리했던 쿠버네티스 API 아웃바운드 네트워크 규칙을 원복했습니다.",
+        "cluster_services_cidr 및 cluster_master_cidr 대역으로의 TCP 443 포트 egress 허용 정책을 다시 활성화했습니다.",
+        "실험 결과 네트워크 정책 차단 시 API 접속 타임아웃이 발생함을 확인하여 가설 검증 후 정상 복구 조치를 진행합니다."
+      ],
+      "report_url": "pr/537/"
+    },
     {
       "number": 536,
       "title": "exp: NetworkPolicy K8s API egress 음성 대조군 (#535)",
