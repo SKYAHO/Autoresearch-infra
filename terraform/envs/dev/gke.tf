@@ -68,6 +68,30 @@ resource "google_service_account_iam_member" "agent_orchestration_api_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
+# #539 실험 브랜치 Job launcher. CronJob 한 tick이 Cloud SQL로 Experiment를 선점하고
+# Kubernetes Job을 만든다. GCP 권한은 API와 같은 Cloud SQL client와 같은 DB password
+# secret 하나뿐이고(secret_manager.tf), 결과 버킷·Codex OAuth secret·다른 Secret에는
+# 접근하지 않는다. Job 생성 권한은 GCP IAM이 아니라 admin root의 Kubernetes RBAC가
+# launcher KSA에만 부여한다.
+resource "google_service_account" "agent_orchestration_launcher" {
+  account_id   = local.agent_orchestration_launcher_sa_name
+  display_name = "Autoresearch dev Agent Orchestration experiment launcher workload identity SA"
+}
+
+resource "google_project_iam_member" "agent_orchestration_launcher_cloudsql" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.agent_orchestration_launcher.email}"
+}
+
+resource "google_service_account_iam_member" "agent_orchestration_launcher_wi" {
+  service_account_id = google_service_account.agent_orchestration_launcher.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.agent_orchestration_launcher_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
 resource "google_service_account" "agent_orchestration_runner" {
   account_id   = local.agent_orchestration_runner_sa_name
   display_name = "Autoresearch dev Agent Orchestration Codex Runner workload identity SA"
