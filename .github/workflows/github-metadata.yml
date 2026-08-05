@@ -1,0 +1,80 @@
+name: GitHub metadata and branch policy
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened, reopened]
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  issue-metadata:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const title = context.payload.issue.title;
+            const label = title.startsWith('[FEAT]') ? 'feature'
+              : title.startsWith('[BUG]') ? 'bug'
+              : title.startsWith('[EXP]') ? 'experiment' : 'chore';
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: context.issue.number, labels: [label] });
+            try {
+              await github.rest.issues.addAssignees({ ...context.repo, issue_number: context.issue.number, assignees: [context.actor] });
+            } catch (error) {
+              core.warning(`Issue author assignment failed: ${error.message}`);
+              await github.rest.issues.addAssignees({ ...context.repo, issue_number: context.issue.number, assignees: ['hyeongyu-data'] });
+            }
+
+  pr-metadata:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo, pull_number: pr.number, per_page: 100,
+            });
+            const names = files.map((file) => file.filename);
+            const labels = new Set();
+            if (names.every((name) => name.startsWith('docs/') || name.endsWith('.md'))) labels.add('documentation');
+            if (names.some((name) => name.startsWith('terraform/'))) labels.add('terraform'), labels.add('gcp');
+            if (names.some((name) => name.startsWith('.github/workflows/'))) labels.add('ci-cd');
+            if (labels.size === 0) labels.add('chore');
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: pr.number, labels: [...labels] });
+            try {
+              await github.rest.issues.addAssignees({ ...context.repo, issue_number: pr.number, assignees: [pr.user.login] });
+            } catch (error) {
+              core.warning(`PR author assignment failed: ${error.message}`);
+              await github.rest.issues.addAssignees({ ...context.repo, issue_number: pr.number, assignees: ['hyeongyu-data'] });
+            }
+
+  branch-name-policy:
+    if: github.event_name == 'pull_request'
+    name: branch-name-policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      BRANCH_NAME: ${{ github.head_ref }}
+    steps:
+      - name: Validate issue-linked English branch name
+        shell: bash
+        run: |
+          if [[ "$BRANCH_NAME" =~ ^(feat|fix|exp|docs|refactor|chore)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+            exit 0
+          fi
+          echo "Invalid branch name: $BRANCH_NAME" >&2
+          echo "Expected: <type>/<issue-number>-<english-lowercase-hyphen-slug>" >&2
+          exit 1

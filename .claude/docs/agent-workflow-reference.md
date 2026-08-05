@@ -41,7 +41,9 @@ Issue 자동 close → Project Done
 - 로컬 파일 읽기·수정은 진행해도 됩니다. GitHub에 반영하는 순간에만
   확인받습니다.
 - 이슈·PR 기본값: **Assignee는 생성자**(gh 인증 계정)로 지정합니다 —
-  `gh issue create`·`gh pr create`에 항상 `--assignee @me`를 붙입니다
+  `gh issue create`·`gh pr create`에 항상 `--assignee @me`를 붙입니다.
+  `github-metadata.yml`이 opened/reopened 이벤트에서도 보정하지만, 생성 시점의
+  메타데이터 누락을 만들지 않기 위해 CLI에서도 항상 지정합니다.
   (`@me` = 생성자, 현재 계정 `hyeongyu-data`). label은 성격에 맞춰 설정
   (Terraform/IaC: `terraform`+`gcp`, 문서: `documentation`, 자동화:
   `ci-cd`/`chore`, 보안·IAM: `security`/`iam`, 비용 영향: `cost`).
@@ -127,6 +129,7 @@ docs: GCP 운영 가이드 갱신
 - [ ] state, `.tfvars` 실값, service account key, secret이 포함되지 않았다
 - [ ] 커밋 메시지가 컨벤션을 따른다
 - [ ] Assignee를 생성자로 지정한다 (`gh pr create --assignee @me`)
+- [ ] 변경 성격에 맞는 label을 지정한다 (`gh pr create --label <label>`)
 
 **PR 본문** (`.github/PULL_REQUEST_TEMPLATE.md` 사용):
 
