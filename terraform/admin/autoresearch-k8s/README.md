@@ -115,7 +115,7 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
    nodeSelector/toleration 계약 위반(빈 목록 포함), 승인된 Artifact Registry 밖
    이미지, `automountServiceAccountToken: true`, `activeDeadlineSeconds`·
    `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. #539에서
-   branch-bootstrap Pod 형태 계약 6종을 추가했다 — initContainer는
+   branch-bootstrap Pod 형태 계약 7종을 추가했다 — initContainer는
    `github-token-minter` 하나, 컨테이너는 `branch-bootstrap` 하나, volume은 승인된
    Secret volume과 `medium: Memory` 1Mi token volume 두 개뿐이며, **GitHub App
    private key volume은 initContainer에만 `readOnly`로 mount할 수 있고 본
@@ -124,7 +124,13 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
    금지한다 — volume 계약만 두면 `secretKeyRef`로 키를 환경 변수에 바로 주입해
    앞의 다섯 규칙을 모두 통과할 수 있고, Pod Security `restricted`도 Secret 참조
    방식은 통제하지 않기 때문이다. 고정 템플릿은 양쪽 모두 리터럴 값만 쓰므로
-   잃는 기능이 없다. 이 규칙들이 강제하는 것은 "키는 initContainer까지, 본 컨테이너는 만료되는
+   잃는 기능이 없다. 일곱 번째 규칙은 Pod template의
+   `app.kubernetes.io/component=branch-bootstrap` label을 요구한다 — 아래 GitHub
+   egress 정책이 이 label로 대상을 고르므로, label이 없는 Job은 admission을
+   통과해도 `api.github.com`에 닿지 못해 deadline까지 매달렸다 timeout으로만
+   실패한다. 제출 시점에 명확한 사유로 거부하는 편이 낫고, launcher의 동시 실행
+   계수가 같은 label selector를 쓰므로 계수 누락도 함께 막는다.
+   이 규칙들이 강제하는 것은 "키는 initContainer까지, 본 컨테이너는 만료되는
    token만"이라는 자격 증명 경계이며, 그 경계를 만드는 launcher 코드는 다른
    저장소에 있어 이 저장소의 리뷰를 거치지 않으므로 서버 측에서 한 번 더 강제한다.
    이름 고정은 이 namespace를 사실상 branch-bootstrap 전용으로 만든다 — 다른 형태의
@@ -206,6 +212,22 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
 결과 업로드는 Private Google APIs VIP `199.36.153.8/30`의 TCP 443만 사용합니다.
 새 목적지가 필요하면 목적지 CIDR/selector, 포트, GSA IAM, 데이터 분류를 함께
 검토하는 별도 이슈가 필요합니다.
+
+#539에서 `app.kubernetes.io/component=branch-bootstrap` label을 가진 Pod에만
+공개 인터넷 TCP 443을 추가로 허용하는 두 번째 egress 정책
+(`experiment-jobs-branch-bootstrap-egress`)을 두었습니다. NetworkPolicy는 선택된
+Pod에 대해 각 정책의 허용 규칙을 **합집합**으로 적용하므로, 기본 경계 정책은 그대로
+남고 branch-bootstrap Pod만 목적지가 넓어집니다. 이 정책의 `except` 목록
+(RFC1918 3개, RFC6598 `100.64/10`, link-local `169.254/16`, loopback `127/8`)은
+이 규칙의 범위만 좁힐 뿐 기본 정책이 이미 허용한 metadata server 접근을 되돌리지
+않습니다.
+
+목적지를 `api.github.com`으로 한정하지 못하는 이유는 이 클러스터의 dataplane이
+Calico여서 GKE Dataplane V2의 `FQDNNetworkPolicy`를 쓸 수 없기 때문입니다. GitHub이
+게시하는 API 대역은 수시로 교체돼 CIDR로 고정하면 예고 없이 브랜치 생성이 깨집니다.
+같은 판단이 이미 API Pod(#525, `deploy/agent-orchestration/network-policy.yaml`)에
+적용돼 있고 `except` 목록도 같습니다. label이 없는 Pod는 이 정책의 대상이 아니어서
+GitHub에 도달하지 못하고 실패합니다(fail-closed).
 
 초기 dev 상한은 Job·Pod 각각 2개, 총 request/limit 2 vCPU/4 GiB입니다.
 `count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로, 실제 제출

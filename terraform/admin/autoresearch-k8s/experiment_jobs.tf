@@ -397,6 +397,16 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "(!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))) && object.spec.template.spec.containers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))"
           message    = "실험 Job은 환경 변수로 Secret·ConfigMap 값을 주입할 수 없습니다(envFrom과 valueFrom 금지). 시크릿은 승인된 initContainer volume 경로만 사용합니다."
         },
+        # Pod template label 고정. 이 규칙이 막는 것은 침해가 아니라 **불일치**다 —
+        # GitHub egress를 여는 NetworkPolicy가 이 label로 대상을 고르므로, label이
+        # 없는 Job은 admission을 통과해도 api.github.com에 닿지 못해 deadline까지
+        # 매달렸다가 timeout으로만 실패한다. 여기서 거부하면 같은 실수가 제출 시점에
+        # 명확한 사유로 드러난다. launcher의 동시 실행 계수도 같은 label selector를
+        # 쓰므로, label 없는 Job이 자기 계수에서 빠지는 경로도 함께 닫힌다.
+        {
+          expression = "has(object.spec.template.metadata) && has(object.spec.template.metadata.labels) && 'app.kubernetes.io/component' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['app.kubernetes.io/component'] == '${local.experiment_branch_bootstrap_component_label}'"
+          message    = "실험 Job의 Pod template은 app.kubernetes.io/component=${local.experiment_branch_bootstrap_component_label} label을 가져야 합니다."
+        },
         # 본 컨테이너는 token을 읽기만 한다. 쓰기 가능하게 마운트되면 컨테이너가
         # 자기 token 파일을 덮어써 initContainer가 만든 자격 증명 경로를 우회할 수
         # 있고, 사후 조사에서 어떤 token이 쓰였는지도 확정할 수 없게 된다.
@@ -535,6 +545,65 @@ resource "kubernetes_network_policy_v1" "experiment_jobs_egress" {
       to {
         ip_block {
           cidr = var.private_googleapis_cidr
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "443"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.experiment_jobs]
+}
+
+# #539 branch-bootstrap Pod만 api.github.com에 도달해야 한다. 위 정책은 namespace의
+# 모든 Pod에 적용되는 기본 경계이고, 이 정책은 그 위에 대상을 좁힌 추가 허용이다 —
+# NetworkPolicy는 선택된 Pod에 대해 각 정책의 허용 규칙을 합집합으로 적용하므로,
+# 두 정책이 함께 있으면 branch-bootstrap Pod는 "기본 경계 + 공개 443"을 갖고 다른
+# Pod는 기본 경계만 갖는다. 이 정책의 `except` 목록은 이 규칙의 대상 범위만 좁힐 뿐
+# 위 정책이 이미 허용한 metadata server(169.254.x)를 되돌리지 않는다.
+#
+# 이 클러스터의 dataplane은 Calico라 GKE Dataplane V2의 `FQDNNetworkPolicy`를 쓸 수
+# 없어 `api.github.com`만 지정하는 방법이 없다. GitHub이 게시하는 API 대역은 수시로
+# 교체돼 고정하면 예고 없이 브랜치 생성이 깨지므로, 공개 인터넷 443을 열되 사설·
+# 링크로컬 대역을 제외하는 방식을 쓴다. 같은 판단이 이미 API Pod(#525)에 적용돼 있다.
+#
+# 이 정책이 넓히는 범위: branch-bootstrap Pod는 임의 공개 HTTPS 목적지에 도달할 수
+# 있다. 그 Pod가 가진 자격 증명은 대상 저장소 Contents write 하나이고 수명은 최대
+# activeDeadlineSeconds(현 계약 300초)이며, 사설 대역 목적지(Cloud SQL, Redis,
+# in-cluster Service, private Google APIs VIP)는 except로 계속 차단된다.
+#
+# 예외적으로 이 cluster의 GKE DNS 엔드포인트는 공개 주소라(gke.tf의
+# allow_external_traffic=true) 이 규칙의 대상에 들어온다. 실제 도달에는
+# container.clusters.connect IAM이 필요하고 이 Pod의 GSA(-exp-job)는 결과 버킷
+# objectCreator와 자기 Workload Identity 외에 아무 권한이 없어 접근할 수 없다.
+# 공개 IP 엔드포인트 쪽은 master authorized networks가 비어 있어 별도로 막힌다.
+# 같은 판단이 API Pod 정책(#525)에도 기록돼 있다.
+resource "kubernetes_network_policy_v1" "experiment_jobs_branch_bootstrap_egress" {
+  metadata {
+    name      = "experiment-jobs-branch-bootstrap-egress"
+    namespace = kubernetes_namespace_v1.experiment_jobs.metadata[0].name
+  }
+
+  spec {
+    # 이 label은 애플리케이션 저장소 `launcher/jobs.py`가 Job과 Pod template 양쪽에
+    # 붙인다. label이 없는 Pod는 이 정책의 대상이 아니라 GitHub에 도달하지 못하고
+    # 실패한다(fail-closed).
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/component" = local.experiment_branch_bootstrap_component_label
+      }
+    }
+
+    policy_types = ["Egress"]
+
+    egress {
+      to {
+        ip_block {
+          cidr   = "0.0.0.0/0"
+          except = local.public_egress_private_cidr_exceptions
         }
       }
 

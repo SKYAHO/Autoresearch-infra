@@ -48,6 +48,24 @@ locals {
   experiment_branch_writer_key_volume        = "github-app-private-key"
   experiment_branch_token_volume             = "github-token"
 
+  # 같은 파일의 `app.kubernetes.io/component` label 값이다. NetworkPolicy가 이
+  # label로 GitHub egress 대상 Pod를 고른다. 컨테이너 이름과 문자열이 같지만 의미가
+  # 다르므로 별도 local로 둔다.
+  experiment_branch_bootstrap_component_label = "branch-bootstrap"
+
+  # 공개 인터넷 443을 열되 사설·링크로컬·loopback 대역을 제외한다. RFC1918(10/8,
+  # 172.16/12, 192.168/16), RFC6598 CGNAT(100.64/10), link-local(169.254/16),
+  # loopback(127/8) 기준이라 dev CIDR 변수가 바뀌어도 함께 고칠 필요가 없다.
+  # `deploy/agent-orchestration/network-policy.yaml`의 API egress(#525)와 같은 목록이다.
+  public_egress_private_cidr_exceptions = [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "100.64.0.0/10",
+    "169.254.0.0/16",
+    "127.0.0.0/8",
+  ]
+
   # 기본 허용 prefix는 이 프로젝트의 Artifact Registry Docker 저장소다
   # (예: asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/).
   experiment_job_allowed_image_prefixes = coalesce(

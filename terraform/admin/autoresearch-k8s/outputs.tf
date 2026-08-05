@@ -78,8 +78,10 @@ output "experiment_job_contract" {
     launcher_job_creation_enabled = var.enable_experiment_job_creation
     ingress_network_policy        = kubernetes_network_policy_v1.experiment_jobs_ingress.metadata[0].name
     egress_network_policy         = kubernetes_network_policy_v1.experiment_jobs_egress.metadata[0].name
-    resource_quota                = kubernetes_resource_quota_v1.experiment_jobs.metadata[0].name
-    limit_range                   = kubernetes_limit_range_v1.experiment_jobs.metadata[0].name
+    # #539 branch-bootstrap Pod에만 추가로 적용되는 공개 443 egress.
+    branch_bootstrap_egress_network_policy = kubernetes_network_policy_v1.experiment_jobs_branch_bootstrap_egress.metadata[0].name
+    resource_quota                         = kubernetes_resource_quota_v1.experiment_jobs.metadata[0].name
+    limit_range                            = kubernetes_limit_range_v1.experiment_jobs.metadata[0].name
   }
 }
 
