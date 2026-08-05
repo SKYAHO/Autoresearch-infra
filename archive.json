@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-05T08:50:49Z",
+  "generated_at": "2026-08-05T09:23:37Z",
   "reports": [
+    {
+      "number": 534,
+      "title": "feat: 셀프 호스티드 러너(ARC) PoC 인프라 구성 (#533)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-05T09:23:23Z",
+      "summary_ko": [
+        "GitHub Actions 셀프 호스티드 러너(ARC) 구성을 위한 GCP GSA, Secret Manager 및 K8s 격리 경계를 신설하였습니다.",
+        "ARC 컨트롤러 및 스케일셋용 OCI 차트를 감싸는 umbrella chart 2종을 작성하고 ArgoCD Application 및 CI apply 파이프라인에 통합하였습니다.",
+        "VPC 내부망(Kubernetes API 서버) 도달성을 비파괴적으로 검증하는 PoC 워크플로우와 GitHub App 자격 증명 관리 런북을 마련하였습니다."
+      ],
+      "report_url": "pr/534/"
+    },
     {
       "number": 529,
       "title": "fix: raw-data staging cleanup IAM 조건을 publish_staging_raw로 재스코핑",
