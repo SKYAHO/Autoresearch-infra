@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: bootstrap-db
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:76092067b2dbe638e2e351cb11275e0f1f2c7e3dfd2d6b4b92c2db6a4a0bf74e
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:0471c6ea3f7e73c0bbe5e077088432a701ed26eb5f32b4f72dc7425c95ddb197
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -63,7 +63,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: api
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:76092067b2dbe638e2e351cb11275e0f1f2c7e3dfd2d6b4b92c2db6a4a0bf74e
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:0471c6ea3f7e73c0bbe5e077088432a701ed26eb5f32b4f72dc7425c95ddb197
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -95,10 +95,33 @@ spec:
                   # 시크릿과 달리 GSA accessor를 부여하지 않는다.
                   name: agent-orchestration-api-token
                   key: ORCH_API_TOKEN
+            - name: ORCH_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  # 운영자가 runbook 절차로 주입하는 issues:write 전용 fine-grained
+                  # PAT다. API·Runner 요청 토큰과 분리하며 GSA accessor를 부여하지
+                  # 않는다. 이 Secret이 없으면 Pod가 startup에서 실패한다.
+                  name: agent-orchestration-github-token
+                  key: ORCH_GITHUB_TOKEN
+            # gh issue create가 연 이슈의 URL을 이 값과 대조해 다른 저장소에 열린
+            # 이슈를 거부한다. 정확히 owner/repo 형식이어야 한다.
+            - name: ORCH_GITHUB_REPOSITORY
+              value: SKYAHO/Autoresearch
+            # 발행되는 이슈 본문에 문자열로 박히는 좌표다. 기간은 발행 시점에 서버가
+            # 계산해 붙이므로 날짜를 넣지 않는다.
+            - name: ORCH_EXPERIMENT_DATASET_SOURCE
+              value: feast://feast_offline_store/training_entity
+            - name: ORCH_EXPERIMENT_TRAINING_CONFIG_REF
+              value: src/pipeline/config.yaml@main
           volumeMounts:
             - name: db-runtime
               mountPath: /runtime
               readOnly: true
+            # gh CLI가 호출마다 HOME·GH_CONFIG_DIR·TMPDIR용과 issue body 파일용
+            # 임시 디렉터리를 만든다. readOnlyRootFilesystem이라 writable /tmp가
+            # 없으면 발행이 실패한다.
+            - name: tmp
+              mountPath: /tmp
           startupProbe:
             httpGet:
               path: /healthcheck
@@ -134,3 +157,6 @@ spec:
         - name: db-runtime
           emptyDir:
             medium: Memory
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
