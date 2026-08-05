@@ -43,6 +43,26 @@
   비상 차단 스위치다. 이후 배포 manifest는 기존 PR·CI 검토 후 main merge로 반영하며,
   rollback은 이전 manifest commit을 main에 반영해 ArgoCD sync 상태를 확인한다.
 
+## 2026-08-05: Agent Orchestration API 실험 Job 생성 권한 활성화 (#523)
+
+- #484/#485/#497로 이미 구축된 `autoresearch-experiments` 실행 경계의 go-live
+  게이트를 열었다: `enable_experiment_job_creation` 기본값을 `false`에서
+  `true`로 전환했다.
+- 선행 조건을 모두 충족하고 나서 전환했다 — batch-od node pool 용량·우선순위
+  계획 수립(README), NetworkPolicy K8s API egress의 ArgoCD sync SHA 수준
+  재확인, Pod Security/quota/NetworkPolicy negative dry-run 4종 라이브
+  재실행(이슈 #523 댓글에 결과 기록). 라이브 재실행 중 ValidatingAdmissionPolicy가
+  동시 위반 시 규칙 평가 순서에 따라 하나의 위반 메시지만 반환함을 확인해,
+  의도한 규칙을 분리 확인하려면 승인된 Artifact Registry 접두사 image로 다시
+  실행해야 했다.
+- 같은 라운드에서 문서를 보강했다: Pod 단위 LimitRange의 initContainer 계산
+  (일반 initContainer는 max() 비교, native sidecar는 합산), `status.startTime`이
+  Pod 생성 성공과 무관하게 설정됨, batch-od 유휴 전제가 이 root의 어떤 서버 측
+  제어로도 강제되지 않고 `Autoresearch-airflow` 쪽 변경은 이 저장소 리뷰를
+  우회할 수 있다는 점을 명시했다.
+- 활성화 이후 `kubectl auth can-i` 검증표 실행·기록과 앱 저장소 교차 확인은
+  이슈 #523에 남은 별도 후속 작업이다.
+
 ## 2026-08-05: raw_data staging cleanup IAM 조건 재스코핑 + 계약 lint (#522)
 
 - #514/PR #517 후속. 앱 저장소(`Autoresearch`) 자신의 PR #517(이 저장소 PR
@@ -72,6 +92,8 @@
   문자열의 의미 계약도 검증하지 않으므로 회귀가 plan diff의 문자열 한 글자
   차이로만 드러나는 문제(PR #521 리뷰 지적)를 막는다.
 - 발견된 고아 staging 객체 1개는 라이브에서 직접 삭제해 정리했다.
+
+
 
 ## 2026-08-04: raw_data staging cleanup IAM 조건 — GCS 객체 CEL 함수 제약 (#514, PR #517)
 

@@ -33,8 +33,9 @@ terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvar
 | 결과 버킷 | `<project>-autoresearch-dev-experiment-results` |
 | 결과 권한 | Job GSA `roles/storage.objectCreator`, 상태 API GSA `roles/storage.objectViewer` |
 
-API KSA의 Job 생성 권한은 `enable_experiment_job_creation=false`가 기본이다. 고정
-템플릿, 허용 image digest, admission 검증이 적용되기 전에는 이 값을 변경하지 않는다.
+API KSA의 Job 생성 권한은 고정 템플릿, 허용 image digest, admission 검증, batch-od
+용량 계획, NetworkPolicy sync 재확인, negative dry-run 4종 재실행까지 선행 조건이
+모두 충족돼 `enable_experiment_job_creation=true`로 전환됐다(#523, 2026-08-05).
 `autoresearch-experiment-job-contract` ValidatingAdmissionPolicy는 create/modify 요청에서
 Job KSA, sha256 digest image, `batch-od` nodeSelector/toleration을 서버 측으로 강제한다.
 

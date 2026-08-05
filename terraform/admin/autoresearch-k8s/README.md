@@ -91,10 +91,11 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
 
 ### Job 생성 권한 활성화 조건
 
-`enable_experiment_job_creation` 기본값은 `false`입니다. 이 상태에서 API KSA는 Job,
-Pod, Pod 로그를 조회만 할 수 있고 Job을 생성·삭제·수정할 수 없습니다. 아래 조건을
-모두 충족하고 별도 보안 검토·승인을 받은 경우에만 local `terraform.tfvars`에서
-`true`로 변경합니다.
+`enable_experiment_job_creation` 기본값은 아래 조건을 모두 충족해 `true`로
+전환했다(#523, 2026-08-05 — NetworkPolicy sync 재확인·negative dry-run 4종 재실행
+결과는 이슈 #523 댓글에 기록). `false`였던 동안 API KSA는 Job, Pod, Pod 로그를
+조회만 할 수 있고 Job을 생성·삭제·수정할 수 없었다. 권한을 다시 잠그는 절차는 아래
+문단("권한을 활성화한 뒤 문제가 발견되면...")을 따른다.
 
 1. API가 사용자 입력을 Job manifest로 그대로 전달하지 않고 고정 템플릿만 사용한다.
 2. 이미지가 mutable tag가 아닌 허용 목록의 digest인지 검증한다.
