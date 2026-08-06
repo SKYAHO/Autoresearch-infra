@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-06T07:36:46Z",
+  "generated_at": "2026-08-06T07:45:18Z",
   "reports": [
+    {
+      "number": 560,
+      "title": "docs: ARC 리스너/컨트롤러 라벨 drift 점검 절차를 런북에 추가 (#559)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-06T07:44:57Z",
+      "summary_ko": [
+        "Actions Runner Controller(ARC) 네트워크 정책의 라벨 불일치 현상을 점검하는 절차를 운영 런북 문서에 추가하였습니다.",
+        "차트 업그레이드로 라벨이 바뀌어 리스너가 API 서버 통신에 실패하고 재시작을 반복하는 문제를 방지하기 위해 작성되었습니다.",
+        "인프라 적용 후 리스너 및 컨트롤러 파드의 정상 작동 여부와 재시작 횟수를 확인하는 kubectl 검증 명령을 안내합니다."
+      ],
+      "report_url": "pr/560/"
+    },
     {
       "number": 556,
       "title": "docs: 인프라 문서 최신화 감사 반영",
