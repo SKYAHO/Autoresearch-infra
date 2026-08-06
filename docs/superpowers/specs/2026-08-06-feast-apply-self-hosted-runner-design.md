@@ -101,16 +101,29 @@ NetworkPolicy의 `pod_selector.match_labels`를 `actions.github.com/scale-set-na
 
 > **정정(#557, 2026-08-06)**: 위 88~90번째 줄의 "K8s API 서버 규칙은
 > feast-apply 러너에 불필요하다"는 ephemeral runner Pod(= `feast apply`
-> 실행 주체)에는 맞지만, 리스너(AutoscalingListener) Pod에는 틀렸다 —
-> 리스너는 스케일셋 종류와 무관하게 `EphemeralRunnerSet`을 patch하기
-> 위해 매 폴링 사이클마다 apiserver 접근이 필수이고, 리스너 Pod와
-> ephemeral runner Pod는 동일한 `scale-set-name` 라벨을 공유한다. 그
+> 실행 주체)에는 맞지만, 리스너(AutoscalingListener) Pod와 ARC 컨트롤러
+> 매니저 Pod에는 틀렸다 — 리스너는 스케일셋 종류와 무관하게
+> `EphemeralRunnerSet`을 patch하기 위해 매 폴링 사이클마다, 컨트롤러
+> 매니저는 CRD watch·리스너/러너 Pod 생성을 위해 상시 apiserver 접근이
+> 필수다. 리스너 Pod와 ephemeral runner Pod는 동일한 `scale-set-name`
+> 라벨을 공유하므로 그 라벨로만 scoping하면 리스너를 배제하게 된다. 그
 > 결과 `feast-apply-dev`/`feast-apply-prod` 리스너가 apiserver에
-> 도달하지 못해 crash-loop했다(라이브 확인). #557에서 K8s API egress
-> 정책의 selector를 `scale-set-name`이 아니라
-> `app.kubernetes.io/component=runner-scale-set-listener`(리스너 Pod
-> 전용, ephemeral runner Pod에는 없음)로 바꿔 세 스케일셋의 리스너
-> 모두에 균일하게 적용했다.
+> 도달하지 못해 crash-loop했다(라이브 확인). 컨트롤러 매니저 Pod는
+> `scale-set-name`도 `component=runner-scale-set-listener`도 달지
+> 않아 애초에 어떤 K8s API 규칙에도 걸린 적이 없었고, 지금 정상 동작
+> 하는 것은 재시작 없이 유지되는 기존 apiserver 커넥션(conntrack) 덕분
+> 으로 추정된다 — 재시작 시 동일 crash-loop가 예상된다(PR #558 리뷰).
+>
+> #557에서는 K8s API egress를 **두 개의 별도 supplemental 정책**으로
+> 나눴다: (1) `actions_runner_control_plane_k8s_api_egress` —
+> `app.kubernetes.io/component` In [`runner-scale-set-listener`,
+> `controller-manager`]로 스코프해 리스너 3개 스케일셋 전부와 컨트롤러
+> 매니저에 적용, (2) `actions_runner_poc_k8s_api_egress` — 기존
+> `scale-set-name=actions-runner-poc` 스코프를 그대로 유지해 96번째
+> 줄이 서술하는 PoC ephemeral runner Pod의 K8s API 검증
+> (`actions-runner-poc.yml`)을 그대로 보존한다. ephemeral runner Pod는
+> 두 정책 어느 쪽에도 걸리지 않으므로(PoC 제외) feast-apply 스케일셋은
+> 여전히 계속 차단된다.
 
 **앱 저장소 좌표(이 저장소 범위 밖, 문서로만 명시)**: `feast-apply.yml`은
 `runs-on: [self-hosted, feast-apply-${environment}]`로 바꾸고, Job 매니페스트
