@@ -563,7 +563,17 @@ Environment 값을 쓴다. prod 좌표가 repo-level vars와 `prod` Environment 
 | 러너 스케일셋 이름(`runs-on` 라벨) | `feast-apply-dev` | `feast-apply-prod` |
 | KSA(`actions-runner` namespace) | `feast-apply-dev-runner` | `feast-apply-prod-runner` |
 | WI로 가장하는 GSA | `github_actions_feast_apply_dev_service_account_email`(기존 #424 GSA 재사용) | `github_actions_feast_apply_prod_service_account_email`(기존 #424 GSA 재사용) |
-| NetworkPolicy egress | DNS·GKE/WI metadata·PGA·GitHub Actions 서비스만(K8s API 제외) | 좌측 + Redis Cluster PSC(discovery 6379, data node 11000-13047) |
+| NetworkPolicy egress | DNS·GKE/WI metadata·PGA·GitHub Actions 서비스 + (리스너 Pod만) K8s API — ephemeral runner Pod(실제 `feast apply` 실행)는 K8s API 제외 | 좌측 + Redis Cluster PSC(discovery 6379, data node 11000-13047) |
+
+**정정(#557/#558, 2026-08-06)**: 최초 설계는 K8s API egress를 러너 스케일셋
+전체에서 뺐지만, 리스너(AutoscalingListener) Pod는 스케일셋 종류와 무관하게
+`EphemeralRunnerSet`을 patch하기 위해 상시 apiserver 접근이 필요하다. 이를
+빠뜨려 feast-apply-dev/prod 리스너가 crash-loop한 뒤(라이브 확인), K8s API
+egress를 `app.kubernetes.io/component`(`runner-scale-set-listener`/
+`controller-manager`) 기준 별도 supplemental 정책으로 분리했다. ephemeral
+runner Pod(=`feast apply`가 실행되는 곳)에는 여전히 K8s API egress를 주지
+않는다(최소 권한 그대로 유지) — `terraform/admin/actions-runner-k8s/main.tf`의
+`actions_runner_control_plane_k8s_api_egress`가 근거.
 
 앱 저장소(`SKYAHO/Autoresearch`)의 `feast-apply.yml`이 이 좌표를 쓰려면 다음이
 **선행 조건**이며, 둘 다 이 저장소 범위 밖(앱 저장소 작업)이다:

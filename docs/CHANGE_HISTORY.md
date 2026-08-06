@@ -3,6 +3,33 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-06: feast apply 셀프 호스티드 러너 이관과 후속 정정 (#541)
+
+- Terraform apply(운영 배포)는 hosted runner로 유지하고 `feast apply`만 ARC
+  셀프 호스티드 러너로 이관하는 결정을 구현했다(#533/#534 PoC 위, PR #545).
+  `actions-runner-k8s`에 feast-apply-dev/prod KSA 2개 + 스케일셋 라벨 스코프
+  NetworkPolicy를 추가하고(prod만 Redis Cluster PSC discovery 6379·data node
+  11000-13047 egress 추가), `argocd-k8s`에 ArgoCD Application 2개 + Helm
+  umbrella chart 2개를 얹었다. 기존 GKE Job 경로(`feast_apply.tf`, #346)는
+  롤백 여유를 위해 지우지 않고 유지한다.
+- WIF provider가 실제로는 생성된 적이 없어(`github-feast-dev`/
+  `github-feast-prod`가 `--show-deleted`에도 안 잡힘) `feast-apply.yml`이
+  `invalid_target`으로 실패하던 것을 `terraform/bootstrap`에 provider 정의를
+  추가해(PR #549) 바로잡았다. bootstrap root는 `apply.yml`의 CI 적용 대상(dev
+  root 1개·admin root 7개)이 아니라서, 발급 provider 없이 그걸 요구하는 IAM
+  바인딩만 존재하는 반쪽 상태로 남아 있었다.
+- 리스너(AutoscalingListener) Pod의 K8s API egress 규칙을 스케일셋
+  라벨(`scale-set-name`)로 스코프했더니 feast-apply-dev/prod 리스너가
+  apiserver에 도달하지 못해 crash-loop했다(#557, 라이브 확인). 리스너 Pod와
+  ephemeral runner(실제 job 실행) Pod가 같은 `scale-set-name` 라벨을 공유해,
+  "feast apply는 kubectl을 안 쓴다"는 근거로 좁힌 규칙이 리스너까지 함께
+  막아버렸다. `app.kubernetes.io/component` 라벨(`runner-scale-set-listener`/
+  `controller-manager`) 기준 별도 supplemental 정책으로 재설계해(#558)
+  컨트롤플레인(리스너+컨트롤러 매니저)에는 K8s API egress를, ephemeral runner
+  Pod에는 계속 차단을 유지한다. ARC 컨트롤러 매니저 Pod는 두 라벨 어디에도
+  안 걸려 지금까지 별 탈 없이 동작한 것은 재시작 없이 유지된 conntrack
+  덕분으로 추정된다 — 재시작 시 같은 crash-loop 위험이 남아 있다.
+
 ## 2026-08-06: 실험 브랜치 launcher·executor 인프라 (#539, #551)
 
 - 실험 Job 생성 주체를 API KSA에서 전용 launcher KSA로 옮겼다. API는 사용자 입력을
