@@ -131,6 +131,64 @@ kubectl -n actions-runner delete pod \
 보낸 job을 전혀 받지 못한다(등록된 저장소가 아니라서 GitHub이 job을 배정하지
 않음 — 실패가 아니라 무한 대기로 관측된다).
 
+## 6. 리스너/컨트롤러/PoC 라벨 drift 점검 (#559)
+
+`terraform/admin/actions-runner-k8s`의 K8s API egress `NetworkPolicy` 2개
+(#557)는 selector 값의 출처와 drift 트리거가 서로 다르다:
+
+- `actions_runner_control_plane_k8s_api_egress`
+  (`app.kubernetes.io/component` In [`runner-scale-set-listener`,
+  `controller-manager`]) — 이 라벨은 **gha-rs chart/컨트롤러**가 Pod 생성 시
+  주입한다. drift 트리거는 gha-rs 컨트롤러/chart 업그레이드다.
+- `actions_runner_poc_k8s_api_egress`
+  (`actions.github.com/scale-set-name=actions-runner-poc`, `main.tf`의
+  하드코딩된 리터럴) — 이 라벨 값은 **이 저장소가 직접 관리하는**
+  `deploy/actions-runner-scale-set/values.yaml`의 `runnerScaleSetName`에서
+  온다. drift 트리거는 gha-rs 업그레이드가 아니라, 그 값을 바꾸면서
+  `main.tf`의 리터럴을 함께 갱신하지 않는 실수다(`locals.tf`가 feast
+  스케일셋에 대해 "`pod_selector`가 참조하는 `scale_set_name`은
+  `values.yaml`의 `runnerScaleSetName`과 반드시 같아야 한다"는 동일 계약을
+  명시).
+
+### 6.1 컨트롤플레인 정책(리스너+컨트롤러) 점검
+
+`actions-runner-k8s` 변경 apply 후, 또는 gha-rs 컨트롤러/chart 버전을 올린
+직후 확인한다:
+
+```bash
+kubectl -n actions-runner get pods -l app.kubernetes.io/component=runner-scale-set-listener
+# 스케일셋 개수만큼 나오는지 확인 — 개수는 리터럴로 외우지 않는다. 정본은
+# locals.tf의 actions_runner_scale_set_count(= 1 +
+# length(feast_apply_runner_identities), 스케일셋 추가 시 자동 반영)다.
+
+kubectl -n actions-runner get pods -l app.kubernetes.io/component=controller-manager
+# 컨트롤러 매니저 1개 확인
+```
+
+두 명령 모두 `STATUS`(`Running`, `CrashLoopBackOff` 아님)·`READY`·
+`RESTARTS`를 함께 본다. **업그레이드 직후 `RESTARTS 0`은 약한 신호다** —
+#557 증상(리스너의 `EphemeralRunnerSet` patch 타임아웃 → crash-loop)은
+폴링 사이클을 몇 번 돌아야 드러나므로, 막 뜬 Pod는 잠시 `RESTARTS 0 /
+Running`으로 보인다. 5~10분 뒤 한 번 더 확인한다. 재시작 없이 떠 있는 기존
+Pod는 이미 맺은 apiserver 커넥션이 conntrack으로 유지돼 정책이 깨져도
+한동안 정상처럼 보일 수 있다(`main.tf`가 적어둔 컨트롤러 매니저 conntrack
+마스킹 사례와 동일한 함정) — 라벨을 바꾼 직후라면 대상 Pod를 재시작시켜
+확인하는 편이 확실하다.
+
+### 6.2 PoC 정책 점검
+
+이 정책이 겨냥하는 PoC ephemeral runner Pod는 **job이 실행되는 동안만
+존재**해서 위 `kubectl get pods` 방식으로는 애초에 잡히지 않는다. 대신:
+
+1. `deploy/actions-runner-scale-set/values.yaml`의 `runnerScaleSetName`과
+   `main.tf`의 `actions_runner_poc_k8s_api_egress` 리터럴
+   (`"actions-runner-poc"`)이 같은 문자열인지 확인한다.
+2. `.github/workflows/actions-runner-poc.yml`(K8s API healthz 검증)을 1회
+   수동 실행해 `curl https://kubernetes.default.svc/healthz`가 성공하는지
+   확인한다 — 라벨이 어긋나면 이 워크플로우가 타임아웃으로 실패한다.
+
+둘 중 하나라도 어긋나면 두 파일의 문자열을 동기화한다.
+
 ## 범위 밖
 
 - App 권한 확장(웹훅, 조직 전체 설치 등)은 이 PoC 범위가 아니다(저장소 단위
