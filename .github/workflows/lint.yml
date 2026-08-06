@@ -27,7 +27,10 @@ jobs:
         run: ruby scripts/test-agent-orchestration-timeout-contract.rb
 
       - name: Check experiment launcher manifest contract
-        run: ruby scripts/test-experiment-launcher-manifest-contract.rb
+        run: ruby scripts/check-experiment-launcher-manifest-contract.rb
+
+      - name: Run experiment launcher manifest contract self-test
+        run: ruby scripts/test-check-experiment-launcher-manifest-contract.rb
 
       - name: Check oauth2-proxy email allowlist configuration
         run: scripts/check-oauth-email-allowlist.sh
