@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-06T02:07:52Z",
+  "generated_at": "2026-08-06T02:27:12Z",
   "reports": [
+    {
+      "number": 549,
+      "title": "fix: Feast apply WIF provider 조건을 환경별 workflow_ref로 분리",
+      "author": "hyochangsung",
+      "merged_at": "2026-08-06T02:26:56Z",
+      "summary_ko": [
+        "Feast apply용 GCP Workload Identity Provider의 조건을 단일 workflow_ref에서 dev/prod 환경별 목록으로 분리하였습니다.",
+        "dev 브랜치 push 및 main에서의 dispatch 실행 시 dev WIF 토큰 발급이 거부되던 조건 결함을 수정하였습니다.",
+        "bootstrap 루트가 CI 자동 apply 대상이 아님을 문서화하고 담당자의 로컬 apply 필요성을 명시하였습니다."
+      ],
+      "report_url": "pr/549/"
+    },
     {
       "number": 543,
       "title": "docs: 초기 spec·plan 원문 복구",
