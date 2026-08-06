@@ -14,11 +14,18 @@
 > [`runbooks/2026-08-02-paired-feast-experiment-runtime.md`](runbooks/2026-08-02-paired-feast-experiment-runtime.md)를 따릅니다.
 
 > #484 Auto Research 실험 Job 경계는 apply·go-live를 마쳤습니다. `enable_experiment_job_creation`이
-> `true`로 전환됐고(#523), 실험 브랜치 생성 주체는 API에서 launcher CronJob으로
-> 옮겨졌습니다(#539/#540, T6 CronJob 배포는 #552). 2026-08-06 `kubectl` 재확인
-> 결과 `agent-orchestration-launcher` CronJob이 1분 주기로 정상 실행 중입니다.
-> 다만 실제 실험 실행 Job·GCS/MLflow 증적 저장·완료 판정·dev merge·main Draft
-> PR 단계는 아직 없습니다(Phase 1 의도적 종료점, 앱 PR #547).
+> `true`로 전환됐고(#523, `terraform/admin/autoresearch-k8s/variables.tf`
+> default), 실험 브랜치 생성 주체는 API에서 launcher CronJob으로 옮겨졌습니다
+> (#539/#540, T6 CronJob 배포는 #552). **CronJob 매니페스트는 이 저장소 소유가
+> 아니라 앱/ArgoCD 쪽(#552 경로)**이라 이 문서로는 재검증할 수 없습니다 —
+> 2026-08-06 `kubectl` 확인 시점에는 `agent-orchestration-launcher` CronJob이
+> 1분 주기로 정상 실행 중이었으나, 최신 상태는 해당 쪽 저장소/ArgoCD Application
+> 기준으로 다시 확인합니다. 다만 실제 실험 실행 Job·GCS/MLflow 증적 저장·완료
+> 판정·dev merge·main Draft PR 단계는 아직 없습니다(Phase 1 의도적 종료점, 앱
+> PR #547). 바로 아래 #485 블록의 `job_creation_enabled=false`는 이것과는 별개로
+> `terraform/envs/dev/outputs.tf`·`admin/autoresearch-k8s/outputs.tf`에 하드코딩된
+> 다른 계약(paired Feast experiment runtime, fail-closed)이며 이름이 비슷해
+> 혼동하기 쉽습니다.
 
 ## 기본 정보
 
@@ -596,8 +603,10 @@ min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된
 
 **노드당 파드 수**: 어떤 노드풀(`dev-default`/`airflow-dev`/`batch-spot`/`batch-od`/
 `ctr-model-retrain`)도 `node_config`에 `max_pods_per_node`를 지정하지 않는다
-(`gke.tf`). VPC-native 클러스터의 GKE 기본값인 **노드당 최대 110 파드**가 전
-풀에 그대로 적용된다(2026-08-06 코드 대조 — override 없음 확인).
+(`gke.tf`, `ctr-model-retrain`만 `gke_ctr_retrain.tf`). VPC-native 클러스터의
+GKE 기본값인 **노드당 최대 110 파드**가 전 풀에 그대로 적용된다(2026-08-06 코드
+대조 — override 없음 확인). 110은 노드마다 pods 2차 대역에서 **/24를 통째로
+할당**한다는 뜻이기도 하다 — 계층 7의 pods CIDR 상한 참고.
 
 ### 계층 4 — 네임스페이스 (ResourceQuota / LimitRange) — `terraform/admin/airflow-k8s`
 
@@ -650,9 +659,9 @@ Terraform이 명시적으로 override하지 않아 GCP 기본값이 그대로 �
 
 | 항목 | 적용 값 | 근거 | 실무 영향 |
 | --- | --- | --- | --- |
-| 노드당 파드 수 | 110(GKE 기본, override 없음) | `gke.tf` 전 node pool `max_pods_per_node` 미지정 | 위 계층 3 참고 |
-| Cloud NAT VM당 포트 | 64(GCP 기본 static 할당, `min_ports_per_vm` 미지정) | `nat.tf`에 `min_ports_per_vm`/`enable_dynamic_port_allocation` 없음 | 동시 outbound 연결이 많은 워크로드(예: 다수 KPO pod 동시 AR pull)가 몰리면 포트 고갈로 NAT 오류 가능 — 발생 시 `min_ports_per_vm` 상향 또는 dynamic allocation 검토 |
-| Cloud SQL 자동 백업 보존 개수 | 7개(GCP 기본, `backup_retention_settings` 미지정) | `cloud_sql.tf`의 `backup_configuration`에 `enabled`/`point_in_time_recovery_enabled`/`start_time`만 있고 보존 개수 지정 없음 | PITR과 별개로, 7일보다 오래된 시점 automated backup 기반 복구는 불가 |
+| 노드당 파드 수 | 110(GKE 기본, override 없음) | 전 node pool `max_pods_per_node` 미지정(`gke.tf`, `ctr-model-retrain`은 `gke_ctr_retrain.tf`) | 110 → 노드당 /24 할당. pods 대역 `gke_pods_cidr`(`terraform.tfvars.example` 기준 `172.16.64.0/20`)은 /24 16개뿐이고 노드풀 max 합(dev-default 2 + airflow-dev 2 + batch-spot 8 + batch-od 2 + ctr-model-retrain 2 = 16)이 정확히 16이라 **이미 상한** — 어느 노드풀이든 max를 올리려면 pods 대역 확장이 선행 조건(#330/#331처럼 max 상향은 이미 두 차례 있었다) |
+| Cloud NAT VM당 포트 | 64(GCP 기본 static 할당, `min_ports_per_vm` 미지정) | `nat.tf`에 `min_ports_per_vm`/`enable_dynamic_port_allocation` 없음 | 동시 outbound 연결이 많은 워크로드(예: 다수 KPO pod 동시 AR pull)가 몰리면 포트 고갈로 NAT 오류 가능. `nat.tf`에 `log_config`도 없어 NAT 로깅이 꺼져 있으므로 고갈 시 워크로드 쪽엔 그냥 간헐 실패/타임아웃으로만 보이고 `OUT_OF_RESOURCES` 같은 NAT 쪽 원인 신호가 로그에 안 남는다 — 발생 시 `min_ports_per_vm` 상향 또는 dynamic allocation 검토 전에 `log_config { filter = "ERRORS_ONLY" }`부터 켜야 원인 규명이 가능하다 |
+| Cloud SQL 자동 백업 보존 개수 | 7개(GCP 기본, `backup_retention_settings` 미지정) | `cloud_sql.tf`의 `backup_configuration`에 `enabled`/`point_in_time_recovery_enabled`/`start_time`만 있고 보존 개수 지정 없음 | 자동 백업이 하루 1회(`start_time = "17:00"`)라는 전제 하에 **7일**치 automated backup까지만 복구 가능. `transaction_log_retention_days`도 미지정(GCP 기본)이라 PITR로 되돌릴 수 있는 트랜잭션 로그 보존 기간도 같은 기본값에 묶여 있다 |
 | GKE release channel | `REGULAR` | `gke.tf` `release_channel.channel = var.gke_release_channel`, 기본값 `REGULAR`(`variables.tf`) | GKE가 자동으로 patch/minor 버전을 주기적으로 올린다 — 예고 없는 노드풀 롤링 재생성 가능성의 근거 |
 
 ## 데이터 저장 위치
