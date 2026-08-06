@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-06T04:30:16Z",
+  "generated_at": "2026-08-06T04:47:27Z",
   "reports": [
+    {
+      "number": 545,
+      "title": "feat: feast apply 셀프 호스티드 러너 이관 인프라·검증 워크플로우 구성 (#541)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-06T04:47:12Z",
+      "summary_ko": [
+        "feast apply 작업을 셀프 호스티드 러너(ARC) 스케일셋 기반으로 전환하기 위한 Kubernetes KSA, NetworkPolicy, ArgoCD Application 인프라를 구성했습니다.",
+        "GCS 도달성과 environment별 Redis PSC 네트워크 접근 권한(dev 차단 음성대조, prod 허용)을 검증하는 수동 프로브 워크플로우를 추가했습니다.",
+        "인프라 순환 의존성 및 장애 전파 방지를 위해 Terraform apply 운영 배포는 GitHub 호스티드 러너 격리 상태를 유지하도록 결정하고 문서화했습니다."
+      ],
+      "report_url": "pr/545/"
+    },
     {
       "number": 540,
       "title": "feat: 실험 브랜치 launcher·executor 인프라 추가",
