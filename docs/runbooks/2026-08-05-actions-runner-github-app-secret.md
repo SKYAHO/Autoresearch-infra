@@ -131,6 +131,34 @@ kubectl -n actions-runner delete pod \
 보낸 job을 전혀 받지 못한다(등록된 저장소가 아니라서 GitHub이 job을 배정하지
 않음 — 실패가 아니라 무한 대기로 관측된다).
 
+## 6. 리스너/컨트롤러 라벨 drift 점검 (#559)
+
+`terraform/admin/actions-runner-k8s`의 K8s API egress `NetworkPolicy` 2개
+(`actions_runner_control_plane_k8s_api_egress`,
+`actions_runner_poc_k8s_api_egress`)는 ARC가 Pod 생성 시 주입하는
+`app.kubernetes.io/component`/`actions.github.com/scale-set-name` 라벨로
+스코프돼 있다(#557). 이 라벨은 Helm values가 아니라 gha-rs 컨트롤러/chart가
+정하므로, 업그레이드로 값이 바뀌면 정책이 조용히 매칭을 잃고 리스너가
+crash-loop한다(즉시 에러가 아니라 job이 안 집히는 상태로만 관측됨, #557에서
+실제 발생).
+
+`actions-runner-k8s` 변경 apply 후, 또는 gha-rs 컨트롤러/chart 버전을 올린
+직후 확인한다:
+
+```bash
+kubectl -n actions-runner get pods -l app.kubernetes.io/component=runner-scale-set-listener
+# 스케일셋 개수만큼(현재 3개: actions-runner-poc, feast-apply-dev, feast-apply-prod)
+# RESTARTS 0 나오는지 확인
+
+kubectl -n actions-runner get pods -l app.kubernetes.io/component=controller-manager
+# 컨트롤러 매니저 1개, RESTARTS 0 확인
+```
+
+둘 중 하나라도 예상 개수보다 적게 나오거나 `RESTARTS`가 늘어나면, 해당 Pod가
+라벨 값 변경으로 두 `NetworkPolicy` 어디에도 걸리지 않아 apiserver 접근이
+막혔을 가능성이 크다 — `kubectl get pods -n actions-runner --show-labels`로
+실제 라벨 값을 확인하고 `main.tf`의 `pod_selector`를 갱신한다.
+
 ## 범위 밖
 
 - App 권한 확장(웹훅, 조직 전체 설치 등)은 이 PoC 범위가 아니다(저장소 단위
