@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-06T02:27:12Z",
+  "generated_at": "2026-08-06T03:21:24Z",
   "reports": [
+    {
+      "number": 540,
+      "title": "feat: 실험 브랜치 launcher·executor 인프라 추가",
+      "author": "bbungjun",
+      "merged_at": "2026-08-06T03:21:10Z",
+      "summary_ko": [
+        "실험 브랜치 자동 생성을 위한 launcher 전용 서비스 계정 및 Kubernetes RBAC 권한 경계를 구축했습니다.",
+        "기존 API 서비스 계정이 보유하던 Kubernetes Job 생성 권한을 회수하여 단일 목적의 launcher 서비스 계정으로 이관했습니다.",
+        "GitHub App 개인키 유출을 방지하는 7종의 어드미션 제어 정책, 전용 네트워크 Egress 규칙 및 운영 문서를 추가했습니다."
+      ],
+      "report_url": "pr/540/"
+    },
     {
       "number": 549,
       "title": "fix: Feast apply WIF provider 조건을 환경별 workflow_ref로 분리",
