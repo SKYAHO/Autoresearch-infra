@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-06T06:48:10Z",
+  "generated_at": "2026-08-06T07:10:16Z",
   "reports": [
+    {
+      "number": 558,
+      "title": "fix: 리스너 K8s API egress를 scale-set-name 대신 component 라벨로 스코프",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-06T07:09:58Z",
+      "summary_ko": [
+        "작업 감시용 리스너 Pod가 쿠버네티스 API 서버에 접근하지 못해 지속적으로 재시작되던 문제를 해결합니다.",
+        "네트워크 보안 정책의 라벨 선택자를 특정 스케일셋에서 전체 리스너 공통 라벨로 변경하였습니다.",
+        "실제 명령을 실행하는 작업자 Pod의 API 접근은 차단하여 보안상 최소 권한 원칙을 계속 유지합니다."
+      ],
+      "report_url": "pr/558/"
+    },
     {
       "number": 547,
       "title": "feat: GitHub 메타데이터 규칙 강제",
