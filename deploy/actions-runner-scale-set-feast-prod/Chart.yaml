@@ -1,0 +1,15 @@
+# #541 5단계 feast-apply-prod 전용 ARC 러너 스케일셋 umbrella chart —
+# deploy/actions-runner-scale-set(PoC)와 같은 dependency를 쓰되 별도
+# ArgoCD Application/스케일셋으로 분리해, PoC/feast-dev/feast-prod가 서로
+# 다른 KSA·NetworkPolicy 스코프(terraform/admin/actions-runner-k8s)를 갖는다.
+apiVersion: v2
+name: autoresearch-actions-runner-scale-set-feast-prod
+description: feast apply(prod) 전용 GitHub Actions 셀프 호스티드 러너 스케일셋
+type: application
+version: 0.1.0
+appVersion: "0.14.2"
+
+dependencies:
+  - name: gha-runner-scale-set
+    version: 0.14.2
+    repository: oci://ghcr.io/actions/actions-runner-controller-charts

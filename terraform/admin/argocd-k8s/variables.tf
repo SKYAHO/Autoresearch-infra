@@ -177,3 +177,15 @@ variable "actions_runner_scale_set_target_revision" {
   type        = string
   default     = "main"
 }
+
+variable "actions_runner_scale_set_feast_dev_target_revision" {
+  description = "feast-apply-dev 러너 스케일셋 Application이 추적할 infra repo ref(#541). 최초 sync는 -var로 병합 커밋 SHA를 pin한다."
+  type        = string
+  default     = "main"
+}
+
+variable "actions_runner_scale_set_feast_prod_target_revision" {
+  description = "feast-apply-prod 러너 스케일셋 Application이 추적할 infra repo ref(#541). 최초 sync는 -var로 병합 커밋 SHA를 pin한다."
+  type        = string
+  default     = "main"
+}

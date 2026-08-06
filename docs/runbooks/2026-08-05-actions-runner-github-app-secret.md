@@ -112,9 +112,29 @@ kubectl -n actions-runner delete pod \
 필요하면 위 명령을 갱신한다. `set -e`가 없는 절차이므로 이 명령이 실패해도
 스크립트는 계속 진행된다 — 출력에서 `deleted`를 직접 확인한다.
 
+## 5. feast-apply 스케일셋을 위한 설치 범위 확장 (#541, 수동, 1회)
+
+`feast-apply-dev`/`feast-apply-prod` 러너 스케일셋은 이 저장소가 아니라 앱
+저장소(`SKYAHO/Autoresearch`, `feast-apply.yml`이 있는 곳)를 대상으로 job을
+받는다(`deploy/actions-runner-scale-set-feast-{dev,prod}/values.yaml`의
+`githubConfigUrl`). 이 App은 1단계에서 `Autoresearch-infra`에만 설치했으므로,
+같은 계정(`SKYAHO`) 소유 저장소인 `Autoresearch`도 접근 범위에 추가해야 한다:
+
+1. `github.com/settings/installations/<Installation ID>`(1단계 5번에서 기록한
+   값) → **Configure**.
+2. "Repository access"에서 "Only select repositories"를 유지한 채
+   `SKYAHO/Autoresearch`를 추가로 선택하고 저장한다.
+3. Installation ID·App ID·Private key는 바뀌지 않는다 — Secret Manager,
+   K8s Secret 어느 쪽도 갱신할 필요가 없다.
+
+이 단계 전에는 feast-dev/prod 스케일셋의 리스너 Pod는 뜨지만, 앱 저장소가
+보낸 job을 전혀 받지 못한다(등록된 저장소가 아니라서 GitHub이 job을 배정하지
+않음 — 실패가 아니라 무한 대기로 관측된다).
+
 ## 범위 밖
 
-- App 권한 확장(웹훅, 조직 전체 설치 등)은 이 PoC 범위가 아니다.
+- App 권한 확장(웹훅, 조직 전체 설치 등)은 이 PoC 범위가 아니다(저장소 단위
+  접근 범위 확장은 5단계에서 다룸 — 조직 전체 설치와는 다르다).
 - Private key 로테이션 자동화는 다루지 않는다. `.pem`은 Secret Manager와
   K8s Secret 양쪽에 모두 저장되므로, 키를 재발급했다면 둘 다 새 값으로
   갱신해야 한다 — 2단계(Secret Manager)부터 3단계(K8s Secret), 4단계(리스너

@@ -53,6 +53,16 @@
 # 재인증이 조용히 실패해 dev-apply SA로 admin root apply가 진행되는 경로는
 # 없다: 그 즉시 401/403으로 눈에 띄게 실패한다.
 #
+# ## runner — 항상 GitHub hosted(`ubuntu-latest`), 셀프 호스티드로 옮기지 않는다 (#541 6단계)
+#
+# `feast apply`는 #541에서 self-hosted ARC 러너로 옮기지만, 이 workflow(운영
+# 배포/Terraform apply)는 옮기지 않는다 — 의도적 결정이다. 셀프 호스티드
+# 러너는 같은 K8s 클러스터 안에서 도는 Pod라 admin root apply가 그 클러스터
+# 자체를 바꿀 때 러너가 자기 자신이 도는 인프라를 변경하는 순환 의존이
+# 생기고, ARC 컨트롤러 장애가 Terraform apply 가용성까지 끌고 내려간다.
+# `apply` Environment의 승인 게이트(6인 reviewer)도 hosted runner 격리를
+# 전제로 설계됐다 — 셀프 호스티드로 옮기면 그 격리 경계가 흐려진다.
+#
 # ## secret 노출 범위 — step 단위로 좁힌다
 #
 # admin root 전용 allowlist(#305) TF_VAR는 admin root를 다루는 step의

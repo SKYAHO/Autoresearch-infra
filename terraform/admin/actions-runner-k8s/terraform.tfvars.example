@@ -17,3 +17,15 @@ private_googleapis_cidr = "199.36.153.8/30"
 
 # scale-set chart(deploy/actions-runner-scale-set)의 maxRunners와 짝을 이룬다.
 actions_runner_max_pods = 4
+
+# #541 5단계: feast-apply-prod 러너 스케일셋 egress 전용. 값은
+# terraform/admin/autoresearch-k8s와 반드시 일치해야 한다(같은 Redis Cluster).
+redis_psc_subnet_cidr = "10.10.16.0/29"
+redis_discovery_port  = 6379
+redis_node_port_start = 11000
+redis_node_port_end   = 13047
+
+# Optional. Empty value derives autoresearch-dev-feast-{dev,prod}@<project_id>.iam.gserviceaccount.com
+# (#424 GSA 재사용, 신규 GSA 없음)
+feast_apply_dev_gcp_service_account_email  = ""
+feast_apply_prod_gcp_service_account_email = ""
