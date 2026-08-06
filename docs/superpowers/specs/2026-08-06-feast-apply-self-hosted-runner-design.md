@@ -99,6 +99,19 @@ NetworkPolicy의 `pod_selector.match_labels`를 `actions.github.com/scale-set-na
   라벨 스코프로 좁혀 dev/PoC 러너가 실수로 prod Redis egress를 상속받지
   않게 한다(리뷰 포인트, PSA `baseline`만으로는 이 경계를 강제하지 못한다).
 
+> **정정(#557, 2026-08-06)**: 위 88~90번째 줄의 "K8s API 서버 규칙은
+> feast-apply 러너에 불필요하다"는 ephemeral runner Pod(= `feast apply`
+> 실행 주체)에는 맞지만, 리스너(AutoscalingListener) Pod에는 틀렸다 —
+> 리스너는 스케일셋 종류와 무관하게 `EphemeralRunnerSet`을 patch하기
+> 위해 매 폴링 사이클마다 apiserver 접근이 필수이고, 리스너 Pod와
+> ephemeral runner Pod는 동일한 `scale-set-name` 라벨을 공유한다. 그
+> 결과 `feast-apply-dev`/`feast-apply-prod` 리스너가 apiserver에
+> 도달하지 못해 crash-loop했다(라이브 확인). #557에서 K8s API egress
+> 정책의 selector를 `scale-set-name`이 아니라
+> `app.kubernetes.io/component=runner-scale-set-listener`(리스너 Pod
+> 전용, ephemeral runner Pod에는 없음)로 바꿔 세 스케일셋의 리스너
+> 모두에 균일하게 적용했다.
+
 **앱 저장소 좌표(이 저장소 범위 밖, 문서로만 명시)**: `feast-apply.yml`은
 `runs-on: [self-hosted, feast-apply-${environment}]`로 바꾸고, Job 매니페스트
 렌더링/재생성/대기/로그 수집 스텝을 제거해 `feast apply`를 워크플로우 스텝에서

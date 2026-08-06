@@ -139,7 +139,7 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
     # namespace 전체(컨트롤러 매니저 + 3개 스케일셋의 리스너·러너 Pod 전부)에
     # 적용되는 공용 최소 baseline이다. NetworkPolicy는 겹치는 selector끼리
     # union으로 합쳐지므로, 이 baseline이 DNS/PGA/GitHub만 허용해 두면
-    # PoC 전용 K8s API 규칙(아래 actions_runner_poc_k8s_api_egress)과
+    # 리스너 전용 K8s API 규칙(아래 actions_runner_listener_k8s_api_egress)과
     # feast-apply-prod 전용 Redis 규칙(feast_apply_prod_runner_egress)을 각각
     # 스케일셋 라벨로 스코프한 별도 정책으로 "추가"할 수 있다 — pod_selector를
     # 좁혀 컨트롤러/리스너 Pod를 어떤 정책에서도 빠뜨리면 그 Pod는 egress
@@ -267,20 +267,37 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
   depends_on = [kubernetes_namespace_v1.actions_runner]
 }
 
-# PoC 스케일셋 러너 Pod 전용 supplemental 규칙: K8s API 서버(in-cluster, 서비스
-# VIP 경유) 접근 검증. baseline(actions_runner_egress)에서 분리해 K8s API
-# egress를 PoC 러너에만 준다 — feast-apply 러너는 kubectl/K8s API를 호출하지
-# 않으므로 상속하지 않는 것이 최소 권한 원칙에 맞다.
-resource "kubernetes_network_policy_v1" "actions_runner_poc_k8s_api_egress" {
+# 리스너(AutoscalingListener) Pod 전용 supplemental 규칙: K8s API 서버
+# (in-cluster, 서비스 VIP 경유) 접근. baseline(actions_runner_egress)에서
+# 분리해 K8s API egress를 리스너에만 준다.
+#
+# #557에서 pod_selector를 scale-set-name=actions-runner-poc에서
+# app.kubernetes.io/component=runner-scale-set-listener로 바꿨다 — 원래
+# selector는 "feast-apply 러너는 kubectl/K8s API를 호출하지 않는다"는
+# 근거로 PoC 스케일셋에만 K8s API egress를 줬는데, 이는 ephemeral runner
+# Pod(= `feast apply`가 실제로 실행되는 곳)에는 맞지만 리스너 Pod에는
+# 틀렸다 — 리스너는 스케일셋 종류와 무관하게 ARC 아키텍처상 매 폴링
+# 사이클마다 `EphemeralRunnerSet`을 patch하기 위해 apiserver 접근이
+# 필수다. 리스너 Pod와 ephemeral runner Pod는 둘 다 동일한
+# `actions.github.com/scale-set-name` 라벨을 공유하므로(#541 리뷰 근거,
+# upstream ADR `docs/adrs/2023-03-14-adding-labels-k8s-resources.md`)
+# scale-set-name 기준 scoping은 feast-apply-dev/prod 리스너를 의도치
+# 않게 배제해 K8s API patch가 타임아웃되고 리스너가 crash-loop했다
+# (라이브 확인, 2026-08-06). `app.kubernetes.io/component=
+# runner-scale-set-listener`는 리스너 Pod 전부에 동일하게 붙고 ephemeral
+# runner Pod에는 없어(ARC가 Pod 종류별로 다른 component 값을 부여),
+# "리스너만 apiserver 접근, ephemeral runner는 차단"이라는 최소 권한
+# 의도를 스케일셋 3종 전부에 균일하게 유지한다.
+resource "kubernetes_network_policy_v1" "actions_runner_listener_k8s_api_egress" {
   metadata {
-    name      = "actions-runner-poc-k8s-api-egress"
+    name      = "actions-runner-listener-k8s-api-egress"
     namespace = kubernetes_namespace_v1.actions_runner.metadata[0].name
   }
 
   spec {
     pod_selector {
       match_labels = {
-        "actions.github.com/scale-set-name" = "actions-runner-poc"
+        "app.kubernetes.io/component" = "runner-scale-set-listener"
       }
     }
     policy_types = ["Egress"]
