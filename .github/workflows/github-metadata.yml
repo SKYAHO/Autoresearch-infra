@@ -1,0 +1,106 @@
+name: GitHub metadata and branch policy
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+# pull_request_target는 base ref workflow와 write token을 쓴다. 이 파일에는
+# checkout, PR 코드 실행, 시크릿 접근, contents: write step을 추가하지 않는다.
+
+jobs:
+  issue-metadata:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const hasAssignee = (issue, login) => issue.assignees.some((assignee) => assignee.login === login);
+            let assignment;
+            try {
+              assignment = (await github.rest.issues.addAssignees({
+                ...context.repo, issue_number: context.issue.number, assignees: [context.actor],
+              })).data;
+            } catch (error) {
+              core.warning(`Issue author assignment request failed: ${error.message}`);
+            }
+            if (!assignment || !hasAssignee(assignment, context.actor)) {
+              const fallback = process.env.DEFAULT_ASSIGNEE;
+              if (!fallback) {
+                core.setFailed('DEFAULT_GITHUB_ASSIGNEE repository variable is required when the author cannot be assigned.');
+                return;
+              }
+              const fallbackResult = (await github.rest.issues.addAssignees({
+                ...context.repo, issue_number: context.issue.number, assignees: [fallback],
+              })).data;
+              if (!hasAssignee(fallbackResult, fallback)) {
+                core.setFailed(`Issue fallback assignee was not applied: ${fallback}`);
+              }
+            }
+        env:
+          DEFAULT_ASSIGNEE: ${{ vars.DEFAULT_GITHUB_ASSIGNEE }}
+
+  pr-metadata:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    concurrency:
+      group: github-metadata-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const hasAssignee = (issue, login) => issue.assignees.some((assignee) => assignee.login === login);
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo, pull_number: pr.number, per_page: 100,
+            });
+            const currentPr = (await github.rest.pulls.get({
+              ...context.repo, pull_number: pr.number,
+            })).data;
+            const names = files.map((file) => file.filename);
+            const labels = new Set();
+            if (names.length > 0 && names.every((name) => name.startsWith('docs/') || name.endsWith('.md'))) labels.add('documentation');
+            if (names.some((name) => name.startsWith('terraform/'))) {
+              labels.add('terraform');
+              labels.add('gcp');
+            }
+            if (names.some((name) => name.startsWith('.github/workflows/'))) labels.add('ci-cd');
+            if (labels.size === 0) labels.add('chore');
+            const managed = ['documentation', 'terraform', 'gcp', 'ci-cd', 'chore'];
+            for (const label of currentPr.labels.map((item) => item.name).filter((label) => managed.includes(label) && !labels.has(label))) {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number: pr.number, name: label });
+            }
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: pr.number, labels: [...labels] });
+            let assignment;
+            try {
+              assignment = (await github.rest.issues.addAssignees({
+                ...context.repo, issue_number: pr.number, assignees: [pr.user.login],
+              })).data;
+            } catch (error) {
+              core.warning(`PR author assignment failed: ${error.message}`);
+            }
+            if (!assignment || !hasAssignee(assignment, pr.user.login)) {
+              const fallback = process.env.DEFAULT_ASSIGNEE;
+              if (!fallback) {
+                core.setFailed('DEFAULT_GITHUB_ASSIGNEE repository variable is required when the author cannot be assigned.');
+                return;
+              }
+              const fallbackResult = (await github.rest.issues.addAssignees({
+                ...context.repo, issue_number: pr.number, assignees: [fallback],
+              })).data;
+              if (!hasAssignee(fallbackResult, fallback)) {
+                core.setFailed(`PR fallback assignee was not applied: ${fallback}`);
+              }
+            }
+        env:
+          DEFAULT_ASSIGNEE: ${{ vars.DEFAULT_GITHUB_ASSIGNEE }}

@@ -1,0 +1,22 @@
+name: Branch name policy
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-name-policy:
+    name: branch-name-policy
+    runs-on: ubuntu-latest
+    env:
+      BRANCH_NAME: ${{ github.head_ref }}
+    steps:
+      - name: Validate English branch name
+        shell: bash
+        run: |
+          if [[ "$BRANCH_NAME" =~ ^(feat|fix|exp|docs|refactor|chore)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ || "$BRANCH_NAME" =~ ^revert-[0-9]+-[A-Za-z0-9._/-]+$ ]]; then exit 0; fi
+          echo "Invalid branch name: $BRANCH_NAME" >&2
+          exit 1

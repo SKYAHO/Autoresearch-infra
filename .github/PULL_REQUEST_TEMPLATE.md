@@ -13,6 +13,8 @@ Closes #
 
 ## 체크리스트
 
+- [ ] Assignee를 생성자로 지정하고 변경 성격에 맞는 label을 부여했다
+- [ ] 브랜치가 `<type>/<이슈번호>-<영어-소문자-하이픈>` 형식이다
 - [ ] 대상 GCP 프로젝트, 리전, 리소스 이름을 확인했다
 - [ ] IAM 권한이 최소 권한 원칙을 따른다
 - [ ] secret 값, service account key, Terraform state가 포함되지 않았다

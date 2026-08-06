@@ -41,7 +41,9 @@ Issue 자동 close → Project Done
 - 로컬 파일 읽기·수정은 진행해도 됩니다. GitHub에 반영하는 순간에만
   확인받습니다.
 - 이슈·PR 기본값: **Assignee는 생성자**(gh 인증 계정)로 지정합니다 —
-  `gh issue create`·`gh pr create`에 항상 `--assignee @me`를 붙입니다
+  `gh issue create`·`gh pr create`에 항상 `--assignee @me`를 붙입니다.
+  `github-metadata.yml`이 Issue opened와 PR opened/reopened/synchronize 이벤트에서 보정하지만, 생성 시점의
+  메타데이터 누락을 만들지 않기 위해 CLI에서도 항상 지정합니다.
   (`@me` = 생성자, 현재 계정 `hyeongyu-data`). label은 성격에 맞춰 설정
   (Terraform/IaC: `terraform`+`gcp`, 문서: `documentation`, 자동화:
   `ci-cd`/`chore`, 보안·IAM: `security`/`iam`, 비용 영향: `cost`).
@@ -86,6 +88,8 @@ GitHub는 `form 선택 → label 자동 적용` 방식으로 동작합니다. Pr
 - 영어 소문자, 숫자, 하이픈만 사용합니다.
 - 이슈 번호를 반드시 포함합니다.
 - 한 브랜치에는 하나의 주요 목적만 담습니다.
+- Create a branch 대화상자의 기본 제안 이름은 사용하지 않고, 생성 전에 위 형식의
+  영어 이름으로 직접 수정합니다.
 
 ```bash
 # 이슈에서 Create a branch로 생성(예: feat/12-add-cloud-run-job) 후
@@ -127,6 +131,7 @@ docs: GCP 운영 가이드 갱신
 - [ ] state, `.tfvars` 실값, service account key, secret이 포함되지 않았다
 - [ ] 커밋 메시지가 컨벤션을 따른다
 - [ ] Assignee를 생성자로 지정한다 (`gh pr create --assignee @me`)
+- [ ] 변경 성격에 맞는 label을 지정한다 (`gh pr create --label <label>`)
 
 **PR 본문** (`.github/PULL_REQUEST_TEMPLATE.md` 사용):
 
@@ -164,7 +169,7 @@ Closes #12
 - 팀원 **2명** approve
 - 모든 conversation resolved
 - CI status check 통과. `branch_ruleset_main.json` 기준 required check는
-  `lint`이며, Terraform plan은 PR check/comment로 함께 확인합니다.
+  `lint`, `branch-name-policy`이며, Terraform plan은 PR check/comment로 함께 확인합니다.
 - Ready for review 상태 (Draft는 approve가 있어도 merge 불가)
 
 **리뷰어 확인 사항:**
@@ -186,7 +191,7 @@ Closes #12
 
 **Branch protection (`main`, `branch_ruleset_main.json`):**
 - 직접 push 금지, PR을 통한 변경만 허용
-- required status check: `lint`
+- required status check: `lint`, `branch-name-policy`
 - approve 후 새 커밋이 push되면 approve가 초기화될 수 있습니다.
 
 ## 머지
@@ -223,12 +228,12 @@ Project는 현재 상태를 보여주는 보드로 사용합니다.
 
 ## CI
 
-- `.github/workflows/lint.yml` — actionlint. required status check.
+- `.github/workflows/lint.yml` — actionlint. `branch-name-policy.yml`과 함께 required status check.
 - `.github/workflows/terraform-plan.yml` — 내부 브랜치 PR에서 OIDC/WIF로
   dev root plan을 실행하고 PR 댓글을 게시합니다.
 - `.github/workflows/claude.yml` — Claude Code PR 리뷰
   (`CLAUDE_CODE_OAUTH_TOKEN` secret 필요).
-- 현재 ruleset required check는 `lint`만 지정되어 있습니다. Terraform
+- 현재 ruleset required check는 `lint`, `branch-name-policy`입니다. Terraform
   plan 실패는 병합 전 반드시 확인해야 하는 정보성 check로 운용합니다.
 
 ## Special Cases
