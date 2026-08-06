@@ -339,6 +339,24 @@ resource "kubernetes_service_account_v1" "feast_apply_runner" {
 # 중복 선언은 불필요하다. dev는 baseline만으로 충분해 별도 리소스가 없다
 # (음성 대조군: dev 러너는 Redis PSC 규칙이 없으므로 접근 시도가 baseline의
 # 어떤 allow 규칙에도 안 걸려 차단된다).
+#
+# pod_selector 근거(#541 리뷰 이해도 확인): actions.github.com/scale-set-name
+# 라벨은 Helm values가 아니라 ARC 컨트롤러가 Pod 생성 시점에 주입하며,
+# 리스너 Pod뿐 아니라 ephemeral runner Pod에도 동일하게 붙는다 — upstream
+# actions/actions-runner-controller의
+# docs/adrs/2023-03-14-adding-labels-k8s-resources.md가 Listener/Runner 두
+# Pod spec 모두에 이 라벨을 "set by controller at creation"으로 명시한다.
+# 값은 AutoscalingRunnerSet.metadata.name(= Helm의 runnerScaleSetName, 이
+# 저장소에서는 deploy/actions-runner-scale-set-feast-{dev,prod}/values.yaml의
+# runnerScaleSetName)에서 온다 — Helm release 이름이 아니다. 라이브 클러스터의
+# PoC 리스너 Pod(actions-runner-poc-*-listener)가 이미
+# actions.github.com/scale-set-name=actions-runner-poc 라벨을 달고 있어(값이
+# PoC values.yaml의 runnerScaleSetName과 일치) 이 주입 메커니즘을 간접
+# 확인했다. 이 selector가 실제로 0개를 고르는 경우(라벨이 전혀 안 붙는
+# 회귀)라면 actions-runner-poc는 K8s API egress가 막혀 job이 API 호출에서
+# 타임아웃하고, feast-apply-prod는 Redis PSC egress가 막혀(baseline도
+# 없으므로) GCS는 되지만 Redis만 실패한다 — 둘 다 각 워크플로우 실행
+# 시점에 바로 드러난다(무한 대기가 아니라 명시적 실패).
 resource "kubernetes_network_policy_v1" "feast_apply_prod_runner_egress" {
   metadata {
     name      = "feast-apply-prod-runner-egress"

@@ -21,6 +21,17 @@ locals {
   # 컨트롤러의 reconcile 타이밍에 달려 있어 예측 가능한 우선순위가 없다.
   # prod가 실제로 밀리는 사례가 관측되면 feast-apply-prod 전용 ResourceQuota
   # 분리를 검토한다(현재는 범위 밖).
+  # 비용 영향(#541 리뷰): 이 변경으로 quota(pods) 상한이 6→12, requests.cpu
+  # 3→6, requests.memory 6Gi→12Gi, limits.memory 12Gi→24Gi로 늘어난다(상한일
+  # 뿐이라 유휴 시 바로 그만큼 청구되진 않는다). 다만 항상 떠 있는 Pod는
+  # 리스너 2개만큼 실제로 늘고(LimitRange 기본 request 500m/1Gi × 2 = 상주
+  # +1 vCPU/+2Gi) — 2026-08-06 라이브 `kubectl describe node`로 확인한 dev
+  # 노드풀 단일 노드(`dev-default`, e2-standard-4)는 이미 cpu 3566m/3920m
+  # (90%), memory 10598091648/13591704Ki(76%) 요청 상태라 이 증가분을 감당할
+  # 헤드룸이 없다 — 노드풀 오토스케일러가 2번째 노드를 추가할 가능성이 높다.
+  # `terraform/envs/dev/variables.tf`의 `gke_node_count_max = 2`가 이미
+  # 그만큼을 허용하므로 Terraform 변수 변경은 불필요하지만, 실제 반복 비용
+  # 증가(2번째 e2-standard-4 노드)가 예상된다.
   # PoC 스케일셋 1개(맵으로 관리하지 않음) + feast_apply_runner_identities
   # 맵 원소 수. 스케일셋을 추가할 때 이 숫자를 별도로 고칠 필요가 없도록
   # 리터럴 대신 맵 길이에서 파생한다(#541 리뷰).

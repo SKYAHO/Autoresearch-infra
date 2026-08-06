@@ -129,6 +129,25 @@ Task 1 → 2 → 3(순차, Terraform 리소스가 서로 참조) → 5(3 완료 
 
 Task 2~3에서 만든 KSA/NetworkPolicy/ArgoCD Application은 앱 저장소가 아직
 참조하지 않는 한(Task 5 검증 워크플로우 제외) 프로덕션 트래픽에 영향이
-없다 — `terraform destroy`(대상 한정) 또는 ArgoCD Application 삭제로 되돌릴
-수 있다. `feast_apply.tf`(#346 경로)는 이번 계획에서 전혀 건드리지 않으므로
+없다. `feast_apply.tf`(#346 경로)는 이번 계획에서 전혀 건드리지 않으므로
 기존 GHA+Job 워크플로우는 항상 동작 가능한 상태로 남는다.
+
+**주의**: `terraform destroy`(대상 한정) 또는 ArgoCD Application 삭제만으로는
+부족하다. 이 저장소의 ArgoCD `Application`은 `prune = false`이고
+`resources-finalizer.argocd.argoproj.io` finalizer가 없어, Application을
+지워도 그 Application이 만든 `AutoscalingRunnerSet`/리스너
+Deployment/`EphemeralRunnerSet`은 클러스터에 그대로 남는다 — 남은
+스케일셋은 계속 GitHub에 등록돼 job을 받고 바인딩된 GSA를 계속 가장한다
+(기존 `actions-runner-poc` Application도 같은 성질). 되돌릴 때는 Application
+삭제 뒤 아래 명령으로 잔존 리소스를 직접 지운다:
+
+```bash
+kubectl -n actions-runner delete autoscalingrunnerset actions-runner-scale-set-feast-prod
+kubectl -n actions-runner delete autoscalingrunnerset actions-runner-scale-set-feast-dev
+# PoC를 함께 되돌릴 때만:
+kubectl -n actions-runner delete autoscalingrunnerset actions-runner-scale-set
+```
+
+`autoscalingrunnerset` 삭제는 컨트롤러가 리스너 Deployment와
+`EphemeralRunnerSet`을 연쇄 정리하도록 트리거한다 — 삭제 후
+`kubectl -n actions-runner get pods`로 관련 Pod가 실제로 사라졌는지 확인한다.

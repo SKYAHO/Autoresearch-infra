@@ -576,6 +576,17 @@ Environment 값을 쓴다. prod 좌표가 repo-level vars와 `prod` Environment 
 2. **`feast-apply.yml`에 `runs-on: feast-apply-${{ inputs.environment }}`
    추가.** 현재는 `ubuntu-latest`(hosted)에서 실행 후 GKE Job으로 위임하는
    2단 구조다.
+3. **러너 실행 이미지에 feast/python이 없다는 점 처리.** ARC 기본 러너
+   이미지(`ghcr.io/actions/actions-runner`, 이 스케일셋들이 쓰는 이미지)에는
+   feast/python/gcloud/redis-cli가 없다 — 2번만 하면 `runs-on`은 옮겨가지만
+   `feast apply` 실행 파일 자체가 없어 실패한다. 둘 중 하나를 택해야 한다:
+   - workflow step에서 Python/feast(+ Redis CA 취득)를 매 실행 설치한다.
+     baseline NetworkPolicy가 `0.0.0.0/0:443`을 이미 열어 두므로 PyPI 접근은
+     되지만, 매 실행마다 설치 시간이 붙는다.
+   - 스케일셋 `template.spec.containers[].image`를 feast 포함 전용 이미지로
+     바꾼다. 이 경우 `deploy/actions-runner-scale-set-feast-{dev,prod}/
+     values.yaml` 변경이 필요해 이 저장소(`Autoresearch-infra`) 범위로
+     되돌아온다 — 위 "이 저장소 범위 밖" 전제가 이 옵션에는 적용되지 않는다.
 
 GitHub App 설치 범위를 앱 저장소로 확장하는 절차(1회, 수동)는
 `docs/runbooks/2026-08-05-actions-runner-github-app-secret.md`의 5단계를
@@ -593,19 +604,39 @@ Identity(이 이슈가 쓰는 경로)에는 이에 대응하는 개념이 없다
 즉 이 경로에서 GCP 신뢰 경계는 **"누가 `feast-apply-prod-runner` KSA로 뜬
 Pod에 job을 스케줄할 수 있는가"**로 옮겨간다 — 실질적으로는 "앱 저장소
 `SKYAHO/Autoresearch`의 어떤 브랜치에서든 `runs-on: feast-apply-prod`를 쓰는
-workflow 파일을 실행할 수 있는가"와 같다. `main` ref 제한이 자동으로 따라오지
-않으므로, 이를 대체하는 통제는 앱 저장소 쪽에서 확보해야 한다(이 저장소
-범위 밖, 앱 저장소 유지관리자 확인 필요):
+workflow 파일을 실행할 수 있는가"와 같다. `workflow_ref` 같은 파일 단위 고정은
+사라지지만, `main` ref 제한 자체는 다음 사실로 여전히 GitHub 쪽에서 걸려
+있다(2026-08-06, 읽기 전용 `gh api`로 확인):
 
-- `feast-apply.yml`의 prod 실행 job에 `environment: prod`를 유지해 GitHub
-  Environment 필수 리뷰어 게이트를 그대로 적용한다.
-- fork PR(`pull_request` 이벤트)이 이 스케일셋을 잡지 못하도록 앱 저장소의
-  Actions 설정(러너 그룹 접근 범위 또는 "Require approval for all outside
-  collaborators")을 확인한다 — self-hosted 러너는 기본적으로 fork PR에
-  노출되면 위험이 크다.
-- 이 두 통제가 실제로 걸려 있는지는 이 PR로 검증되지 않았다. `apply.yml`의
-  "self-hosted로 옮기지 않는다" 결정(위 참고)과 짝을 이루는 문서화이지,
-  통제 자체의 존재를 보증하지 않는다.
+- `SKYAHO/Autoresearch`는 public repo다.
+- `main` 브랜치는 classic branch protection이 아니라 Ruleset
+  (`main-protection`, id 18360502)으로 보호된다 — classic protection API는
+  404("Branch not protected")를 반환하지만 이는 오탐이다.
+- `prod` GitHub Environment의 `deployment-branch-policies`는 `main` 브랜치
+  하나만 허용한다(`{"branch_policies":[{"name":"main","type":"branch"}]}`) —
+  즉 `environment: prod`를 쓰는 job은 **`main`에서 실행될 때만** prod
+  Environment의 secret/승인 컨텍스트를 받을 수 있고, 그 밖의 브랜치에서는
+  Environment 자체가 거부된다. 이 제한은 WIF든 GKE WI든 GCP 인증 방식과
+  무관하게 GitHub이 강제하므로 이번 이관으로 사라지지 않는다.
+- 다만 `prod` Environment의 `protection_rules`에는 `type: "branch_policy"`만
+  있고 `type: "required_reviewers"` 항목은 없다 — **사람 승인 게이트는
+  현재 걸려 있지 않다.** `feast-apply.yml`을 `main`에 머지할 수 있는 사람(=
+  현재 `main-protection` Ruleset이 허용하는 사람)이 곧 prod GSA를 가장할 수
+  있는 사람과 같다.
+- fork PR(`pull_request` 이벤트)은 이 경로와 무관하다 — 현재
+  `feast-apply.yml`은 `push: branches: [main, dev]`와 `workflow_dispatch`로만
+  트리거되고 `pull_request`를 쓰지 않는다(2026-08-06 기준 `main`의 실제
+  파일 확인).
+- 남는 잔여 격차는 **파일 단위 고정의 소실**이다: `main`에 머지되는
+  워크플로우라면 `feast-apply.yml`이 아니어도 `runs-on: feast-apply-prod` +
+  `environment: prod`를 선언하기만 하면 prod GSA를 가장할 수 있다 — 예전엔
+  `workflow_ref`가 정확히 `feast-apply.yml`인지까지 봤지만 이제는 안 본다.
+  prod GSA의 현재 권한(이 저장소 `github_actions.tf`/`redis.tf`/
+  `secret_manager.tf` 기준)은 feast registry/staging GCS object-admin,
+  BigQuery `feast_apply_prod_offline_store_metadata_viewer`, GKE
+  `feast_apply_prod_cluster_viewer`, Redis `dbConnectionUser`(IAM 조건으로
+  Redis Cluster 1개에 한정), Redis 서버 CA secret `secretAccessor`로,
+  cluster-admin 급은 아니지만 dev보다 넓은 데이터 접근권이다.
 
 #### 운영 제약과 한계
 
