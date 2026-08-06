@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-06T07:10:16Z",
+  "generated_at": "2026-08-06T07:33:51Z",
   "reports": [
+    {
+      "number": 556,
+      "title": "docs: 인프라 문서 최신화 감사 반영",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-06T07:33:40Z",
+      "summary_ko": [
+        "실제 GitHub PR 상태 및 라이브 클러스터 점검 결과를 바탕으로 변경 이력과 인프라 요약 문서를 최신화했습니다.",
+        "실험 Job 경계의 배포 완료 상태와 런처 CronJob의 1분 주기 정상 실행 현황을 문서에 명시했습니다.",
+        "GCP 기본값이 그대로 적용 중인 노드당 파드 수, Cloud NAT 포트, SQL 백업 보존 기간 등을 문서화했습니다."
+      ],
+      "report_url": "pr/556/"
+    },
     {
       "number": 558,
       "title": "fix: 리스너 K8s API egress를 scale-set-name 대신 component 라벨로 스코프",
