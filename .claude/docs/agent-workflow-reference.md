@@ -42,7 +42,7 @@ Issue 자동 close → Project Done
   확인받습니다.
 - 이슈·PR 기본값: **Assignee는 생성자**(gh 인증 계정)로 지정합니다 —
   `gh issue create`·`gh pr create`에 항상 `--assignee @me`를 붙입니다.
-  `github-metadata.yml`이 Issue opened와 PR opened/reopened/synchronize 이벤트에서도 보정하지만, 생성 시점의
+  `github-metadata.yml`이 Issue opened와 PR opened/reopened/synchronize 이벤트에서 보정하지만, 생성 시점의
   메타데이터 누락을 만들지 않기 위해 CLI에서도 항상 지정합니다.
   (`@me` = 생성자, 현재 계정 `hyeongyu-data`). label은 성격에 맞춰 설정
   (Terraform/IaC: `terraform`+`gcp`, 문서: `documentation`, 자동화:
@@ -88,6 +88,8 @@ GitHub는 `form 선택 → label 자동 적용` 방식으로 동작합니다. Pr
 - 영어 소문자, 숫자, 하이픈만 사용합니다.
 - 이슈 번호를 반드시 포함합니다.
 - 한 브랜치에는 하나의 주요 목적만 담습니다.
+- Create a branch 대화상자의 기본 제안 이름은 사용하지 않고, 생성 전에 위 형식의
+  영어 이름으로 직접 수정합니다.
 
 ```bash
 # 이슈에서 Create a branch로 생성(예: feat/12-add-cloud-run-job) 후
@@ -167,7 +169,7 @@ Closes #12
 - 팀원 **2명** approve
 - 모든 conversation resolved
 - CI status check 통과. `branch_ruleset_main.json` 기준 required check는
-  `lint`이며, Terraform plan은 PR check/comment로 함께 확인합니다.
+  `lint`, `branch-name-policy`이며, Terraform plan은 PR check/comment로 함께 확인합니다.
 - Ready for review 상태 (Draft는 approve가 있어도 merge 불가)
 
 **리뷰어 확인 사항:**

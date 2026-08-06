@@ -53,6 +53,15 @@
   교체했다. 해당 image의 Alembic head는 `0004_experiment_branch_bootstrap`이며, 운영
   rollback은 launcher suspend 뒤 문서에 기록한 이전 API와 세 image 좌표를 함께 되돌린다.
 
+## 2026-08-06: GitHub 메타데이터 보정과 이슈 연결 영어 브랜치 검사 (#546) — PR 대기
+
+- Issue/PR 생성 시 작성자를 담당자로 지정하고, 지정 결과를 API 응답으로 검증한다.
+  외부 작성자처럼 지정할 수 없는 경우에는 Repository variable
+  `DEFAULT_GITHUB_ASSIGNEE`의 운영 담당자로 대체한다.
+- `branch-name-policy`를 main required check에 추가하는 선언을 만들었다. PR merge 후
+  관리자 담당자가 라이브 ruleset 반영과 기존 열린 PR의 check 재실행 여부를 확인한다.
+  머지가 막히는 긴급 상황의 롤백 순서는 **ruleset에서 check 제거 → workflow revert**다.
+
 ## 2026-08-05: GitHub Actions 셀프 호스티드 러너(ARC) PoC 인프라 구성 (#533) — PR 대기
 
 - GCP(GSA/WI/Secret Manager 컨테이너)는 dev root, Kubernetes(namespace/KSA/

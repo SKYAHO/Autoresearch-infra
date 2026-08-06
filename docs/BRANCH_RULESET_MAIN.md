@@ -40,7 +40,15 @@ gh api \
 ## 주의사항
 
 - `bypass_actors`가 비어 있어 관리자 포함 모든 사용자에게 동일하게 적용됩니다.
-- `lint` check는 GitHub Actions workflow 문법을 actionlint로 확인합니다.
+- `lint` check는 GitHub Actions workflow 문법을 actionlint로 확인하고,
+  `branch-name-policy` check는 이슈 연결 영어 브랜치 형식을 확인합니다.
+- 이 문서와 JSON은 **반영 예정 선언**입니다. PR이 merge된 뒤 관리자 담당자가
+  라이브 ruleset에 `branch-name-policy`를 추가하기 전에는 실제 required check가
+  `lint`만일 수 있으므로, Settings → Rules에서 적용 결과를 확인합니다.
+- 적용 직후 기존 PR도 다시 평가됩니다. 형식 위반 PR은 이슈에서 올바른 브랜치를
+  새로 만들고 PR을 교체하며, 형식은 맞지만 check가 없는 PR은 빈 커밋 또는 새 push로
+  check를 생성합니다. 긴급 롤백은 ruleset에서 `branch-name-policy`를 먼저 제거한 뒤
+  workflow를 revert합니다.
 - Terraform `plan` workflow는 PR마다 실행되고 댓글을 게시하지만, 현재
   ruleset required status check에는 포함하지 않습니다. 실패 시 머지 전
   원인을 확인하고 수정합니다.

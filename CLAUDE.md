@@ -75,6 +75,8 @@
 - GitHub Actions는 `.github/workflows/`: `lint.yml`(actionlint, required
   check), `terraform-plan.yml`(OIDC/WIF 기반 PR plan 및 댓글 게시),
   `claude.yml`(Claude PR 리뷰), `terraform-drift.yml`(dev root state drift 주기 감지).
+  `github-metadata.yml`(Issue/PR 담당자·label 보정)과
+  `branch-name-policy.yml`(이슈 연결 영어 브랜치 required check)도 포함합니다.
 - 작업 중 스펙·플랜 문서는 `docs/superpowers/` 기준을 따르고, 완료된 핵심
   결정은 `docs/CHANGE_HISTORY.md`에 요약합니다.
 - 팀원 로컬 GKE/Bastion/Airflow UI 접근 절차는
