@@ -13,7 +13,7 @@
 | 규칙 | 내용 | 목적 |
 |---|---|---|
 | Pull Request 필수 | `main`에는 직접 push하지 않고 PR을 통해서만 반영합니다. 정책 의도는 최소 2명 승인 + 모든 review thread 해결이며, **현재 라이브 룰은 승인 0명으로 완화된 상태**(thread 해결 필수는 유지 — 2026-07-30 rules API 실측, 수시 변경되므로 머지 전 확인). | 검증 없는 변경이 기준 브랜치에 들어가는 것을 방지합니다. |
-| 필수 status checks | `lint` status check가 통과해야 merge할 수 있습니다. | 최소한의 자동 검증 없이 기준 브랜치에 반영되는 것을 방지합니다. |
+| 필수 status checks | `lint`, `branch-name-policy` status check가 통과해야 merge할 수 있습니다. | 자동 검증과 이슈 연결 영어 브랜치 형식 없이 기준 브랜치에 반영되는 것을 방지합니다. |
 | stale review 무효화 | 새 커밋이 PR에 push되면 기존 승인을 무효화합니다. | 리뷰 이후 바뀐 코드가 승인 없이 merge되는 것을 막습니다. |
 | force push 차단 | `main`에 대한 non-fast-forward push를 차단합니다. | 기준 브랜치 히스토리 손상을 방지합니다. |
 | branch 삭제 차단 | `main` 브랜치 삭제를 차단합니다. | 기준 브랜치 삭제 사고를 방지합니다. |

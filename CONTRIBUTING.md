@@ -155,11 +155,11 @@ Project의 `Add item`으로 제목만 추가하면 Issue Form을 우회하게 �
 
 ## CI 및 검증
 
-- `.github/workflows/lint.yml` — actionlint. `lint`는 required status check입니다.
+- `.github/workflows/lint.yml` — actionlint. `lint`와 `branch-name-policy`는 required status check입니다.
 - `.github/workflows/terraform-plan.yml` — 내부 브랜치 PR에서 OIDC/WIF로 dev root plan을 실행하고 PR 댓글을 게시합니다.
 - `.github/workflows/claude.yml` — Claude Code PR 리뷰.
 - `.github/workflows/terraform-drift.yml` — dev root의 state drift를 주기 감지합니다.
-- 현재 `branch_ruleset_main.json`의 required status check는 `lint`입니다. Terraform plan은 PR check/comment로 반드시 확인하되, ruleset required check에는 포함하지 않습니다.
+- 현재 `branch_ruleset_main.json`의 required status check는 `lint`, `branch-name-policy`입니다. Terraform plan은 PR check/comment로 반드시 확인하되, ruleset required check에는 포함하지 않습니다.
 
 Terraform 변경 PR의 로컬 검증:
 
@@ -180,7 +180,7 @@ scripts/terraform-env --environment dev --root terraform/envs/dev plan -var-file
 
 **GCP 인증 workflow가 실패할 때**: GitHub OIDC provider와 service account binding, workflow `permissions`의 `id-token: write`, 대상 GCP project id와 service account email, 최소 권한 IAM role을 확인합니다.
 
-**PR이 merge되지 않을 때**: Draft 상태인지, approve 2명이 있는지, 모든 대화가 resolve되었는지, 충돌이 있는지, required check(`lint`)가 실패했는지 확인합니다.
+**PR이 merge되지 않을 때**: Draft 상태인지, approve 2명이 있는지, 모든 대화가 resolve되었는지, 충돌이 있는지, required check(`lint`, `branch-name-policy`)가 실패했는지 확인합니다.
 
 **이슈가 자동으로 닫히지 않을 때**: PR 본문에 `Closes #이슈번호`가 있는지, PR이 `main`으로 merge되었는지, 이슈 번호가 같은 저장소의 번호인지 확인합니다.
 
