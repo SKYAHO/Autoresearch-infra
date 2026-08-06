@@ -136,17 +136,15 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
   }
 
   spec {
-    # #541 5단계에서 이 namespace를 feast-apply-{dev,prod} 스케일셋과 공유하게
-    # 되면서 pod_selector{}(namespace 전체)를 이 PoC 스케일셋 Pod로만 좁힌다 —
-    # 그렇지 않으면 feast-apply-prod Redis egress 규칙과 별개로, 이 PoC 규칙이
-    # namespace의 모든 Pod에 적용돼 스코프 분리가 무의미해진다. 값은 실제
-    # 배포 후 `kubectl -n actions-runner get pods --show-labels`로 확인된
-    # ARC 표준 라벨이다.
-    pod_selector {
-      match_labels = {
-        "actions.github.com/scale-set-name" = "actions-runner-poc"
-      }
-    }
+    # namespace 전체(컨트롤러 매니저 + 3개 스케일셋의 리스너·러너 Pod 전부)에
+    # 적용되는 공용 최소 baseline이다. NetworkPolicy는 겹치는 selector끼리
+    # union으로 합쳐지므로, 이 baseline이 DNS/PGA/GitHub만 허용해 두면
+    # PoC 전용 K8s API 규칙(아래 actions_runner_poc_k8s_api_egress)과
+    # feast-apply-prod 전용 Redis 규칙(feast_apply_prod_runner_egress)을 각각
+    # 스케일셋 라벨로 스코프한 별도 정책으로 "추가"할 수 있다 — pod_selector를
+    # 좁혀 컨트롤러/리스너 Pod를 어떤 정책에서도 빠뜨리면 그 Pod는 egress
+    # 무제한이 된다(#541 리뷰 — 이전에 좁혔다가 되돌림).
+    pod_selector {}
     policy_types = ["Egress"]
 
     # 같은 namespace 내 통신(컨트롤러 ↔ 러너).
@@ -244,7 +242,49 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
       }
     }
 
-    # PoC: K8s API 서버(in-cluster, 서비스 VIP 경유) 접근 검증.
+    # GitHub Actions 서비스 연결(러너 등록/job polling). 사설 대역(RFC1918)은
+    # except로 빼서 아래 PoC 전용 K8s API 규칙과 겹치지 않게 한다 — 겹치면 그
+    # 규칙을 제거해도 이 규칙이 대신 통과시켜 Task 7 음성 대조군이 무효화된다.
+    egress {
+      to {
+        ip_block {
+          cidr = "0.0.0.0/0"
+          except = [
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+          ]
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "443"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.actions_runner]
+}
+
+# PoC 스케일셋 러너 Pod 전용 supplemental 규칙: K8s API 서버(in-cluster, 서비스
+# VIP 경유) 접근 검증. baseline(actions_runner_egress)에서 분리해 K8s API
+# egress를 PoC 러너에만 준다 — feast-apply 러너는 kubectl/K8s API를 호출하지
+# 않으므로 상속하지 않는 것이 최소 권한 원칙에 맞다.
+resource "kubernetes_network_policy_v1" "actions_runner_poc_k8s_api_egress" {
+  metadata {
+    name      = "actions-runner-poc-k8s-api-egress"
+    namespace = kubernetes_namespace_v1.actions_runner.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "actions.github.com/scale-set-name" = "actions-runner-poc"
+      }
+    }
+    policy_types = ["Egress"]
+
     egress {
       to {
         ip_block {
@@ -263,27 +303,6 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
       to {
         ip_block {
           cidr = var.cluster_master_cidr
-        }
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "443"
-      }
-    }
-
-    # GitHub Actions 서비스 연결(러너 등록/job polling). 사설 대역(RFC1918)은
-    # except로 빼서 위 K8s API 규칙과 겹치지 않게 한다 — 겹치면 그 규칙을
-    # 제거해도 이 규칙이 대신 통과시켜 Task 7 음성 대조군이 무효화된다.
-    egress {
-      to {
-        ip_block {
-          cidr = "0.0.0.0/0"
-          except = [
-            "10.0.0.0/8",
-            "172.16.0.0/12",
-            "192.168.0.0/16",
-          ]
         }
       }
 
@@ -313,164 +332,43 @@ resource "kubernetes_service_account_v1" "feast_apply_runner" {
   automount_service_account_token = false
 }
 
-# feast-apply-{dev,prod} 스케일셋 전용 egress. actions_runner_egress(PoC)와
-# 같은 namespace를 공유하므로 pod_selector로 반드시 스케일셋별로 스코프해야
-# 서로 겹치지 않는다 — 겹치면 dev/PoC 러너가 prod Redis egress를 상속받는다.
-# K8s API 규칙은 포함하지 않는다: `feast apply`는 kubectl/K8s API를 호출하지
-# 않으므로 PoC 전용 규칙을 상속하지 않는 것이 최소 권한 원칙에 맞다.
-resource "kubernetes_network_policy_v1" "feast_apply_runner_egress" {
-  for_each = local.feast_apply_runner_identities
-
+# feast-apply-prod 스케일셋 전용 supplemental 규칙: Redis Cluster PSC만
+# 추가한다. DNS/PGA/GitHub-443은 baseline(actions_runner_egress, pod_selector
+# {}) 이 이미 namespace 전체(feast-apply-dev/prod 포함)에 적용하므로 여기서
+# 다시 선언하지 않는다 — NetworkPolicy는 겹치는 selector끼리 union이라
+# 중복 선언은 불필요하다. dev는 baseline만으로 충분해 별도 리소스가 없다
+# (음성 대조군: dev 러너는 Redis PSC 규칙이 없으므로 접근 시도가 baseline의
+# 어떤 allow 규칙에도 안 걸려 차단된다).
+resource "kubernetes_network_policy_v1" "feast_apply_prod_runner_egress" {
   metadata {
-    name      = "feast-apply-${each.key}-runner-egress"
+    name      = "feast-apply-prod-runner-egress"
     namespace = kubernetes_namespace_v1.actions_runner.metadata[0].name
   }
 
   spec {
     pod_selector {
       match_labels = {
-        "actions.github.com/scale-set-name" = each.value.scale_set_name
+        "actions.github.com/scale-set-name" = local.feast_apply_runner_identities.prod.scale_set_name
       }
     }
     policy_types = ["Egress"]
 
-    # 같은 namespace 내 통신(컨트롤러 ↔ 러너, actions_runner_egress와 동일 이유).
-    egress {
-      to {
-        pod_selector {}
-      }
-    }
-
     egress {
       to {
         ip_block {
-          cidr = var.cluster_services_cidr
-        }
-      }
-
-      ports {
-        protocol = "UDP"
-        port     = "53"
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "53"
-      }
-    }
-
-    egress {
-      to {
-        namespace_selector {
-          match_labels = {
-            "kubernetes.io/metadata.name" = "kube-system"
-          }
-        }
-
-        pod_selector {
-          match_labels = {
-            "k8s-app" = "kube-dns"
-          }
-        }
-      }
-
-      ports {
-        protocol = "UDP"
-        port     = "53"
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "53"
-      }
-    }
-
-    egress {
-      to {
-        ip_block {
-          cidr = "169.254.169.254/32"
+          cidr = var.redis_psc_subnet_cidr
         }
       }
 
       ports {
         protocol = "TCP"
-        port     = "80"
-      }
-    }
-
-    egress {
-      to {
-        ip_block {
-          cidr = "169.254.169.252/32"
-        }
+        port     = tostring(var.redis_discovery_port)
       }
 
       ports {
         protocol = "TCP"
-        port     = "987"
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "988"
-      }
-    }
-
-    egress {
-      to {
-        ip_block {
-          cidr = var.private_googleapis_cidr
-        }
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "443"
-      }
-    }
-
-    # GitHub Actions 서비스 연결(러너 등록/job polling). actions_runner_egress와
-    # 동일한 RFC1918 except.
-    egress {
-      to {
-        ip_block {
-          cidr = "0.0.0.0/0"
-          except = [
-            "10.0.0.0/8",
-            "172.16.0.0/12",
-            "192.168.0.0/16",
-          ]
-        }
-      }
-
-      ports {
-        protocol = "TCP"
-        port     = "443"
-      }
-    }
-
-    # Redis Cluster PSC discovery/data-node topology는 prod에만 필요하다
-    # (feast_apply.tf의 동일 패턴). dev egress에는 렌더하지 않는다.
-    dynamic "egress" {
-      for_each = each.key == "prod" ? [true] : []
-
-      content {
-        to {
-          ip_block {
-            cidr = var.redis_psc_subnet_cidr
-          }
-        }
-
-        ports {
-          protocol = "TCP"
-          port     = tostring(var.redis_discovery_port)
-        }
-
-        ports {
-          protocol = "TCP"
-          port     = tostring(var.redis_node_port_start)
-          end_port = var.redis_node_port_end
-        }
+        port     = tostring(var.redis_node_port_start)
+        end_port = var.redis_node_port_end
       }
     }
   }

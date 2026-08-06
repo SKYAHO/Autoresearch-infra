@@ -181,7 +181,7 @@ variable "feast_apply_dev_gcp_service_account_email" {
 }
 
 variable "feast_apply_prod_gcp_service_account_email" {
-  description = "feast-apply-prod 러너 스케일셋 KSA가 가리킬 GSA email. Empty value derives the dev default name."
+  description = "feast-apply-prod 러너 스케일셋 KSA가 가리킬 GSA email. Empty value derives the prod default name."
   type        = string
   default     = ""
 }

@@ -426,6 +426,28 @@ resource "google_service_account_iam_member" "feast_apply_prod_ksa_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
+# #541 셀프 호스티드 러너(ARC) KSA도 같은 GSA를 가장한다(GSA는 #424와 공유,
+# namespace/KSA만 다름). `actions-runner`/`feast-apply-{dev,prod}-runner`는
+# terraform/admin/actions-runner-k8s의 리터럴과 정확히 일치해야 한다 — 그
+# root가 이 namespace/KSA 이름을 바꾸면 여기도 함께 바꿔야 하며, 두 root가
+# 서로 다른 state라 drift를 자동으로 잡아주지 않는다. GKE Job 경로(위 두
+# binding)는 #346 롤백 여유를 위해 유지한다.
+resource "google_service_account_iam_member" "feast_apply_dev_runner_ksa_wi" {
+  service_account_id = google_service_account.feast_apply_dev.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[actions-runner/feast-apply-dev-runner]"
+
+  depends_on = [google_container_cluster.dev]
+}
+
+resource "google_service_account_iam_member" "feast_apply_prod_runner_ksa_wi" {
+  service_account_id = google_service_account.feast_apply_prod.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[actions-runner/feast-apply-prod-runner]"
+
+  depends_on = [google_container_cluster.dev]
+}
+
 # GKE endpoint와 cluster metadata 조회는 두 환경에 필요하다. Job 권한은 Task 3의
 # 환경별 namespace RoleBinding이 별도로 제한한다.
 resource "google_project_iam_member" "feast_apply_dev_cluster_viewer" {

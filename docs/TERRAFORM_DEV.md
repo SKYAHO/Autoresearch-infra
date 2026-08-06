@@ -581,6 +581,32 @@ GitHub App 설치 범위를 앱 저장소로 확장하는 절차(1회, 수동)�
 `docs/runbooks/2026-08-05-actions-runner-github-app-secret.md`의 5단계를
 따른다.
 
+##### feast-apply-prod 러너의 신뢰 경계 (#541 리뷰)
+
+기존 GKE Job 경로(#332/#424)는 GSA 가장 조건을 **WIF `attribute.workflow_ref`
+고정**(`feast-apply.yml@refs/heads/main`)으로 걸었다 — 그 정확한 workflow
+파일이 `main` ref에서 실행될 때만 GCP 토큰을 발급받았다. GKE Workload
+Identity(이 이슈가 쓰는 경로)에는 이에 대응하는 개념이 없다: KSA→GSA
+바인딩은 "그 namespace의 그 KSA로 뜬 Pod면 전부" 허용이라, `workflow_ref`
+같은 파일/ref 단위 조건을 걸 수 없다.
+
+즉 이 경로에서 GCP 신뢰 경계는 **"누가 `feast-apply-prod-runner` KSA로 뜬
+Pod에 job을 스케줄할 수 있는가"**로 옮겨간다 — 실질적으로는 "앱 저장소
+`SKYAHO/Autoresearch`의 어떤 브랜치에서든 `runs-on: feast-apply-prod`를 쓰는
+workflow 파일을 실행할 수 있는가"와 같다. `main` ref 제한이 자동으로 따라오지
+않으므로, 이를 대체하는 통제는 앱 저장소 쪽에서 확보해야 한다(이 저장소
+범위 밖, 앱 저장소 유지관리자 확인 필요):
+
+- `feast-apply.yml`의 prod 실행 job에 `environment: prod`를 유지해 GitHub
+  Environment 필수 리뷰어 게이트를 그대로 적용한다.
+- fork PR(`pull_request` 이벤트)이 이 스케일셋을 잡지 못하도록 앱 저장소의
+  Actions 설정(러너 그룹 접근 범위 또는 "Require approval for all outside
+  collaborators")을 확인한다 — self-hosted 러너는 기본적으로 fork PR에
+  노출되면 위험이 크다.
+- 이 두 통제가 실제로 걸려 있는지는 이 PR로 검증되지 않았다. `apply.yml`의
+  "self-hosted로 옮기지 않는다" 결정(위 참고)과 짝을 이루는 문서화이지,
+  통제 자체의 존재를 보증하지 않는다.
+
 #### 운영 제약과 한계
 
 - **dev/prod apply는 `main`의 정확한 `feast-apply.yml`로만 가능하다.** dev는
