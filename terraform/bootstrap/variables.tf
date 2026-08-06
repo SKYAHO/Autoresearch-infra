@@ -29,12 +29,26 @@ variable "feast_apply_github_repository" {
 # provider 가 같은 값을 쓰면 한쪽은 반드시 어긋난다(#548) — feast-apply 는
 # `on.push.branches: [main, dev]` 라서 dev push 의 workflow_ref 가
 # `@refs/heads/dev` 로 온다. 그래서 환경별 목록으로 분리한다.
+# 빈 리스트는 조건식을 `assertion.workflow_ref in []` 로 만들어 **모든 토큰을
+# 조용히 거부**한다 — plan/apply 는 성공하므로 앱 저장소 워크플로우가 실패할
+# 때까지 드러나지 않는다. 형식 검증도 함께 걸어 오타를 apply 전에 잡는다.
+# repository 부분은 `var.feast_apply_github_repository` 와 맞아야 하지만,
+# 변수 간 참조는 Terraform 1.9+ 에서만 되고 이 root 는 `>= 1.6.0` 을 허용하므로
+# 여기서는 형태만 검증하고 대조는 provider 조건식에 맡긴다.
 variable "feast_apply_prod_workflow_refs" {
   description = "GitHub Actions workflow_refs allowed to obtain prod Feast apply WIF tokens. prod는 main push와 main에서의 workflow_dispatch뿐이라 ref가 하나다."
   type        = list(string)
   default = [
     "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main",
   ]
+
+  validation {
+    condition = length(var.feast_apply_prod_workflow_refs) > 0 && alltrue([
+      for ref in var.feast_apply_prod_workflow_refs :
+      can(regex("^[^/]+/[^/]+/\\.github/workflows/feast-apply\\.yml@refs/heads/[A-Za-z0-9._/-]+$", ref))
+    ])
+    error_message = "feast_apply_prod_workflow_refs must be a non-empty list of feast-apply.yml workflow refs; an empty list silently rejects every token."
+  }
 }
 
 variable "feast_apply_dev_workflow_refs" {
@@ -44,6 +58,14 @@ variable "feast_apply_dev_workflow_refs" {
     "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/dev",
     "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main",
   ]
+
+  validation {
+    condition = length(var.feast_apply_dev_workflow_refs) > 0 && alltrue([
+      for ref in var.feast_apply_dev_workflow_refs :
+      can(regex("^[^/]+/[^/]+/\\.github/workflows/feast-apply\\.yml@refs/heads/[A-Za-z0-9._/-]+$", ref))
+    ])
+    error_message = "feast_apply_dev_workflow_refs must be a non-empty list of feast-apply.yml workflow refs; an empty list silently rejects every token."
+  }
 }
 
 variable "region" {
