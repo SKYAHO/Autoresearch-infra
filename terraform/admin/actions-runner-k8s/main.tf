@@ -136,6 +136,14 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
   }
 
   spec {
+    # namespace 전체(컨트롤러 매니저 + 3개 스케일셋의 리스너·러너 Pod 전부)에
+    # 적용되는 공용 최소 baseline이다. NetworkPolicy는 겹치는 selector끼리
+    # union으로 합쳐지므로, 이 baseline이 DNS/PGA/GitHub만 허용해 두면
+    # PoC 전용 K8s API 규칙(아래 actions_runner_poc_k8s_api_egress)과
+    # feast-apply-prod 전용 Redis 규칙(feast_apply_prod_runner_egress)을 각각
+    # 스케일셋 라벨로 스코프한 별도 정책으로 "추가"할 수 있다 — pod_selector를
+    # 좁혀 컨트롤러/리스너 Pod를 어떤 정책에서도 빠뜨리면 그 Pod는 egress
+    # 무제한이 된다(#541 리뷰 — 이전에 좁혔다가 되돌림).
     pod_selector {}
     policy_types = ["Egress"]
 
@@ -234,7 +242,49 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
       }
     }
 
-    # PoC: K8s API 서버(in-cluster, 서비스 VIP 경유) 접근 검증.
+    # GitHub Actions 서비스 연결(러너 등록/job polling). 사설 대역(RFC1918)은
+    # except로 빼서 아래 PoC 전용 K8s API 규칙과 겹치지 않게 한다 — 겹치면 그
+    # 규칙을 제거해도 이 규칙이 대신 통과시켜 Task 7 음성 대조군이 무효화된다.
+    egress {
+      to {
+        ip_block {
+          cidr = "0.0.0.0/0"
+          except = [
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+          ]
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = "443"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.actions_runner]
+}
+
+# PoC 스케일셋 러너 Pod 전용 supplemental 규칙: K8s API 서버(in-cluster, 서비스
+# VIP 경유) 접근 검증. baseline(actions_runner_egress)에서 분리해 K8s API
+# egress를 PoC 러너에만 준다 — feast-apply 러너는 kubectl/K8s API를 호출하지
+# 않으므로 상속하지 않는 것이 최소 권한 원칙에 맞다.
+resource "kubernetes_network_policy_v1" "actions_runner_poc_k8s_api_egress" {
+  metadata {
+    name      = "actions-runner-poc-k8s-api-egress"
+    namespace = kubernetes_namespace_v1.actions_runner.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "actions.github.com/scale-set-name" = "actions-runner-poc"
+      }
+    }
+    policy_types = ["Egress"]
+
     egress {
       to {
         ip_block {
@@ -261,25 +311,82 @@ resource "kubernetes_network_policy_v1" "actions_runner_egress" {
         port     = "443"
       }
     }
+  }
 
-    # GitHub Actions 서비스 연결(러너 등록/job polling). 사설 대역(RFC1918)은
-    # except로 빼서 위 K8s API 규칙과 겹치지 않게 한다 — 겹치면 그 규칙을
-    # 제거해도 이 규칙이 대신 통과시켜 Task 7 음성 대조군이 무효화된다.
+  depends_on = [kubernetes_namespace_v1.actions_runner]
+}
+
+# #541 5단계: feast apply 전용 러너 KSA 2개. 새 GSA는 만들지 않고 #424의
+# feast_apply_{dev,prod} GSA를 그대로 재사용한다(locals.tf 참고).
+resource "kubernetes_service_account_v1" "feast_apply_runner" {
+  for_each = local.feast_apply_runner_identities
+
+  metadata {
+    name      = each.value.ksa_name
+    namespace = kubernetes_namespace_v1.actions_runner.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = each.value.gcp_service_account_email
+    }
+  }
+
+  automount_service_account_token = false
+}
+
+# feast-apply-prod 스케일셋 전용 supplemental 규칙: Redis Cluster PSC만
+# 추가한다. DNS/PGA/GitHub-443은 baseline(actions_runner_egress, pod_selector
+# {}) 이 이미 namespace 전체(feast-apply-dev/prod 포함)에 적용하므로 여기서
+# 다시 선언하지 않는다 — NetworkPolicy는 겹치는 selector끼리 union이라
+# 중복 선언은 불필요하다. dev는 baseline만으로 충분해 별도 리소스가 없다
+# (음성 대조군: dev 러너는 Redis PSC 규칙이 없으므로 접근 시도가 baseline의
+# 어떤 allow 규칙에도 안 걸려 차단된다).
+#
+# pod_selector 근거(#541 리뷰 이해도 확인): actions.github.com/scale-set-name
+# 라벨은 Helm values가 아니라 ARC 컨트롤러가 Pod 생성 시점에 주입하며,
+# 리스너 Pod뿐 아니라 ephemeral runner Pod에도 동일하게 붙는다 — upstream
+# actions/actions-runner-controller의
+# docs/adrs/2023-03-14-adding-labels-k8s-resources.md가 Listener/Runner 두
+# Pod spec 모두에 이 라벨을 "set by controller at creation"으로 명시한다.
+# 값은 AutoscalingRunnerSet.metadata.name(= Helm의 runnerScaleSetName, 이
+# 저장소에서는 deploy/actions-runner-scale-set-feast-{dev,prod}/values.yaml의
+# runnerScaleSetName)에서 온다 — Helm release 이름이 아니다. 라이브 클러스터의
+# PoC 리스너 Pod(actions-runner-poc-*-listener)가 이미
+# actions.github.com/scale-set-name=actions-runner-poc 라벨을 달고 있어(값이
+# PoC values.yaml의 runnerScaleSetName과 일치) 이 주입 메커니즘을 간접
+# 확인했다. 이 selector가 실제로 0개를 고르는 경우(라벨이 전혀 안 붙는
+# 회귀)라면 actions-runner-poc는 K8s API egress가 막혀 job이 API 호출에서
+# 타임아웃하고, feast-apply-prod는 Redis PSC egress가 막혀(baseline도
+# 없으므로) GCS는 되지만 Redis만 실패한다 — 둘 다 각 워크플로우 실행
+# 시점에 바로 드러난다(무한 대기가 아니라 명시적 실패).
+resource "kubernetes_network_policy_v1" "feast_apply_prod_runner_egress" {
+  metadata {
+    name      = "feast-apply-prod-runner-egress"
+    namespace = kubernetes_namespace_v1.actions_runner.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "actions.github.com/scale-set-name" = local.feast_apply_runner_identities.prod.scale_set_name
+      }
+    }
+    policy_types = ["Egress"]
+
     egress {
       to {
         ip_block {
-          cidr = "0.0.0.0/0"
-          except = [
-            "10.0.0.0/8",
-            "172.16.0.0/12",
-            "192.168.0.0/16",
-          ]
+          cidr = var.redis_psc_subnet_cidr
         }
       }
 
       ports {
         protocol = "TCP"
-        port     = "443"
+        port     = tostring(var.redis_discovery_port)
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = tostring(var.redis_node_port_start)
+        end_port = var.redis_node_port_end
       }
     }
   }

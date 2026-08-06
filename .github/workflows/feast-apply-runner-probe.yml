@@ -1,0 +1,162 @@
+# #541 5단계 검증. feast-apply-{dev,prod} 스케일셋이 실제로 GCS에 도달하고,
+# prod만 Redis Cluster PSC에 도달하는지 확인하는 비파괴적 워크플로우다.
+# feast apply 자체는 실행하지 않는다 — 앱 저장소 feast-apply.yml 재작성 이후
+# 이 확인이 그 워크플로우의 첫 실행으로 대체될 수 있어, 영구 자산으로 남길지는
+# #541 완료 시 재검토한다(제거 쪽이 기본값 — actions-runner-poc.yml과 목적이
+# 겹치면 그쪽을 확장해 재사용).
+#
+# 러너 기본 이미지(ghcr.io/actions/actions-runner)에는 gcloud/redis-cli가
+# 없다(actions-runner-poc.yml과 동일 이유) — GKE metadata server + curl로 GCS
+# 접근을, /dev/tcp로 Redis 도달성만(프로토콜 PING은 아님) 확인한다.
+#
+# Redis 확인은 environment와 무관하게 항상 시도한다: prod는 성공이 기대값이고
+# dev는 NetworkPolicy가 막아 실패가 기대값이다. 기대값과 실제 결과를 비교해
+# 일치하면 step은 성공(exit 0), 불일치(dev인데 도달 성공/prod인데 도달 실패)면
+# 이상 상태이므로 step을 실제로 실패(exit 1)시켜 job이 빨간 X로 보이게 한다
+# — continue-on-error는 쓰지 않는다(#541 리뷰: exit 0 고정 + continue-on-error는
+# negative control이 뭘 해도 항상 초록으로 보여 검증 목적을 무력화한다).
+#
+# workflow_call도 함께 연다(#541 리뷰 blocker): `feast-apply-{dev,prod}`
+# 스케일셋은 `SKYAHO/Autoresearch`에 repo 스코프로 등록돼 있어(#533에서
+# org/그룹 스코프는 범위 밖으로 뒀다), 이 workflow_dispatch를
+# Autoresearch-infra에서 직접 실행하면 실행 컨텍스트가 이 저장소로 남아
+# 매칭되는 러너가 없어 job이 큐에서 무한 대기한다. 실제 검증은 앱 저장소에
+# 아래와 같은 caller workflow(이 저장소 범위 밖이라 여기서 만들지 않는다)를
+# 추가해 `workflow_call`로 실행해야 한다 — 그러면 실행 컨텍스트가 앱 저장소가
+# 되어 스케일셋이 job을 받는다:
+#
+#   jobs:
+#     probe:
+#       uses: SKYAHO/Autoresearch-infra/.github/workflows/feast-apply-runner-probe.yml@main
+#       with:
+#         environment: dev
+#         redis_discovery_host: ""
+#
+# workflow_dispatch는 이 파일을 infra 저장소에서 직접 실행해 문법/로직만
+# 확인하고 싶을 때를 위해 남겨둔다 — job이 큐에서 대기하면 위 이유 때문이니
+# 취소하고 caller workflow로 재시도한다.
+
+name: Feast Apply Runner Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "확인할 environment"
+        type: choice
+        options:
+          - dev
+          - prod
+        required: true
+      redis_discovery_host:
+        description: "Redis Cluster PSC discovery endpoint IP (prod 확인 시 필요, terraform output redis_discovery_address)"
+        type: string
+        required: false
+      redis_port:
+        description: "Redis discovery endpoint TCP port"
+        type: string
+        required: false
+        default: "6379"
+  workflow_call:
+    inputs:
+      environment:
+        description: "확인할 environment (dev 또는 prod)"
+        type: string
+        required: true
+      redis_discovery_host:
+        description: "Redis Cluster PSC discovery endpoint IP (prod 확인 시 필요, terraform output redis_discovery_address)"
+        type: string
+        required: false
+      redis_port:
+        description: "Redis discovery endpoint TCP port"
+        type: string
+        required: false
+        default: "6379"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: feast-apply-${{ inputs.environment }}
+    steps:
+      - name: GCS 도달성 확인 (WI 토큰 발급 + registry 버킷 접근)
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -uo pipefail
+
+          project_id=$(curl -sf -H 'Metadata-Flavor: Google' \
+            'http://metadata.google.internal/computeMetadata/v1/project/project-id')
+          token=$(curl -sf -H 'Metadata-Flavor: Google' \
+            'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+            | grep -o '"access_token" *: *"[^"]*"' | cut -d'"' -f4)
+
+          if [ -z "$project_id" ] || [ -z "$token" ]; then
+            echo "project id 또는 GSA access token 발급 실패 — Workload Identity 확인 필요" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$ENVIRONMENT" = "prod" ]; then
+            bucket="${project_id}-feast-registry"
+          else
+            bucket="${project_id}-feast-registry-dev"
+          fi
+
+          http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${token}" \
+            "https://storage.googleapis.com/storage/v1/b/${bucket}/o?maxResults=1")
+
+          {
+            echo "## Feast Apply Runner Probe (${ENVIRONMENT})"
+            echo
+            echo "- GCS bucket: \`${bucket}\`"
+            echo "- HTTP status: ${http_code}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$http_code" != "200" ]; then
+            echo "GCS 접근 실패 (HTTP ${http_code}) — IAM 또는 NetworkPolicy 확인 필요"
+            exit 1
+          fi
+
+          echo "GCS 접근 성공"
+
+      - name: Redis Cluster PSC 도달성 확인 (prod=성공 기대, dev=negative control)
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          REDIS_HOST: ${{ inputs.redis_discovery_host }}
+          REDIS_PORT: ${{ inputs.redis_port || '6379' }}
+        run: |
+          set -u
+
+          if [ -z "${REDIS_HOST:-}" ]; then
+            echo "- Redis: redis_discovery_host 입력이 없어 건너뜀" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # REDIS_HOST/PORT를 bash -c 문자열에 직접 보간하지 않고 위치 인자로
+          # 넘긴다 — 문자열 보간은 중첩 셸이 값을 다시 파싱해 명령 주입이
+          # 가능해진다(#541 리뷰 하드닝). $1/$2는 바깥 셸이 아니라 안쪽
+          # bash -c가 확장하므로 작은따옴표가 맞다(shellcheck SC2016 오탐).
+          # shellcheck disable=SC2016
+          if timeout 5 bash -c 'exec 3<>/dev/tcp/"$1"/"$2"' _ "$REDIS_HOST" "$REDIS_PORT" 2>/dev/null; then
+            reachable=true
+          else
+            reachable=false
+          fi
+
+          if [ "$ENVIRONMENT" = "prod" ]; then
+            expected=true
+          else
+            expected=false
+          fi
+
+          echo "- Redis PSC(${REDIS_HOST}:${REDIS_PORT}) 도달=${reachable}, 기대=${expected} (${ENVIRONMENT})" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$reachable" = "$expected" ]; then
+            echo "  기대값과 일치 — 정상" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "  기대값과 불일치 — NetworkPolicy/PSC 설정 확인 필요" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
