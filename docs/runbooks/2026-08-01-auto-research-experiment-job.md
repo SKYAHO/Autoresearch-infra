@@ -337,6 +337,25 @@ CronJob **launcher** 하나다. API는 Job을 만들지 않고 상태만 조회�
 | Job 이름 | `ar-branch-<experiment UUID hex>` |
 | 동시 실행 상한 | `ORCH_MAX_CONCURRENT_EXPERIMENTS=2` (namespace quota와 같은 값) |
 
+### Phase 1 release provenance (#551)
+
+launcher·executor·API는 애플리케이션 PR `SKYAHO/Autoresearch#547`의 squash merge
+SHA `e81d7f7cafa8c2834f75bd36f9cebacebee4e5e6`을 source로 한 release run
+`SKYAHO/Autoresearch/actions/runs/31069140098`에서 게시했다. mutable tag는 사용하지
+않으며 배포와 롤백은 아래 digest 전체 참조를 사용한다.
+
+| 역할 | immutable image |
+|---|---|
+| launcher | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:44ca561e7cd8f6df7b00c6a6d7c1d7ee971107d3e3234e5eb02086c90ca57cc7` |
+| executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fe0002e097ac750c90a083519cc6ac86420e84a44c1aa7aa6c7d0ff9120b707c` |
+| API | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:36507859b830032aedaa7a6fbf1b77e69466ceec7b56af084dc694e21c51ecde` |
+
+release workflow가 세 image의 OCI revision·비루트 실행·import를 검증했고, API
+digest를 직접 실행한 `alembic -c agent_orchestration/alembic.ini heads` 결과는
+`0004_experiment_branch_bootstrap (head)`다. 이전 API digest
+`sha256:0471c6ea3f7e73c0bbe5e077088432a701ed26eb5f32b4f72dc7425c95ddb197`가
+rollback 좌표다. launcher CronJob을 먼저 suspend한 뒤 세 참조를 함께 되돌린다.
+
 이 Phase는 Job 완료·실패를 DB status로 회수하지 않는다. Job이 `Complete`가 되어도
 Experiment는 `RUNNING`에 남는다. 이는 의도된 경계이며 reconciler는 후속 이슈다.
 
