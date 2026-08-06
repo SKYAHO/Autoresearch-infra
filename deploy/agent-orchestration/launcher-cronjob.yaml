@@ -1,0 +1,221 @@
+# #551 Phase 1 launcher는 1분마다 DB에서 봉인 좌표가 완성된 Experiment를 선점하고,
+# 고정 manifest의 branch-bootstrap Job을 생성한 뒤 종료한다. GitHub ref 생성은 executor
+# Job의 책임이며 launcher는 GitHub 공개 egress나 branch-writer private key를 갖지 않는다.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: agent-orchestration-launcher
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-launcher
+    app.kubernetes.io/part-of: agent-orchestration
+    app.kubernetes.io/component: launcher
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: agent-orchestration-launcher
+            app.kubernetes.io/part-of: agent-orchestration
+            app.kubernetes.io/component: launcher
+        spec:
+          serviceAccountName: agent-orchestration-launcher
+          # launcher만 Kubernetes Jobs create/get/list를 호출하므로 in-cluster token이
+          # 필요하다. executor Job은 애플리케이션 고정 manifest에서 false로 강제한다.
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: bootstrap-db
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:44ca561e7cd8f6df7b00c6a6d7c1d7ee971107d3e3234e5eb02086c90ca57cc7
+              imagePullPolicy: IfNotPresent
+              command:
+                - python
+                - -m
+                - agent_orchestration.bootstrap_secrets
+              env:
+                - name: ORCH_DB_PASSWORD_SECRET_ID
+                  value: projects/autoresearch-503903/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
+                - name: ORCH_DB_HOST
+                  value: 192.168.0.3
+                - name: ORCH_DB_NAME
+                  value: agent_orchestration
+                - name: ORCH_DB_USER
+                  value: agent_orchestration_app
+                - name: ORCH_RUNTIME_DIR
+                  value: /runtime
+              volumeMounts:
+                - name: db-runtime
+                  mountPath: /runtime
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 10001
+                runAsGroup: 10001
+                capabilities:
+                  drop: ["ALL"]
+          containers:
+            - name: launcher
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:44ca561e7cd8f6df7b00c6a6d7c1d7ee971107d3e3234e5eb02086c90ca57cc7
+              imagePullPolicy: IfNotPresent
+              # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
+              # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
+              # 남지 않으며 exec 뒤 launcher process만 값을 가진다.
+              command:
+                - python
+                - -c
+                - |
+                  import os
+                  from pathlib import Path
+
+                  entries = [
+                      line.split("=", 1)[1]
+                      for line in Path("/runtime/db.env").read_text(encoding="utf-8").splitlines()
+                      if line.startswith("ORCH_DATABASE_URL=")
+                  ]
+                  if len(entries) != 1:
+                      raise SystemExit("Expected exactly one ORCH_DATABASE_URL runtime entry")
+                  os.environ["ORCH_DATABASE_URL"] = entries[0]
+                  os.execvp(
+                      "python",
+                      ["python", "-m", "agent_orchestration.launcher.main"],
+                  )
+              env:
+                - name: ORCH_JOB_NAMESPACE
+                  value: autoresearch-experiments
+                - name: ORCH_EXECUTOR_IMAGE
+                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fe0002e097ac750c90a083519cc6ac86420e84a44c1aa7aa6c7d0ff9120b707c
+                - name: ORCH_EXECUTOR_SERVICE_ACCOUNT
+                  value: experiment-job
+                - name: ORCH_EXECUTOR_NODE_POOL
+                  value: batch-od
+                - name: ORCH_GITHUB_APP_SECRET_NAME
+                  value: autoresearch-experiment-branch-writer-app
+                - name: ORCH_GITHUB_APP_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: autoresearch-experiment-branch-writer-app
+                      key: app-id
+                - name: ORCH_GITHUB_APP_INSTALLATION_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: autoresearch-experiment-branch-writer-app
+                      key: installation-id
+                - name: ORCH_GITHUB_REPOSITORY
+                  value: SKYAHO/Autoresearch
+                - name: ORCH_MAX_CONCURRENT_EXPERIMENTS
+                  value: "2"
+              volumeMounts:
+                - name: db-runtime
+                  mountPath: /runtime
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 10001
+                runAsGroup: 10001
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: db-runtime
+              emptyDir:
+                medium: Memory
+---
+# launcher는 Cloud SQL·Secret Manager·DNS와 Kubernetes API만 호출한다. 공개 GitHub
+# egress는 생성된 branch-bootstrap Pod에만 별도 허용되며 launcher에는 열지 않는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-launcher
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-launcher
+      app.kubernetes.io/part-of: agent-orchestration
+      app.kubernetes.io/component: launcher
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            # dev Terraform var.private_services_cidr와 반드시 일치한다.
+            cidr: 192.168.0.0/20
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.252/32
+      ports:
+        - protocol: TCP
+          port: 987
+        - protocol: TCP
+          port: 988
+    - to:
+        - ipBlock:
+            # Secret Manager private.googleapis.com 고정 VIP.
+            cidr: 199.36.153.8/30
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        # Calico의 Service DNAT 전·후 평가 경로를 모두 허용하되 Kubernetes API
+        # Service 한 개와 control plane CIDR로만 제한한다.
+        - ipBlock:
+            cidr: 172.16.128.1/32
+        - ipBlock:
+            cidr: 172.16.0.0/28
+      ports:
+        - protocol: TCP
+          port: 443

@@ -44,8 +44,8 @@
 | T3 | admin root: admission에 branch-bootstrap Pod 형태 계약 추가 | `51d0fbd` |
 | T4 | admin root: branch-bootstrap Pod 전용 공개 443 egress | `c1548d8` |
 | T5 | `deploy/`: API에 baseline-reader Secret mount·env 배선 | `5855638` |
-| T6 | `deploy/`: launcher CronJob + 전용 NetworkPolicy (**release digest 필요**) | 대기 |
-| T7 | runbook 2종·CHANGE_HISTORY·이 문서 | 진행 중 |
+| T6 | `deploy/`: launcher CronJob + 전용 NetworkPolicy + 세 release digest 반영 | #551 |
+| T7 | runbook 2종·CHANGE_HISTORY·이 문서 | `7419c8b`, #551 |
 
 ## 계획과 다르게 결정한 것
 

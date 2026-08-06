@@ -3,7 +3,7 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
-## 2026-08-06: 실험 브랜치 launcher·executor 인프라 (#539) — PR 대기
+## 2026-08-06: 실험 브랜치 launcher·executor 인프라 (#539, #551)
 
 - 실험 Job 생성 주체를 API KSA에서 전용 launcher KSA로 옮겼다. API는 사용자 입력을
   받고 `gh` CLI를 subprocess로 실행하며 공개 인터넷으로 나가는 넓은 표면적의
@@ -45,10 +45,13 @@
   하는 경로가 쓰기 권한을 갖는다. App ID·installation ID는 비밀이 아니지만 App 생성
   전에는 값을 알 수 없어 manifest에 리터럴로 박을 수 없어, #533 패턴대로 private key와
   한 Secret에 두고 운영자가 주입한다. PEM은 Terraform·Git·manifest 어디에도 없다.
-- launcher CronJob(T6)은 애플리케이션 release가 게시할 digest가 있어야 완성된다.
-  digest 추정과 mutable tag 대체를 금지했으므로 그 단계는 release 이후로 분리했다.
-  API digest 교체도 같은 이유로 별도 커밋이며, 그때까지 T5의 baseline-reader 배선은
-  동작에 영향을 주지 않는 사전 배선이다.
+- #551에서 애플리케이션 PR #547의 merge SHA `e81d7f7c...`를 source로 release한
+  launcher·executor·API immutable digest를 반영하고 T6 CronJob을 완성했다. launcher는
+  1분 주기·`Forbid`·상한 2로 동작하며, Cloud SQL·Secret Manager·DNS·Kubernetes API만
+  허용하는 전용 egress 정책을 갖는다. 공개 GitHub egress는 executor Pod에만 남는다.
+- API Deployment·migration Job·Runner bootstrap의 API image 다섯 참조를 같은 digest로
+  교체했다. 해당 image의 Alembic head는 `0004_experiment_branch_bootstrap`이며, 운영
+  rollback은 launcher suspend 뒤 문서에 기록한 이전 API와 세 image 좌표를 함께 되돌린다.
 
 ## 2026-08-05: GitHub Actions 셀프 호스티드 러너(ARC) PoC 인프라 구성 (#533) — PR 대기
 
