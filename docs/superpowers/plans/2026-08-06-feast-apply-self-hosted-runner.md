@@ -142,11 +142,17 @@ Deployment/`EphemeralRunnerSet`은 클러스터에 그대로 남는다 — 남�
 삭제 뒤 아래 명령으로 잔존 리소스를 직접 지운다:
 
 ```bash
-kubectl -n actions-runner delete autoscalingrunnerset actions-runner-scale-set-feast-prod
-kubectl -n actions-runner delete autoscalingrunnerset actions-runner-scale-set-feast-dev
+kubectl -n actions-runner delete autoscalingrunnerset feast-apply-prod
+kubectl -n actions-runner delete autoscalingrunnerset feast-apply-dev
 # PoC를 함께 되돌릴 때만:
-kubectl -n actions-runner delete autoscalingrunnerset actions-runner-scale-set
+kubectl -n actions-runner delete autoscalingrunnerset actions-runner-poc
 ```
+
+`AutoscalingRunnerSet` CR 이름은 ArgoCD Application 이름
+(`actions-runner-scale-set-feast-prod` 등)이 아니라 각
+`deploy/actions-runner-scale-set*/values.yaml`의 `runnerScaleSetName` 값이다
+— 2026-08-06 라이브 클러스터에서 `kubectl get autoscalingrunnerset -n
+actions-runner`로 PoC(`actions-runner-poc`)를 확인했다.
 
 `autoscalingrunnerset` 삭제는 컨트롤러가 리스너 Deployment와
 `EphemeralRunnerSet`을 연쇄 정리하도록 트리거한다 — 삭제 후
