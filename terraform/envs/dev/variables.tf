@@ -342,6 +342,22 @@ variable "agent_orchestration_runner_k8s_service_account" {
   default     = "agent-orchestration-runner"
 }
 
+# #539 launcher는 API·Runner와 다른 주체다. API는 실험 Job을 만들지 않고,
+# launcher만 DB 선점과 Kubernetes Job 생성을 수행한다. 이 값은
+# terraform/admin/autoresearch-k8s의 agent_orchestration_launcher_k8s_service_account와
+# 반드시 같아야 한다 — 불일치는 두 root의 apply를 모두 통과한 뒤 Workload Identity
+# principal이 어긋나 launcher Pod의 Secret Manager 접근 403으로만 드러난다.
+variable "agent_orchestration_launcher_k8s_service_account" {
+  description = "실험 브랜치 Job launcher GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "agent-orchestration-launcher"
+
+  validation {
+    condition     = length(var.agent_orchestration_launcher_k8s_service_account) >= 1 && length(var.agent_orchestration_launcher_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.agent_orchestration_launcher_k8s_service_account))
+    error_message = "agent_orchestration_launcher_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
 variable "mlflow_db_name" {
   description = "기존 Cloud SQL 인스턴스 내 MLflow 전용 database 이름(Airflow/앱과 분리)."
   type        = string

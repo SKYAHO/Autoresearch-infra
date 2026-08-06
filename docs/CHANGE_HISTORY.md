@@ -3,6 +3,53 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-06: 실험 브랜치 launcher·executor 인프라 (#539) — PR 대기
+
+- 실험 Job 생성 주체를 API KSA에서 전용 launcher KSA로 옮겼다. API는 사용자 입력을
+  받고 `gh` CLI를 subprocess로 실행하며 공개 인터넷으로 나가는 넓은 표면적의
+  컴포넌트인 반면, launcher는 외부 입력도 인터넷 egress도 없이 1분마다 DB를 읽고
+  Job을 만들고 종료하는 단일 목적 CronJob이다. 애플리케이션 `origin/main`에
+  Kubernetes Job 생성 코드가 없음을 확인해(BatchV1Api 미사용) 기능 영향 없이
+  회수했다. `experiment-job-observer`(상태 조회)는 API에 그대로 남는다.
+- RBAC 동사는 launcher 코드가 실제 호출하는 `list`/`get`/`create` 세 개만 부여했다.
+  정본 계획이 제안한 `Pods`·`Events` read는 해당 호출이 없어 제외했다 — 추가는
+  쉽고 회수는 어렵다는 판단이다.
+- `enable_experiment_job_creation`은 이름을 유지하고 주체만 바꿨다. 이름에 주체가
+  들어 있지 않아 로컬 `tfvars`·runbook 참조가 깨지지 않으며, output 필드
+  `launcher_job_creation_enabled`가 새 주체를 드러낸다. 롤백 스위치로서의 역할은
+  유지되고, 순서는 CronJob suspend(즉시) → 플래그 `false` apply(승인 필요)다.
+- branch-writer App private key(대상 저장소 Contents write)를 이 namespace가 다루는
+  시크릿 중 가장 위험한 것으로 보고, ValidatingAdmissionPolicy에 Pod 형태 계약 7종을
+  추가했다. 핵심은 "키는 initContainer까지, 본 컨테이너는 만료되는 installation
+  token만"이다. 이 분리를 만드는 것은 애플리케이션 저장소의 launcher 코드인데 그
+  코드는 이 저장소의 리뷰·CI를 거치지 않으므로 같은 계약을 서버에서 다시 강제한다.
+- peer review에서 volume 계약만으로는 부족함을 확인했다. `env[].valueFrom.secretKeyRef`
+  나 `envFrom`은 volume을 전혀 쓰지 않고 Secret 값을 환경 변수로 주입해 나머지 규칙을
+  모두 통과하며, Pod Security `restricted`도 Secret 참조 방식은 통제하지 않는다.
+  Secret 이름만 금지하면 다른 이름의 더 강한 App 키로 우회되므로 `valueFrom`/`envFrom`
+  자체를 금지했다 — 고정 템플릿은 양쪽 컨테이너 모두 리터럴 값만 써서 잃는 것이 없다.
+- Pod template label(`app.kubernetes.io/component=branch-bootstrap`) 요구 규칙이
+  막는 것은 침해가 아니라 불일치다. GitHub egress 정책이 이 label로 대상을 고르므로,
+  label이 없는 Job은 admission을 통과해도 `api.github.com`에 닿지 못해 deadline까지
+  매달렸다 timeout으로만 실패한다. 제출 시점에 사유를 드러내는 편이 낫다.
+- 컨테이너 이름 고정은 `autoresearch-experiments`를 사실상 branch-bootstrap 전용으로
+  만든다. #484가 상정했던 단일 컨테이너 실험 Job은 이 정책 아래에서 만들 수 없으며,
+  다른 형태가 필요해지면 그 변경에서 규칙을 먼저 넓힌다.
+- Calico dataplane이라 `FQDNNetworkPolicy`로 `api.github.com`만 지정할 수 없다.
+  GitHub이 게시하는 API 대역은 수시로 교체돼 CIDR 고정은 예고 없는 장애가 되므로,
+  label이 붙은 Pod에만 공개 443을 열고 사설·링크로컬 대역을 `except`로 제외했다.
+  #525가 API Pod에 적용한 것과 같은 판단이며 `except` 목록도 같다. NetworkPolicy는
+  허용 규칙을 합집합으로 적용하므로 기본 경계 정책과 metadata server 접근은 유지된다.
+- GitHub App은 baseline-reader(Contents read, API가 발행 전 `heads/dev` SHA 봉인)와
+  branch-writer(Contents write, executor가 ref 생성)로 분리했다. 하나로 합치면 읽기만
+  하는 경로가 쓰기 권한을 갖는다. App ID·installation ID는 비밀이 아니지만 App 생성
+  전에는 값을 알 수 없어 manifest에 리터럴로 박을 수 없어, #533 패턴대로 private key와
+  한 Secret에 두고 운영자가 주입한다. PEM은 Terraform·Git·manifest 어디에도 없다.
+- launcher CronJob(T6)은 애플리케이션 release가 게시할 digest가 있어야 완성된다.
+  digest 추정과 mutable tag 대체를 금지했으므로 그 단계는 release 이후로 분리했다.
+  API digest 교체도 같은 이유로 별도 커밋이며, 그때까지 T5의 baseline-reader 배선은
+  동작에 영향을 주지 않는 사전 배선이다.
+
 ## 2026-08-05: GitHub Actions 셀프 호스티드 러너(ARC) PoC 인프라 구성 (#533) — PR 대기
 
 - GCP(GSA/WI/Secret Manager 컨테이너)는 dev root, Kubernetes(namespace/KSA/

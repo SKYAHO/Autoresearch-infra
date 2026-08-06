@@ -62,6 +62,9 @@ locals {
   # Kubernetes 이름 대신 짧은 orch-api/orch-runner 식별자를 사용한다.
   agent_orchestration_api_sa_name    = "${local.resource_prefix}-orch-api"
   agent_orchestration_runner_sa_name = "${local.resource_prefix}-orch-runner"
+  # #539 실험 브랜치 Job launcher. `-orch-launcher`는 account_id 상한 30자를 정확히
+  # 채워 여유가 없으므로 `-orch-launch`로 줄인다(28자).
+  agent_orchestration_launcher_sa_name = "${local.resource_prefix}-orch-launch"
   # 실험 Job은 API·Codex Runner와 다른 GSA를 사용한다. 결과 버킷 object 생성만
   # 허용하고 Secret Manager·Cloud SQL·Kubernetes API 권한은 부여하지 않는다.
   experiment_job_sa_name         = "${local.resource_prefix}-exp-job"
@@ -127,9 +130,10 @@ locals {
   gke_workload_identity_principal                = "${var.project_id}.svc.id.goog[${var.gke_app_k8s_namespace}/${var.gke_app_k8s_service_account}]"
   experiment_runtime_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.experiment_runtime_k8s_namespace}/${var.experiment_runtime_k8s_service_account}]"
 
-  agent_orchestration_api_workload_identity_principal    = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_api_k8s_service_account}]"
-  agent_orchestration_runner_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_runner_k8s_service_account}]"
-  experiment_job_workload_identity_principal             = "${var.project_id}.svc.id.goog[${var.experiment_job_k8s_namespace}/${var.experiment_job_k8s_service_account}]"
+  agent_orchestration_api_workload_identity_principal      = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_api_k8s_service_account}]"
+  agent_orchestration_runner_workload_identity_principal   = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_runner_k8s_service_account}]"
+  agent_orchestration_launcher_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_launcher_k8s_service_account}]"
+  experiment_job_workload_identity_principal               = "${var.project_id}.svc.id.goog[${var.experiment_job_k8s_namespace}/${var.experiment_job_k8s_service_account}]"
 
   mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
 
