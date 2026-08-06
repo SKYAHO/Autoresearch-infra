@@ -64,6 +64,7 @@ git switch feat/42-add-cloud-run-job
 - 영어 소문자와 하이픈(`-`)만 사용합니다.
 - 이슈 번호를 반드시 포함합니다.
 - `branch-name-policy` required check가 형식을 검사하므로, 형식 위반 브랜치는 main에 병합할 수 없습니다.
+- GitHub의 Revert 자동 브랜치(`revert-<PR번호>-...`)는 긴급 롤백을 위해 예외로 허용합니다.
 
 ---
 
