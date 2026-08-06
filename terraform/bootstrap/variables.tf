@@ -25,10 +25,25 @@ variable "feast_apply_github_repository" {
   default     = "SKYAHO/Autoresearch"
 }
 
-variable "feast_apply_workflow_ref" {
-  description = "Exact GitHub Actions workflow_ref allowed to obtain Feast apply WIF tokens."
-  type        = string
-  default     = "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main"
+# workflow_ref 는 워크플로우가 **실행된 ref** 를 담으므로 환경마다 다르다. 두
+# provider 가 같은 값을 쓰면 한쪽은 반드시 어긋난다(#548) — feast-apply 는
+# `on.push.branches: [main, dev]` 라서 dev push 의 workflow_ref 가
+# `@refs/heads/dev` 로 온다. 그래서 환경별 목록으로 분리한다.
+variable "feast_apply_prod_workflow_refs" {
+  description = "GitHub Actions workflow_refs allowed to obtain prod Feast apply WIF tokens. prod는 main push와 main에서의 workflow_dispatch뿐이라 ref가 하나다."
+  type        = list(string)
+  default = [
+    "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main",
+  ]
+}
+
+variable "feast_apply_dev_workflow_refs" {
+  description = "GitHub Actions workflow_refs allowed to obtain dev Feast apply WIF tokens. dev push(@refs/heads/dev)와 main에서 environment=dev로 실행하는 workflow_dispatch(@refs/heads/main)를 모두 받는다."
+  type        = list(string)
+  default = [
+    "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/dev",
+    "SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main",
+  ]
 }
 
 variable "region" {
