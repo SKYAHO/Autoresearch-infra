@@ -81,19 +81,29 @@ Feast apply는 기존 범용 `github` provider가 아니라 같은
 `SKYAHO/Autoresearch` 저장소 토큰만 허용하며, GitHub OIDC의 `environment`
 claim이 다음 값과 정확히 일치해야 한다.
 
-| provider ID | 필수 GitHub Environment | bootstrap output |
-| --- | --- | --- |
-| `github-feast-dev` | `dev` | `feast_dev_wif_provider_name` |
-| `github-feast-prod` | `prod` | `feast_prod_wif_provider_name` |
+> **bootstrap root는 CI apply 대상이 아니다.** `.github/workflows/apply.yml`은
+> dev root와 admin root 7개만 적용하므로, 이 두 provider는 정의를 머지해도
+> 로컬 apply 전까지 생성되지 않는다. dev root의 Feast apply SA 바인딩은
+> `attribute.environment/prod|dev` principalSet을 요구하는데 범용 `github`
+> provider는 그 attribute를 매핑하지 않으므로, **provider apply가 선행되지
+> 않으면 앱 저장소의 `feast-apply`가 `invalid_target`으로 실패한다** (#548).
+
+| provider ID | 필수 GitHub Environment | 허용 workflow_ref | bootstrap output |
+| --- | --- | --- | --- |
+| `github-feast-dev` | `dev` | `…feast-apply.yml@refs/heads/dev`, `…@refs/heads/main` | `feast_dev_wif_provider_name` |
+| `github-feast-prod` | `prod` | `…feast-apply.yml@refs/heads/main` | `feast_prod_wif_provider_name` |
 
 앱 저장소의 `feast-apply.yml`은 GitHub Environment를 반드시 지정해야 하며,
 각 Environment의 `WIF_PROVIDER_ID` 변수에는 표의 **동일한 환경** provider
 이름을 설정한다. 예를 들어 `dev` Environment에는
 `github-feast-dev` provider 이름만, `prod` Environment에는
 `github-feast-prod` provider 이름만 설정한다. 교차 설정하면 OIDC provider
-조건에서 거부된다. 각 provider는 `workflow_ref` claim도 매핑하고,
-`SKYAHO/Autoresearch/.github/workflows/feast-apply.yml@refs/heads/main`과의
-정확한 일치를 provider 조건에서 검증한다. 후속 Feast apply 서비스 계정의
+조건에서 거부된다. 각 provider는 `workflow_ref` claim도 매핑해 위 표의 목록과
+대조한다. **환경마다 허용 ref가 다르다** — `workflow_ref`는 워크플로우가
+실행된 ref를 담는데 `feast-apply.yml`이 `main`과 `dev` push 양쪽에 트리거되기
+때문이다(#548). `dev`는 dev push(`@refs/heads/dev`)와 `main`에서
+`environment: dev`로 실행하는 `workflow_dispatch`(`@refs/heads/main`)를 모두
+받고, `prod`는 main ref 하나만 받는다. 후속 Feast apply 서비스 계정의
 `roles/iam.workloadIdentityUser` binding은 해당 환경의
 `attribute.environment` principalSet **하나만** 사용한다. environment와
 workflow ref를 별도 IAM member로 추가하면 member가 OR로 평가되어 정확한
