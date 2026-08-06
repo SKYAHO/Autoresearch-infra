@@ -350,6 +350,24 @@ SHA `e81d7f7cafa8c2834f75bd36f9cebacebee4e5e6`을 source로 한 release run
 | executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fe0002e097ac750c90a083519cc6ac86420e84a44c1aa7aa6c7d0ff9120b707c` |
 | API | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:36507859b830032aedaa7a6fbf1b77e69466ceec7b56af084dc694e21c51ecde` |
 
+**launcher CronJob의 DB bootstrap initContainer는 launcher image가 아니라 API
+image를 쓴다.** `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소
+최상위 모듈인데 `launcher.Dockerfile`이 이를 COPY하지 않아 launcher image에 없다.
+launcher image로 실행하면 initContainer가 `ModuleNotFoundError`로 죽고
+`backoffLimit: 0`이라 1분마다 실패 Job만 쌓인다(`api-migration-job.yaml`이 쓰는 것과
+같은 패턴이다). launcher image가 자체 bootstrap을 갖게 하려면 Dockerfile에 해당
+모듈을 추가하는 애플리케이션 변경이 선행돼야 한다.
+
+manifest가 어떤 image로 어떤 모듈을 실행하는지는 `--dry-run=server`나 digest 조회로
+검증되지 않는다. 둘 다 image **안**을 열어보지 않기 때문이다. digest를 바꾸거나
+컨테이너의 `command`를 바꿀 때는 아래처럼 실제 image에서 import를 확인한다.
+
+```bash
+kubectl -n autoresearch run bootstrap-probe --rm -it --restart=Never \
+  --image=<해당 digest> --command -- \
+  python -c "import agent_orchestration.bootstrap_secrets; print('OK')"
+```
+
 release workflow가 세 image의 OCI revision·비루트 실행·import를 검증했고, API
 digest를 직접 실행한 `alembic -c agent_orchestration/alembic.ini heads` 결과는
 `0004_experiment_branch_bootstrap (head)`다. 이전 API digest

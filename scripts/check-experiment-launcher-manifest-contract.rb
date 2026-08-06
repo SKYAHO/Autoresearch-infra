@@ -61,6 +61,10 @@ module ExperimentLauncherManifestContract
   def check_cron_job!(cron_job)
     expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:44ca561e7cd8f6df7b00c6a6d7c1d7ee971107d3e3234e5eb02086c90ca57cc7"
     expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fe0002e097ac750c90a083519cc6ac86420e84a44c1aa7aa6c7d0ff9120b707c"
+    # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
+    # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
+    # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
+    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:36507859b830032aedaa7a6fbf1b77e69466ceec7b56af084dc694e21c51ecde"
 
     spec = cron_job.fetch("spec")
     expect_equal("* * * * *", spec["schedule"], "launcher schedule")
@@ -85,7 +89,7 @@ module ExperimentLauncherManifestContract
     containers = pod_spec.fetch("containers")
     expect_equal(["bootstrap-db"], init_containers.map { |item| item["name"] }, "launcher initContainer")
     expect_equal(["launcher"], containers.map { |item| item["name"] }, "launcher app container")
-    expect_equal(expected_launcher_image, init_containers.first["image"], "launcher bootstrap image")
+    expect_equal(expected_bootstrap_image, init_containers.first["image"], "launcher bootstrap image")
     expect_equal(expected_launcher_image, containers.first["image"], "launcher image")
 
     environment = containers.first.fetch("env").to_h { |item| [item.fetch("name"), item] }

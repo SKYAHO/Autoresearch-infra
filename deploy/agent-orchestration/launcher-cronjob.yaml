@@ -36,8 +36,20 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           initContainers:
+            # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
+            # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소
+            # 최상위 모듈인데 `launcher.Dockerfile`은 `__init__.py`, `launcher/`,
+            # `app/`, `github_app.py`, `github_refs.py`만 COPY하므로 launcher
+            # image에 들어 있지 않다. launcher image로 실행하면 initContainer가
+            # ModuleNotFoundError로 죽고 backoffLimit 0이라 1분마다 실패 Job만
+            # 쌓인다. api-migration-job.yaml이 쓰는 것과 같은 패턴이다.
+            #
+            # 두 digest는 같은 애플리케이션 커밋(e81d7f7)의 release 산출물이므로
+            # 이후 promotion에서도 함께 갱신한다. launcher image가 자체 bootstrap을
+            # 갖게 하려면 Dockerfile에 해당 모듈을 추가하는 애플리케이션 변경이
+            # 선행돼야 하며, 그 전까지는 이 참조가 유일하게 동작하는 구성이다.
             - name: bootstrap-db
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:44ca561e7cd8f6df7b00c6a6d7c1d7ee971107d3e3234e5eb02086c90ca57cc7
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:36507859b830032aedaa7a6fbf1b77e69466ceec7b56af084dc694e21c51ecde
               imagePullPolicy: IfNotPresent
               command:
                 - python
