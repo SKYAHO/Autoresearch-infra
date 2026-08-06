@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-06T04:47:59Z",
+  "generated_at": "2026-08-06T04:52:57Z",
   "reports": [
+    {
+      "number": 552,
+      "title": "feat: 실험 브랜치 launcher 배포를 추가한다",
+      "author": "bbungjun",
+      "merged_at": "2026-08-06T04:52:46Z",
+      "summary_ko": [
+        "실험 브랜치 자동 생성을 전담하는 1분 주기 CronJob launcher 및 전용 NetworkPolicy 매니페스트를 배포 구성에 추가하였습니다.",
+        "애플리케이션 최신 릴리스 산출물인 launcher, executor, API의 불변 이미지 디제스트(digest)를 매니페스트에 일괄 반영하였습니다.",
+        "매니페스트 설정 계약을 검증하는 CI 테스트 스크립트와 릴리스 출처 정보 및 롤백 가이드 문서를 작성하였습니다."
+      ],
+      "report_url": "pr/552/"
+    },
     {
       "number": 545,
       "title": "feat: feast apply 셀프 호스티드 러너 이관 인프라·검증 워크플로우 구성 (#541)",
