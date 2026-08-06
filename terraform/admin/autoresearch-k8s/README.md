@@ -80,7 +80,8 @@ Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정
 |---|---|---|
 | namespace | `autoresearch-experiments` | 실험 Pod와 기존 앱을 분리 |
 | Job KSA | `experiment-job` | 결과 버킷 쓰기 전용 Workload Identity |
-| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용. 이 RBAC를 실제로 쓰려면 API Pod의 egress에 Kubernetes API 경로가 있어야 한다 — 해당 정책은 이 root가 아니라 `deploy/agent-orchestration/network-policy.yaml`이 소유한다(#484에서 services CIDR·control plane CIDR TCP 443 추가) |
+| API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용. #539에서 Job `create` 권한은 launcher KSA로 옮겨 API에는 남기지 않는다. 이 RBAC를 실제로 쓰려면 API Pod의 egress에 Kubernetes API 경로가 있어야 한다 — 해당 정책은 이 root가 아니라 `deploy/agent-orchestration/network-policy.yaml`이 소유한다(#484에서 services CIDR·control plane CIDR TCP 443 추가) |
+| launcher KSA | `autoresearch/agent-orchestration-launcher` | #539 실험 브랜치 Job의 유일한 생성 주체. Jobs `create/get/list`만 가지며 `delete`/`update`/`patch`는 없다. 실험 경로에서 Kubernetes API 토큰을 마운트하는 유일한 주체이기도 하다(executor Pod는 Job spec에서 마운트를 끈다) |
 | Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
 | 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
 
@@ -97,6 +98,13 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
 조회만 할 수 있고 Job을 생성·삭제·수정할 수 없었다. 권한을 다시 잠그는 절차는 아래
 문단("권한을 활성화한 뒤 문제가 발견되면...")을 따른다.
 
+#539에서 이 플래그가 여닫는 **주체가 API KSA에서 launcher KSA로 바뀌었다.** 변수
+이름에는 주체가 들어 있지 않아 그대로 두었고(로컬 `tfvars`와 runbook 참조가 깨지지
+않는다), 실제 주체는 `experiment_job_contract` output의 `launcher_service_account`와
+`launcher_job_creation_enabled` 필드가 드러낸다. 아래 1~6번 활성화 조건은 주체가
+바뀌어도 그대로 적용된다 — 다만 1번의 "고정 템플릿"을 만드는 주체는 이제 API가
+아니라 launcher(`agent_orchestration/launcher/jobs.py`)다.
+
 1. API가 사용자 입력을 Job manifest로 그대로 전달하지 않고 고정 템플릿만 사용한다.
 2. 이미지가 mutable tag가 아닌 허용 목록의 digest인지 검증한다.
 3. Job 이름·label·결과 GCS prefix·CPU/메모리·`backoffLimit: 0`은 API의 고정 템플릿이
@@ -106,9 +114,30 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
    ServiceAccount 변경, digest 없는 image(`initContainers` 포함), `batch-od`
    nodeSelector/toleration 계약 위반(빈 목록 포함), 승인된 Artifact Registry 밖
    이미지, `automountServiceAccountToken: true`, `activeDeadlineSeconds`·
-   `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. 두 시간
+   `ttlSecondsAfterFinished` 누락 또는 3600초 초과를 서버 측에서 거부한다. #539에서
+   branch-bootstrap Pod 형태 계약 7종을 추가했다 — initContainer는
+   `github-token-minter` 하나, 컨테이너는 `branch-bootstrap` 하나, volume은 승인된
+   Secret volume과 `medium: Memory` 1Mi token volume 두 개뿐이며, **GitHub App
+   private key volume은 initContainer에만 `readOnly`로 mount할 수 있고 본
+   컨테이너에는 mount할 수 없다.** 본 컨테이너의 token volume도 `readOnly`여야
+   한다. 여섯 번째 규칙은 `envFrom`과 `env[].valueFrom`을 양쪽 컨테이너 모두에서
+   금지한다 — volume 계약만 두면 `secretKeyRef`로 키를 환경 변수에 바로 주입해
+   앞의 다섯 규칙을 모두 통과할 수 있고, Pod Security `restricted`도 Secret 참조
+   방식은 통제하지 않기 때문이다. 고정 템플릿은 양쪽 모두 리터럴 값만 쓰므로
+   잃는 기능이 없다. 일곱 번째 규칙은 Pod template의
+   `app.kubernetes.io/component=branch-bootstrap` label을 요구한다 — 아래 GitHub
+   egress 정책이 이 label로 대상을 고르므로, label이 없는 Job은 admission을
+   통과해도 `api.github.com`에 닿지 못해 deadline까지 매달렸다 timeout으로만
+   실패한다. 제출 시점에 명확한 사유로 거부하는 편이 낫고, launcher의 동시 실행
+   계수가 같은 label selector를 쓰므로 계수 누락도 함께 막는다.
+   이 규칙들이 강제하는 것은 "키는 initContainer까지, 본 컨테이너는 만료되는
+   token만"이라는 자격 증명 경계이며, 그 경계를 만드는 launcher 코드는 다른
+   저장소에 있어 이 저장소의 리뷰를 거치지 않으므로 서버 측에서 한 번 더 강제한다.
+   이름 고정은 이 namespace를 사실상 branch-bootstrap 전용으로 만든다 — 다른 형태의
+   실험 Job이 필요해지면 그 변경에서 이 규칙들을 먼저 넓힌다. 두 시간
    필드를 정책에 둔 것은 완료 Job이 quota를 무기한 점유하는 경로를 막기 위해서다
-   (API KSA에 `delete`가 없어 회수 수단이 TTL뿐이다). Pod Security `restricted`는
+   (제출자 KSA에 `delete`가 없어 회수 수단이 TTL뿐이다 — #539 이후 그 주체는
+   launcher KSA다). Pod Security `restricted`는
    privileged·host namespace 등 별도 위험 필드를 거부한다.
 5. 아래 runbook의 RBAC·Pod Security·NetworkPolicy 음성 검증을 적용 cluster에서
    수행한다.
@@ -170,11 +199,12 @@ GCS 인증은 GKE metadata server 경로를 사용하므로 컨테이너 내부�
    못 박은 이유가 이것이다 — 알림이 없으면 활성화 이후 이 전제가 깨져도 알아챌
    수단이 없다.
 
-권한을 활성화한 뒤 문제가 발견되면 API 배포에서 제출을 먼저 중지하고, 승인된
-Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만 막고 이미 실행
-중인 Job·Pod·GCS 업로드를 중단하지 않습니다. 취소는 API에 `delete` 권한을 추가하지
-않은 현재 MVP에서는 제공하지 않으며, 종료·quota 회수는 `activeDeadlineSeconds`와 TTL
-controller에 의존합니다. namespace, KSA, 결과 버킷을 롤백 수단으로 삭제하지 않습니다.
+권한을 활성화한 뒤 문제가 발견되면 launcher CronJob을 먼저 중지(suspend)해 제출을
+막고, 승인된 Terraform apply로 값을 `false`로 되돌립니다. 이 변경은 새 Job 제출만
+막고 이미 실행 중인 Job·Pod·GCS 업로드를 중단하지 않습니다. 취소는 launcher에
+`delete` 권한을 추가하지 않은 현재 MVP에서는 제공하지 않으며, 종료·quota 회수는
+`activeDeadlineSeconds`와 TTL controller에 의존합니다. namespace, KSA, 결과 버킷을
+롤백 수단으로 삭제하지 않습니다.
 
 ### 네트워크와 용량 상한
 
@@ -182,6 +212,22 @@ controller에 의존합니다. namespace, KSA, 결과 버킷을 롤백 수단으
 결과 업로드는 Private Google APIs VIP `199.36.153.8/30`의 TCP 443만 사용합니다.
 새 목적지가 필요하면 목적지 CIDR/selector, 포트, GSA IAM, 데이터 분류를 함께
 검토하는 별도 이슈가 필요합니다.
+
+#539에서 `app.kubernetes.io/component=branch-bootstrap` label을 가진 Pod에만
+공개 인터넷 TCP 443을 추가로 허용하는 두 번째 egress 정책
+(`experiment-jobs-branch-bootstrap-egress`)을 두었습니다. NetworkPolicy는 선택된
+Pod에 대해 각 정책의 허용 규칙을 **합집합**으로 적용하므로, 기본 경계 정책은 그대로
+남고 branch-bootstrap Pod만 목적지가 넓어집니다. 이 정책의 `except` 목록
+(RFC1918 3개, RFC6598 `100.64/10`, link-local `169.254/16`, loopback `127/8`)은
+이 규칙의 범위만 좁힐 뿐 기본 정책이 이미 허용한 metadata server 접근을 되돌리지
+않습니다.
+
+목적지를 `api.github.com`으로 한정하지 못하는 이유는 이 클러스터의 dataplane이
+Calico여서 GKE Dataplane V2의 `FQDNNetworkPolicy`를 쓸 수 없기 때문입니다. GitHub이
+게시하는 API 대역은 수시로 교체돼 CIDR로 고정하면 예고 없이 브랜치 생성이 깨집니다.
+같은 판단이 이미 API Pod(#525, `deploy/agent-orchestration/network-policy.yaml`)에
+적용돼 있고 `except` 목록도 같습니다. label이 없는 Pod는 이 정책의 대상이 아니어서
+GitHub에 도달하지 못하고 실패합니다(fail-closed).
 
 초기 dev 상한은 Job·Pod 각각 2개, 총 request/limit 2 vCPU/4 GiB입니다.
 `count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로, 실제 제출
@@ -196,7 +242,7 @@ admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` to
 1 vCPU/2 GiB)도 강제합니다 — 컨테이너 request 합계와 limit 합계 양쪽 모두 이 값을
 넘을 수 없습니다. 단, 같은 root의 `autoresearch-experiment-job-contract` 정책은
 컨테이너 `resources`를 검사하지 않으므로, 컨테이너 2개짜리 Pod의 Job `create` 자체는
-API KSA 요청 수준에서는 성공합니다. 거부되는 것은 그 뒤 Job controller가 템플릿으로
+제출자(#539 이후 launcher KSA) 요청 수준에서는 성공합니다. 거부되는 것은 그 뒤 Job controller가 템플릿으로
 만드는 Pod입니다 — Pod 합계가 상한을 넘으면 LimitRange가 Pod 생성을 막고 Job에
 `FailedCreate` 이벤트가 비동기로 남습니다. Job controller는 Pod 생성을 계속
 재시도하지만 Pod 객체 자체가 만들어지지 않으므로 `requests.cpu`/`requests.memory`/
@@ -214,13 +260,18 @@ Pod가 한 번도 만들어지지 못해도 `activeDeadlineSeconds` 타이머는
 없앤다"는 뜻은 아닙니다. `count/jobs.batch=2`가 이런 Job으로 모두 채워지면 세 번째
 `create`는 이 LimitRange 도입 전과 동일하게 `Forbidden` quota 초과로 즉시(동기)
 거부되며, 회수 주체는 TTL controller(deadline 최대 3600초 + TTL 최대 3600초 = 슬롯당
-최대 2시간, 위 "초기 dev 상한" 문단과 동일한 병목)입니다 — API KSA에는 `delete`가
+최대 2시간, 위 "초기 dev 상한" 문단과 동일한 병목)입니다 — 제출자 KSA(#539 이후
+launcher KSA)에는 `delete`가
 없어 그 전에 수동 회수는 break-glass 관리자 권한으로만 가능합니다(runbook "장애 처리와
-롤백" 참조). 고정 템플릿이 실제로 단일 컨테이너만 만든다는 전제가 깨져
-향후 sidecar 등 다중 컨테이너 Pod가 필요해지면 이 Pod 상한이 먼저 걸리므로, 그
-변경에서 상한 값을 함께 재검토합니다. 이 상한은 컨테이너 상한과 동일한 값이라
-헤드룸이 0입니다 — 컨테이너가 하나라도 추가되면(의도적이든 GCS FUSE CSI 같은
-주입형 sidecar든) 거부됩니다. 이 namespace에는 현재 sidecar를 주입하는 mutating
+롤백" 참조). #539의 branch-bootstrap Job은 initContainer 1개 + app 컨테이너 1개인데,
+Kubernetes가 일반(non-sidecar) initContainer를 app 컨테이너 합계와 `max()`로 비교하므로
+Pod 합계는 500m/1 GiB로 상한 안에 들어옵니다. 다만 이는 여유가 아니라 "sidecar가
+아니어서" 통과하는 것이라, token-minter를 native sidecar(`restartPolicy: Always`)로
+바꾸면 합산 대상이 되어 이 상한에 먼저 걸립니다. 그런 변경에서는 상한 값을 함께
+재검토합니다. 이 상한은 컨테이너 상한과 동일한 값이라
+헤드룸이 0입니다 — 승인된 두 컨테이너 외에 하나라도 추가되면(의도적이든 GCS FUSE
+CSI 같은 주입형 sidecar든) 거부되며, admission 정책이 그 이전에 제출 자체를
+막습니다. 이 namespace에는 현재 sidecar를 주입하는 mutating
 webhook이 없으므로, 값을 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를
 명시적 제약으로 유지합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증

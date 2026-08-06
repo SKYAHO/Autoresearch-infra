@@ -33,6 +33,23 @@ resource "kubernetes_service_account_v1" "agent_orchestration_api" {
   }
 }
 
+# #539 실험 브랜치 Job launcher. API·Runner와 다른 세 번째 Workload Identity 주체다.
+# 이 KSA만 Kubernetes API 토큰을 마운트한다(기본값 true를 그대로 두지 않고 명시한다) —
+# launcher는 in-cluster config로 Job을 생성해야 하므로 토큰이 필요하고, 반대로
+# executor Pod는 Kubernetes API를 전혀 쓰지 않아 Job spec에서 마운트를 끈다. 즉
+# "토큰이 있는 실험 경로의 주체는 launcher 하나"가 이 경계의 계약이다.
+resource "kubernetes_service_account_v1" "agent_orchestration_launcher" {
+  metadata {
+    name      = var.agent_orchestration_launcher_k8s_service_account
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = local.agent_orchestration_launcher_gcp_service_account_email
+    }
+  }
+
+  automount_service_account_token = true
+}
+
 resource "kubernetes_service_account_v1" "agent_orchestration_runner" {
   metadata {
     name      = var.agent_orchestration_runner_k8s_service_account

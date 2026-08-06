@@ -6,6 +6,10 @@ locals {
   agent_orchestration_api_gcp_service_account_email    = var.agent_orchestration_api_gcp_service_account_email != "" ? var.agent_orchestration_api_gcp_service_account_email : "${var.resource_prefix}-orch-api@${var.project_id}.iam.gserviceaccount.com"
   agent_orchestration_runner_gcp_service_account_email = var.agent_orchestration_runner_gcp_service_account_email != "" ? var.agent_orchestration_runner_gcp_service_account_email : "${var.resource_prefix}-orch-runner@${var.project_id}.iam.gserviceaccount.com"
 
+  # #539 launcher GSA. dev root local의 `-orch-launch`와 같은 규칙으로 파생한다 —
+  # account_id 30자 제한 때문에 `-orch-launcher`가 아니라 `-orch-launch`(28자)다.
+  agent_orchestration_launcher_gcp_service_account_email = var.agent_orchestration_launcher_gcp_service_account_email != "" ? var.agent_orchestration_launcher_gcp_service_account_email : "${var.resource_prefix}-orch-launch@${var.project_id}.iam.gserviceaccount.com"
+
   # dev root의 experiment_runtime_contract와 같은 기본값을 사용한다. override는
   # 두 root output을 대조할 때만 사용한다.
   experiment_runtime_gcp_service_account_email = var.experiment_runtime_gcp_service_account_email != "" ? var.experiment_runtime_gcp_service_account_email : "${var.resource_prefix}-exp-runtime@${var.project_id}.iam.gserviceaccount.com"
@@ -33,6 +37,34 @@ locals {
   # admin root는 dev root Terraform state를 직접 읽지 않는다. GSA의 account id는
   # dev root local과 같은 짧은 `-exp-job` 규칙으로 파생하며, 예외만 변수로 override한다.
   experiment_job_gcp_service_account_email = var.experiment_job_gcp_service_account_email != "" ? var.experiment_job_gcp_service_account_email : "${var.resource_prefix}-exp-job@${var.project_id}.iam.gserviceaccount.com"
+
+  # #539 branch-bootstrap Job의 고정 컨테이너·volume 이름. 이 값들은 애플리케이션
+  # 저장소 `agent_orchestration/launcher/jobs.py`의 상수와 정확히 같아야 한다 —
+  # 불일치하면 launcher가 만드는 모든 Job이 admission에서 거부된다. 이름을 서버 측에
+  # 고정하는 이유는 private key를 마운트하는 컨테이너를 "순서"가 아니라 "정체"로
+  # 식별하기 위해서다.
+  experiment_branch_bootstrap_init_container = "github-token-minter"
+  experiment_branch_bootstrap_app_container  = "branch-bootstrap"
+  experiment_branch_writer_key_volume        = "github-app-private-key"
+  experiment_branch_token_volume             = "github-token"
+
+  # 같은 파일의 `app.kubernetes.io/component` label 값이다. NetworkPolicy가 이
+  # label로 GitHub egress 대상 Pod를 고른다. 컨테이너 이름과 문자열이 같지만 의미가
+  # 다르므로 별도 local로 둔다.
+  experiment_branch_bootstrap_component_label = "branch-bootstrap"
+
+  # 공개 인터넷 443을 열되 사설·링크로컬·loopback 대역을 제외한다. RFC1918(10/8,
+  # 172.16/12, 192.168/16), RFC6598 CGNAT(100.64/10), link-local(169.254/16),
+  # loopback(127/8) 기준이라 dev CIDR 변수가 바뀌어도 함께 고칠 필요가 없다.
+  # `deploy/agent-orchestration/network-policy.yaml`의 API egress(#525)와 같은 목록이다.
+  public_egress_private_cidr_exceptions = [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "100.64.0.0/10",
+    "169.254.0.0/16",
+    "127.0.0.0/8",
+  ]
 
   # 기본 허용 prefix는 이 프로젝트의 Artifact Registry Docker 저장소다
   # (예: asia-northeast3-docker.pkg.dev/<project>/autoresearch-dev-docker/).

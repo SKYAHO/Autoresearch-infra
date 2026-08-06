@@ -113,6 +113,30 @@ spec:
               value: feast://feast_offline_store/training_entity
             - name: ORCH_EXPERIMENT_TRAINING_CONFIG_REF
               value: src/pipeline/config.yaml@main
+            # #539 baseline-reader GitHub App. 이슈 발행 **전에** heads/dev SHA를
+            # 읽어 experiments.base_dev_sha에 봉인하는 데만 쓴다. 이 App은 선택된
+            # 한 저장소의 Contents read만 가지며, 브랜치를 만드는 branch-writer App
+            # (Contents write)과 별개의 App·Secret이다.
+            #
+            # App ID와 installation ID는 비밀이 아니지만 App 생성 전에는 값을 알 수
+            # 없어 manifest에 리터럴로 박을 수 없다. #533 actions-runner와 같은
+            # 패턴으로 private key와 같은 Secret에 함께 두고 운영자가 runbook 절차로
+            # 주입한다. Secret이 없으면 Pod가 뜨지 않는다(fail-closed).
+            - name: ORCH_BASELINE_GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: agent-orchestration-baseline-reader-app
+                  key: app-id
+            - name: ORCH_BASELINE_GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: agent-orchestration-baseline-reader-app
+                  key: installation-id
+            # private key는 환경 변수가 아니라 파일로만 전달한다. 환경 변수는 하위
+            # 프로세스(gh CLI 등)로 상속되고 crash dump·프로세스 목록에 노출될 수
+            # 있어 PEM을 담기에 부적절하다.
+            - name: ORCH_BASELINE_GITHUB_APP_PRIVATE_KEY_PATH
+              value: /var/run/secrets/baseline-reader/private-key.pem
           volumeMounts:
             - name: db-runtime
               mountPath: /runtime
@@ -122,6 +146,11 @@ spec:
             # 없으면 발행이 실패한다.
             - name: tmp
               mountPath: /tmp
+            # #539 baseline-reader private key. API 컨테이너만 마운트하며
+            # initContainer(DB bootstrap)에는 넣지 않는다.
+            - name: baseline-reader-app
+              mountPath: /var/run/secrets/baseline-reader
+              readOnly: true
           startupProbe:
             httpGet:
               path: /healthcheck
@@ -160,3 +189,14 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        # #539 baseline-reader App private key. 값(PEM)은 Terraform이 관리하지 않고
+        # 운영자가 runbook 절차로 주입한다. defaultMode는 8진수 0440(owner/group
+        # 읽기)이다 — Secret 파일 소유자는 root:fsGroup이라 0400으로 두면 fsGroup
+        # 10001로 도는 API 프로세스가 읽지 못한다.
+        - name: baseline-reader-app
+          secret:
+            secretName: agent-orchestration-baseline-reader-app
+            defaultMode: 0440
+            items:
+              - key: private-key.pem
+                path: private-key.pem

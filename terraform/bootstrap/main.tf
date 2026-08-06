@@ -86,6 +86,14 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 # repository, environment, workflow_ref를 provider 조건에서 함께 검증한다.
 # Workload Identity User IAM member는 OR로 결합되므로 workflow_ref를 별도
 # IAM member로 분리하지 않는다(#424).
+#
+# 이 두 provider는 envs/dev의 feast apply SA WI 바인딩
+# (`attribute.environment/prod|dev`)이 성립하기 위한 전제다 — 범용 `github`
+# provider는 `attribute.environment`를 매핑하지 않아 그 바인딩을 만족시킬 수
+# 없다. bootstrap root는 CI apply 대상이 아니므로(`apply.yml`은 dev root와
+# admin root 7개만 적용) **이 파일 변경은 로컬 apply 전까지 반영되지 않는다.**
+# #548에서 정의만 머지되고 apply되지 않은 채 소비자 IAM만 바뀌어 feast-apply가
+# `invalid_target`으로 죽었다.
 resource "google_iam_workload_identity_pool_provider" "github_feast_dev" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "github-feast-dev"
@@ -98,7 +106,7 @@ resource "google_iam_workload_identity_pool_provider" "github_feast_dev" {
     "attribute.workflow_ref" = "assertion.workflow_ref"
   }
 
-  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'dev' && assertion.workflow_ref == '${var.feast_apply_workflow_ref}'"
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'dev' && assertion.workflow_ref in ${jsonencode(var.feast_apply_dev_workflow_refs)}"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -117,7 +125,7 @@ resource "google_iam_workload_identity_pool_provider" "github_feast_prod" {
     "attribute.workflow_ref" = "assertion.workflow_ref"
   }
 
-  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'prod' && assertion.workflow_ref == '${var.feast_apply_workflow_ref}'"
+  attribute_condition = "assertion.repository == '${var.feast_apply_github_repository}' && assertion.environment == 'prod' && assertion.workflow_ref in ${jsonencode(var.feast_apply_prod_workflow_refs)}"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"

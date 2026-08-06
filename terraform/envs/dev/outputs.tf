@@ -140,6 +140,11 @@ output "agent_orchestration_deployment_contract" {
     runner_gcp_service_account_email   = google_service_account.agent_orchestration_runner.email
     api_workload_identity_principal    = local.agent_orchestration_api_workload_identity_principal
     runner_workload_identity_principal = local.agent_orchestration_runner_workload_identity_principal
+    # #539 launcher 좌표. admin root의 KSA annotation과 RoleBinding subject가 이
+    # 값과 정확히 같아야 한다.
+    launcher_gcp_service_account_email   = google_service_account.agent_orchestration_launcher.email
+    launcher_workload_identity_principal = local.agent_orchestration_launcher_workload_identity_principal
+    launcher_kubernetes_service_account  = var.agent_orchestration_launcher_k8s_service_account
   }
 }
 

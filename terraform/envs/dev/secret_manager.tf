@@ -86,8 +86,10 @@ resource "google_secret_manager_secret_iam_member" "mlflow_db_password" {
   member    = "serviceAccount:${google_service_account.mlflow.email}"
 }
 
-# Agent Orchestration API만 전용 DB 비밀번호를 읽는다. Kubernetes Secret, Pod
-# manifest, 컨테이너 이미지에는 DB URL·비밀번호를 두지 않는다.
+# Agent Orchestration API와 #539 실험 브랜치 launcher만 전용 DB 비밀번호를 읽는다.
+# 둘은 같은 database의 같은 애플리케이션 user를 쓰므로 secret도 같은 하나다. Codex
+# Runner는 이 secret에 접근하지 않는다. Kubernetes Secret, Pod manifest, 컨테이너
+# 이미지에는 DB URL·비밀번호를 두지 않는다.
 resource "google_secret_manager_secret" "agent_orchestration_db_password" {
   secret_id = local.agent_orchestration_db_password_secret_id
 
@@ -105,6 +107,12 @@ resource "google_secret_manager_secret_iam_member" "agent_orchestration_api_db_p
   secret_id = google_secret_manager_secret.agent_orchestration_db_password.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.agent_orchestration_api.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "agent_orchestration_launcher_db_password" {
+  secret_id = google_secret_manager_secret.agent_orchestration_db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.agent_orchestration_launcher.email}"
 }
 
 # Codex OAuth 초기 인증 파일의 컨테이너 밖 정본. payload(version)는 Terraform이
