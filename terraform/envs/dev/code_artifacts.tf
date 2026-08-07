@@ -9,9 +9,22 @@
 # 적용된다. prefix로 분리하고 IAM 조건으로 서로 침범하지 않게 한다.
 
 # 파드가 읽는 입력물 버킷. versioning 없음(#238) — 코드 아카이브는 삭제해도 git에서
-# 재생성 가능한 배포 캐시고, #577 스냅샷은 content-addressed write-once라 같은 경로에
-# 다른 내용이 덮어써지는 상황 자체가 성립하지 않는다. prevent_destroy는 두지 않는다.
-# 공개 접근은 차단.
+# 재생성 가능한 배포 캐시다.
+#
+# #577 스냅샷에 대해서도 versioning이 필요 없는데, 근거는 "레이아웃 전체가
+# content-addressed"라서가 **아니다.** 스냅샷 스토어에는 content-addressed가 아닌
+# `by-date/dt=<날짜>/<service>.json` 포인터도 있고, 이 객체는 같은 날짜로 재게시하면
+# 덮어써진다. 실험 경로가 안전한 이유는 **그 포인터를 쓰지 않기 때문**이다 —
+# `src/pipeline/training_snapshot_store.py`가 `record_pointer` 인자를 두고 "실험 조립은
+# False로 넘겨야 한다(prod 포인터를 오염시키지 않기 위해, #530 §6.3)"를 계약으로
+# 명시한다. 실험은 `by-hash/<dataset_sha256>/`만 쓰고 그 경로는 `if_generation_match=0`
+# write-once다.
+#
+# 즉 versioning 부재의 전제는 **"실험 게시가 `record_pointer=False`를 지킨다"**이다.
+# 이 전제가 깨지면(포인터까지 쓰는 경로가 생기면) versioning 또는 soft_delete_policy를
+# 다시 검토해야 한다.
+#
+# prevent_destroy는 두지 않는다. 공개 접근은 차단.
 resource "google_storage_bucket" "code_artifacts" {
   name                        = local.code_artifacts_bucket
   location                    = var.region
