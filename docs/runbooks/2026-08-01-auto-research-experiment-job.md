@@ -425,6 +425,90 @@ Secret 이름은 admission 정책이 서버 측에서 검사한다
 (`experiment_branch_writer_secret_name`). 이름을 바꾸면 Terraform 변수와 함께
 바꿔야 하며, 어긋나면 **모든 Job이 거부된다.**
 
+### Phase 2 executor Secret 등록 (#562)
+
+Phase 2는 위 branch-writer Secret 외에 두 개를 더 요구한다. 둘 다 실험 namespace에
+두고, 값은 Terraform·Git·manifest 어디에도 넣지 않는다.
+
+| Secret 이름 | key | mount하는 컨테이너 | 쓰임 |
+|---|---|---|---|
+| `autoresearch-experiment-codex-auth` | `auth.json` | `codex-worker` **만** | Codex 인증 |
+| `autoresearch-experiment-executor-api-token` | `token` | `candidate-finalizer` **만** | candidate SHA 보고 |
+
+Codex 인증은 PVC가 아니라 Secret이다. `standard-rwo` PVC는 단일 노드 attach라 여러
+Pod의 동시 시작을 막을 수 있고, 작은 read-only `auth.json`에는 각 Pod가 독립으로
+mount하는 Secret이 맞다(애플리케이션 `#566`).
+
+**`auth.json` 외의 key를 넣지 않는다.** 어드미션 계약이 volume의 `items`를
+`auth.json` 하나로 고정하지만, Secret 자체에 다른 key가 있으면 이후 계약 변경 시
+그것까지 노출될 여지가 생긴다.
+
+```bash
+umask 077
+sdir="$(mktemp -d)"
+trap 'rm -rf "$sdir"' EXIT
+
+cp /path/to/codex-auth.json "$sdir/auth.json"
+printf '%s' '<executor API token>' > "$sdir/token"
+
+kubectl -n autoresearch-experiments create secret generic \
+  autoresearch-experiment-codex-auth \
+  --from-file=auth.json="$sdir/auth.json" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n autoresearch-experiments create secret generic \
+  autoresearch-experiment-executor-api-token \
+  --from-file=token="$sdir/token" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+rm -rf "$sdir"; trap - EXIT
+shred -u /path/to/codex-auth.json
+```
+
+두 이름은 admission 정책(`experiment_codex_home_secret_name`,
+`experiment_executor_api_token_secret_name`)과 launcher manifest의
+`ORCH_CODEX_HOME_SECRET_NAME`·`ORCH_EXECUTOR_API_TOKEN_SECRET_NAME` 양쪽이 같은
+값을 갖는다. 셋 중 하나만 바꾸면 **모든 executor Job이 거부된다.**
+
+#### 롤아웃 순서
+
+**Secret을 먼저 만들고 그 다음 launcher를 배포한다.** 순서가 뒤집히면 kubelet이
+volume mount를 완료하지 못해 Pod가 `Pending`에 머물고, Job은
+`activeDeadlineSeconds`(3600초) 뒤에야 `Failed`가 된다. 즉 실패를 1시간 뒤에 알게
+된다. 판별 근거는 Pod event의 `FailedMount`와 Job의 `DeadlineExceeded`다.
+
+```bash
+kubectl -n autoresearch-experiments get events --sort-by=.lastTimestamp | grep FailedMount
+```
+
+`subPath` mount는 실행 중 Secret 갱신을 전파하지 않으므로, Secret을 교체해도 이미
+도는 Job에는 적용되지 않는다. 새 Experiment부터 반영된다.
+
+### Phase 1 ↔ Phase 2 전환과 롤백 (#562)
+
+애플리케이션 `launcher/main.py`에는 **Phase 1/2를 고르는 스위치가 없다.**
+`ensure_executor_job`만 호출하므로 launcher image digest를 올리는 순간 전량
+Phase 2로 전환되고, 점진 배포 경로가 없다.
+
+따라서 롤백은 **launcher image digest를 직전 main revision 값으로 되돌리고 ArgoCD를
+sync하는 것**이다. 그때 생성되는 Job은 다시 `branch-bootstrap` 형태이며, 어드미션
+계약에 그 종류가 보존돼 있어 그대로 통과한다. **`branch-bootstrap` 계약을 정리
+대상으로 보고 지우면 롤백 경로가 막힌다.**
+
+| 대상 | 롤백 절차 |
+|---|---|
+| launcher 전환 | image digest를 직전 값으로 되돌리고 ArgoCD sync |
+| 어드미션 계약 | Terraform revert 후 apply. Phase 1 계약이 보존돼 있어 되돌린 launcher가 통과한다 |
+| NetworkPolicy | `experiment-jobs-executor-egress`만 삭제. Phase 1 정책은 손대지 않았다 |
+| Secret 2종 | launcher를 **먼저** 되돌린 뒤 삭제한다. 반대로 하면 진행 중인 Job이 `FailedMount`로 매달린다 |
+
+어드미션 계약 변경은 `failurePolicy: Fail` + `Deny`라 잘못되면 실험 Job이 **전부**
+거부된다. apply 직후 Phase 1 manifest로 server dry-run 회귀를 확인한다.
+
+```bash
+kubectl apply --dry-run=server -f <branch-bootstrap Job manifest>
+```
+
 ### 자격 증명 회수
 
 키 유출이 의심되면 순서대로 수행한다.
