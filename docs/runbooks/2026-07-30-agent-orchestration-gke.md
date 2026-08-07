@@ -13,11 +13,15 @@ UI는 사용자별 인증을 제공하지 않습니다. 따라서 `agent-orchest
 않습니다.
 
 이 문서는 `deploy/agent-orchestration/`의 immutable digest 주입, OAuth 초기 인증,
-Alembic PreSync migration, ArgoCD manual sync, 내부 healthcheck, Streamlit port-forward와
+Alembic PreSync migration, ArgoCD automated sync, 내부 healthcheck, Streamlit port-forward와
 PostgreSQL 저장 검증·롤백 절차를 다룹니다.
 외부 Ingress, LoadBalancer, 사용자별 OAuth, 외부 공개 API는 범위가 아닙니다.
 
 ## 적용 전 조건
+
+automated sync에서는 `main` merge 자체가 배포 트리거입니다. 아래 조건은 모두
+**merge 전(= PR 리뷰 시점)**에 충족돼야 하며, "sync 버튼을 누르기 전에 확인"하던
+manual sync 시절의 정지 지점은 더 이상 없습니다.
 
 1. `terraform/envs/dev`와 `terraform/admin/autoresearch-k8s` 변경이 별도 승인된
    Terraform plan을 거쳐 적용되어야 합니다. `agent_orchestration` DB/user, API·Runner
@@ -30,10 +34,24 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
    - `autoresearch-agent-orchestration-ui@sha256:...`
 
 3. `terraform/admin/argocd-k8s`의 `agent-orchestration` Application이 먼저
-   적용되어 있어야 합니다. source path는 `deploy/agent-orchestration`, destination은
-   `autoresearch`, sync 정책은 `CreateNamespace=false`인 manual sync입니다. 기본값
-   `agent_orchestration_deployment_enabled=false`에서는 Application이 존재하지 않는
-   ref를 바라보므로 sync할 수 없습니다.
+   적용되어 있어야 합니다(#526). source path는 `deploy/agent-orchestration`,
+   destination은 `autoresearch`입니다. `agent_orchestration_deployment_enabled=true`이면
+   `targetRevision=main`을 추적하는 automated sync(`prune=false`, `selfHeal=false`)이고,
+   `false`이면 존재하지 않는 `agent-orchestration-disabled` ref를 바라보는 비상 차단
+   상태라 sync할 수 없습니다. automated sync는 신규 커밋을 최대 3분 폴링으로 자동
+   반영하며, 별도 `argocd app sync` 수동 트리거가 필요 없습니다.
+
+   `prune=false`와 `selfHeal=false`는 운영상 다음을 의미합니다.
+
+   - `prune=false`: manifest에서 리소스를 **삭제**하는 commit을 merge해도 클러스터의
+     live 리소스는 삭제되지 않고 남습니다. NetworkPolicy 규칙 제거, container/volume
+     제거처럼 "추가를 되돌리는" 방향의 변경은 merge만으로 반영되지 않고, 별도
+     `kubectl delete`가 필요합니다.
+   - `selfHeal=false`: 새 Git revision이 생겼을 때만 sync가 트리거됩니다. `kubectl
+     edit`나 `argocd app sync --revision <old-sha>` 등으로 live 리소스가 직접
+     바뀌면 그 drift는 자동 교정되지 않고, 다음 main 커밋이 merge될 때까지 그대로
+     유지됩니다. [롤백과 보안 확인](#롤백과-보안-확인)에서 이 두 제약이 실제
+     복구 절차에 미치는 영향을 다룹니다.
 4. NetworkPolicy의 정적 CIDR이 현재 dev Terraform 값과 일치해야 합니다. manifest에
    값을 임의로 바꾸지 말고, `terraform/envs/dev`의 `dev_subnet_cidr`(현재
    `10.10.0.0/20`), `gke_services_cidr`(현재 `172.16.128.0/24`)와
@@ -41,19 +59,22 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
    승인된 변수 값으로 대조합니다. 첫 값은 node-originated kubelet probe·API
    port-forward ingress, 둘째 값은 Runner Service VIP·DNS egress, 셋째 값은 Cloud SQL
    private IP egress에 사용됩니다. CIDR 변경은 Terraform과 NetworkPolicy를 같은 배포
-   변경에서 함께 갱신한 뒤 sync합니다.
+   변경에서 함께 갱신한 뒤 main에 merge합니다.
 5. API manifest의 `ORCH_DB_HOST`가 reviewed Terraform state의
    `cloud_sql_private_ip_address` output과 일치해야 합니다. Cloud SQL instance를
    재생성하면 private IP가 달라질 수 있고, ArgoCD plain manifest의 리터럴 값은
-   Terraform drift만으로 자동 갱신되지 않습니다. 불일치하면 sync하지 말고 새
-   manifest commit에 현재 output을 반영한 뒤 target SHA → reviewed admin apply →
-   manual sync 전체 순서를 다시 수행합니다.
-6. v0.7.0 이상을 sync하기 전에 Kubernetes Secret `agent-orchestration-github-token`이
-   먼저 존재해야 합니다. 아래
+   Terraform drift만으로 자동 갱신되지 않습니다. 불일치하면 새 manifest commit에
+   현재 output을 반영해 main에 merge합니다. `agent_orchestration_deployment_enabled`가
+   이미 `true`인 정상 운영 상태에서는 automated sync가 그 commit을 자동 반영하므로
+   별도 admin apply가 필요 없습니다.
+6. v0.7.0 이상을 main에 merge하기 전에 Kubernetes Secret
+   `agent-orchestration-github-token`이 먼저 존재해야 합니다. 아래
    [이슈 발행 GitHub 토큰 등록](#이슈-발행-github-토큰-등록-525) 절차를 따릅니다.
    API는 `load_settings()`를 uvicorn lifespan startup에서 호출하므로, 아래 필수
    환경변수 중 하나라도 비어 있으면 첫 요청 500이 아니라 **Pod 기동 자체가
-   실패**합니다.
+   실패**합니다. Secret 없이 merge되면 automated sync가 최대 3분 뒤 자동으로
+   반영해 새 Pod가 `CreateContainerConfigError`로 멈추므로, merge 전에 반드시
+   먼저 등록합니다.
 
    | 환경변수 | 출처 | 현재 값 |
    | --- | --- | --- |
@@ -158,11 +179,12 @@ head를 가리켜야 합니다. 이 두 상태와 다른 partial schema가 관�
 최초 활성화에서는 위 자리표시자를 release workflow가 검증한 immutable digest와
 적용된 dev Terraform output의 비밀이 아닌 식별자로만 바꾼 별도 manifest commit을
 만듭니다. 이 commit은 Application이 아직 disabled 상태인 동안 검토·병합할 수
-있습니다. 병합 뒤에만 그 정확한 main commit SHA를
-`AGENT_ORCHESTRATION_TARGET_REVISION`으로 지정하고,
-`AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`와 함께 reviewed admin apply를
-수행합니다. mutable tag, PR head SHA, 비밀번호·OAuth payload·요청 토큰은 이
-commit에 넣지 않습니다.
+있습니다(#526 기준 target은 고정 SHA가 아니라 `main`이므로, disabled 상태에서
+main에 merge해도 즉시 배포되지 않습니다). 병합 뒤에는 그 merge를 포함한 main을
+검토한 다음 `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 reviewed admin apply를
+수행합니다. 이 apply가 `targetRevision`을 `main`으로 바꾸는 순간 automated sync가
+이미 merge된 manifest를 자동 반영합니다. mutable tag, PR head SHA, 비밀번호·OAuth
+payload·요청 토큰은 이 commit에 넣지 않습니다.
 
 ## DB runtime 권한 migration 선행 조건
 
@@ -257,9 +279,10 @@ DB 비밀번호 rotation도 Secret version 변경만으로 기존 API Pod를 자
 2. API Pod template에 비밀값·Secret payload를 넣지 않는 새
    `autoresearch.io/db-bootstrap-revision` annotation 값을 추가한 manifest commit을
    만듭니다. 이 annotation 변경은 API rollout을 유발합니다.
-3. 그 commit의 main SHA를 target revision Variable에 지정하고 reviewed admin apply 뒤
-   ArgoCD manual sync를 수행합니다. `kubectl rollout restart`로 ArgoCD 관리
-   manifest를 직접 변경하지 않습니다.
+3. 그 manifest commit을 reviewed PR로 main에 merge합니다. `enabled=true`인 정상
+   운영 상태에서는 automated sync가 최대 3분 폴링으로 자동 반영하므로 별도 admin
+   apply나 수동 sync 트리거가 필요 없습니다. `kubectl rollout restart`로 ArgoCD
+   관리 manifest를 직접 변경하지 않습니다.
 4. API rollout과 공통 end-to-end gate가 성공했는지 확인합니다. 실패 시 단순
    manifest rollback으로는 `versions/latest`를 되돌리지 못하므로, 승인된 password와
    Secret version을 다시 일치시킨 뒤 새 restart manifest revision으로 복구합니다.
@@ -289,26 +312,21 @@ Git, PR, 티켓에 기록하지 않습니다. PVC를 삭제하는 방식은 갱�
 2. 새 **manifest commit 하나에만** Runner init container의
    `runner-codex-auth` command 배열 뒤에 `--replace-existing`을 추가합니다. 이 명시 opt-in은
    기존 regular `auth.json`을 새 Secret Manager 값으로 0600 원자 교체하게 합니다.
-3. 그 manifest commit의 정확한 소문자 40자리 SHA를
-   non-secret GitHub Actions Variable `AGENT_ORCHESTRATION_TARGET_REVISION`에 설정하고,
-   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 재사용 Terraform
-   plan/apply workflow는 이 두 Variables를 각각
-   `TF_VAR_agent_orchestration_target_revision`과
-   `TF_VAR_agent_orchestration_deployment_enabled`로 같은 값으로 주입합니다. 그 뒤
-   reviewed Terraform plan을 확인한 뒤 Terraform apply로 ArgoCD Application의
-   `targetRevision`을 갱신합니다.
-   **manifest commit만 만들거나 ArgoCD sync만 실행해서는 안 됩니다.** Application은
-   고정 SHA를 추적하므로 target revision이 새 SHA가 아니면 새 init 인자를 읽지
-   않습니다.
-4. ArgoCD에서 해당 revision의 diff를 확인한 뒤 manual sync합니다. Runner rollout이
-   Ready이고 Runner readiness probe의 `/healthcheck`가 성공하는지 확인한 다음, API
-   `/healthcheck`도 확인한 뒤 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를
-   수행합니다. 이 gate는 OAuth 복구 전용 절차가 아니라 모든 배포의 공통 검증입니다.
+3. 그 manifest commit을 reviewed PR로 main에 merge합니다. `enabled=true`인
+   정상 운영 상태에서는 Application이 `main`을 automated sync로 추적하므로
+   merge만으로 반영이 시작됩니다. **manifest commit만 만들고 main에 merge하지
+   않은 상태로 두면 안 됩니다.** disabled 상태(`agent_orchestration_deployment_enabled=false`)라면
+   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 먼저 reviewed admin apply를
+   수행해야 automated sync가 시작됩니다.
+4. merge된 revision이 automated sync로 반영됐는지 ArgoCD에서 확인합니다(최대
+   3분 폴링, 필요하면 `argocd app get agent-orchestration`으로 즉시 확인). Runner
+   rollout이 Ready이고 Runner readiness probe의 `/healthcheck`가 성공하는지 확인한
+   다음, API `/healthcheck`도 확인한 뒤
+   [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 수행합니다.
+   이 gate는 OAuth 복구 전용 절차가 아니라 모든 배포의 공통 검증입니다.
 5. 위 Runner/API readiness와 공통 post-sync end-to-end gate가 모두 성공한 경우에만
-   다음 manifest commit에서 `--replace-existing`을 제거합니다. 그 다음 commit의
-   정확한 40자리 SHA로 `AGENT_ORCHESTRATION_TARGET_REVISION`을 다시 갱신하고,
-   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 설정합니다. reviewed Terraform
-   plan/apply와 ArgoCD manual sync를 같은 순서로 수행합니다.
+   다음 manifest commit에서 `--replace-existing`을 제거하고 reviewed PR로 main에
+   merge합니다. automated sync가 이 commit도 같은 방식으로 자동 반영합니다.
 
 하나라도 실패하면 5단계의 정상 flag 제거 commit으로 진행하지 말고, 즉시 승인된
 rollback/incident handling으로 멈춥니다. force init container는 이미 PVC의 기존 인증을
@@ -537,7 +555,7 @@ kubectl -n autoresearch get job agent-orchestration-api-migration \
 ## 공통 post-sync end-to-end gate
 
 이 gate는 최초 배포, 이미지 promotion, 이미지 rollback, OAuth force 복구 뒤의 모든
-manual sync에 적용합니다. Runner Service를 port-forward하거나 외부 노출하지 않습니다.
+sync에 적용합니다. Runner Service를 port-forward하거나 외부 노출하지 않습니다.
 권한 있는 운영자는 API Service만 port-forward합니다.
 
 ```bash
@@ -690,29 +708,45 @@ python3 -c 'import json, sys; paths = json.load(open(sys.argv[1], encoding="utf-
 ## 롤백과 보안 확인
 
 이미지 promotion은 검증된 API와 Runner immutable digest를 manifest commit에 함께
-반영하는 것으로 시작합니다. 그러나 manifest commit만 만들고 ArgoCD sync하는 것은
-충분하지 않습니다. Application은 고정된
-`agent_orchestration_target_revision`만 읽으므로, 다음 순서를 지킵니다.
+반영하는 것으로 시작합니다. Application(#526)이 `agent_orchestration_deployment_enabled=true`에서
+`targetRevision=main`을 automated sync(prune·selfHeal 없음)로 추적하므로, 다음
+순서를 지킵니다.
 
-1. 배포할 digest를 포함한 manifest commit을 만들고 정확한 소문자 40자리 SHA를
-   확인합니다.
-2. 그 SHA로 non-secret GitHub Actions Variable
-   `AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하고,
-   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 이 Variables가
-   `TF_VAR_agent_orchestration_target_revision` 및
-   `TF_VAR_agent_orchestration_deployment_enabled`로 주입된 Terraform 변경의 reviewed
-   plan을 확인하고 apply합니다.
-3. ArgoCD에서 갱신된 Application target revision과 diff를 확인한 뒤 manual sync하고,
-   Runner Ready 및 API `/healthcheck`를 확인한 뒤
+1. 배포할 digest를 포함한 manifest commit을 만들고 reviewed PR로 main에 merge합니다.
+2. `enabled=true`인 정상 운영 상태라면 별도 admin apply 없이 automated sync가 최대
+   3분 폴링으로 자동 반영합니다. `enabled=false`(비상 차단) 상태라면
+   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 reviewed admin apply를 먼저
+   수행해야 sync가 시작됩니다.
+3. ArgoCD에서 반영된 revision과 diff를 확인한 뒤 Runner Ready 및 API
+   `/healthcheck`를 확인하고
    [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과합니다.
 
-이미지 rollback도 같은 순서입니다. 이전에 검증된 API digest 다섯 container 참조와 Runner digest를 포함한 새 rollback
-manifest commit을 만들고, 그 commit의 정확한 40자리 SHA로
-`AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하며
-`AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true`로 함께 설정합니다. 두 Variables가 주입된
-Terraform Application을 reviewed plan/apply로 갱신한 뒤에만 ArgoCD manual sync합니다.
-sync 뒤에는 [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과해야
-하며, 실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로 멈춥니다.
+위 1번의 "reviewed PR로 main에 merge"가 manual sync 시절 "ArgoCD diff를 sync
+**전에** 확인"하던 정지 게이트를 대체합니다. digest pin 검증(아래
+[배포 및 확인](#배포-및-확인) 체크리스트)은 이제 sync 후 확인이 아니라 **PR
+리뷰 시점의 필수 항목**이며, 그 승인 책임은 ArgoCD 운영자가 아니라 PR
+리뷰어에게 있습니다.
+
+automated sync는 나쁜 commit이 이미 main에 있고 클러스터에도 반영된 뒤에만
+발견되는 경우가 있으므로, 정지·복구 수단을 다음처럼 구분합니다.
+
+- **긴급 정지**: `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=false` admin apply로
+  `targetRevision`을 존재하지 않는 ref로 되돌리는 것이 유일한 "새 commit을 더
+  받지 않는" 스위치입니다. 다만 `prune=false`이므로 이 flag를 내려도 **이미
+  떠 있는 workload는 그대로 계속 동작합니다** — 이것은 정지가 아니라 새
+  반영의 동결입니다.
+- **금지된 우회**: `argocd app sync --revision <old-sha>`로 임시 복구하지
+  않습니다. `selfHeal=false`라 이렇게 만든 상태는 자동 교정되지 않고 다음
+  main 커밋이 merge될 때까지 유지되므로, Git과 클러스터가 조용히 어긋난 채로
+  남습니다. 승인된 rollback은 revert commit을 reviewed PR로 main에 merge하는
+  경로뿐입니다.
+
+이미지 rollback도 같은 순서입니다. 이전에 검증된 API digest 다섯 container 참조와
+Runner digest를 포함한 새 rollback manifest commit을 만들어 reviewed PR로 main에
+merge합니다. `enabled=true`인 정상 운영 상태라면 automated sync가 이 commit도 같은
+방식으로 자동 반영합니다. sync 뒤에는
+[공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과해야 하며,
+실패하면 deployment success로 진행하지 않고 incident/rollback 판단으로 멈춥니다.
 OAuth 장애와 이미지 장애를 같은 롤백으로 처리하지 않습니다.
 
 rollback manifest를 만들기 전에는 대상 Alembic revision이 `chat_interactions` table과
@@ -729,13 +763,14 @@ ArgoCD가 관리)처럼, 같은 기능 변경이 서로 다른 두 배포 경로
 실측).
 
 - RBAC는 admin apply로 즉시 반영됩니다.
-- `deploy/agent-orchestration/`의 NetworkPolicy 등 manifest는 **ArgoCD Application의 고정
-  `targetRevision`을 갱신하고 manual sync해야만** 반영됩니다. GitHub merge와 Terraform
-  apply만으로는 반영되지 않습니다.
+- `deploy/agent-orchestration/`의 NetworkPolicy 등 manifest는 **main에 merge된 뒤
+  ArgoCD automated sync가 반영해야만** 실제로 적용됩니다(최대 3분 폴링). PR merge
+  자체는 GitHub 저장소 상태만 바꿀 뿐, 그 순간에 클러스터가 즉시 갱신되지는
+  않습니다.
 
-두 변경을 같은 PR·같은 커밋에 묶어도, 머지 뒤 `AGENT_ORCHESTRATION_TARGET_REVISION`을 그
-커밋 SHA로 갱신하고 admin apply·ArgoCD sync를 별도로 밟지 않으면 "권한은 있는데 실제로
-호출할 경로가 없는" 상태가 남습니다. `kubectl auth can-i`는 RBAC만 확인하므로 이 간극을
+두 변경을 같은 PR·같은 커밋에 묶어 머지해도, automated sync가 실제로 반영을
+끝냈는지 확인하지 않으면 "권한은 있는데 실제로 호출할 경로가 아직 없는" 창이
+잠시 남을 수 있습니다. `kubectl auth can-i`는 RBAC만 확인하므로 이 간극을
 드러내지 않습니다 — NetworkPolicy 반영 여부는
 `kubectl -n autoresearch get networkpolicy agent-orchestration-api-egress -o yaml`로 직접
 대조해야 합니다.
@@ -743,14 +778,15 @@ ArgoCD가 관리)처럼, 같은 기능 변경이 서로 다른 두 배포 경로
 RBAC와 NetworkPolicy를 함께 바꾸는 변경은 다음 순서를 지킵니다.
 
 1. RBAC(Terraform)와 NetworkPolicy(manifest) 변경을 같은 PR에 포함해 머지합니다.
-2. 머지 커밋의 정확한 40자리 SHA로 `AGENT_ORCHESTRATION_TARGET_REVISION`을 갱신하고
-   admin apply를 실행해 RBAC를 반영합니다. `terraform/admin/argocd-k8s/main.tf`에서
-   `targetRevision`은 `agent_orchestration_deployment_enabled ? target_revision :
-   "agent-orchestration-disabled"`로 결정되므로, 이 flag가 이미 `true`인 정상 운영
-   상태에서만 SHA 갱신이 그대로 반영됩니다. flag가 `false`라면 [롤백과 보안
-   확인](#롤백과-보안-확인) 절차처럼 SHA 갱신과
-   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true` 설정을 함께 적용해야 합니다.
-3. ArgoCD에서 Application diff를 확인한 뒤 manual sync해 NetworkPolicy를 반영합니다.
+2. `agent_orchestration_deployment_enabled`가 이미 `true`인 정상 운영 상태라면
+   RBAC 변경만 admin apply로 반영합니다. flag가 `false`(비상 차단)라면 [롤백과
+   보안 확인](#롤백과-보안-확인) 절차처럼
+   `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=true` admin apply를 함께 수행해야
+   Application이 `main`을 추적하기 시작합니다. `terraform/admin/argocd-k8s/main.tf`의
+   `targetRevision = var.agent_orchestration_deployment_enabled ? "main" :
+   "agent-orchestration-disabled"`가 이 분기를 결정합니다.
+3. ArgoCD에서 automated sync가 머지 커밋을 반영했는지 확인해 NetworkPolicy를
+   검증합니다.
 4. live NetworkPolicy와, 권한을 실제로 쓰는 Pod에서의 연결 가능 여부를 함께 확인합니다.
    권한 확인만으로는 충분하지 않습니다.
 
