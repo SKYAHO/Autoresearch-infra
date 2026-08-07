@@ -69,6 +69,40 @@ module ExperimentLauncherManifestContractTest
     File.write(path, documents.map(&:to_yaml).join("---\n"))
   end
 
+  def expect_equal(expected, actual, description)
+    return if expected == actual
+
+    raise "#{description} 불일치: 기대=#{expected.inspect}, 실제=#{actual.inspect}"
+  end
+
+  def check_v09_training_release!
+    documents = YAML.load_stream(
+      File.read(ExperimentLauncherManifestContract::MANIFEST_PATH)
+    ).compact
+    cron_job = documents.find { |document| document["kind"] == "CronJob" }
+    container = cron_job.dig(
+      "spec", "jobTemplate", "spec", "template", "spec", "containers", 0
+    )
+    environment = container.fetch("env").to_h { |item| [item.fetch("name"), item] }
+
+    expect_equal(
+      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:24bf725cab23ff2b1e54086a5366538f23aea408aae7f6e12073e19454e6b04e",
+      container.fetch("image"),
+      "v0.9.0 launcher image"
+    )
+    expected = {
+      "ORCH_EXECUTOR_IMAGE" => "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:a3ee4aff0266ee2781608b2172c78f9def70ff7aa73c657df97c361566075808",
+      "ORCH_TRAINING_DATASET_URI" => "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
+      "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
+      "ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC" => "600",
+      "ORCH_UV_SYNC_TIMEOUT_SEC" => "900"
+    }
+    expected.each do |name, value|
+      expect_equal({ "name" => name, "value" => value }, environment.fetch(name), name)
+    end
+    raise "구식 ORCH_TRAINING_DATASET_PATH가 남아 있습니다" if environment.key?("ORCH_TRAINING_DATASET_PATH")
+  end
+
   def expect_failure(label)
     root = fixture_root
     yield root
@@ -84,6 +118,7 @@ module ExperimentLauncherManifestContractTest
 
   def run!
     ExperimentLauncherManifestContract.check!
+    check_v09_training_release!
 
     expect_failure("공개 인터넷 egress 추가") do |root|
       mutate_policy(root) do |policy|
@@ -193,6 +228,39 @@ module ExperimentLauncherManifestContractTest
         environment.find do |item|
           item["name"] == "ORCH_TTL_AFTER_FINISHED_SEC"
         end["value"] = "30"
+      end
+    end
+
+    # (#591) 학습은 URI가 opt-in 스위치이고 timeout 세 값도 v0.9.0 launcher가
+    # 필수로 읽으므로, 하나라도 변경·누락되거나 구식 PATH가 재유입되면 거부한다.
+    expect_failure("학습 snapshot URI 변경") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        environment.find { |item| item["name"] == "ORCH_TRAINING_DATASET_URI" }["value"] =
+          "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/"
+      end
+    end
+
+    expect_failure("학습 timeout 누락") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        environment.reject! { |item| item["name"] == "ORCH_TRAINING_TIMEOUT_SEC" }
+      end
+    end
+
+    expect_failure("구식 학습 dataset path 재유입") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        environment << {
+          "name" => "ORCH_TRAINING_DATASET_PATH",
+          "value" => "/workspace/training_dataset.csv"
+        }
       end
     end
 

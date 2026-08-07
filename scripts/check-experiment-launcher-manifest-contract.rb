@@ -154,8 +154,8 @@ module ExperimentLauncherManifestContract
   end
 
   def check_cron_job!(cron_job)
-    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:2818f29a658b36c14199bd7e2d195e56921cf876217b6504af3fbc5634627837"
-    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:7999677d238f29202fa5720700e86943937bb3d0536cdb3269231c01a14c2475"
+    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:24bf725cab23ff2b1e54086a5366538f23aea408aae7f6e12073e19454e6b04e"
+    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:a3ee4aff0266ee2781608b2172c78f9def70ff7aa73c657df97c361566075808"
     # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
     # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
     # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
@@ -193,6 +193,11 @@ module ExperimentLauncherManifestContract
       "ORCH_EXECUTOR_IMAGE" => expected_executor_image,
       "ORCH_EXECUTOR_SERVICE_ACCOUNT" => "experiment-job",
       "ORCH_EXECUTOR_NODE_POOL" => "batch-od",
+      "ORCH_TRAINING_DATASET_URI" =>
+        "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
+      "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
+      "ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC" => "600",
+      "ORCH_UV_SYNC_TIMEOUT_SEC" => "900",
       "ORCH_GITHUB_APP_SECRET_NAME" => "autoresearch-experiment-branch-writer-app",
       "ORCH_GITHUB_REPOSITORY" => "SKYAHO/Autoresearch",
       "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "2",
@@ -219,11 +224,17 @@ module ExperimentLauncherManifestContract
       "ORCH_TTL_AFTER_FINISHED_SEC" => "3600"
     }
     expected_literals.each do |name, value|
+      entry = environment[name]
+      raise ContractError, "#{name} env가 없습니다" unless entry
+
       expect_equal(
         { "name" => name, "value" => value },
-        environment.fetch(name),
+        entry,
         name
       )
+    end
+    if environment.key?("ORCH_TRAINING_DATASET_PATH")
+      raise ContractError, "구식 ORCH_TRAINING_DATASET_PATH는 사용할 수 없습니다"
     end
 
     {
