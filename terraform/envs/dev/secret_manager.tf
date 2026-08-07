@@ -64,6 +64,15 @@ resource "google_secret_manager_secret_iam_member" "feast_apply_prod_redis_serve
   member    = "serviceAccount:${google_service_account.feast_apply_prod.email}"
 }
 
+# #568 dev 환경의 feast apply도 동일하게 Redis CA가 필요하다. prod SA에만 부여돼
+# 있던 바인딩 누락 — #561/#562로 dev도 GKE Job 없이 러너에서 직접 apply를 실행하며
+# 처음 드러났다.
+resource "google_secret_manager_secret_iam_member" "feast_apply_dev_redis_server_ca" {
+  secret_id = google_secret_manager_secret.redis_server_ca.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.feast_apply_dev.email}"
+}
+
 # #93 MLflow DB 비밀번호를 Secret Manager에 저장. random_password는 cloud_sql.tf.
 # state 평문 저장 한계는 db_app_password와 동일(GCS backend 접근제어로 완화, dev accept).
 resource "google_secret_manager_secret" "mlflow_db_password" {
