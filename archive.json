@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T04:58:25Z",
+  "generated_at": "2026-08-07T04:59:17Z",
   "reports": [
+    {
+      "number": 565,
+      "title": "feat: 실험 Job 어드미션 계약을 일반화하고 Phase 2 executor 경계를 추가한다 (#562)",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T04:58:14Z",
+      "summary_ko": [
+        "실험 Job 어드미션 계약을 app.kubernetes.io/component 종류별 매핑 구조로 전환하여 여러 형태의 Job을 수용하도록 일반화했습니다.",
+        "Phase 2 8-컨테이너 executor Job의 어드미션 검증 규칙, egress 네트워크 정책 및 launcher 환경변수 6종을 신설했습니다.",
+        "비밀키 마운트 규칙을 허용 목록 방식으로 반전하여 Codex 컨테이너 자격 증명 유출을 방지하고 Phase 1 롤백 경로를 보존했습니다."
+      ],
+      "report_url": "pr/565/"
+    },
     {
       "number": 564,
       "title": "chore: Agent Orchestration UI digest 승격",
