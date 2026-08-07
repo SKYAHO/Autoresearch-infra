@@ -59,6 +59,16 @@ module ExperimentLauncherManifestContractTest
     File.write(path, documents.map(&:to_yaml).join("---\n"))
   end
 
+  def mutate_launcher(root)
+    path = File.join(root, "deploy", "agent-orchestration", "launcher-cronjob.yaml")
+    documents = YAML.load_stream(File.read(path)).compact
+    cron_job = documents.find { |document| document["kind"] == "CronJob" }
+    raise "fixture CronJob이 없습니다" unless cron_job
+
+    yield cron_job
+    File.write(path, documents.map(&:to_yaml).join("---\n"))
+  end
+
   def expect_failure(label)
     root = fixture_root
     yield root
@@ -172,6 +182,17 @@ module ExperimentLauncherManifestContractTest
           .flat_map { |container| container["env"] || [] }
           .find { |item| item["name"] == "ORCH_EXECUTOR_API_TOKEN" }
         entry.dig("valueFrom", "secretKeyRef")["key"] = "ORCH_EXECUTOR_API_TOKEN"
+      end
+    end
+
+    expect_failure("smoke 기간 TTL 3600 고정 위반") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        environment.find do |item|
+          item["name"] == "ORCH_TTL_AFTER_FINISHED_SEC"
+        end["value"] = "30"
       end
     end
 

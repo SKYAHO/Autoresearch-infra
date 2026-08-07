@@ -350,6 +350,17 @@ SHA `e81d7f7cafa8c2834f75bd36f9cebacebee4e5e6`을 source로 한 release run
 | executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fe0002e097ac750c90a083519cc6ac86420e84a44c1aa7aa6c7d0ff9120b707c` |
 | API | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:36507859b830032aedaa7a6fbf1b77e69466ceec7b56af084dc694e21c51ecde` |
 
+### Phase 2 실패 관측 release provenance (#579)
+
+launcher·executor는 애플리케이션 PR `SKYAHO/Autoresearch#583`의 squash merge SHA
+`7f908a571938c910a3549e103df5f3e903708d32`를 source로 한 release run
+`SKYAHO/Autoresearch/actions/runs/31158995427`에서 게시했다.
+
+| 역할 | 이번 승격 digest | 직전 rollback digest |
+|---|---|---|
+| launcher | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:b6fde46c1bb20daea28665d060005486580f3862eb837896423a2d90712e39c1` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:4aa7fba653c32a408b77b833dcc11963c5543becf03e3d7608d9095c466f5a2e` |
+| executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fb785a28cffab21dac4817d0b6cffaf0c2cd4026e54a3fabc6d19cff4439a347` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:00664bc9f0b711fcf7a161e76a02d7c5bc482803ae0faf93d7b81d1568ca9dd9` |
+
 **launcher CronJob의 DB bootstrap initContainer는 launcher image가 아니라 API
 image를 쓴다.** `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소
 최상위 모듈인데 `launcher.Dockerfile`이 이를 COPY하지 않아 launcher image에 없다.
@@ -637,20 +648,43 @@ kubectl -n autoresearch run openapi-probe --rm -i --restart=Never \
 배포가 성공한 것처럼 보인다. `READY=false`인 Pod가 재시작을 쌓고 있는지 반드시
 본다.
 
+#### 실패 증거 보존 TTL (#579)
+
+Autoresearch #582 실패 관측 image를 승격하는 단일 smoke에서는 launcher에
+`ORCH_TTL_AFTER_FINISHED_SEC=3600`을 주입한다. 이 값은 launcher가 새 executor Job의
+`ttlSecondsAfterFinished`에 복사하며, 완료된 Job·Pod event와 container 로그를 조사할
+시간을 확보한다. 권한·egress·active deadline은 바꾸지 않는다.
+
+1. launcher CronJob을 suspend한 상태에서 새 launcher/executor digest와 TTL 3600
+   manifest를 적용한다.
+2. rollout과 설정을 확인한 뒤 suspend를 해제하고 새 Experiment 하나만 발행한다.
+3. 평가 중 (`EVALUATING`) 완주 또는 정제된 `stage`·`error_type`·`reason` 실패 로그와
+   보존된 Job event를 수집한다.
+4. 완주 증거를 수집하면 manifest의 TTL을 `30`으로 되돌린다. 이때
+   `scripts/check-experiment-launcher-manifest-contract.rb`의 기대 리터럴과
+   `scripts/test-check-experiment-launcher-manifest-contract.rb`의 음성 self-test도
+   같은 PR에서 함께 되돌려야 `lint` required check가 통과한다.
+5. 회수 PR을 병합하고 TTL 30 manifest를 다시 적용한 뒤 live CronJob 값을 확인한다.
+
+TTL 3600을 상시값으로 남기면 완료 Job이 최대 한 시간 누적되므로 smoke 종료 후 회수를
+완료 조건으로 취급한다. 로그가 Kubernetes API 또는 목적지 egress 차단을 구체적으로
+증명할 때만 별도 최소 권한 변경을 검토한다.
+
 ### Phase 1 ↔ Phase 2 전환과 롤백 (#562)
 
 애플리케이션 `launcher/main.py`에는 **Phase 1/2를 고르는 스위치가 없다.**
 `ensure_executor_job`만 호출하므로 launcher image digest를 올리는 순간 전량
 Phase 2로 전환되고, 점진 배포 경로가 없다.
 
-따라서 롤백은 **launcher image digest를 직전 main revision 값으로 되돌리고 ArgoCD를
-sync하는 것**이다. 그때 생성되는 Job은 다시 `branch-bootstrap` 형태이며, 어드미션
+따라서 롤백은 **launcher image digest를 위 provenance 표의 직전 rollback digest로
+되돌리고 manifest를 다시 적용하는 것**이다. 그때 생성되는 Job은 다시
+`branch-bootstrap` 형태이며, 어드미션
 계약에 그 종류가 보존돼 있어 그대로 통과한다. **`branch-bootstrap` 계약을 정리
 대상으로 보고 지우면 롤백 경로가 막힌다.**
 
 | 대상 | 롤백 절차 |
 |---|---|
-| launcher 전환 | image digest를 직전 값으로 되돌리고 ArgoCD sync |
+| launcher 전환 | launcher와 executor image digest를 위 provenance 표의 직전 rollback digest로 되돌리고 manifest 재적용 |
 | 어드미션 계약 | Terraform revert 후 apply. Phase 1 계약이 보존돼 있어 되돌린 launcher가 통과한다 |
 | NetworkPolicy | `experiment-jobs-executor-egress`만 삭제. Phase 1 정책은 손대지 않았다 |
 | executor namespace Secret 2종 | launcher를 **먼저** 되돌린 뒤 삭제한다. 반대로 하면 진행 중인 Job이 `FailedMount`로 매달린다 |

@@ -86,7 +86,7 @@ spec:
                   drop: ["ALL"]
           containers:
             - name: launcher
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:4aa7fba653c32a408b77b833dcc11963c5543becf03e3d7608d9095c466f5a2e
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:b6fde46c1bb20daea28665d060005486580f3862eb837896423a2d90712e39c1
               imagePullPolicy: IfNotPresent
               # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
               # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
@@ -114,7 +114,7 @@ spec:
                 - name: ORCH_JOB_NAMESPACE
                   value: autoresearch-experiments
                 - name: ORCH_EXECUTOR_IMAGE
-                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:00664bc9f0b711fcf7a161e76a02d7c5bc482803ae0faf93d7b81d1568ca9dd9
+                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fb785a28cffab21dac4817d0b6cffaf0c2cd4026e54a3fabc6d19cff4439a347
                 - name: ORCH_EXECUTOR_SERVICE_ACCOUNT
                   value: experiment-job
                 - name: ORCH_EXECUTOR_NODE_POOL
@@ -171,6 +171,10 @@ spec:
                   value: "3600"
                 - name: ORCH_CODEX_TIMEOUT_SEC
                   value: "1800"
+                # (#579) #582 실패 원인을 수집하는 단일 smoke 동안 완료 Job을
+                # 1시간 보존한다. EVALUATING 완주 증거 수집 뒤 30으로 회수한다.
+                - name: ORCH_TTL_AFTER_FINISHED_SEC
+                  value: "3600"
               volumeMounts:
                 - name: db-runtime
                   mountPath: /runtime
