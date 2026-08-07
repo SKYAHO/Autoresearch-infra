@@ -263,7 +263,20 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           scope       = "Namespaced"
         }]
       }
-      validations = [
+      # (#562) Job 종류를 한 번만 추출해 종류별 계약이 재사용한다. label이 없는
+      # Job은 빈 문자열이 되어 아래 "알려진 종류" 검사에서 사유와 함께 거부된다 —
+      # 없는 key를 직접 인덱싱하면 CEL 런타임 오류가 되고 failurePolicy=Fail의
+      # 우회적 경로로만 거부돼 메시지가 드러나지 않는다.
+      variables = [{
+        name = "component"
+        expression = join("", [
+          "has(object.spec.template.metadata) && ",
+          "has(object.spec.template.metadata.labels) && ",
+          "'app.kubernetes.io/component' in object.spec.template.metadata.labels ",
+          "? object.spec.template.metadata.labels['app.kubernetes.io/component'] : ''",
+        ])
+      }]
+      validations = concat([
         # Job의 pod template에는 serviceAccountName defaulting이 적용되지 않는다
         # (Pod 오브젝트와 달리 실측상 필드가 그대로 비어 온다). 가드 없이 비교하면
         # 누락 Job이 CEL 런타임 오류로만 거부돼 사유가 드러나지 않으므로 명시한다.
@@ -339,42 +352,49 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "has(object.spec.ttlSecondsAfterFinished) && object.spec.ttlSecondsAfterFinished >= 0 && object.spec.ttlSecondsAfterFinished <= 3600"
           message    = "실험 Job은 ttlSecondsAfterFinished를 0~3600초로 명시해야 합니다."
         },
-        # ── #539 branch-bootstrap Pod 형태 계약 ──────────────────────────────
+        # ── Job 종류 판별 ────────────────────────────────────────────────────
         #
-        # 위 규칙들은 "누가·어디서·어떤 이미지로" 도는지를 강제한다. 아래 다섯 개는
-        # "private key가 어느 컨테이너까지 보이는지"를 강제한다. 이 Phase에서
-        # 마운트되는 branch-writer App private key는 `SKYAHO/Autoresearch`의
-        # Contents write 권한을 가지므로, 유출 시 저장소에 임의 코드를 push할 수
-        # 있다 — 이 namespace가 다루는 시크릿 중 영향 범위가 가장 크다.
+        # Pod template label 고정. 이 규칙이 막는 것은 침해가 아니라 **불일치**다 —
+        # GitHub egress를 여는 NetworkPolicy가 이 label로 대상을 고르므로, label이
+        # 없는 Job은 admission을 통과해도 api.github.com에 닿지 못해 deadline까지
+        # 매달렸다가 timeout으로만 실패한다. 여기서 거부하면 같은 실수가 제출 시점에
+        # 명확한 사유로 드러난다. launcher의 동시 실행 계수도 같은 label selector를
+        # 쓰므로, label 없는 Job이 자기 계수에서 빠지는 경로도 함께 닫힌다.
         #
-        # 설계상 키는 initContainer에서만 보이고, 본 컨테이너는 그 결과물인 1시간
-        # 만료 installation token만 받는다. 그 분리를 만드는 것은 애플리케이션
-        # 저장소의 launcher 코드(`launcher/jobs.py`)인데, 그 코드는 이 저장소의
-        # 리뷰·CI를 거치지 않는다. 따라서 같은 계약을 서버 측에서 한 번 더 강제한다.
-        #
-        # 주의: 이 정책은 namespace 전체에 바인딩되므로, 아래 이름 고정은 이
-        # namespace를 사실상 branch-bootstrap 전용으로 만든다. 다른 형태의 실험
-        # Job이 필요해지면 그 변경에서 이 규칙들을 먼저 넓혀야 한다.
+        # (#562) 단일 값 고정에서 "승인된 종류 중 하나"로 넓혔다. 종류별 형태
+        # 계약은 아래 concat 인자가 `local.experiment_job_contracts`에서 생성한다.
         {
-          expression = "has(object.spec.template.spec.initContainers) && object.spec.template.spec.initContainers.size() == 1 && object.spec.template.spec.initContainers[0].name == '${local.experiment_branch_bootstrap_init_container}'"
-          message    = "실험 Job은 initContainer로 ${local.experiment_branch_bootstrap_init_container} 하나만 사용해야 합니다."
+          expression = "variables.component in ${jsonencode(keys(local.experiment_job_contracts))}"
+          message    = "실험 Job의 Pod template은 승인된 app.kubernetes.io/component label을 가져야 합니다(${join(", ", keys(local.experiment_job_contracts))})."
         },
-        {
-          expression = "object.spec.template.spec.containers.size() == 1 && object.spec.template.spec.containers[0].name == '${local.experiment_branch_bootstrap_app_container}'"
-          message    = "실험 Job은 컨테이너로 ${local.experiment_branch_bootstrap_app_container} 하나만 사용해야 합니다."
-        },
-        # volume 목록 자체를 두 개로 못 박는다. 개수를 열어두면 승인된 두 volume을
-        # 그대로 둔 채 hostPath·다른 Secret·PVC를 추가하는 경로가 남는다(Pod
-        # Security restricted가 hostPath는 막지만 다른 Secret은 막지 않는다).
+        # ── #539 branch-bootstrap volume 모양 계약 ───────────────────────────
+        #
+        # 위 종류별 규칙이 volume "집합"을 고정하고, 이 규칙이 그 volume들의
+        # "모양"을 고정한다. 집합만 고정하면 같은 이름으로 hostPath나 다른 Secret을
+        # 넣는 경로가 남는다(Pod Security restricted가 hostPath는 막지만 다른
+        # Secret은 막지 않는다).
         #
         # sizeLimit을 문자열 '1Mi'로 비교하는 것은 Quantity가 제출된 표기를 그대로
         # 보존해 왕복하기 때문이다. 고정 템플릿이 리터럴 "1Mi"를 보내므로 일치하며,
         # 같은 값을 다른 표기(예: "1048576")로 바꾸는 템플릿 변경은 의도적으로
         # 거부된다 — 이 계약은 "값이 같음"이 아니라 "템플릿이 그대로임"을 확인한다.
         {
-          expression = "has(object.spec.template.spec.volumes) && object.spec.template.spec.volumes.size() == 2 && object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_writer_key_volume}' && has(v.secret) && has(v.secret.secretName) && v.secret.secretName == '${var.experiment_branch_writer_secret_name}') && object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_token_volume}' && has(v.emptyDir) && has(v.emptyDir.medium) && v.emptyDir.medium == 'Memory' && has(v.emptyDir.sizeLimit) && v.emptyDir.sizeLimit == '1Mi')"
-          message    = "실험 Job은 ${var.experiment_branch_writer_secret_name} Secret volume과 medium=Memory 1Mi token volume 두 개만 사용해야 합니다."
+          expression = "variables.component != '${local.experiment_branch_bootstrap_component_label}' || (object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_writer_key_volume}' && has(v.secret) && has(v.secret.secretName) && v.secret.secretName == '${var.experiment_branch_writer_secret_name}') && object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_token_volume}' && has(v.emptyDir) && has(v.emptyDir.medium) && v.emptyDir.medium == 'Memory' && has(v.emptyDir.sizeLimit) && v.emptyDir.sizeLimit == '1Mi'))"
+          message    = "branch-bootstrap Job은 ${var.experiment_branch_writer_secret_name} Secret volume과 medium=Memory 1Mi token volume을 그대로 사용해야 합니다."
         },
+        # ── 자격 증명 경계 ──────────────────────────────────────────────────
+        #
+        # 위 규칙들은 "누가·어디서·어떤 이미지로·어떤 형태로" 도는지를 강제한다.
+        # 아래 규칙들은 "private key가 어느 컨테이너까지 보이는지"를 강제한다.
+        # 마운트되는 branch-writer App private key는 `SKYAHO/Autoresearch`의
+        # Contents write 권한을 가지므로, 유출 시 저장소에 임의 코드를 push할 수
+        # 있다 — 이 namespace가 다루는 시크릿 중 영향 범위가 가장 크다.
+        #
+        # 설계상 키는 token을 발급하는 컨테이너에서만 보이고, 나머지는 그 결과물인
+        # 1시간 만료 installation token만 받는다. 그 분리를 만드는 것은 애플리케이션
+        # 저장소의 launcher 코드(`launcher/jobs.py`)인데, 그 코드는 이 저장소의
+        # 리뷰·CI를 거치지 않는다. 따라서 같은 계약을 서버 측에서 한 번 더 강제한다.
+        #
         # 이 정책의 핵심 규칙이다. private key volume은 initContainer만, 그것도
         # readOnly로 마운트할 수 있다. 본 컨테이너는 GitHub과 실제로 통신하며 더
         # 오래 사는 쪽이라, 여기가 손상됐을 때 얻는 것이 "만료되는 token"인지
@@ -397,24 +417,49 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "(!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))) && object.spec.template.spec.containers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))"
           message    = "실험 Job은 환경 변수로 Secret·ConfigMap 값을 주입할 수 없습니다(envFrom과 valueFrom 금지). 시크릿은 승인된 initContainer volume 경로만 사용합니다."
         },
-        # Pod template label 고정. 이 규칙이 막는 것은 침해가 아니라 **불일치**다 —
-        # GitHub egress를 여는 NetworkPolicy가 이 label로 대상을 고르므로, label이
-        # 없는 Job은 admission을 통과해도 api.github.com에 닿지 못해 deadline까지
-        # 매달렸다가 timeout으로만 실패한다. 여기서 거부하면 같은 실수가 제출 시점에
-        # 명확한 사유로 드러난다. launcher의 동시 실행 계수도 같은 label selector를
-        # 쓰므로, label 없는 Job이 자기 계수에서 빠지는 경로도 함께 닫힌다.
-        {
-          expression = "has(object.spec.template.metadata) && has(object.spec.template.metadata.labels) && 'app.kubernetes.io/component' in object.spec.template.metadata.labels && object.spec.template.metadata.labels['app.kubernetes.io/component'] == '${local.experiment_branch_bootstrap_component_label}'"
-          message    = "실험 Job의 Pod template은 app.kubernetes.io/component=${local.experiment_branch_bootstrap_component_label} label을 가져야 합니다."
-        },
         # 본 컨테이너는 token을 읽기만 한다. 쓰기 가능하게 마운트되면 컨테이너가
         # 자기 token 파일을 덮어써 initContainer가 만든 자격 증명 경로를 우회할 수
         # 있고, 사후 조사에서 어떤 token이 쓰였는지도 확정할 수 없게 된다.
         {
-          expression = "object.spec.template.spec.containers.all(c, has(c.volumeMounts) && c.volumeMounts.exists_one(m, m.name == '${local.experiment_branch_token_volume}' && has(m.readOnly) && m.readOnly == true))"
+          expression = "variables.component != '${local.experiment_branch_bootstrap_component_label}' || object.spec.template.spec.containers.all(c, has(c.volumeMounts) && c.volumeMounts.exists_one(m, m.name == '${local.experiment_branch_token_volume}' && has(m.readOnly) && m.readOnly == true))"
           message    = "본 컨테이너는 token volume을 readOnly로만 mount해야 합니다."
         },
-      ]
+        ],
+        # ── 종류별 컨테이너 구성 (#562) ──────────────────────────────────────
+        #
+        # 목록 비교 하나로 개수·이름·**순서**를 함께 고정한다. 순서를 고정하는
+        # 이유는 token을 발급하는 컨테이너가 그 token을 쓰는 컨테이너 바로 앞에
+        # 와야 하기 때문이다 — 순서가 바뀌면 만료 창이 길어지거나 빈 token 파일을
+        # 읽는다. 이름 고정은 private key를 마운트하는 컨테이너를 "순서"가 아니라
+        # "정체"로 식별하기 위한 것이며 아래 자격 증명 규칙이 그 이름에 의존한다.
+        [
+          for component, contract in local.experiment_job_contracts : {
+            expression = join("", [
+              "variables.component != '${component}' || (",
+              "has(object.spec.template.spec.initContainers) && ",
+              "object.spec.template.spec.initContainers.map(c, c.name) == ${jsonencode(contract.init_containers)} && ",
+              "object.spec.template.spec.containers.map(c, c.name) == ${jsonencode(contract.app_containers)})",
+            ])
+            message = "${component} Job의 컨테이너 구성은 ${join(" → ", contract.init_containers)} 다음 ${join(", ", contract.app_containers)} 순서여야 합니다."
+          }
+        ],
+        # ── 종류별 volume 집합 (#562) ────────────────────────────────────────
+        #
+        # 개수와 이름 집합을 함께 고정한다. 개수만 열어두면 승인된 volume을 그대로
+        # 둔 채 hostPath·다른 Secret을 추가하는 경로가 남는다. 각 volume의 모양
+        # (Secret 이름, emptyDir medium/sizeLimit)은 종류별 모양 규칙이 맡는다.
+        [
+          for component, contract in local.experiment_job_contracts : {
+            expression = join("", [
+              "variables.component != '${component}' || (",
+              "has(object.spec.template.spec.volumes) && ",
+              "object.spec.template.spec.volumes.size() == ${length(contract.volumes)} && ",
+              "${jsonencode(contract.volumes)}.all(n, object.spec.template.spec.volumes.exists_one(v, v.name == n)))",
+            ])
+            message = "${component} Job은 승인된 volume ${length(contract.volumes)}개만 사용해야 합니다(${join(", ", contract.volumes)})."
+          }
+        ],
+      )
     }
   }
 }

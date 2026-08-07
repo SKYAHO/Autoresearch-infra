@@ -53,6 +53,38 @@ locals {
   # 다르므로 별도 local로 둔다.
   experiment_branch_bootstrap_component_label = "branch-bootstrap"
 
+  # (#562) Job 종류별 어드미션 계약. key는 Pod template의
+  # `app.kubernetes.io/component` label 값이다. 이 map에 없는 종류는 정책이
+  # 거부하므로, 새 Job 종류를 도입하는 변경은 여기 항목을 먼저 추가한다.
+  #
+  # 계약을 map에서 생성하는 이유는 이 namespace가 Phase 1 `branch-bootstrap`
+  # 한 종류만 통과시키도록 이름을 하드코딩하고 있었고, Phase 2 executor처럼
+  # 형태가 다른 Job이 필요해질 때마다 정책 전체를 다시 쓰게 되기 때문이다.
+  #
+  # `credential_mounts`는 "이 volume을 mount할 수 있는 컨테이너 이름"이다.
+  # 목록에 없는 컨테이너는 init/app 구분 없이 mount가 거부된다. 이 방향이
+  # 중요하다 — "모든 initContainer가 키를 mount해야 한다"는 형태로 쓰면
+  # initContainer가 늘어나는 순간 그 새 컨테이너에도 키를 넣으라는 요구가 된다.
+  experiment_job_contracts = {
+    (local.experiment_branch_bootstrap_component_label) = {
+      init_containers = [local.experiment_branch_bootstrap_init_container]
+      app_containers  = [local.experiment_branch_bootstrap_app_container]
+      volumes = [
+        local.experiment_branch_writer_key_volume,
+        local.experiment_branch_token_volume,
+      ]
+      credential_mounts = {
+        (local.experiment_branch_writer_key_volume) = [
+          local.experiment_branch_bootstrap_init_container,
+        ]
+        (local.experiment_branch_token_volume) = [
+          local.experiment_branch_bootstrap_init_container,
+          local.experiment_branch_bootstrap_app_container,
+        ]
+      }
+    }
+  }
+
   # 공개 인터넷 443을 열되 사설·링크로컬·loopback 대역을 제외한다. RFC1918(10/8,
   # 172.16/12, 192.168/16), RFC6598 CGNAT(100.64/10), link-local(169.254/16),
   # loopback(127/8) 기준이라 dev CIDR 변수가 바뀌어도 함께 고칠 필요가 없다.
