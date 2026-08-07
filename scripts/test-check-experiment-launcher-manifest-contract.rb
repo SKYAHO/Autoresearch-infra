@@ -91,7 +91,7 @@ module ExperimentLauncherManifestContractTest
       "v0.9.0 launcher image"
     )
     expected = {
-      "ORCH_EXECUTOR_IMAGE" => "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:7829095e6dc25334329d8f8b7f3c5c126edd32a6a96625dea109d76e70210a6d",
+      "ORCH_EXECUTOR_IMAGE" => "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:9111b80adffa013c5bc49cb3c33a55daae226ca38faa7214ca930d94bbb75abb",
       "ORCH_TRAINING_DATASET_URI" => "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
       "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
       "ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC" => "600",
