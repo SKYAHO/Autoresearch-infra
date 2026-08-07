@@ -3,6 +3,35 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-07: 실험 Job 어드미션 계약 일반화와 Phase 2 executor 경계 (#562)
+
+- 어드미션 계약을 Job 종류별(`app.kubernetes.io/component`) 계약으로 일반화하고
+  Phase 2 executor(8-container) 계약을 추가했다. 기존 단일 종류 하드코딩은
+  namespace를 사실상 `branch-bootstrap` 전용으로 만들고 있었다.
+- **private key 규칙을 반전한 것이 이 변경의 핵심이다.** 기존 규칙은 "모든
+  initContainer가 private key를 readOnly로 mount해야 한다"였는데, 이는
+  initContainer가 minter 하나로 고정돼 있을 때만 의도대로 동작한다. Phase 2는
+  initContainer가 7개이고 그중 하나가 Codex를 실행하므로, 개수·이름 제한만 푸는
+  일반화는 계약이 **Codex 컨테이너에 개인키를 넣으라고 요구**하게 된다. volume별
+  `readers`/`writers` allowlist로 다시 써, 목록에 없는 컨테이너는 init/app 구분
+  없이 mount가 거부되도록 했다.
+- 컨테이너별 네트워크 분리는 불가능하다. NetworkPolicy는 Pod 단위인데 8개
+  컨테이너가 한 Pod에 있고, Calico라 FQDN 지정도 못 해 공개 443을 통째로 연다.
+  따라서 `codex-worker`도 GitHub에 도달한다. 실질 경계는 자격 증명 분리 하나뿐이며,
+  "네트워크로 막혀 있다"는 전제로 그 규칙을 완화하지 않는다는 판단을 코드 주석과
+  테스트에 함께 남겼다.
+- `branch-bootstrap` 계약 보존은 정리 누락 방지가 아니라 **롤백 전제조건**이다.
+  애플리케이션 `launcher/main.py`에 Phase 1/2 스위치가 없어 전환이 image digest
+  하나로 결정되고, 롤백은 digest 되돌리기다. 그때 생성되는 Job이 Phase 1 형태라
+  계약을 지우면 롤백이 어드미션에서 막힌다.
+- Codex 인증 원본은 PVC가 아니라 `auth.json` key 하나짜리 Secret이다(애플리케이션
+  `#566`). `standard-rwo` PVC의 단일 노드 attach가 여러 Pod 동시 시작을 막을 수
+  있다는 판단이며, 인프라 쪽에서는 Secret을 먼저 만든 뒤 launcher를 배포해야
+  한다는 순서 제약으로 나타난다.
+- Job 1건의 노드 점유가 300초에서 3600초로 늘었다(애플리케이션 `#568`의
+  `ORCH_ACTIVE_DEADLINE_SEC` 도입). 동시 실행은 quota 2건으로 묶여 상한은
+  유지되지만 Phase 1 기준의 비용 감각은 갱신이 필요하다.
+
 ## 2026-08-06: feast apply 셀프 호스티드 러너 이관과 후속 정정 (#541)
 
 - Terraform apply(운영 배포)는 hosted runner로 유지하고 `feast apply`만 ARC

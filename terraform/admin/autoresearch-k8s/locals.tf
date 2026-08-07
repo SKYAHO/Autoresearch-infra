@@ -53,6 +53,124 @@ locals {
   # 다르므로 별도 local로 둔다.
   experiment_branch_bootstrap_component_label = "branch-bootstrap"
 
+  # (#562) Phase 2 executor의 같은 label 값. `launcher/jobs.py`의
+  # `EXPERIMENT_EXECUTOR_LABEL_SELECTOR`와 같아야 한다 — launcher가 동시 실행
+  # 계수에도 이 selector를 쓰므로, 불일치하면 Job이 자기 계수에서 빠진다.
+  experiment_executor_component_label = "experiment-executor"
+
+  # candidate-finalizer가 candidate SHA를 보고할 in-cluster Experiment API 좌표.
+  # `deploy/agent-orchestration/api-service.yaml`의 Service selector·port와 같아야
+  # 한다 — 불일치하면 finalizer가 보고하지 못해 Job이 deadline까지 매달린다.
+  experiment_executor_api_service_selector = "agent-orchestration-api"
+  experiment_executor_api_port             = "8000"
+
+  # (#562) Job 종류별 어드미션 계약. key는 Pod template의
+  # `app.kubernetes.io/component` label 값이다. 이 map에 없는 종류는 정책이
+  # 거부하므로, 새 Job 종류를 도입하는 변경은 여기 항목을 먼저 추가한다.
+  #
+  # 계약을 map에서 생성하는 이유는 이 namespace가 Phase 1 `branch-bootstrap`
+  # 한 종류만 통과시키도록 이름을 하드코딩하고 있었고, Phase 2 executor처럼
+  # 형태가 다른 Job이 필요해질 때마다 정책 전체를 다시 쓰게 되기 때문이다.
+  #
+  # `credential_mounts`는 "이 volume을 mount할 수 있는 컨테이너"를 `readers`(읽기
+  # 전용)와 `writers`(쓰기 허용)로 나눠 선언한다. 목록에 없는 컨테이너는 init/app
+  # 구분 없이 mount가 거부되고, `readers`는 `readOnly: true`가 아니면 거부된다.
+  #
+  # 이 방향이 중요하다 — "모든 initContainer가 키를 mount해야 한다"는 형태로 쓰면
+  # initContainer가 늘어나는 순간 그 새 컨테이너에도 키를 넣으라는 요구가 된다.
+  # 그 문장은 initContainer가 minter 하나로 고정돼 있을 때만 의도대로 동작했다.
+  #
+  # `writers`를 따로 두는 이유는 token volume 때문이다. token을 발급하는
+  # 컨테이너는 그 volume에 써야 하고, 소비하는 컨테이너는 읽기만 해야 한다.
+  # 소비자가 쓰기로 mount하면 자기 token 파일을 덮어써 발급 경로를 우회할 수 있고
+  # 사후 조사에서 어떤 token이 쓰였는지도 확정할 수 없다.
+  experiment_job_contracts = {
+    (local.experiment_branch_bootstrap_component_label) = {
+      init_containers = [local.experiment_branch_bootstrap_init_container]
+      app_containers  = [local.experiment_branch_bootstrap_app_container]
+      volumes = [
+        local.experiment_branch_writer_key_volume,
+        local.experiment_branch_token_volume,
+      ]
+      credential_mounts = {
+        (local.experiment_branch_writer_key_volume) = {
+          readers = [local.experiment_branch_bootstrap_init_container]
+          writers = []
+        }
+        (local.experiment_branch_token_volume) = {
+          readers = [local.experiment_branch_bootstrap_app_container]
+          writers = [local.experiment_branch_bootstrap_init_container]
+        }
+      }
+    }
+
+    # (#562) Phase 2 executor. 값의 정본은 애플리케이션 저장소
+    # `agent_orchestration/launcher/jobs.py`의 `build_executor_job()`이며
+    # source SHA e5ce030 기준이다. 불일치하면 launcher가 만드는 모든 Job이
+    # admission에서 거부된다.
+    (local.experiment_executor_component_label) = {
+      # 순서까지 계약이다. token을 발급하는 컨테이너가 그 token을 쓰는 컨테이너
+      # 바로 앞에 와야 만료 창이 최소가 되고, 순서가 바뀌면 빈 token 파일을 읽는다.
+      init_containers = [
+        "branch-token-minter",
+        "branch-creator",
+        "clone-token-minter",
+        "workspace-preparer",
+        "codex-worker",
+        "candidate-verifier",
+        "push-token-minter",
+      ]
+      app_containers = ["candidate-finalizer"]
+      volumes = [
+        local.experiment_branch_writer_key_volume,
+        "branch-token",
+        "clone-token",
+        "push-token",
+        "workspace",
+        "executor-state",
+        "verification-result",
+        "executor-tmp",
+        "codex-home",
+        "executor-api-token",
+      ]
+      # 이 표의 결과로 `codex-worker`는 Codex 인증 외 어떤 자격 증명도 갖지 못하고
+      # `candidate-verifier`는 아무것도 갖지 못한다. 8개 컨테이너가 한 Pod에 있어
+      # NetworkPolicy로는 컨테이너별 목적지를 나눌 수 없으므로(Pod 단위 적용,
+      # Calico라 FQDN 지정 불가) codex-worker도 GitHub에 네트워크로는 닿는다.
+      # 실질 경계는 이 자격 증명 분리 하나뿐이다 — "네트워크로 막혀 있다"는
+      # 전제로 이 표를 완화하지 않는다.
+      #
+      # 토큰을 용도별로 셋으로 나눈 것도 계약이다. 하나로 합치면 clone용 read
+      # 권한 토큰과 push용 write 권한 토큰이 같은 파일을 공유하게 된다.
+      credential_mounts = {
+        (local.experiment_branch_writer_key_volume) = {
+          readers = ["branch-token-minter", "clone-token-minter", "push-token-minter"]
+          writers = []
+        }
+        "branch-token" = {
+          readers = ["branch-creator"]
+          writers = ["branch-token-minter"]
+        }
+        "clone-token" = {
+          readers = ["workspace-preparer"]
+          writers = ["clone-token-minter"]
+        }
+        "push-token" = {
+          readers = ["candidate-finalizer"]
+          writers = ["push-token-minter"]
+        }
+        "executor-api-token" = {
+          readers = ["candidate-finalizer"]
+          writers = []
+        }
+        "codex-home" = {
+          readers = ["codex-worker"]
+          writers = []
+        }
+      }
+    }
+  }
+
   # 공개 인터넷 443을 열되 사설·링크로컬·loopback 대역을 제외한다. RFC1918(10/8,
   # 172.16/12, 192.168/16), RFC6598 CGNAT(100.64/10), link-local(169.254/16),
   # loopback(127/8) 기준이라 dev CIDR 변수가 바뀌어도 함께 고칠 필요가 없다.

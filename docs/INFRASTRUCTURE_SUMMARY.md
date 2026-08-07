@@ -22,7 +22,21 @@
 > 1분 주기로 정상 실행 중이었으나, 최신 상태는 해당 쪽 저장소/ArgoCD Application
 > 기준으로 다시 확인합니다. 다만 실제 실험 실행 Job·GCS/MLflow 증적 저장·완료
 > 판정·dev merge·main Draft PR 단계는 아직 없습니다(Phase 1 의도적 종료점, 앱
-> PR #547). 바로 아래 #485 블록의 `job_creation_enabled=false`는 이것과는 별개로
+> PR #547).
+>
+> #562에서 Phase 2 executor 경계를 추가했습니다. 어드미션 계약이 Job 종류별
+> (`app.kubernetes.io/component`) 계약으로 일반화됐고, 8-container executor
+> (initContainer 7 + app 1) 계약과 전용 egress
+> (`experiment-jobs-executor-egress`, 공개 443 + in-cluster Experiment API)가
+> 추가됐습니다. Phase 1 `branch-bootstrap` 계약·egress는 롤백 경로로 보존합니다 —
+> 앱 `launcher/main.py`에 Phase 1/2 스위치가 없어 전환·롤백이 launcher image
+> digest 하나로 결정되기 때문입니다. 실험 namespace에 Secret 2종
+> (`autoresearch-experiment-codex-auth`,
+> `autoresearch-experiment-executor-api-token`)이 **선행 등록**되어야 하며 절차는
+> [`runbooks/2026-08-01-auto-research-experiment-job.md`](runbooks/2026-08-01-auto-research-experiment-job.md)에
+> 있습니다. Job 1건의 노드 점유 상한은 300초에서 3600초로 늘었습니다.
+>
+> 바로 아래 #485 블록의 `job_creation_enabled=false`는 이것과는 별개로
 > `terraform/envs/dev/outputs.tf`·`admin/autoresearch-k8s/outputs.tf`에 하드코딩된
 > 다른 계약(paired Feast experiment runtime, fail-closed)이며 이름이 비슷해
 > 혼동하기 쉽습니다.

@@ -417,6 +417,39 @@ variable "experiment_branch_writer_secret_name" {
   }
 }
 
+variable "experiment_executor_api_token_secret_name" {
+  description = "Phase 2 candidate-finalizer가 in-cluster Experiment API 보고에 사용하는 token Kubernetes Secret 이름. 값은 Terraform이 관리하지 않는다."
+  type        = string
+  default     = "autoresearch-experiment-executor-api-token"
+
+  validation {
+    condition     = length(var.experiment_executor_api_token_secret_name) >= 1 && length(var.experiment_executor_api_token_secret_name) <= 253 && can(regex("^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$", var.experiment_executor_api_token_secret_name))
+    error_message = "experiment_executor_api_token_secret_name must be a valid Kubernetes Secret name."
+  }
+}
+
+variable "experiment_codex_home_secret_name" {
+  description = "codex-worker만 readOnly subPath로 mount하는 Codex 인증 Kubernetes Secret 이름. auth.json key 하나만 제공하며 값은 Terraform이 관리하지 않는다. launcher의 ORCH_CODEX_HOME_SECRET_NAME과 같아야 한다."
+  type        = string
+  default     = "autoresearch-experiment-codex-auth"
+
+  validation {
+    condition     = length(var.experiment_codex_home_secret_name) >= 1 && length(var.experiment_codex_home_secret_name) <= 253 && can(regex("^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$", var.experiment_codex_home_secret_name))
+    error_message = "experiment_codex_home_secret_name must be a valid Kubernetes Secret name."
+  }
+}
+
+variable "experiment_workspace_size_limit" {
+  description = "Phase 2 executor workspace emptyDir의 sizeLimit. Memory가 아닌 노드 ephemeral storage를 소비하므로 값을 올릴 때는 노드 디스크 여유를 함께 확인한다. launcher의 ORCH_EXECUTOR_WORKSPACE_SIZE_LIMIT과 문자열이 정확히 같아야 한다 — 이 계약은 '값이 같음'이 아니라 '템플릿이 그대로임'을 확인하므로 8Gi와 8192Mi는 다른 값으로 취급된다."
+  type        = string
+  default     = "8Gi"
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(Ki|Mi|Gi|Ti)$", var.experiment_workspace_size_limit))
+    error_message = "experiment_workspace_size_limit must be a positive Kubernetes quantity with a binary suffix (e.g. 8Gi)."
+  }
+}
+
 variable "enable_experiment_job_creation" {
   description = "실험 브랜치 launcher KSA의 Job 생성 권한 활성화 여부. #523 선행 조건(고정 템플릿·허용 digest·admission 검증, NetworkPolicy sync 재확인, negative dry-run 4종 재실행 — 이슈 댓글 기록 완료) 충족 후 true로 전환했고, #539에서 주체만 API KSA → launcher KSA로 옮겼다. 문제 발생 시 false로 되돌리는 것이 CronJob 중지 다음의 롤백 수단이다."
   type        = bool

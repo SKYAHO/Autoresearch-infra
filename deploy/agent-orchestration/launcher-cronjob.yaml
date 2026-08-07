@@ -49,7 +49,7 @@ spec:
             # 갖게 하려면 Dockerfile에 해당 모듈을 추가하는 애플리케이션 변경이
             # 선행돼야 하며, 그 전까지는 이 참조가 유일하게 동작하는 구성이다.
             - name: bootstrap-db
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:36507859b830032aedaa7a6fbf1b77e69466ceec7b56af084dc694e21c51ecde
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:be70b05db1a6a7bae0bb283f43c58137cb9c3090bef32bbea58fd0fcfe4e1b21
               imagePullPolicy: IfNotPresent
               command:
                 - python
@@ -86,7 +86,7 @@ spec:
                   drop: ["ALL"]
           containers:
             - name: launcher
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:44ca561e7cd8f6df7b00c6a6d7c1d7ee971107d3e3234e5eb02086c90ca57cc7
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:4aa7fba653c32a408b77b833dcc11963c5543becf03e3d7608d9095c466f5a2e
               imagePullPolicy: IfNotPresent
               # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
               # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
@@ -114,7 +114,7 @@ spec:
                 - name: ORCH_JOB_NAMESPACE
                   value: autoresearch-experiments
                 - name: ORCH_EXECUTOR_IMAGE
-                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fe0002e097ac750c90a083519cc6ac86420e84a44c1aa7aa6c7d0ff9120b707c
+                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:00664bc9f0b711fcf7a161e76a02d7c5bc482803ae0faf93d7b81d1568ca9dd9
                 - name: ORCH_EXECUTOR_SERVICE_ACCOUNT
                   value: experiment-job
                 - name: ORCH_EXECUTOR_NODE_POOL
@@ -135,6 +135,42 @@ spec:
                   value: SKYAHO/Autoresearch
                 - name: ORCH_MAX_CONCURRENT_EXPERIMENTS
                   value: "2"
+                # (#562) Phase 2 executor 좌표. launcher/config.py의
+                # from_environment()가 아래 다섯 개를 모두 _required_environment로
+                # 읽으므로, 하나라도 빠지면 launcher가 기동 즉시 죽고 실험이 0건이
+                # 된다.
+                #
+                # candidate-finalizer가 candidate SHA를 보고할 in-cluster API다.
+                # 같은 클러스터의 ClusterIP Service이며 experiment namespace의
+                # executor egress 정책이 이 목적지만 따로 열어 둔다.
+                - name: ORCH_EXECUTOR_API_URL
+                  value: http://agent-orchestration-api.autoresearch.svc.cluster.local:8000
+                # 아래 두 Secret 이름은 terraform/admin/autoresearch-k8s의
+                # experiment_executor_api_token_secret_name·
+                # experiment_codex_home_secret_name과 정확히 같아야 한다.
+                # 어드미션 계약이 volume의 secretName을 그 값으로 고정하므로
+                # 불일치하면 모든 executor Job이 거부된다.
+                - name: ORCH_EXECUTOR_API_TOKEN_SECRET_NAME
+                  value: autoresearch-experiment-executor-api-token
+                - name: ORCH_CODEX_HOME_SECRET_NAME
+                  value: autoresearch-experiment-codex-auth
+                # workspace는 medium=Memory가 아닌 노드 ephemeral storage를
+                # 소비한다. 어드미션 계약이 이 문자열과 정확히 일치하는지 검사하므로
+                # 8Gi와 8192Mi는 다른 값으로 취급된다.
+                - name: ORCH_EXECUTOR_WORKSPACE_SIZE_LIMIT
+                  value: 8Gi
+                # 두 시간 값에는 제약이 두 겹이다.
+                #   ORCH_CODEX_TIMEOUT_SEC < ORCH_ACTIVE_DEADLINE_SEC
+                #     → 어기면 launcher가 기동 시 LauncherConfigError로 죽는다.
+                #   ORCH_ACTIVE_DEADLINE_SEC <= 3600
+                #     → 어기면 launcher는 뜨지만 어드미션이 Job을 거부하고 실패가
+                #       launcher 로그에만 남아, 조용히 아무 Job도 만들어지지 않는다.
+                # 값은 애플리케이션 spec이 고정한 MVP 운영값이다. 나머지 시간은
+                # clone·검증·push가 쓴다.
+                - name: ORCH_ACTIVE_DEADLINE_SEC
+                  value: "3600"
+                - name: ORCH_CODEX_TIMEOUT_SEC
+                  value: "1800"
               volumeMounts:
                 - name: db-runtime
                   mountPath: /runtime

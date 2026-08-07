@@ -397,7 +397,13 @@ private key가 `autoresearch` namespace에 필요 없고 두 ID가 실험 namesp
 두 ID는 launcher가 Job manifest를 조립할 때 필요하다. **실험 namespace의 Secret에는
 `private-key.pem` 외의 key를 넣지 않는다.**
 
+`set -eu`가 없으면 `cp`가 실패해도 다음 명령이 그대로 진행된다. 그 경로에서는
+private key Secret만 빠진 채 두 ID Secret이 만들어지고, 마지막 `shred -u`가 원본
+`.pem`을 지워 **복구 불가능한 반쪽 상태**가 된다. 실제로 #562 작업 중 같은 형태의
+사고가 났다.
+
 ```bash
+set -eu
 umask 077
 sdir="$(mktemp -d)"
 trap 'rm -rf "$sdir"' EXIT
@@ -405,6 +411,7 @@ trap 'rm -rf "$sdir"' EXIT
 printf '%s' '<App ID>'          > "$sdir/app-id"
 printf '%s' '<installation ID>' > "$sdir/installation-id"
 cp /path/to/branch-writer.pem     "$sdir/private-key.pem"
+[ -s "$sdir/private-key.pem" ]  # 비어 있으면 여기서 멈춘다
 
 kubectl -n autoresearch-experiments create secret generic \
   autoresearch-experiment-branch-writer-app \
@@ -418,12 +425,161 @@ kubectl -n autoresearch create secret generic \
   --dry-run=client -o yaml | kubectl apply -f -
 
 rm -rf "$sdir"; trap - EXIT
+# 원본을 다른 곳에 보관하지 않았다면 이 줄은 실행하지 않는다. App private key는
+# GitHub에서 재발급만 가능하고 기존 키를 되살릴 수 없다.
 shred -u /path/to/branch-writer.pem
 ```
 
 Secret 이름은 admission 정책이 서버 측에서 검사한다
 (`experiment_branch_writer_secret_name`). 이름을 바꾸면 Terraform 변수와 함께
 바꿔야 하며, 어긋나면 **모든 Job이 거부된다.**
+
+### Phase 2 executor Secret 등록 (#562)
+
+Phase 2는 위 branch-writer Secret 외에 두 개를 더 요구한다. 둘 다 실험 namespace에
+두고, 값은 Terraform·Git·manifest 어디에도 넣지 않는다.
+
+| Secret 이름 | key | mount하는 컨테이너 | 쓰임 |
+|---|---|---|---|
+| `autoresearch-experiment-codex-auth` | `auth.json` | `codex-worker` **만** | Codex 인증 |
+| `autoresearch-experiment-executor-api-token` | `token` | `candidate-finalizer` **만** | candidate SHA 보고 |
+
+Codex 인증은 PVC가 아니라 Secret이다. `standard-rwo` PVC는 단일 노드 attach라 여러
+Pod의 동시 시작을 막을 수 있고, 작은 read-only `auth.json`에는 각 Pod가 독립으로
+mount하는 Secret이 맞다(애플리케이션 `#566`).
+
+**`auth.json` 외의 key를 넣지 않는다.** 어드미션 계약이 volume의 `items`를
+`auth.json` 하나로 고정하지만, Secret 자체에 다른 key가 있으면 이후 계약 변경 시
+그것까지 노출될 여지가 생긴다.
+
+Codex 인증 파일은 보통 `~/.codex/auth.json`이다. **그 경로를 그대로 쓸 때는
+`shred`를 실행하지 않는다** — 지우면 로컬 Codex 로그인이 깨진다. 별도 머신에서
+복사해온 임시 파일일 때만 마지막 줄을 쓴다.
+
+```bash
+set -eu
+umask 077
+sdir="$(mktemp -d)"
+trap 'rm -rf "$sdir"' EXIT
+
+cp ~/.codex/auth.json "$sdir/auth.json"
+[ -s "$sdir/auth.json" ]                    # 비어 있으면 여기서 멈춘다
+python3 -c 'import json;json.load(open("'"$sdir"'/auth.json"))'  # JSON 형식 확인
+printf '%s' '<executor API token>' > "$sdir/token"
+
+kubectl -n autoresearch-experiments create secret generic \
+  autoresearch-experiment-codex-auth \
+  --from-file=auth.json="$sdir/auth.json" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n autoresearch-experiments create secret generic \
+  autoresearch-experiment-executor-api-token \
+  --from-file=token="$sdir/token" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+rm -rf "$sdir"; trap - EXIT
+# 임시로 복사해온 파일일 때만:
+# shred -u /path/to/copied-auth.json
+```
+
+등록 뒤에는 값이 아니라 **key 이름만** 확인한다.
+
+```bash
+for s in autoresearch-experiment-codex-auth autoresearch-experiment-executor-api-token; do
+  printf '%-45s ' "$s"
+  kubectl -n autoresearch-experiments get secret "$s" \
+    -o go-template='{{range $k,$v := .data}}{{$k}} {{end}}{{"\n"}}'
+done
+# 기대: codex-auth → auth.json / executor-api-token → token
+```
+
+`auth.json` 외의 key가 들어가면 안 된다. 어드미션 계약이 volume의 `items`를
+`auth.json` 하나로 고정하지만, Secret 자체를 깨끗하게 두는 편이 이후 계약 변경에
+안전하다.
+
+두 이름은 admission 정책(`experiment_codex_home_secret_name`,
+`experiment_executor_api_token_secret_name`)과 launcher manifest의
+`ORCH_CODEX_HOME_SECRET_NAME`·`ORCH_EXECUTOR_API_TOKEN_SECRET_NAME` 양쪽이 같은
+값을 갖는다. 셋 중 하나만 바꾸면 **모든 executor Job이 거부된다.**
+
+#### 롤아웃 순서
+
+**Secret을 먼저 만들고 그 다음 launcher를 배포한다.** 순서가 뒤집히면 kubelet이
+volume mount를 완료하지 못해 Pod가 `Pending`에 머물고, Job은
+`activeDeadlineSeconds`(3600초) 뒤에야 `Failed`가 된다. 즉 실패를 1시간 뒤에 알게
+된다. 판별 근거는 Pod event의 `FailedMount`와 Job의 `DeadlineExceeded`다.
+
+```bash
+kubectl -n autoresearch-experiments get events --sort-by=.lastTimestamp | grep FailedMount
+```
+
+`subPath` mount는 실행 중 Secret 갱신을 전파하지 않으므로, Secret을 교체해도 이미
+도는 Job에는 적용되지 않는다. 새 Experiment부터 반영된다.
+
+### Phase 1 ↔ Phase 2 전환과 롤백 (#562)
+
+애플리케이션 `launcher/main.py`에는 **Phase 1/2를 고르는 스위치가 없다.**
+`ensure_executor_job`만 호출하므로 launcher image digest를 올리는 순간 전량
+Phase 2로 전환되고, 점진 배포 경로가 없다.
+
+따라서 롤백은 **launcher image digest를 직전 main revision 값으로 되돌리고 ArgoCD를
+sync하는 것**이다. 그때 생성되는 Job은 다시 `branch-bootstrap` 형태이며, 어드미션
+계약에 그 종류가 보존돼 있어 그대로 통과한다. **`branch-bootstrap` 계약을 정리
+대상으로 보고 지우면 롤백 경로가 막힌다.**
+
+| 대상 | 롤백 절차 |
+|---|---|
+| launcher 전환 | image digest를 직전 값으로 되돌리고 ArgoCD sync |
+| 어드미션 계약 | Terraform revert 후 apply. Phase 1 계약이 보존돼 있어 되돌린 launcher가 통과한다 |
+| NetworkPolicy | `experiment-jobs-executor-egress`만 삭제. Phase 1 정책은 손대지 않았다 |
+| Secret 2종 | launcher를 **먼저** 되돌린 뒤 삭제한다. 반대로 하면 진행 중인 Job이 `FailedMount`로 매달린다 |
+
+어드미션 계약 변경은 `failurePolicy: Fail` + `Deny`라 잘못되면 실험 Job이 **전부**
+거부된다. apply 직후 dry-run으로 회귀를 확인한다.
+
+#### 계약 변경 검증용 dry-run manifest 만들기
+
+`--dry-run=server`는 Job을 API 서버까지 보내 어드미션 판정만 받고 저장하지 않는다.
+Pod가 생성되지 않으므로 private key·네트워크·Codex가 관여하지 않고, 몇 초 만에
+끝난다. 계약을 고칠 때마다 반복해도 비용이 없다.
+
+manifest는 **손으로 쓰지 않는다.** 손으로 쓴 YAML의 실수가 계약 위반으로 오인되기
+때문이다. 애플리케이션 저장소의 정본 빌더(`launcher/jobs.py`의
+`build_executor_job`·`build_branch_job`)를 그대로 호출해 생성한다.
+
+```bash
+# 애플리케이션 저장소를 배포 중인 source SHA로 체크아웃한 뒤
+python - <<'PY'
+import dataclasses, sys, types, uuid, yaml
+from kubernetes.client import ApiClient
+
+# jobs.py가 launcher.repository에서 쓰는 것은 ClaimedExperiment 하나뿐인데
+# 그 모듈이 FastAPI·SQLAlchemy까지 끌어오므로 데이터클래스만 stub한다.
+stub = types.ModuleType("agent_orchestration.launcher.repository")
+@dataclasses.dataclass(frozen=True)
+class ClaimedExperiment:
+    experiment_id: uuid.UUID; issue_number: int; issue_branch: str
+    base_dev_sha: str; issue_body_sha256: str; job_name: str
+stub.ClaimedExperiment = ClaimedExperiment
+sys.modules["agent_orchestration.launcher.repository"] = stub
+
+from agent_orchestration.launcher.config import LauncherSettings
+from agent_orchestration.launcher.jobs import build_executor_job
+# settings 값은 deploy/agent-orchestration/launcher-cronjob.yaml의 env와 동일하게 채운다.
+PY
+```
+
+세 가지를 확인한다. 셋째가 핵심이다.
+
+| manifest | 기대 |
+|---|---|
+| Phase 1 branch-bootstrap | **통과** — 거부되면 롤백 경로가 막힌 것이므로 즉시 revert |
+| Phase 2 executor | **통과** |
+| executor의 `codex-worker`에 `github-app-private-key` mount를 붙인 변형 | **거부**, 사유가 "…volume은 … 만 mount할 수 있습니다" |
+
+셋째가 통과하면 자격 증명 allowlist가 동작하지 않는 것이므로 진행을 멈춘다.
+컨테이너 개수 규칙에서 먼저 걸려 거부되는 것으로는 부족하다 — 거부 **사유**가
+자격 증명 규칙이어야 한다.
 
 ### 자격 증명 회수
 
