@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T18:11:57Z",
+  "generated_at": "2026-08-07T18:12:58Z",
   "reports": [
+    {
+      "number": 594,
+      "title": "feat: bump executor image digest to v0.9.1 for launcher",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T18:11:41Z",
+      "summary_ko": [
+        "실험 오케스트레이션 실행기(executor) 컨테이너 이미지를 v0.9.1 최신 디제스트로 업데이트하였습니다.",
+        "CronJob 매니페스트 환경변수(ORCH_EXECUTOR_IMAGE)의 이미지 디제스트 해시값을 신규 v0.9.1 이미지로 변경하였습니다.",
+        "매니페스트 계약 검증 스크립트 및 관련 단위 테스트의 기댓값을 신규 디제스트로 동기화하였습니다."
+      ],
+      "report_url": "pr/594/"
+    },
     {
       "number": 593,
       "title": "feat: API v0.9.0 digest 승격",
