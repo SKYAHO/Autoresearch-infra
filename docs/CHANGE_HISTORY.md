@@ -3,6 +3,25 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-07: 실험 Job에 canonical 학습 스냅샷 read 부여와 prefix 정정 (#577)
+
+- `experiment-job` GSA에 `mlflow_artifacts` 버킷의 `training-snapshots/` prefix
+  `objectViewer`를 조건부로 부여했다. `#464`가 만든 canonical store를 그대로 쓰며 **새
+  스토어를 만들지 않았다** — `#464` 작업 범위가 "새 중복 버킷은 만들지 않는다"를
+  명시하고, 그 이슈의 동기에 "seed sweep이나 baseline/challenger 학습 반복"이 들어 있어
+  실험 파이프라인이 이 store의 의도된 소비자다.
+- **read만 부여했다.** 게시는 `airflow_batch`의 `objectCreator`(create만, overwrite
+  불가)가 계속 담당한다. 실험 Job용 게시 principal을 따로 만들면 학습 데이터에 대한
+  write 경계가 하나 더 늘어난다.
+- 첫 시도(`PR #578`)는 `code_artifacts` 버킷에 별도 스냅샷 자리를 만들려 했으나 위
+  `#464` 계약과 충돌해 닫았다. 리뷰에서 중복이 지적됐고, `locals.tf`의 prefix 상수와 IAM
+  바인딩 목록을 확인하지 않고 버킷 정의만 본 것이 원인이었다.
+- **canonical prefix를 `sha256=<hex>/`에서 `by-hash/<hex>/`로 정정했다.** 이 저장소
+  문서(설계 spec·MLflow 운영 런북)와 애플리케이션 구현이 어긋나 있었는데, 버킷이 비어
+  있어(객체 0개) 실물로 판단할 수 없었다. `by-hash/`가 앱 저장소 10개 파일에 이미 계약으로
+  퍼져 있고 `sha256=`는 이 저장소 문서 3곳에만 있어 애플리케이션 구현을 정본으로 택했다.
+  아래 2026-07-31 항목은 그 시점의 기록이므로 고치지 않았다.
+
 ## 2026-08-07: 실험 Job 어드미션 계약 일반화와 Phase 2 executor 경계 (#562)
 
 - 어드미션 계약을 Job 종류별(`app.kubernetes.io/component`) 계약으로 일반화하고

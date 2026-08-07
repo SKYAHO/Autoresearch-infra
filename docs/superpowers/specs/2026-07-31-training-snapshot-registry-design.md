@@ -1,4 +1,24 @@
-# MLflow Training Snapshot Registry 설계
+﻿# MLflow Training Snapshot Registry 설계
+
+> **[정정 — 2026-08-07] canonical prefix를 `sha256=<hex>/`에서 `by-hash/<hex>/`로 바꿨다.**
+>
+> 이 문서가 정의한 `training-snapshots/sha256=<digest>/`와 애플리케이션 구현
+> (`SKYAHO/Autoresearch`의 `src/pipeline/training_snapshot_store.py`)의
+> `training-snapshots/by-hash/<dataset_sha256>/`가 어긋나 있었다. `#577` 작업에서
+> 실험 Job에 read를 부여하려다 발견했다.
+>
+> **버킷을 확인한 결과 `training-snapshots/`는 비어 있었다**(객체 0개, prefix 자체
+> 없음). 아무도 게시한 적이 없어 실물로는 어느 쪽이 유효한지 판단할 수 없었고, 지금
+> 정하는 쪽이 사실상 정본이 되는 상태였다.
+>
+> 애플리케이션 구현을 정본으로 택했다. `by-hash/`가 앱 저장소 **10개 파일**(게시·다운로드·
+> 조립·학습·재현 계약·CLI·spec·가이드·테스트)에 이미 계약으로 퍼져 있는 반면, `sha256=`는
+> 이 저장소 문서 3곳에만 있고 실행되는 코드가 없었다. 반대로 맞추면 앱 저장소의 spec과
+> 재현 계약까지 연쇄로 고쳐야 한다.
+>
+> 함께 정정한 문서: `docs/MLFLOW_OPERATIONS_RUNBOOK.md`(조회 명령 포함).
+> `docs/CHANGE_HISTORY.md`의 기존 항목은 그 시점의 기록이므로 고치지 않고 별도 항목을
+> 추가했다.
 
 ## 목표
 
@@ -10,7 +30,7 @@
 
 - 새 GCS 버킷을 만들지 않고 Terraform이 관리하는 기존 MLflow artifact 버킷을
   재사용한다.
-- canonical prefix는 `training-snapshots/sha256=<64자리 hex>/`이다.
+- canonical prefix는 `training-snapshots/by-hash/<64자리 hex>/`이다.
 - 각 snapshot은 `training_dataset.csv`와 `snapshot_manifest.json`을 가진다.
 - 앱의 CSV 생성·해시 계산·manifest 기록 및 MLflow run artifact 업로드 구현은
   `SKYAHO/Autoresearch#423`의 범위이며, 이 변경은 저장소·IAM·운영 계약만 다룬다.
@@ -20,7 +40,7 @@
 ## 저장 및 무결성 계약
 
 1. publisher가 CSV bytes의 SHA-256을 계산한다.
-2. `gs://<mlflow-bucket>/training-snapshots/sha256=<digest>/training_dataset.csv`
+2. `gs://<mlflow-bucket>/training-snapshots/by-hash/<digest>/training_dataset.csv`
    를 generation `0` 조건으로 create-if-absent 업로드한다.
 3. manifest도 같은 digest와 CSV object URI, generation, byte size를 기록한다.
 4. 같은 digest가 이미 있으면 기존 객체를 읽어 SHA-256과 generation을 검증하고
