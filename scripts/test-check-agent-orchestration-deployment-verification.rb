@@ -14,6 +14,9 @@ def expect_failure
       File.join(AgentOrchestrationDeploymentVerification::ROOT, "config/environments/dev/environment.yaml"),
       File.join(directory, "config/environments/dev/environment.yaml")
     )
+    # mutation 전 fixture는 반드시 통과해야 한다. 이 단정이 없으면 fixture 구성이
+    # 깨졌을 때 아래 expect_failure들이 의도하지 않은 이유로 모두 통과할 수 있다.
+    AgentOrchestrationDeploymentVerification.check!(directory)
     yield directory
     begin
       AgentOrchestrationDeploymentVerification.check!(directory)
@@ -49,6 +52,7 @@ expect_failure { |root| mutate_job(root) { |job| job.dig("spec", "template", "sp
 expect_failure { |root| mutate_job(root) { |job| job.dig("spec", "template", "spec")["containers"][0]["envFrom"] = [{ "secretRef" => { "name" => "secret" } }] } }
 expect_failure { |root| mutate_job(root) { |job| job.dig("spec", "template", "spec")["containers"][0]["volumeMounts"] = [{ "name" => "secret", "mountPath" => "/secret" }] } }
 expect_failure { |root| mutate_job(root) { |job| job.dig("spec", "template", "spec")["containers"][0]["command"][-1] = "raise SystemExit(0)" } }
+expect_failure { |root| mutate_job(root) { |job| job.dig("spec", "template", "spec")["containers"][0]["command"][-1] = "deadline = time.monotonic() + 280" } }
 expect_failure { |root| mutate_job(root) { |job| job.dig("spec", "template", "spec")["containers"][0]["securityContext"]["runAsNonRoot"] = false } }
 expect_failure do |root|
   mutate_policies(root) { |documents| documents.reject! { |document| document.dig("metadata", "name") == "agent-orchestration-deployment-verifier" } }

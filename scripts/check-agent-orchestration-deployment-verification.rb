@@ -67,6 +67,10 @@ module AgentOrchestrationDeploymentVerification
     raise ContractError, "검증 image는 digest로 고정해야 합니다" unless container["image"].to_s.match?(/@sha256:[0-9a-f]{64}$/)
     source = (container["command"] || []).last.to_s
     raise ContractError, "candidate endpoint 검증이 없습니다" unless source.include?("/internal/executor/experiments/{experiment_id}/candidate")
+    unless source.include?("http://agent-orchestration-api.autoresearch.svc.cluster.local:8000/")
+      raise ContractError, "probe 대상은 NetworkPolicy가 허용한 API Service TCP 8000이어야 합니다"
+    end
+    raise ContractError, "probe 내부 deadline은 150초여야 합니다" unless source.include?("time.monotonic() + 150")
     raise ContractError, "verifier는 환경변수를 가질 수 없습니다" unless (container["env"] || []).empty?
     raise ContractError, "verifier는 Secret envFrom을 가질 수 없습니다" unless (container["envFrom"] || []).empty?
     raise ContractError, "verifier는 volumeMount를 가질 수 없습니다" unless (container["volumeMounts"] || []).empty?
