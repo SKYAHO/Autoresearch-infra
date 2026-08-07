@@ -57,6 +57,51 @@ module ExperimentLauncherManifestContract
       YAML.safe_load(File.read(environment_path))
     )
     check_image_digest_consistency!(File.dirname(manifest_path))
+    check_api_executor_token!(File.dirname(manifest_path))
+  end
+
+  # (#575) candidate 보고 인증은 발신·수신 양쪽이 같은 token을 가져야 성립한다.
+  # 발신 측 candidate-finalizer는 executor namespace Secret을 파일로 mount하고,
+  # 수신 측 API는 자기 namespace 사본을 환경 변수로 읽는다. 이 검사는 후자의
+  # 참조 형태만 고정한다 — 값도, 두 사본의 동일성도 검사 대상이 아니다(그건
+  # 운영 절차와 smoke가 확인한다).
+  #
+  # 이 참조가 없으면 새 API image가 startup에서 죽고, Service는 candidate
+  # endpoint가 없는 직전 Pod만 Ready로 유지한다. 그 상태는 배포가 "성공한 것처럼"
+  # 보이므로 정적 검사로 잡는다.
+  def check_api_executor_token!(manifest_directory)
+    path = File.join(manifest_directory, "api-deployment.yaml")
+    raise ContractError, "API Deployment manifest가 없습니다" unless File.file?(path)
+
+    deployment = YAML.load_stream(File.read(path)).compact.find do |document|
+      document["kind"] == "Deployment"
+    end
+    raise ContractError, "API Deployment 문서가 없습니다" unless deployment
+
+    containers = deployment.dig("spec", "template", "spec", "containers") || []
+    entry = containers
+      .flat_map { |container| container["env"] || [] }
+      .find { |item| item["name"] == "ORCH_EXECUTOR_API_TOKEN" }
+
+    unless entry
+      raise ContractError,
+            "API Deployment에 ORCH_EXECUTOR_API_TOKEN env가 없습니다. " \
+            "새 API image는 이 값을 필수로 읽어 startup에서 실패합니다."
+    end
+
+    expect_equal(
+      { "name" => "autoresearch-experiment-executor-api-token", "key" => "token" },
+      entry.dig("valueFrom", "secretKeyRef"),
+      "ORCH_EXECUTOR_API_TOKEN Secret 참조"
+    )
+
+    # envFrom은 Secret에 key가 추가될 때 그것까지 API 환경으로 흘려보낸다.
+    containers.each do |container|
+      next unless container["envFrom"]
+
+      raise ContractError,
+            "API Deployment는 envFrom을 사용할 수 없습니다(단일 key secretKeyRef만 허용)."
+    end
   end
 
   # (#566) 같은 애플리케이션 이미지를 여러 manifest가 참조하는데, 승격에서 일부만
