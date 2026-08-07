@@ -114,7 +114,7 @@ spec:
                 - name: ORCH_JOB_NAMESPACE
                   value: autoresearch-experiments
                 - name: ORCH_EXECUTOR_IMAGE
-                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fb785a28cffab21dac4817d0b6cffaf0c2cd4026e54a3fabc6d19cff4439a347
+                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:b92f0e6f7b4128686208900baf7dcf0c9b65945b60538bb9f4463a4b916a588f
                 - name: ORCH_EXECUTOR_SERVICE_ACCOUNT
                   value: experiment-job
                 - name: ORCH_EXECUTOR_NODE_POOL
