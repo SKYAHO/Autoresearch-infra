@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T03:33:42Z",
+  "generated_at": "2026-08-07T03:40:07Z",
   "reports": [
+    {
+      "number": 564,
+      "title": "chore: Agent Orchestration UI digest 승격",
+      "author": "Noah-JuYong",
+      "merged_at": "2026-08-07T03:39:53Z",
+      "summary_ko": [
+        "Autoresearch PR #572의 Streamlit UI 기능 변경사항을 dev GKE 환경에 반영하기 위해 UI 이미지 digest를 승격하였습니다.",
+        "agent-orchestration-ui 쿠버네티스 매니페스트의 컨테이너 이미지 digest를 검증된 신규 digest로 업데이트하였습니다.",
+        "롤아웃 실행 목적, 검증 정보, 적용 절차 및 롤백 가이드를 명시한 실행 문서를 추가하였습니다."
+      ],
+      "report_url": "pr/564/"
+    },
     {
       "number": 560,
       "title": "docs: ARC 리스너/컨트롤러 라벨 drift 점검 절차를 런북에 추가 (#559)",
