@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T05:43:05Z",
+  "generated_at": "2026-08-07T05:53:50Z",
   "reports": [
+    {
+      "number": 571,
+      "title": "docs: agent-orchestration ArgoCD sync 상태 문서 갱신",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-07T05:53:36Z",
+      "summary_ko": [
+        "GitOps 전략 문서의 agent-orchestration 이관 상태를 실환경 ArgoCD 배포 상태에 맞게 갱신하였습니다.",
+        "기존 '배포 준비(수동 sync)' 표기를 자동 동기화(automated sync)가 적용된 '완료(운영 중)' 상태로 수정하였습니다.",
+        "실제 쿠버네티스 클러스터 및 ArgoCD 설정과 문서 사이의 불일치를 해소하였습니다."
+      ],
+      "report_url": "pr/571/"
+    },
     {
       "number": 573,
       "title": "docs: agent-orchestration 런북을 #526 automated sync 기준으로 갱신",
