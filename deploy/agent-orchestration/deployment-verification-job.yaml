@@ -8,8 +8,8 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/sync-wave: "10"
-    # 성공 기록만 정리하고 실패 Job은 보존한다. Prometheus의 KubeJobFailed 경보와
-    # ArgoCD operation 실패 원인을 운영자가 확인할 수 있어야 한다.
+    # 성공 기록은 정리한다. 실패 Job은 다음 PostSync 직전에 BeforeHookCreation이
+    # 정리하므로, 다음 sync 전까지 ArgoCD operation과 KubeJobFailed 경보를 확인한다.
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
   labels:
     app.kubernetes.io/name: agent-orchestration-deployment-verification
@@ -17,7 +17,8 @@ metadata:
     app.kubernetes.io/component: deployment-verifier
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 180
+  # 이미지 pull·스케줄링에 최대 150초를 남기고, endpoint probe는 별도 150초로 제한한다.
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:

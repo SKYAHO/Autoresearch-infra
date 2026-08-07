@@ -36,8 +36,9 @@ spec:
       ports:
         - protocol: TCP
           port: 8000
-    # ArgoCD PostSync verifier만 candidate endpoint OpenAPI 계약을 확인한다.
-    # namespaceSelector와 podSelector를 한 from 항목에 함께 둬 교집합으로 좁힌다.
+    # 같은 namespace의 ArgoCD PostSync verifier만 candidate endpoint OpenAPI 계약을
+    # 확인한다. NetworkPolicy에서 namespaceSelector를 생략한 podSelector는 이
+    # NetworkPolicy와 같은 namespace의 Pod에만 적용된다.
     - from:
         - podSelector:
             matchLabels:
@@ -168,8 +169,8 @@ spec:
         - protocol: TCP
           port: 443
 ---
-# UI Pod는 API TCP 8000과 DNS만 호출한다. UI에는 KSA token·Cloud SQL·Runner·외부 HTTPS
-# egress가 필요 없으므로 기본 차단 경계를 명시적으로 유지한다.
+# PostSync verifier Pod는 API TCP 8000과 DNS만 호출한다. Kubernetes API token,
+# Secret, volume을 쓰지 않으며 ingress도 받지 않아야 한다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -181,8 +182,15 @@ spec:
       app.kubernetes.io/component: deployment-verifier
       app.kubernetes.io/part-of: agent-orchestration
   policyTypes:
+    - Ingress
     - Egress
+  # verifier는 요청을 받는 서버가 아니므로 모든 ingress를 명시적으로 차단한다.
+  ingress: []
   egress:
+    # Calico가 Service 트래픽을 DNAT 이전 ClusterIP로 평가하는 경로를 지원하려면
+    # services CIDR의 TCP 8000을 허용해야 한다. 동일 namespace API selector는
+    # DNAT 이후 평가 경로의 보완 경계다. 현재 Service CIDR 안의 다른 TCP 8000
+    # Service까지 허용할 수 있으므로, 새 Service 추가 시 전용 egress 설계를 재검토한다.
     - to:
         - ipBlock:
             cidr: 172.16.128.0/24
@@ -211,6 +219,8 @@ spec:
         - protocol: TCP
           port: 53
 ---
+# UI Pod는 API TCP 8000과 DNS만 호출한다. UI에는 KSA token·Cloud SQL·Runner·외부 HTTPS
+# egress가 필요 없으므로 기본 차단 경계를 명시적으로 유지한다.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
