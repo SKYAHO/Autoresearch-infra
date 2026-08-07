@@ -418,13 +418,15 @@ rollback은 launcher CronJob을 먼저 suspend한 뒤 위 표의 launcher·execu
 애플리케이션 [PR #606](https://github.com/SKYAHO/Autoresearch/pull/606)의 merge SHA
 `53e273c3858e28d70df346e75f9d8b27b7ab6b4d`를 source로 한
 [v0.9.0 release](https://github.com/SKYAHO/Autoresearch/releases/tag/v0.9.0)의
-학습 배선을 dev launcher와 executor에 반영한다. 이 변경은 학습 경로에 필요한 두
-이미지만 승격하며 API·UI·runner image는 현재 digest를 유지한다.
+학습 배선과 API image를 dev Agent Orchestration manifest에 반영한다. launcher와
+executor는 학습 경로가 들어간 v0.9.0 digest를 사용하고, API도 같은 release의 digest로
+승격한다. UI와 runner application image는 현재 digest를 유지한다.
 
 | 역할 | v0.9.0 적용 digest | 이 변경의 직전 rollback digest |
 |---|---|---|
 | launcher | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:24bf725cab23ff2b1e54086a5366538f23aea408aae7f6e12073e19454e6b04e` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:2818f29a658b36c14199bd7e2d195e56921cf876217b6504af3fbc5634627837` |
 | executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:a3ee4aff0266ee2781608b2172c78f9def70ff7aa73c657df97c361566075808` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:7999677d238f29202fa5720700e86943937bb3d0536cdb3269231c01a14c2475` |
+| API | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:4d7d156cd08d1e5ebfa0c0283026d72ea7504dfaa40aa837edc917627b107c24` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:e8886396c00a6c919cb28d49c7ad4de836b0de07a685da5db7a166384e72f066` |
 
 launcher는 아래 값을 literal env로 executor Job에 전달한다. URI가 비어 있으면 학습이
 꺼지고 기존 경로만 실행되므로, URI와 함께 v0.9.0이 필수로 읽는 세 timeout을 항상
@@ -452,11 +454,17 @@ kubectl -n autoresearch get cronjob agent-orchestration-launcher \
 kubectl -n autoresearch get cronjob agent-orchestration-launcher \
   -o jsonpath='{range .spec.jobTemplate.spec.template.spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' \
   | grep -E '^(ORCH_EXECUTOR_IMAGE|ORCH_TRAINING_)'
+kubectl -n autoresearch get deployment agent-orchestration-api \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="api")].image}{"\n"}'
+kubectl -n autoresearch get job agent-orchestration-api-migration \
+  agent-orchestration-deployment-verification --ignore-not-found \
+  -o jsonpath='{range .items[*].spec.template.spec.containers[*]}{.image}{"\n"}{end}'
 ```
 
 학습 배선 또는 이미지 문제가 생기면 launcher를 먼저 suspend하고, 위 표의 launcher와
 executor digest를 **한 쌍으로** 직전 값으로 되돌리면서 네 학습 env를 함께 제거한다.
-snapshot bucket viewer IAM은 롤백하지 않는다.
+API v0.9.0 문제가 생기면 같은 순서로 API image 7개 참조를 위 표의 직전 digest로
+함께 되돌린다. snapshot bucket viewer IAM은 롤백하지 않는다.
 
 **launcher CronJob의 DB bootstrap initContainer는 launcher image가 아니라 API
 image를 쓴다.** `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소

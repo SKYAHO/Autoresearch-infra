@@ -3,6 +3,19 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-08: Agent Orchestration API v0.9.0 digest 승격
+
+- 기존 PR #592에서 승격한 launcher·executor 학습 배선에 이어, API v0.9.0 digest
+  `sha256:4d7d156cd08d1e5ebfa0c0283026d72ea7504dfaa40aa837edc917627b107c24`를
+  dev manifest에 반영했다. API Deployment·migration·PostSync verifier·runner
+  bootstrap·launcher bootstrap의 참조 7개를 하나의 immutable digest로 교체했다.
+- UI와 runner application image, launcher/executor 학습 환경 변수, resource
+  request/limit, CronJob `suspend`, IAM/GCP resource, NetworkPolicy는 변경하지 않았다.
+- ArgoCD sync 후 API Deployment와 PreSync migration/PostSync verifier hook의 live
+  image를 확인한다. 장애 시 launcher를 먼저 suspend하고 API 7개 참조를 직전
+  `sha256:e8886396c00a6c919cb28d49c7ad4de836b0de07a685da5db7a166384e72f066`로 함께
+  revert한다. snapshot bucket IAM은 롤백 대상이 아니다.
+
 ## 2026-08-08: v0.9.0 학습 executor 배선 활성화 (#591)
 
 - 애플리케이션 [PR #606](https://github.com/SKYAHO/Autoresearch/pull/606)의 v0.9.0
