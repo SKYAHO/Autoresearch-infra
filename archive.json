@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T08:00:35Z",
+  "generated_at": "2026-08-07T08:03:48Z",
   "reports": [
+    {
+      "number": 581,
+      "title": "fix: Phase 2 smoke 관측성을 배포한다",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T08:03:30Z",
+      "summary_ko": [
+        "Phase 2 실행 실패 원인을 추적할 수 있도록 오케스트레이터 CronJob의 launcher 및 executor 이미지 다이제스트를 업데이트했습니다.",
+        "단일 smoke 테스트 동안 완주 증거 및 실패 이벤트를 수집하기 위해 완료된 Job의 보존 시간을 1시간(3600초)으로 설정했습니다.",
+        "매니페스트 검증 스크립트와 자기 테스트를 보강하고, 테스트 완료 후 보존 시간을 정상 회수하는 운영 가이드를 작성했습니다."
+      ],
+      "report_url": "pr/581/"
+    },
     {
       "number": 576,
       "title": "fix: API에 executor API token을 주입한다 (#575)",
