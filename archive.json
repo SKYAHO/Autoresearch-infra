@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T12:09:53Z",
+  "generated_at": "2026-08-07T15:54:10Z",
   "reports": [
+    {
+      "number": 590,
+      "title": "feat: 실험 Job GSA에 실험 스냅샷 버킷 read 권한 추가",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T15:54:04Z",
+      "summary_ko": [
+        "실험 실행 파드(Job) GSA에 실제 학습 데이터 스냅샷이 존재하는 실험 결과 전용 버킷의 객체 읽기 권한(roles/storage.objectViewer)을 추가하였습니다.",
+        "이전 PR(#577)에서 미적용 상태로 잘못 설정되어 있던 MLflow 아티팩트 버킷 대상 IAM 권한을 제거하고, Output 계약 좌표를 실제 게시 버킷으로 정정하였습니다.",
+        "권한 반영 후 gcloud 및 gsutil을 활용한 정상 읽기 검증 절차와 문제 발생 시의 revert 기반 롤백 가이드를 운영 문서에 추가하였습니다."
+      ],
+      "report_url": "pr/590/"
+    },
     {
       "number": 586,
       "title": "fix: Phase 2 executor digest를 승격한다",
