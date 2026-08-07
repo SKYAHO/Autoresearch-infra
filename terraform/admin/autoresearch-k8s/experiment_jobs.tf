@@ -382,6 +382,41 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
           expression = "variables.component != '${local.experiment_branch_bootstrap_component_label}' || (object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_writer_key_volume}' && has(v.secret) && has(v.secret.secretName) && v.secret.secretName == '${var.experiment_branch_writer_secret_name}') && object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_token_volume}' && has(v.emptyDir) && has(v.emptyDir.medium) && v.emptyDir.medium == 'Memory' && has(v.emptyDir.sizeLimit) && v.emptyDir.sizeLimit == '1Mi'))"
           message    = "branch-bootstrap Job은 ${var.experiment_branch_writer_secret_name} Secret volume과 medium=Memory 1Mi token volume을 그대로 사용해야 합니다."
         },
+        # ── #562 experiment-executor volume 모양 계약 ────────────────────────
+        #
+        # 토큰·상태·검증 결과는 medium=Memory여야 한다. 디스크로 떨어지면 Pod가
+        # 죽은 뒤에도 노드에 남아 사후 회수 대상이 되고, 토큰의 짧은 수명이라는
+        # 전제가 무너진다.
+        #
+        # workspace는 clone 대상이라 디스크 기반이 맞다. 대신 sizeLimit을 승인값과
+        # 문자열로 고정해 노드 ephemeral storage 소비 상한을 계약에 남긴다.
+        #
+        # codex-home은 items를 `auth.json` 하나로 못 박는다. Secret에 다른 key가
+        # 추가될 때 계약이 그것까지 codex-worker에 노출하지 않도록 한다.
+        {
+          expression = join("", [
+            "variables.component != '${local.experiment_executor_component_label}' || (",
+            "['branch-token','clone-token','push-token','executor-state','verification-result'].all(n, ",
+            "object.spec.template.spec.volumes.exists_one(v, v.name == n && has(v.emptyDir) && ",
+            "has(v.emptyDir.medium) && v.emptyDir.medium == 'Memory' && ",
+            "has(v.emptyDir.sizeLimit) && v.emptyDir.sizeLimit == '1Mi')) && ",
+            "object.spec.template.spec.volumes.exists_one(v, v.name == 'executor-tmp' && has(v.emptyDir) && ",
+            "has(v.emptyDir.medium) && v.emptyDir.medium == 'Memory' && ",
+            "has(v.emptyDir.sizeLimit) && v.emptyDir.sizeLimit == '1Gi') && ",
+            "object.spec.template.spec.volumes.exists_one(v, v.name == 'workspace' && has(v.emptyDir) && ",
+            "!has(v.emptyDir.medium) && has(v.emptyDir.sizeLimit) && ",
+            "v.emptyDir.sizeLimit == '${var.experiment_workspace_size_limit}') && ",
+            "object.spec.template.spec.volumes.exists_one(v, v.name == 'codex-home' && has(v.secret) && ",
+            "has(v.secret.secretName) && v.secret.secretName == '${var.experiment_codex_home_secret_name}' && ",
+            "has(v.secret.items) && v.secret.items.map(i, i.key) == ['auth.json']) && ",
+            "object.spec.template.spec.volumes.exists_one(v, v.name == '${local.experiment_branch_writer_key_volume}' && ",
+            "has(v.secret) && has(v.secret.secretName) && ",
+            "v.secret.secretName == '${var.experiment_branch_writer_secret_name}') && ",
+            "object.spec.template.spec.volumes.exists_one(v, v.name == 'executor-api-token' && has(v.secret) && ",
+            "has(v.secret.secretName) && v.secret.secretName == '${var.experiment_executor_api_token_secret_name}'))",
+          ])
+          message = "experiment-executor Job의 volume 모양이 승인된 계약과 다릅니다(토큰·상태 volume은 medium=Memory 1Mi, workspace는 sizeLimit ${var.experiment_workspace_size_limit}, codex-home은 auth.json key 하나만)."
+        },
         # ── 자격 증명 경계 ──────────────────────────────────────────────────
         #
         # 위 규칙들은 "누가·어디서·어떤 이미지로·어떤 형태로" 도는지를 강제한다.

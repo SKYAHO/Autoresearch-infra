@@ -113,6 +113,78 @@ run "private_key_rule_is_an_allowlist_not_a_requirement" {
   }
 }
 
+run "executor_contract_separates_credentials_by_container" {
+  command = plan
+
+  # 8개 컨테이너가 한 Pod에 있어 NetworkPolicy로는 컨테이너별 목적지를 나눌 수
+  # 없다(Pod 단위 적용, Calico라 FQDN 지정 불가). 따라서 codex-worker도 GitHub에
+  # 네트워크로는 닿는다. 실질 경계는 자격 증명 분리 하나뿐이므로, 그 분리가
+  # 계약에 남아 있는지를 여기서 잡는다.
+  assert {
+    condition = alltrue([
+      for volume, holders in local.experiment_job_contracts["experiment-executor"].credential_mounts :
+      !contains(concat(holders.readers, holders.writers), "codex-worker")
+      if volume != "codex-home"
+    ])
+    error_message = "codex-worker는 Codex 인증(codex-home) 외 어떤 자격 증명도 mount할 수 없다."
+  }
+
+  assert {
+    condition = alltrue([
+      for volume, holders in local.experiment_job_contracts["experiment-executor"].credential_mounts :
+      !contains(concat(holders.readers, holders.writers), "candidate-verifier")
+    ])
+    error_message = "candidate-verifier는 어떤 자격 증명도 mount할 수 없다."
+  }
+
+  # 역방향. Codex 인증이 GitHub을 만지는 컨테이너로 새는 경로도 닫아야 한다.
+  assert {
+    condition = local.experiment_job_contracts["experiment-executor"].credential_mounts["codex-home"] == {
+      readers = ["codex-worker"]
+      writers = []
+    }
+    error_message = "Codex 인증 Secret은 codex-worker만 읽기 전용으로 mount할 수 있어야 한다."
+  }
+
+  # private key는 token을 발급하는 세 컨테이너만 본다. 쓰기 주체는 없다.
+  assert {
+    condition = local.experiment_job_contracts["experiment-executor"].credential_mounts["github-app-private-key"] == {
+      readers = ["branch-token-minter", "clone-token-minter", "push-token-minter"]
+      writers = []
+    }
+    error_message = "private key는 token minter 3개만 읽기 전용으로 mount할 수 있어야 한다."
+  }
+
+  # 순서 고정. token 발급 컨테이너가 그 token을 쓰는 컨테이너 바로 앞에 와야 한다.
+  assert {
+    condition = local.experiment_job_contracts["experiment-executor"].init_containers == [
+      "branch-token-minter",
+      "branch-creator",
+      "clone-token-minter",
+      "workspace-preparer",
+      "codex-worker",
+      "candidate-verifier",
+      "push-token-minter",
+    ]
+    error_message = "executor initContainer 구성·순서가 launcher/jobs.py의 build_executor_job과 달라지면 모든 Job이 거부된다."
+  }
+
+  assert {
+    condition     = local.experiment_job_contracts["experiment-executor"].app_containers == ["candidate-finalizer"]
+    error_message = "executor의 app container는 candidate-finalizer 하나여야 한다."
+  }
+
+  # 토큰은 용도별로 분리돼야 한다. 하나로 합치면 clone용 read 권한 토큰과
+  # push용 write 권한 토큰이 같은 파일을 공유하게 된다.
+  assert {
+    condition = alltrue([
+      for volume in ["branch-token", "clone-token", "push-token"] :
+      contains(local.experiment_job_contracts["experiment-executor"].volumes, volume)
+    ])
+    error_message = "executor는 branch/clone/push token volume을 분리해 유지해야 한다."
+  }
+}
+
 run "policy_covers_every_declared_contract" {
   command = plan
 
