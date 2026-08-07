@@ -2,9 +2,16 @@
 # GitHub Actions(Autoresearch code-archive.yml)가 main 머지/dispatch 시 코드
 # tar.gz를 이 버킷에 올리고 latest.txt를 갱신하며, GKE autoresearch-app 파드가
 # 시작 시 아카이브를 내려받아 실행한다. 앱 구현: SKYAHO/Autoresearch#180, #182.
+#
+# #577에서 두 번째 용도가 붙었다 — 학습 데이터셋 스냅샷(`training-snapshots/`).
+# 성격이 같아서 같은 버킷을 쓴다: 파드 밖에서 만들어 올리고 파드는 읽기만 하는 불변
+# 산출물이며, 소비자 GSA마다 `objectViewer`를 한 줄씩 부여하는 이 파일의 관례가 그대로
+# 적용된다. prefix로 분리하고 IAM 조건으로 서로 침범하지 않게 한다.
 
-# 코드 아카이브 전용 버킷. versioning 없음(#238), 삭제해도 git에서 재생성 가능한
-# 배포 캐시라 prevent_destroy는 두지 않는다. 공개 접근은 차단.
+# 파드가 읽는 입력물 버킷. versioning 없음(#238) — 코드 아카이브는 삭제해도 git에서
+# 재생성 가능한 배포 캐시고, #577 스냅샷은 content-addressed write-once라 같은 경로에
+# 다른 내용이 덮어써지는 상황 자체가 성립하지 않는다. prevent_destroy는 두지 않는다.
+# 공개 접근은 차단.
 resource "google_storage_bucket" "code_artifacts" {
   name                        = local.code_artifacts_bucket
   location                    = var.region
@@ -74,4 +81,30 @@ resource "google_storage_bucket_iam_member" "code_artifacts_feast_apply_prod_vie
   bucket = google_storage_bucket.code_artifacts.name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.feast_apply_prod.email}"
+}
+
+# #577 실험 Job이 학습 입력으로 쓰는 데이터셋 스냅샷 read.
+#
+# 위 네 grant와 달리 **IAM 조건으로 prefix를 좁힌다.** 이유는 이 GSA의 권한 경계가
+# 다른 소비자보다 좁게 설계돼 있기 때문이다 — `experiment_jobs.tf`가 결과 버킷에
+# objectViewer를 주지 않으면서 "Job이 이전 결과를 읽거나 삭제할 수 없다"를 명시적으로
+#보장한다. 그 GSA에 이 버킷 전체 read를 주면 `code/` 아카이브까지 함께 열려 경계가
+# 필요 이상으로 넓어지므로, 학습 입력 prefix로만 제한한다.
+#
+# 조건식은 `experiment_runtime.tf`의 registry/staging read와 같은 형태다.
+# 조건부 IAM은 GCS에서 object 단위로 평가되므로 `objects.get`은 prefix로 좁혀지지만
+# **`objects.list`는 bucket resource에 대해 평가돼 prefix 조건이 성립하지 않는다.**
+# 즉 이 grant로는 목록 조회가 되지 않는다 — 애플리케이션은 스냅샷을 목록으로 찾지 않고
+# content-addressed 경로(`by-hash/<dataset_sha256>/`)를 직접 지정해 읽으므로 문제없다.
+# 목록이 필요해지면 그때 별도 검토한다(무조건 넓히지 않는다).
+resource "google_storage_bucket_iam_member" "code_artifacts_experiment_job_snapshot_viewer" {
+  bucket = google_storage_bucket.code_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.experiment_job.email}"
+
+  condition {
+    title       = "experiment-job-training-snapshot-read"
+    description = "학습 데이터셋 스냅샷 prefix만 읽도록 제한하고 코드 아카이브는 제외한다."
+    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.code_artifacts.name}/objects/${local.training_snapshot_prefix}')"
+  }
 }

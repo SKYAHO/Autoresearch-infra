@@ -109,6 +109,17 @@ locals {
   code_artifacts_bucket          = "${var.project_id}-code-artifacts"
   code_uploader_sa_name          = "${local.resource_prefix}-code-uploader"
   experiment_runtime_code_prefix = "code/"
+  # #577 학습 데이터셋 스냅샷 prefix. 이 버킷은 원래 코드 아카이브 전용이었으나
+  # (`code/` prefix) 같은 성격의 두 번째 입력물을 받는다 — 파드 밖에서 만들어 올리고
+  # 파드는 읽기만 하는 불변 산출물이다. `experiment-job` GSA의 read는 이 prefix로만
+  # 좁혀 `code/` 아카이브와 서로 침범하지 않게 한다.
+  #
+  # 이 아래 레이아웃은 애플리케이션의 스냅샷 스토어 계약을 따른다
+  # (`SKYAHO/Autoresearch`의 `docs/specs/2026-08-04-training-dataset-snapshot-store.md`).
+  #   <prefix>by-hash/<dataset_sha256>/training_dataset.csv
+  #   <prefix>by-hash/<dataset_sha256>/snapshot_manifest.json
+  #   <prefix>by-date/dt=<events_end_date>/<feature_service>.json
+  training_snapshot_prefix = "training-snapshots/"
   raw_data_prefixes = {
     youtube_raw            = "data_lake/youtube_trending_kr/"
     users_raw              = "asset/virtual_user/"
