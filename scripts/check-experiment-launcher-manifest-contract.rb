@@ -59,12 +59,12 @@ module ExperimentLauncherManifestContract
   end
 
   def check_cron_job!(cron_job)
-    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:44ca561e7cd8f6df7b00c6a6d7c1d7ee971107d3e3234e5eb02086c90ca57cc7"
-    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fe0002e097ac750c90a083519cc6ac86420e84a44c1aa7aa6c7d0ff9120b707c"
+    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:4aa7fba653c32a408b77b833dcc11963c5543becf03e3d7608d9095c466f5a2e"
+    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:00664bc9f0b711fcf7a161e76a02d7c5bc482803ae0faf93d7b81d1568ca9dd9"
     # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
     # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
     # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
-    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:36507859b830032aedaa7a6fbf1b77e69466ceec7b56af084dc694e21c51ecde"
+    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:be70b05db1a6a7bae0bb283f43c58137cb9c3090bef32bbea58fd0fcfe4e1b21"
 
     spec = cron_job.fetch("spec")
     expect_equal("* * * * *", spec["schedule"], "launcher schedule")
@@ -100,7 +100,25 @@ module ExperimentLauncherManifestContract
       "ORCH_EXECUTOR_NODE_POOL" => "batch-od",
       "ORCH_GITHUB_APP_SECRET_NAME" => "autoresearch-experiment-branch-writer-app",
       "ORCH_GITHUB_REPOSITORY" => "SKYAHO/Autoresearch",
-      "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "2"
+      "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "2",
+      # (#562) Phase 2 좌표. launcher/config.py의 from_environment()가 아래를 모두
+      # _required_environment로 읽으므로, 하나라도 빠지면 launcher가 기동 즉시
+      # 죽고 실험이 0건이 된다. 두 Secret 이름은 어드미션 계약이 volume의
+      # secretName으로 고정하는 값과 같아야 하고, workspace 상한은 계약이 문자열로
+      # 비교하므로 표기까지 같아야 한다.
+      "ORCH_EXECUTOR_API_URL" =>
+        "http://agent-orchestration-api.autoresearch.svc.cluster.local:8000",
+      "ORCH_EXECUTOR_API_TOKEN_SECRET_NAME" =>
+        "autoresearch-experiment-executor-api-token",
+      "ORCH_CODEX_HOME_SECRET_NAME" => "autoresearch-experiment-codex-auth",
+      "ORCH_EXECUTOR_WORKSPACE_SIZE_LIMIT" => "8Gi",
+      # 3600은 어드미션 계약의 activeDeadlineSeconds 상한과 같은 값이다. 이 값을
+      # 넘기면 launcher는 기동하지만 어드미션이 Job을 거부하고 실패가 launcher
+      # 로그에만 남아, 조용히 아무 Job도 만들어지지 않는다. Codex 상한은 Job 전체
+      # 상한보다 작아야 하며(작지 않으면 launcher가 기동 시 거부한다) 나머지
+      # 시간은 clone·검증·push가 쓴다.
+      "ORCH_ACTIVE_DEADLINE_SEC" => "3600",
+      "ORCH_CODEX_TIMEOUT_SEC" => "1800"
     }
     expected_literals.each do |name, value|
       expect_equal(
