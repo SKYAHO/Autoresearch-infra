@@ -503,11 +503,51 @@ sync하는 것**이다. 그때 생성되는 Job은 다시 `branch-bootstrap` 형
 | Secret 2종 | launcher를 **먼저** 되돌린 뒤 삭제한다. 반대로 하면 진행 중인 Job이 `FailedMount`로 매달린다 |
 
 어드미션 계약 변경은 `failurePolicy: Fail` + `Deny`라 잘못되면 실험 Job이 **전부**
-거부된다. apply 직후 Phase 1 manifest로 server dry-run 회귀를 확인한다.
+거부된다. apply 직후 dry-run으로 회귀를 확인한다.
+
+#### 계약 변경 검증용 dry-run manifest 만들기
+
+`--dry-run=server`는 Job을 API 서버까지 보내 어드미션 판정만 받고 저장하지 않는다.
+Pod가 생성되지 않으므로 private key·네트워크·Codex가 관여하지 않고, 몇 초 만에
+끝난다. 계약을 고칠 때마다 반복해도 비용이 없다.
+
+manifest는 **손으로 쓰지 않는다.** 손으로 쓴 YAML의 실수가 계약 위반으로 오인되기
+때문이다. 애플리케이션 저장소의 정본 빌더(`launcher/jobs.py`의
+`build_executor_job`·`build_branch_job`)를 그대로 호출해 생성한다.
 
 ```bash
-kubectl apply --dry-run=server -f <branch-bootstrap Job manifest>
+# 애플리케이션 저장소를 배포 중인 source SHA로 체크아웃한 뒤
+python - <<'PY'
+import dataclasses, sys, types, uuid, yaml
+from kubernetes.client import ApiClient
+
+# jobs.py가 launcher.repository에서 쓰는 것은 ClaimedExperiment 하나뿐인데
+# 그 모듈이 FastAPI·SQLAlchemy까지 끌어오므로 데이터클래스만 stub한다.
+stub = types.ModuleType("agent_orchestration.launcher.repository")
+@dataclasses.dataclass(frozen=True)
+class ClaimedExperiment:
+    experiment_id: uuid.UUID; issue_number: int; issue_branch: str
+    base_dev_sha: str; issue_body_sha256: str; job_name: str
+stub.ClaimedExperiment = ClaimedExperiment
+sys.modules["agent_orchestration.launcher.repository"] = stub
+
+from agent_orchestration.launcher.config import LauncherSettings
+from agent_orchestration.launcher.jobs import build_executor_job
+# settings 값은 deploy/agent-orchestration/launcher-cronjob.yaml의 env와 동일하게 채운다.
+PY
 ```
+
+세 가지를 확인한다. 셋째가 핵심이다.
+
+| manifest | 기대 |
+|---|---|
+| Phase 1 branch-bootstrap | **통과** — 거부되면 롤백 경로가 막힌 것이므로 즉시 revert |
+| Phase 2 executor | **통과** |
+| executor의 `codex-worker`에 `github-app-private-key` mount를 붙인 변형 | **거부**, 사유가 "…volume은 … 만 mount할 수 있습니다" |
+
+셋째가 통과하면 자격 증명 allowlist가 동작하지 않는 것이므로 진행을 멈춘다.
+컨테이너 개수 규칙에서 먼저 걸려 거부되는 것으로는 부족하다 — 거부 **사유**가
+자격 증명 규칙이어야 한다.
 
 ### 자격 증명 회수
 
