@@ -159,8 +159,8 @@ apply) → ② Secret Manager 새 version → ③ 위 절차로 `mlflow-db` 재�
 bucket이나 MLflow Model Registry version을 만들지 않는다.
 
 ```text
-gs://<bucket>/training-snapshots/sha256=<64자리 hex>/training_dataset.csv
-gs://<bucket>/training-snapshots/sha256=<64자리 hex>/snapshot_manifest.json
+gs://<bucket>/training-snapshots/by-hash/<64자리 hex>/training_dataset.csv
+gs://<bucket>/training-snapshots/by-hash/<64자리 hex>/snapshot_manifest.json
 ```
 
 `snapshot_manifest.json`에는 최소한 `sha256`, CSV object `gs://` URI,
@@ -198,7 +198,7 @@ bucket과 prefix를 확인하고, live 검증 승인 후 다음처럼 metadata·
 확인한다(명령의 bucket/digest는 실제 값으로 치환한다).
 
 ```bash
-SNAPSHOT_URI="gs://<bucket>/training-snapshots/sha256=<digest>/training_dataset.csv"
+SNAPSHOT_URI="gs://<bucket>/training-snapshots/by-hash/<digest>/training_dataset.csv"
 gcloud storage objects describe "$SNAPSHOT_URI" --format='yaml(name,generation,size,md5Hash,crc32c)'
 gcloud storage cp "$SNAPSHOT_URI" "/tmp/training_dataset.csv"
 sha256sum /tmp/training_dataset.csv
