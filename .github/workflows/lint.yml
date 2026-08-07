@@ -32,6 +32,9 @@ jobs:
       - name: Run experiment launcher manifest contract self-test
         run: ruby scripts/test-check-experiment-launcher-manifest-contract.rb
 
+      - name: Run Agent Orchestration digest promotion self-test
+        run: ruby scripts/test-promote-agent-orchestration-digests.rb
+
       - name: Check Agent Orchestration PostSync deployment verifier contract
         run: ruby scripts/check-agent-orchestration-deployment-verification.rb
 
