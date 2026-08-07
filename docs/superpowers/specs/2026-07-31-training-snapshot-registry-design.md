@@ -1,4 +1,4 @@
-﻿# MLflow Training Snapshot Registry 설계
+# MLflow Training Snapshot Registry 설계
 
 > **[정정 — 2026-08-07] canonical prefix를 `sha256=<hex>/`에서 `by-hash/<hex>/`로 바꿨다.**
 >

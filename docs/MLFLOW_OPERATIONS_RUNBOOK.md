@@ -1,4 +1,4 @@
-﻿# MLflow 운영 Runbook
+# MLflow 운영 Runbook
 
 > 이슈 #91~#95 · 설계 `superpowers/specs/2026-07-17-mlflow-operating-design.md`
 > 상태: 배포·검증 완료(#94). ArgoCD Application `mlflow` Synced/Healthy.
