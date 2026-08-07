@@ -49,7 +49,7 @@ spec:
             # 갖게 하려면 Dockerfile에 해당 모듈을 추가하는 애플리케이션 변경이
             # 선행돼야 하며, 그 전까지는 이 참조가 유일하게 동작하는 구성이다.
             - name: bootstrap-db
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:be70b05db1a6a7bae0bb283f43c58137cb9c3090bef32bbea58fd0fcfe4e1b21
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:e8886396c00a6c919cb28d49c7ad4de836b0de07a685da5db7a166384e72f066
               imagePullPolicy: IfNotPresent
               command:
                 - python
