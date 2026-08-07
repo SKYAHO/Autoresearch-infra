@@ -3,13 +3,15 @@
 ## 상태
 
 - 관련 이슈: [#562](https://github.com/SKYAHO/Autoresearch-infra/issues/562)
+- 후속 버그: [#575](https://github.com/SKYAHO/Autoresearch-infra/issues/575) —
+  API의 executor token 소비 경계 누락 복구
 - 인접 이슈: [#561](https://github.com/SKYAHO/Autoresearch-infra/issues/561) —
   판정 Job 계약. 본 설계가 도입하는 **계약 골격을 공유**한다(아래 3.1 결정).
 - 애플리케이션 정본: `SKYAHO/Autoresearch#557`, PR #564 →
   **PR #568로 갱신** (merged source SHA
   `e5ce030979f573dfcd9117a1bfaf456e4a6aff75`, 2026-08-07)
-- 상태: 설계 확정, 구현 전. 이전 판에서 smoke를 막던 외부 의존
-  (`activeDeadlineSeconds` 고정)은 PR #568로 **해소됐다**(9절).
+- 상태: Phase 2 인프라 구현·apply 완료. 운영 smoke 직전 새 API Pod에서
+  `ORCH_EXECUTOR_API_TOKEN` 주입 누락을 발견해 #575로 복구 중이다(9절).
 - 대상 환경: GCP dev / GKE `autoresearch-dev-gke`
 - 작성 언어: 한국어
 
@@ -167,26 +169,56 @@ dataplane은 Calico라 `FQDNNetworkPolicy`를 쓸 수 없어 공개 443을 통�
 **롤백 자체가 어드미션에서 거부된다.** 계약 보존은 정리 누락이 아니라 롤백
 전제조건이다.
 
-## 4. 신설하는 리소스
+## 4. 신설하는 리소스와 executor API token 소비 경계
 
 `terraform/admin/autoresearch-k8s/`에 아래 두 개가 없음을 확인했다. 둘 다
-Kubernetes Secret이며, 이번 변경에서 만든다.
+`autoresearch-experiments` namespace의 Kubernetes Secret이며, #562에서 만들었다.
 
 - **Codex 인증 Secret** (`codex-home` volume의 원본) — `auth.json` key 하나를
   제공한다. `codex-worker`만 `/var/lib/codex/auth.json`에 readOnly `subPath`로
   마운트한다. `defaultMode` 0440은 launcher가 지정하므로 이 저장소는 Secret과 key
   존재만 소유한다.
 - **`executor-api-token` Secret** — `candidate-finalizer`가 in-cluster Experiment
-  API에 보고할 때 쓰는 토큰.
+  API에 보고할 때 쓰는 토큰. 이름은
+  `autoresearch-experiment-executor-api-token`, key는 `token`이다.
 
 두 Secret 모두 값은 기존 `github-app-private-key`와 같은 경로로 배치하고 Git·PR·
 로그에 남기지 않는다.
 
-**롤아웃 순서가 정해져 있다.** 앱 spec이 명시한다 — Secret과 `auth.json` key를
-**먼저 생성한 뒤** 새 launcher 설정·이미지를 배포한다. 순서가 뒤집히면 kubelet이
-volume mount를 완료하지 못해 Pod가 `Pending`에 머물고, Job은
-`activeDeadlineSeconds` 뒤에야 `Failed`가 된다. 이 실패는 Pod event의
-`FailedMount`와 Job의 `DeadlineExceeded`로 판별한다.
+### 4.1 같은 token의 API namespace 사본이 필요하다 (#575)
+
+candidate 보고 인증은 양쪽이 같은 token을 가져야 성립한다.
+
+- 발신자 `candidate-finalizer`는 `autoresearch-experiments` namespace의
+  `autoresearch-experiment-executor-api-token/token`을 파일로 마운트한다.
+- 수신자 API는 `autoresearch` namespace의 같은 이름·key Secret을
+  `ORCH_EXECUTOR_API_TOKEN` 환경 변수로 읽는다.
+
+Kubernetes Secret은 namespace-scoped이므로 한 Secret을 두 Pod가 직접 공유할 수
+없다. 따라서 **같은 payload를 가진 Secret 객체가 두 namespace에 각각 하나씩**
+있어야 한다. manifest에는 Secret 이름과 key 참조만 두고 값은 운영자가 runbook
+절차로 주입한다. API Deployment는 `envFrom`이 아니라 아래의 단일 key
+`secretKeyRef`만 사용한다.
+
+```yaml
+- name: ORCH_EXECUTOR_API_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: autoresearch-experiment-executor-api-token
+      key: token
+```
+
+두 사본의 불일치는 candidate 보고를 401로 실패시키므로 회전은 실행 중 Experiment가
+없는 시점에 양쪽 Secret을 함께 갱신하고 API를 재시작한다. Secret 값이나 hash를
+로그·PR에 출력해 동일성을 증명하지 않는다. 대신 새 API의 Ready 상태와 인증된
+candidate smoke 결과로 end-to-end 일치를 검증한다.
+
+**롤아웃 순서가 정해져 있다.** 두 namespace의 executor token Secret과
+`auth.json` key를 **먼저 생성한 뒤**, API Deployment의 token 참조를 배포하고 새
+API가 Ready인 것을 확인한 다음 launcher를 활성화한다. executor namespace의 Secret이
+없으면 Pod가 `Pending`에 머물고, API namespace의 Secret 또는 env 참조가 없으면 API가
+`CreateContainerConfigError` 또는 startup 실패에 머문다. 어느 경우에도 smoke를
+시작하지 않는다.
 
 `subPath` 마운트는 실행 중 Secret 갱신을 전파하지 않으므로, Secret 교체는 새
 Experiment부터 적용된다.
@@ -225,7 +257,7 @@ repository clone과 Codex 작업물이 노드 디스크를 채우면 노드 압�
 같은 노드의 다른 Job까지 영향을 받는다. quota에 `requests.ephemeral-storage`와
 LimitRange 기본값·상한을 추가한다.
 
-## 7. 계약 대조 결과 (구현 전 예측)
+## 7. 계약 대조 결과 (구현 당시 기준)
 
 거부되는 규칙 6건:
 
@@ -254,12 +286,17 @@ LimitRange 기본값·상한을 추가한다.
    Pod를 만들지 않으므로 private key·네트워크·Codex가 관여하지 않는다. 두 개를
    나란히 돌린다: 신규 executor Job은 **통과해야 하고**, 기존 branch-bootstrap
    Job은 **여전히 통과해야 한다**(회귀).
-3. **운영 smoke** — 실제 Experiment 1건. 9절의 외부 의존이 풀린 뒤에만 시작한다.
+3. **plain manifest 계약 검사** — API Deployment가
+   `ORCH_EXECUTOR_API_TOKEN`을 정확한 Secret 이름·key의 단일
+   `secretKeyRef`로 읽는지 고정한다. Secret 값은 검사 대상이 아니다.
+4. **운영 smoke** — 실제 Experiment 1건. 9절의 배포 게이트가 모두 풀린 뒤에만
+   시작한다.
 
 dry-run이 증명하지 못하는 것: 네트워크 도달성(NetworkPolicy는 런타임에 작용),
-Codex·verifier의 실제 동작, 토큰 발급·push 성공. 이는 3층에서만 확인된다.
+Codex·verifier의 실제 동작, 토큰 발급·push 성공. 이는 4층 운영 smoke에서만
+확인된다.
 
-## 9. 실행 상한 — 이전 판의 차단 사유는 해소됐다
+## 9. 운영 smoke 배포 게이트
 
 이 설계의 이전 판은 `activeDeadlineSeconds`가 300초로 고정돼 있고
 `from_environment()`가 그 필드를 읽지 않아 **Phase 2 Job이 완주할 수 없다**고
@@ -281,7 +318,24 @@ Codex·verifier의 실제 동작, 토큰 발급·push 성공. 이는 3층에서�
 통과하지만 어드미션이 Job을 거부한다. 그 실패는 launcher 로그에만 남고 Job은
 생성되지 않으므로, manifest 계약 검사에서 상한을 함께 검증한다(계획 Task 8).
 
-**운영 smoke를 막는 외부 의존은 더 이상 없다.**
+실행 상한 의존은 해소됐지만, #575에서 다음 누락을 운영 중 확인했다.
+
+- 새 API image는 `ORCH_EXECUTOR_API_TOKEN`을 필수로 읽는다.
+- `autoresearch-experiments`의 executor token Secret은 존재하지만
+  `autoresearch`에는 namespace 사본이 없다.
+- API Deployment에도 해당 env `secretKeyRef`가 없다.
+- 결과적으로 새 API Pod는 startup에서 실패하고 Service는 candidate endpoint가 없는
+  직전 API Pod만 Ready endpoint로 유지한다.
+
+따라서 운영 smoke의 추가 선행 게이트는 다음 네 가지다.
+
+1. `autoresearch` namespace에 같은 이름·key·payload의 Secret을 등록한다.
+2. API Deployment에 4.1의 `secretKeyRef`를 반영한다.
+3. 새 API Pod의 rollout과 `/healthcheck` 200을 확인한다.
+4. Service OpenAPI에 `POST /experiments/{experiment_id}/candidate`가 노출되는지
+   확인한다.
+
+이 네 조건 전에는 Experiment를 등록하지 않는다.
 
 ## 10. 롤백
 
@@ -290,7 +344,8 @@ Codex·verifier의 실제 동작, 토큰 발급·push 성공. 이는 3층에서�
 | launcher 전환 | launcher image digest를 직전 main revision 값으로 되돌리고 ArgoCD sync. Phase 1 동작으로 복귀한다(3.5). |
 | 어드미션 계약 | Terraform revert 후 apply. `branch-bootstrap` 계약이 보존돼 있으므로 되돌린 launcher가 그대로 통과한다. |
 | NetworkPolicy | executor 전용 정책 삭제. 기존 정책은 손대지 않았으므로 Phase 1 경로가 그대로 남는다. |
-| 신설 Secret 2종 | Phase 1은 이들을 참조하지 않으므로 제거 가능. 단 롤백 순서상 launcher를 먼저 되돌린 뒤 제거한다 — 반대로 하면 진행 중인 Phase 2 Job이 `FailedMount`로 매달린다. |
+| executor namespace Secret 2종 | Phase 1은 이들을 참조하지 않으므로 제거 가능. 단 롤백 순서상 launcher를 먼저 되돌린 뒤 제거한다 — 반대로 하면 진행 중인 Phase 2 Job이 `FailedMount`로 매달린다. |
+| API namespace token 사본 | Phase 2 API Deployment를 token 비필수 직전 digest로 되돌려 Ready를 확인한 뒤 env 참조와 Secret을 제거한다. 진행 중인 Phase 2 Job이 있으면 먼저 종료 결과를 확정한다. |
 
 계약 변경이 잘못되면 `failurePolicy: Fail` + `Deny`로 **실험 Job 전체가 거부**된다.
 apply 직후 기존 branch-bootstrap manifest로 dry-run 회귀 확인을 수행한다(8절 2층).
@@ -298,7 +353,8 @@ apply 직후 기존 branch-bootstrap manifest로 dry-run 회귀 확인을 수행
 ## 11. 비용·보안 영향
 
 **비용**: 기존 `batch-od` node pool과 namespace quota를 그대로 쓴다. 새 상시 노드도
-새 디스크도 없다(신설 리소스가 둘 다 Secret이다).
+새 디스크도 없다(신설 리소스는 executor namespace Secret 2개와 API namespace의
+token Secret 사본 1개다).
 
 다만 **Job 1건의 노드 점유 시간이 300초에서 3600초로 12배 늘어난다**(9절). 이
 node pool은 min 0 / max 2의 온디맨드 `e2-standard-2`이므로, 동시 2건이 상한까지
@@ -310,7 +366,8 @@ Phase 1 기준으로 잡았던 비용 감각은 갱신이 필요하다. dev 실�
 **보안**: 순증이 아니라 순감이다. 3.2·3.3의 allowlist 규칙은 현행보다 강하고,
 `codex-worker`가 자격 증명을 갖지 못한다는 것이 서버 측에서 강제된다. 확대되는
 면은 executor Pod의 in-cluster API egress 1건이며, 대상은 `autoresearch`
-namespace의 API Service로 한정한다.
+namespace의 API Service로 한정한다. #575의 API namespace 사본은 인증 검증 주체인
+API Pod만 단일 key `secretKeyRef`로 읽으며, UI·runner·launcher에는 전달하지 않는다.
 
 **참고 — 상류 GitHub 보호막**: `SKYAHO/Autoresearch`의 `main-protection` ruleset은
 `required_approving_review_count: 1`, `require_last_push_approval: true`,
