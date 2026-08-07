@@ -386,6 +386,33 @@ launcher·executor는 애플리케이션 PR `SKYAHO/Autoresearch#583`의 squash 
 | launcher | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:b6fde46c1bb20daea28665d060005486580f3862eb837896423a2d90712e39c1` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:4aa7fba653c32a408b77b833dcc11963c5543becf03e3d7608d9095c466f5a2e` |
 | executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fb785a28cffab21dac4817d0b6cffaf0c2cd4026e54a3fabc6d19cff4439a347` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:00664bc9f0b711fcf7a161e76a02d7c5bc482803ae0faf93d7b81d1568ca9dd9` |
 
+### Phase 2 구현 지시 release provenance (#585)
+
+executor는 애플리케이션 PR `SKYAHO/Autoresearch#587`의 squash merge SHA
+`6fef4715e145a3d11f0074fff574a41e1ba7d01c`를 source로 한 release run
+`SKYAHO/Autoresearch/actions/runs/31162026581`에서 게시했다. launcher와 TTL은
+바꾸지 않고 executor digest만 승격한다.
+
+| 역할 | 이번 승격 digest | 직전 rollback digest |
+|---|---|---|
+| executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:b92f0e6f7b4128686208900baf7dcf0c9b65945b60538bb9f4463a4b916a588f` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fb785a28cffab21dac4817d0b6cffaf0c2cd4026e54a3fabc6d19cff4439a347` |
+
+### Phase 2 raw GitHub Issue 실행 release provenance (#582)
+
+launcher·executor는 애플리케이션 PR `SKYAHO/Autoresearch#594`의 merge SHA
+`2d0c942d6f926f8f1a38357b2dc6d1ea6da9787a`를 source로 한 release run
+`SKYAHO/Autoresearch/actions/runs/31176094314`에서 게시했다. 두 image는 같은
+source를 사용하며 raw GitHub Issue를 Codex 입력으로 넘기는 실행 계약을 함께
+구현한다.
+
+| 역할 | 이번 승격 digest | 직전 rollback digest |
+|---|---|---|
+| launcher | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:2818f29a658b36c14199bd7e2d195e56921cf876217b6504af3fbc5634627837` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:b6fde46c1bb20daea28665d060005486580f3862eb837896423a2d90712e39c1` |
+| executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:7999677d238f29202fa5720700e86943937bb3d0536cdb3269231c01a14c2475` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:fb785a28cffab21dac4817d0b6cffaf0c2cd4026e54a3fabc6d19cff4439a347` |
+
+rollback은 launcher CronJob을 먼저 suspend한 뒤 위 표의 launcher·executor
+`직전 rollback digest`를 **한 쌍으로** 되돌린다. 한쪽 digest만 되돌리지 않는다.
+
 **launcher CronJob의 DB bootstrap initContainer는 launcher image가 아니라 API
 image를 쓴다.** `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소
 최상위 모듈인데 `launcher.Dockerfile`이 이를 COPY하지 않아 launcher image에 없다.
