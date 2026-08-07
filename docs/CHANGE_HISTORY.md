@@ -204,6 +204,17 @@
   비상 차단 스위치다. 이후 배포 manifest는 기존 PR·CI 검토 후 main merge로 반영하며,
   rollback은 이전 manifest commit을 main에 반영해 ArgoCD sync 상태를 확인한다.
 
+## 2026-08-07: Agent Orchestration release digest 자동 승격 (#587)
+
+- 검증된 Autoresearch release가 API 일곱 참조와 UI 한 참조를 immutable digest로만
+  갱신하도록 저장소 소유 승격 script와 self-test를 추가했다. 고정 GAR repository,
+  digest 형식, 참조 수, 기존 API digest 정합이 맞지 않으면 commit 전에 실패한다.
+- release GitHub App은 infra 단일 저장소 Contents read/write와 `main` Ruleset의
+  App 전용 bypass actor로 제한한다. 사람과 일반 token의 `main` 직접 push 금지는
+  유지하며, ArgoCD automated sync와 PostSync 검증 결과로 배포를 확인한다.
+- 최초 설정, 일상 확인, 실패 및 rollback 절차는
+  `docs/AGENT_ORCHESTRATION_DIGEST_PROMOTION_RUNBOOK.md`에 기록했다.
+
 ## 2026-08-07: Agent Orchestration PostSync 배포 검증 (#574)
 
 - ArgoCD Deployment health가 rollout 실패를 먼저 판정한 뒤, GKE 내부 PostSync Job이
