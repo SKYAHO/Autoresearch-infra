@@ -637,6 +637,24 @@ kubectl -n autoresearch run openapi-probe --rm -i --restart=Never \
 배포가 성공한 것처럼 보인다. `READY=false`인 Pod가 재시작을 쌓고 있는지 반드시
 본다.
 
+#### 실패 증거 보존 TTL (#579)
+
+Autoresearch #582 실패 관측 image를 승격하는 단일 smoke에서는 launcher에
+`ORCH_TTL_AFTER_FINISHED_SEC=3600`을 주입한다. 이 값은 launcher가 새 executor Job의
+`ttlSecondsAfterFinished`에 복사하며, 완료된 Job·Pod event와 container 로그를 조사할
+시간을 확보한다. 권한·egress·active deadline은 바꾸지 않는다.
+
+1. launcher CronJob을 suspend한 상태에서 새 launcher/executor digest와 TTL 3600
+   manifest를 적용한다.
+2. rollout과 설정을 확인한 뒤 suspend를 해제하고 새 Experiment 하나만 발행한다.
+3. 평가 중 (`EVALUATING`) 완주 또는 정제된 `stage`·`error_type`·`reason` 실패 로그와
+   보존된 Job event를 수집한다.
+4. 완주 증거를 수집하면 manifest의 TTL을 `30`으로 되돌려 다시 적용한다.
+
+TTL 3600을 상시값으로 남기면 완료 Job이 최대 한 시간 누적되므로 smoke 종료 후 회수를
+완료 조건으로 취급한다. 로그가 Kubernetes API 또는 목적지 egress 차단을 구체적으로
+증명할 때만 별도 최소 권한 변경을 검토한다.
+
 ### Phase 1 ↔ Phase 2 전환과 롤백 (#562)
 
 애플리케이션 `launcher/main.py`에는 **Phase 1/2를 고르는 스위치가 없다.**

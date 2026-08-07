@@ -213,7 +213,10 @@ module ExperimentLauncherManifestContract
       # 상한보다 작아야 하며(작지 않으면 launcher가 기동 시 거부한다) 나머지
       # 시간은 clone·검증·push가 쓴다.
       "ORCH_ACTIVE_DEADLINE_SEC" => "3600",
-      "ORCH_CODEX_TIMEOUT_SEC" => "1800"
+      "ORCH_CODEX_TIMEOUT_SEC" => "1800",
+      # (#579) 장애 smoke 동안 완료 Job/Pod event를 조사할 시간을 확보한다.
+      # end-to-end 성공 증거 수집 후 애플리케이션 기본값 30으로 회수한다.
+      "ORCH_TTL_AFTER_FINISHED_SEC" => "3600"
     }
     expected_literals.each do |name, value|
       expect_equal(

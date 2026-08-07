@@ -171,6 +171,10 @@ spec:
                   value: "3600"
                 - name: ORCH_CODEX_TIMEOUT_SEC
                   value: "1800"
+                # (#579) #582 실패 원인을 수집하는 단일 smoke 동안 완료 Job을
+                # 1시간 보존한다. EVALUATING 완주 증거 수집 뒤 30으로 회수한다.
+                - name: ORCH_TTL_AFTER_FINISHED_SEC
+                  value: "3600"
               volumeMounts:
                 - name: db-runtime
                   mountPath: /runtime
