@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T05:34:42Z",
+  "generated_at": "2026-08-07T05:43:05Z",
   "reports": [
+    {
+      "number": 573,
+      "title": "docs: agent-orchestration 런북을 #526 automated sync 기준으로 갱신",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-07T05:42:51Z",
+      "summary_ko": [
+        "PR #526에서 변경된 ArgoCD 자동 동기화(main 추적) 모델에 맞춰 agent-orchestration GKE 운영 런북을 최신화하였습니다.",
+        "수동 커밋 SHA 지정 및 수동 동기화 지시를 main 브랜치 자동 동기화 확인 절차로 수정하였습니다.",
+        "최초 활성화, 시크릿 회전, 이미지 롤백 및 네트워크 정책 반영 등 런북 전반의 운영 순서를 정합성에 맞게 개정하였습니다."
+      ],
+      "report_url": "pr/573/"
+    },
     {
       "number": 567,
       "title": "fix: Phase 2 API digest 승격 누락을 바로잡는다 (#566)",
