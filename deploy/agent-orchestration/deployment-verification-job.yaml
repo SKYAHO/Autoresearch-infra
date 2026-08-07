@@ -16,7 +16,9 @@ metadata:
     app.kubernetes.io/part-of: agent-orchestration
     app.kubernetes.io/component: deployment-verifier
 spec:
-  backoffLimit: 0
+  # 최초 Pod의 image pull·node 압박 같은 일시 실패는 한 번 재시도한다. endpoint
+  # 계약 자체는 내부 150초 재시도로 판정하므로, 재시도는 인프라 잡음만 흡수한다.
+  backoffLimit: 1
   # 이미지 pull·스케줄링에 최대 150초를 남기고, endpoint probe는 별도 150초로 제한한다.
   activeDeadlineSeconds: 300
   template:
