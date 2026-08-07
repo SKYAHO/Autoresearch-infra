@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T08:28:35Z",
+  "generated_at": "2026-08-07T08:37:05Z",
   "reports": [
+    {
+      "number": 580,
+      "title": "feat: PostSync 배포 검증을 자동화한다 (#574)",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-07T08:36:48Z",
+      "summary_ko": [
+        "ArgoCD 배포 직후(PostSync 단계) GKE 내부에서 Agent Orchestration API의 candidate endpoint를 자동 검증하는 Job을 도입하였습니다.",
+        "외부 CI Runner에 Kubernetes 권한을 주는 대신 시크릿과 k8s API 권한이 전혀 없는 최소권한 Pod와 전용 NetworkPolicy를 구성하였습니다.",
+        "검증 Job의 최소권한 계약과 이미지 digest 일치성을 검증하는 CI 스크립트 및 운영 런북 문서를 함께 추가하였습니다."
+      ],
+      "report_url": "pr/580/"
+    },
     {
       "number": 583,
       "title": "chore: agent-orchestration API·UI digest를 v0.8.0으로 승격한다",
