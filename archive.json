@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T05:57:57Z",
+  "generated_at": "2026-08-07T06:13:48Z",
   "reports": [
+    {
+      "number": 576,
+      "title": "fix: API에 executor API token을 주입한다 (#575)",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T06:13:31Z",
+      "summary_ko": [
+        "Phase 2 API가 필수 요구하는 executor API token 환경 변수를 API Deployment 매니페스트에 추가 주입하였습니다.",
+        "매니페스트 계약 검사 스크립트에 API 토큰 참조 검증 로직 및 테스트 케이스를 추가하여 은밀한 런타임 배포 실패를 방지하도록 개선하였습니다.",
+        "네임스페이스 간 시크릿 사본 복제 방법, 운영 smoke 검증 게이트 4종, 롤백 가이드를 운영 문서에 반영하였습니다."
+      ],
+      "report_url": "pr/576/"
+    },
     {
       "number": 571,
       "title": "docs: agent-orchestration ArgoCD sync 상태 문서 갱신",
