@@ -36,6 +36,16 @@ spec:
       ports:
         - protocol: TCP
           port: 8000
+    # ArgoCD PostSync verifier만 candidate endpoint OpenAPI 계약을 확인한다.
+    # namespaceSelector와 podSelector를 한 from 항목에 함께 둬 교집합으로 좁힌다.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: deployment-verifier
+              app.kubernetes.io/part-of: agent-orchestration
+      ports:
+        - protocol: TCP
+          port: 8000
   egress:
     # Calico가 Service 트래픽을 DNAT 이전 ClusterIP로 평가하는 경로에서는
     # podSelector만으로 Runner Service VIP를 매칭할 수 없다. 이 CIDR은 dev
@@ -160,6 +170,47 @@ spec:
 ---
 # UI Pod는 API TCP 8000과 DNS만 호출한다. UI에는 KSA token·Cloud SQL·Runner·외부 HTTPS
 # egress가 필요 없으므로 기본 차단 경계를 명시적으로 유지한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-deployment-verifier
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: deployment-verifier
+      app.kubernetes.io/part-of: agent-orchestration
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 172.16.128.0/24
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: api
+              app.kubernetes.io/part-of: agent-orchestration
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - ipBlock:
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

@@ -185,6 +185,12 @@
   비상 차단 스위치다. 이후 배포 manifest는 기존 PR·CI 검토 후 main merge로 반영하며,
   rollback은 이전 manifest commit을 main에 반영해 ArgoCD sync 상태를 확인한다.
 
+## 2026-08-07: Agent Orchestration PostSync 배포 검증 (#574)
+
+- main merge 뒤 ArgoCD가 GKE 내부 PostSync Job으로 API candidate endpoint를 확인한다.
+- Job은 Secret·Kubernetes API token 없이 API Service TCP 8000과 DNS만 사용한다.
+- 실패 Job은 보존해 ArgoCD sync 실패와 기존 Job 실패 경보로 운영자가 확인한다.
+
 ## 2026-08-05: Agent Orchestration API 실험 Job 생성 권한 활성화 (#523)
 
 - #484/#485/#497로 이미 구축된 `autoresearch-experiments` 실행 경계의 go-live

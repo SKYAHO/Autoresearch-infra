@@ -648,6 +648,27 @@ kubectl -n autoresearch run openapi-probe --rm -i --restart=Never \
 배포가 성공한 것처럼 보인다. `READY=false`인 Pod가 재시작을 쌓고 있는지 반드시
 본다.
 
+### ArgoCD PostSync 자동 배포 검증 (#574)
+
+infra `main` merge 뒤 ArgoCD는 `agent-orchestration-deployment-verification` Job을
+PostSync hook으로 실행한다. 이 Job은 같은 namespace의 API Service OpenAPI에서
+candidate 보고 endpoint를 확인한다. GitHub Actions runner에 cluster 권한을 주지
+않으며, Job도 Secret·Kubernetes API token을 갖지 않는다.
+
+Job이 실패하면 ArgoCD sync operation이 실패하고 실패 Job은 보존된다. 기존
+`KubeJobFailed` 경보와 함께 다음을 확인한다.
+
+```bash
+kubectl -n autoresearch get job agent-orchestration-deployment-verification
+kubectl -n autoresearch logs job/agent-orchestration-deployment-verification
+kubectl -n argocd get application agent-orchestration \
+  -o jsonpath='{.status.operationState.phase}{" "}{.status.operationState.message}{"\\n"}'
+```
+
+검증 Job을 되돌릴 때는 `deployment-verification-job.yaml`과
+`agent-orchestration-deployment-verifier` NetworkPolicy, API ingress의
+`deployment-verifier` 규칙을 같은 revert PR에서 함께 제거한다.
+
 #### 실패 증거 보존 TTL (#579)
 
 Autoresearch #582 실패 관측 image를 승격하는 단일 smoke에서는 launcher에

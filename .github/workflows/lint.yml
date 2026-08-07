@@ -32,6 +32,12 @@ jobs:
       - name: Run experiment launcher manifest contract self-test
         run: ruby scripts/test-check-experiment-launcher-manifest-contract.rb
 
+      - name: Check Agent Orchestration PostSync deployment verifier contract
+        run: ruby scripts/check-agent-orchestration-deployment-verification.rb
+
+      - name: Run PostSync deployment verifier contract self-test
+        run: ruby scripts/test-check-agent-orchestration-deployment-verification.rb
+
       - name: Check oauth2-proxy email allowlist configuration
         run: scripts/check-oauth-email-allowlist.sh
 

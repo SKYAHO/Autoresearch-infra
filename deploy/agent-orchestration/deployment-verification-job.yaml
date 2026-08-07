@@ -1,0 +1,75 @@
+# ArgoCD PostSync 배포 검증 Job. GitHub-hosted Runner는 private GKE에 접근할 수
+# 없으므로, 검증은 같은 클러스터의 최소권한 Pod에서 수행한다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agent-orchestration-deployment-verification
+  namespace: autoresearch
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/sync-wave: "10"
+    # 성공 기록만 정리하고 실패 Job은 보존한다. Prometheus의 KubeJobFailed 경보와
+    # ArgoCD operation 실패 원인을 운영자가 확인할 수 있어야 한다.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+  labels:
+    app.kubernetes.io/name: agent-orchestration-deployment-verification
+    app.kubernetes.io/part-of: agent-orchestration
+    app.kubernetes.io/component: deployment-verifier
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-orchestration-deployment-verification
+        app.kubernetes.io/part-of: agent-orchestration
+        app.kubernetes.io/component: deployment-verifier
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: verify
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:be70b05db1a6a7bae0bb283f43c58137cb9c3090bef32bbea58fd0fcfe4e1b21
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              import json
+              import time
+              from urllib.request import urlopen
+
+              endpoint = "http://agent-orchestration-api.autoresearch.svc.cluster.local:8000/openapi.json"
+              expected_path = "/internal/executor/experiments/{experiment_id}/candidate"
+              deadline = time.monotonic() + 150
+              last_error = "endpoint probe did not run"
+              while time.monotonic() < deadline:
+                  try:
+                      with urlopen(endpoint, timeout=5) as response:
+                          document = json.load(response)
+                      if expected_path in document.get("paths", {}):
+                          print("Agent Orchestration candidate endpoint verification passed")
+                          raise SystemExit(0)
+                      last_error = "candidate endpoint is absent from OpenAPI"
+                  except Exception as error:  # noqa: BLE001 - retry boundary
+                      last_error = f"{type(error).__name__}: {error}"
+                  time.sleep(5)
+              raise SystemExit(f"Agent Orchestration deployment verification failed: {last_error}")
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
