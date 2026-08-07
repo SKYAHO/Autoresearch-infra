@@ -58,6 +58,12 @@ locals {
   # 계수에도 이 selector를 쓰므로, 불일치하면 Job이 자기 계수에서 빠진다.
   experiment_executor_component_label = "experiment-executor"
 
+  # candidate-finalizer가 candidate SHA를 보고할 in-cluster Experiment API 좌표.
+  # `deploy/agent-orchestration/api-service.yaml`의 Service selector·port와 같아야
+  # 한다 — 불일치하면 finalizer가 보고하지 못해 Job이 deadline까지 매달린다.
+  experiment_executor_api_service_selector = "agent-orchestration-api"
+  experiment_executor_api_port             = "8000"
+
   # (#562) Job 종류별 어드미션 계약. key는 Pod template의
   # `app.kubernetes.io/component` label 값이다. 이 map에 없는 종류는 정책이
   # 거부하므로, 새 Job 종류를 도입하는 변경은 여기 항목을 먼저 추가한다.

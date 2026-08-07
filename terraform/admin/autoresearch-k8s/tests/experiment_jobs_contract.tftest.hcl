@@ -185,6 +185,41 @@ run "executor_contract_separates_credentials_by_container" {
   }
 }
 
+run "executor_egress_preserves_phase1_path" {
+  command = plan
+
+  # Phase 1 egress는 launcher digest 롤백 경로다. executor 정책을 추가하면서
+  # 이 정책의 대상이 바뀌면 롤백된 Job이 GitHub에 닿지 못한다.
+  assert {
+    condition     = kubernetes_network_policy_v1.experiment_jobs_branch_bootstrap_egress.spec[0].pod_selector[0].match_labels["app.kubernetes.io/component"] == "branch-bootstrap"
+    error_message = "Phase 1 egress 정책의 대상 label은 branch-bootstrap으로 유지해야 한다."
+  }
+
+  assert {
+    condition     = kubernetes_network_policy_v1.experiment_executor_egress.spec[0].pod_selector[0].match_labels["app.kubernetes.io/component"] == "experiment-executor"
+    error_message = "executor egress는 executor label에만 적용되어야 한다."
+  }
+
+  # in-cluster API 규칙은 namespace와 Pod를 한 to 블록에 함께 둬야 교집합이 된다.
+  # 블록을 나누면 합집합이 되어 그 namespace의 모든 Pod로 열린다.
+  assert {
+    condition = alltrue([
+      for rule in kubernetes_network_policy_v1.experiment_executor_egress.spec[0].egress :
+      length(rule.to) == 1
+    ])
+    error_message = "egress 규칙마다 to 블록은 하나여야 한다 — 나누면 selector가 합집합으로 넓어진다."
+  }
+
+  # Cloud SQL 직접 연결은 열지 않는다. 보고 경로는 API 경유다.
+  assert {
+    condition = alltrue([
+      for rule in kubernetes_network_policy_v1.experiment_executor_egress.spec[0].egress :
+      alltrue([for port in rule.ports : contains(["443", local.experiment_executor_api_port], port.port)])
+    ])
+    error_message = "executor egress는 공개 443과 in-cluster API 포트 외의 목적지를 열지 않아야 한다."
+  }
+}
+
 run "policy_covers_every_declared_contract" {
   command = plan
 
