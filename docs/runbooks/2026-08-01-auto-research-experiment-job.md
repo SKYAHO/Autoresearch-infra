@@ -538,16 +538,52 @@ kubectl -n autoresearch-experiments get secret \
 
 파이프로만 흘려보내므로 token이 셸 히스토리·터미널·파일에 남지 않는다.
 
-확인은 key 이름과 길이 일치까지만 한다. **값이나 hash를 출력해 동일성을 증명하지
-않는다** — 로그·PR에 남으면 그 자체가 유출이다.
+#### 토큰 값 요건
+
+애플리케이션이 startup에서 세 조건을 강제한다(`app/config.py`). 어기면 API가
+`ValueError`로 죽는다.
+
+| 조건 | 위반 시 |
+|---|---|
+| **32자 이상** | `must be at least 32 characters long` |
+| `ORCH_API_TOKEN`과 다를 것 | `must differ` |
+| `ORCH_RUNNER_TOKEN`과 다를 것 | `must differ` |
+
+32자는 **디코딩된 값** 기준이다. `-o go-template`의 `{{len $v}}`는 base64
+인코딩 길이를 세므로 그 값으로 판단하면 안 된다(#575에서 실제로 오독해, 20자
+토큰을 28자로 착각하고 요건 충족으로 넘어갔다).
+
+새로 만들 때는 여유 있게 48자를 쓴다.
+
+```bash
+bash -c '
+set -eu
+umask 077
+t=$(openssl rand -base64 64 | tr -d "\n=+/" | cut -c1-48)
+[ ${#t} -ge 32 ] || { echo "토큰 길이 부족"; exit 1; }
+for ns in autoresearch autoresearch-experiments; do
+  printf %s "$t" | kubectl -n "$ns" create secret generic \
+    autoresearch-experiment-executor-api-token \
+    --from-file=token=/dev/stdin --dry-run=client -o yaml | kubectl apply -f -
+done
+unset t
+'
+```
+
+값을 변수에만 담고 파일·화면에 남기지 않는다.
+
+#### 등록 확인
+
+확인은 key 이름과 **디코딩 길이**까지만 한다. **값이나 hash를 출력해 동일성을
+증명하지 않는다** — 로그·PR에 남으면 그 자체가 유출이다.
 
 ```bash
 for ns in autoresearch autoresearch-experiments; do
-  printf '%-28s ' "$ns"
+  printf '%-28s decoded=' "$ns"
   kubectl -n "$ns" get secret autoresearch-experiment-executor-api-token \
-    -o go-template='{{range $k,$v := .data}}{{$k}}({{len $v}}) {{end}}{{"\n"}}'
+    -o jsonpath='{.data.token}' | base64 -d | wc -c
 done
-# 기대: 양쪽 모두 token(<같은 길이>)
+# 기대: 양쪽 모두 같은 값이며 32 이상
 ```
 
 길이가 같아도 값이 같다는 증명은 아니다. 실제 일치는 **새 API가 Ready가 되고
@@ -594,7 +630,7 @@ RESTARTS:.status.containerStatuses[0].restartCount,IMAGE:.spec.containers[0].ima
 kubectl -n autoresearch run openapi-probe --rm -i --restart=Never \
   --image=curlimages/curl:8.10.1 -- \
   -s http://agent-orchestration-api.autoresearch.svc.cluster.local:8000/openapi.json \
-| grep -o '/experiments/{experiment_id}/candidate' || echo '❌ candidate endpoint 없음'
+| grep -o '/internal/executor/experiments/{experiment_id}/candidate' || echo '❌ candidate endpoint 없음'
 ```
 
 3번이 특히 중요하다. 새 Pod가 죽어도 **Service는 직전 이미지 Pod를 Ready로 유지**해

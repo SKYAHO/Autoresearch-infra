@@ -329,10 +329,13 @@ Codex·verifier의 실제 동작, 토큰 발급·push 성공. 이는 4층 운영
 
 따라서 운영 smoke의 추가 선행 게이트는 다음 네 가지다.
 
-1. `autoresearch` namespace에 같은 이름·key·payload의 Secret을 등록한다.
+1. `autoresearch` namespace에 같은 이름·key·payload의 Secret을 등록한다. 토큰
+   값은 **디코딩 기준 32자 이상**이고 `ORCH_API_TOKEN`·`ORCH_RUNNER_TOKEN`과
+   달라야 한다(`app/config.py`가 startup에서 강제). base64 인코딩 길이로
+   판단하지 않는다 — #575에서 20자 토큰을 28자로 오독한 사례가 있다.
 2. API Deployment에 4.1의 `secretKeyRef`를 반영한다.
 3. 새 API Pod의 rollout과 `/healthcheck` 200을 확인한다.
-4. Service OpenAPI에 `POST /experiments/{experiment_id}/candidate`가 노출되는지
+4. Service OpenAPI에 `POST /internal/executor/experiments/{experiment_id}/candidate`가 노출되는지
    확인한다.
 
 이 네 조건 전에는 Experiment를 등록하지 않는다.
