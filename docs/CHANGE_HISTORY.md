@@ -3,6 +3,21 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-08: v0.9.0 학습 executor 배선 활성화 (#591)
+
+- 애플리케이션 [PR #606](https://github.com/SKYAHO/Autoresearch/pull/606)의 v0.9.0
+  launcher·executor image digest를 dev GitOps manifest에 반영했다. 학습 활성화에
+  필요하지 않은 API·UI·runner image는 함께 승격하지 않았다.
+- `ORCH_TRAINING_DATASET_URI`와 필수 timeout 세 개(`1800`, `600`, `900`)를 같은
+  launcher CronJob에 공급했다. URI가 학습 opt-in 스위치이고 세 timeout이 필수이므로
+  네 값을 분리해서 적용하지 않는다. 구식 `ORCH_TRAINING_DATASET_PATH`는 manifest와
+  정적 contract에서 금지한다.
+- 이전 #589에서 적용한 snapshot bucket `roles/storage.objectViewer`, executor 자원,
+  CronJob `suspend`, IAM·GCP resource는 변경하지 않았다. ArgoCD sync 후 launcher
+  resume와 실험 발행·`candidate_sha`·ROC-AUC 검증은 애플리케이션 담당자가 수행한다.
+- 장애 시 launcher를 먼저 suspend하고 두 image digest와 학습 env를 직전 커밋으로
+  함께 revert한다. snapshot bucket IAM은 롤백 대상이 아니다.
+
 ## 2026-08-08: 실험 결과 버킷의 학습 snapshot read 좌표 정정 (#589)
 
 - live 확인에서 학습 snapshot 두 객체가

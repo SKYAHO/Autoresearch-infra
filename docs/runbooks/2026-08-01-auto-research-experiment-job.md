@@ -413,6 +413,51 @@ source를 사용하며 raw GitHub Issue를 Codex 입력으로 넘기는 실행 �
 rollback은 launcher CronJob을 먼저 suspend한 뒤 위 표의 launcher·executor
 `직전 rollback digest`를 **한 쌍으로** 되돌린다. 한쪽 digest만 되돌리지 않는다.
 
+### Phase 2 학습 배선 v0.9.0 release provenance (#605/#606)
+
+애플리케이션 [PR #606](https://github.com/SKYAHO/Autoresearch/pull/606)의 merge SHA
+`53e273c3858e28d70df346e75f9d8b27b7ab6b4d`를 source로 한
+[v0.9.0 release](https://github.com/SKYAHO/Autoresearch/releases/tag/v0.9.0)의
+학습 배선을 dev launcher와 executor에 반영한다. 이 변경은 학습 경로에 필요한 두
+이미지만 승격하며 API·UI·runner image는 현재 digest를 유지한다.
+
+| 역할 | v0.9.0 적용 digest | 이 변경의 직전 rollback digest |
+|---|---|---|
+| launcher | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:24bf725cab23ff2b1e54086a5366538f23aea408aae7f6e12073e19454e6b04e` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:2818f29a658b36c14199bd7e2d195e56921cf876217b6504af3fbc5634627837` |
+| executor | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:a3ee4aff0266ee2781608b2172c78f9def70ff7aa73c657df97c361566075808` | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:7999677d238f29202fa5720700e86943937bb3d0536cdb3269231c01a14c2475` |
+
+launcher는 아래 값을 literal env로 executor Job에 전달한다. URI가 비어 있으면 학습이
+꺼지고 기존 경로만 실행되므로, URI와 함께 v0.9.0이 필수로 읽는 세 timeout을 항상
+공급한다. `ORCH_TRAINING_DATASET_PATH`는 사용하지 않으며 정적 contract가 재유입을
+거부한다.
+
+| 이름 | 값 |
+|---|---|
+| `ORCH_TRAINING_DATASET_URI` | `gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/` |
+| `ORCH_TRAINING_TIMEOUT_SEC` | `1800` |
+| `ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC` | `600` |
+| `ORCH_UV_SYNC_TIMEOUT_SEC` | `900` |
+
+이 release는 이전 변경으로 부여한 `experiment-job` GSA의 결과 버킷
+`roles/storage.objectViewer`와 현재 executor 자원 제한을 전제로 하며, IAM·GCP
+resource·resource request/limit·CronJob `suspend`는 바꾸지 않는다. ArgoCD sync가
+완료된 뒤 현재 의도적으로 정지한 launcher의 `suspend=false` 복귀와 새 Experiment
+발행, `candidate_sha`·ROC-AUC 검증은 애플리케이션 담당자가 수행한다.
+
+적용 후에는 다음 값이 live CronJob에 반영됐는지 확인한다.
+
+```bash
+kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+  -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}{"\n"}'
+kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+  -o jsonpath='{range .spec.jobTemplate.spec.template.spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' \
+  | grep -E '^(ORCH_EXECUTOR_IMAGE|ORCH_TRAINING_)'
+```
+
+학습 배선 또는 이미지 문제가 생기면 launcher를 먼저 suspend하고, 위 표의 launcher와
+executor digest를 **한 쌍으로** 직전 값으로 되돌리면서 네 학습 env를 함께 제거한다.
+snapshot bucket viewer IAM은 롤백하지 않는다.
+
 **launcher CronJob의 DB bootstrap initContainer는 launcher image가 아니라 API
 image를 쓴다.** `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소
 최상위 모듈인데 `launcher.Dockerfile`이 이를 COPY하지 않아 launcher image에 없다.
