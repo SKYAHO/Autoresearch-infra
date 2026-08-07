@@ -478,7 +478,8 @@ ArgoCD에서 API/Runner manifest와 NetworkPolicy diff를 먼저 확인합니다
 
 - API와 Runner image가 모두 `@sha256:` immutable digest입니다.
 - Experiment API를 포함하는 promotion에서는 API digest가 API container, API DB
-  bootstrap, Runner OAuth bootstrap, PreSync migration Job의 두 container까지 다섯 image
+  bootstrap, Runner OAuth bootstrap, PreSync migration Job의 두 container, PostSync
+  deployment verifier Job의 `verify` container까지 여섯 image
   reference에 모두 같은 값으로 pin돼 있습니다.
 - API에는 `agent-orchestration-api` KSA, DB runtime `emptyDir`, `/tmp` `emptyDir`,
   그리고 #539에서 추가한 baseline-reader private key Secret volume만 있고 OAuth
@@ -741,7 +742,7 @@ automated sync는 나쁜 commit이 이미 main에 있고 클러스터에도 반�
   남습니다. 승인된 rollback은 revert commit을 reviewed PR로 main에 merge하는
   경로뿐입니다.
 
-이미지 rollback도 같은 순서입니다. 이전에 검증된 API digest 다섯 container 참조와
+이미지 rollback도 같은 순서입니다. 이전에 검증된 API digest 여섯 container 참조와
 Runner digest를 포함한 새 rollback manifest commit을 만들어 reviewed PR로 main에
 merge합니다. `enabled=true`인 정상 운영 상태라면 automated sync가 이 commit도 같은
 방식으로 자동 반영합니다. sync 뒤에는
@@ -798,16 +799,17 @@ RBAC와 NetworkPolicy를 함께 바꾸는 변경은 다음 순서를 지킵니�
 ### 이미지 참조 원자성
 
 API digest는 `api` container, API의 `bootstrap-db` init container, Runner의
-`bootstrap-codex-auth` init container, PreSync migration Job의 두 container 다섯 곳을
+`bootstrap-codex-auth` init container, PreSync migration Job의 두 container, PostSync
+deployment verifier Job의 `verify` container 여섯 곳을
 **같은 commit에서 함께** 갱신합니다. Runner init container는 API 이미지의
 `bootstrap_secrets` CLI와 OAuth 파일 형식 계약을 실행하고, migration Job은 같은 image의
-Alembic migration을 실행하므로 어느 하나라도 이전 digest로 남기면 runtime·bootstrap·DB
-schema 계약이 달라질 수 있습니다. CI 계약 검사는 다섯 API image reference의 동등성과 모든
+Alembic migration을 실행하고 verifier는 candidate endpoint 계약을 확인하므로 어느 하나라도 이전 digest로 남기면 runtime·bootstrap·DB
+schema·배포 검증 계약이 달라질 수 있습니다. CI 계약 검사는 여섯 API image reference의 동등성과 모든
 image의 `@sha256` pin을 검증합니다.
 
 Runner 본체만 promotion할 때에는 Runner container digest만 별도로 바꿀 수 있습니다.
 다만 API 또는 Runner 중 한 쪽의 rollback이 필요하고 해당 release 조합의 호환성이
-검증되지 않았다면, 마지막으로 end-to-end gate를 통과한 API 다섯 참조와 Runner 본체
+검증되지 않았다면, 마지막으로 end-to-end gate를 통과한 API 여섯 참조와 Runner 본체
 digest의 조합 전체를 새 rollback manifest commit으로 되돌립니다.
 
 마지막으로 다음을 확인합니다.

@@ -648,6 +648,45 @@ kubectl -n autoresearch run openapi-probe --rm -i --restart=Never \
 배포가 성공한 것처럼 보인다. `READY=false`인 Pod가 재시작을 쌓고 있는지 반드시
 본다.
 
+### ArgoCD PostSync 자동 배포 검증 (#574)
+
+infra `main` merge 뒤 ArgoCD는 `agent-orchestration-deployment-verification` Job을
+PostSync hook으로 실행한다. 이 Job은 같은 namespace의 API Service OpenAPI에서
+candidate 보고 endpoint를 확인한다. GitHub Actions runner에 cluster 권한을 주지
+않으며, Job도 Secret·Kubernetes API token을 갖지 않는다.
+
+Job 내부 probe는 candidate endpoint가 확인되면 `SystemExit(0)`으로 성공하고,
+`Exception`이 아닌 `BaseException` 계열이므로 retry `except Exception`에 잡히지 않는다.
+endpoint가 deadline까지 없으면 문자열을 가진 `SystemExit`로 exit code 1을 반환한다.
+
+`backoffLimit=1`은 image pull·node eviction 같은 Pod 단위의 일시 실패를 한 번
+흡수한다. 반면 `activeDeadlineSeconds=300`은 Job 전체 상한이라 deadline을 넘으면
+남은 retry와 무관하게 `DeadlineExceeded`로 실패한다. 이때 종료된 Pod log가 없을 수
+있으므로 Job condition과 Pod event를 함께 확인한다.
+
+Job이 실패하면 ArgoCD sync operation이 실패한다. Application에는 `retry`와
+`selfHeal`이 없으므로 같은 Git revision의 실패를 automated sync가 계속 재시도하지
+않는다. 새 revision 또는 운영자의 수동 sync가 다음 PostSync를 시작할 때
+`BeforeHookCreation`이 직전 실패 Job을 삭제한다. manifest를 revert로 제거해도
+`prune=false`이므로 기존 실패 Job은 삭제되지 않는다. 기존 `KubeJobFailed` 경보와
+함께 다음을 확인한다.
+
+```bash
+kubectl -n autoresearch get job agent-orchestration-deployment-verification
+kubectl -n autoresearch logs job/agent-orchestration-deployment-verification
+kubectl -n autoresearch get pods -l app.kubernetes.io/component=deployment-verifier
+kubectl -n autoresearch get events --sort-by=.lastTimestamp | tail -n 30
+kubectl -n argocd get application agent-orchestration \
+  -o jsonpath='{.status.operationState.phase}{" "}{.status.operationState.message}{"\\n"}'
+```
+
+candidate endpoint가 없는 이전 API digest로 긴급 롤백하면 Deployment는 먼저 그
+digest로 실제 적용되지만, 뒤이은 verifier가 실패해 ArgoCD operation은 실패로
+기록된다. ArgoCD는 이를 이전 digest로 자동 rollback하지 않는다. 따라서 이 경우
+`deployment-verification-job.yaml`과 `agent-orchestration-deployment-verifier`
+NetworkPolicy, API ingress의 `deployment-verifier` 규칙을 같은 revert PR에서 함께
+제거하는 것은 선택 사항이 아니라 롤백 완료 조건이다.
+
 #### 실패 증거 보존 TTL (#579)
 
 Autoresearch #582 실패 관측 image를 승격하는 단일 smoke에서는 launcher에

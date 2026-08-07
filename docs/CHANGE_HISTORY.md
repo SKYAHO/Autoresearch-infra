@@ -185,6 +185,20 @@
   비상 차단 스위치다. 이후 배포 manifest는 기존 PR·CI 검토 후 main merge로 반영하며,
   rollback은 이전 manifest commit을 main에 반영해 ArgoCD sync 상태를 확인한다.
 
+## 2026-08-07: Agent Orchestration PostSync 배포 검증 (#574)
+
+- ArgoCD Deployment health가 rollout 실패를 먼저 판정한 뒤, GKE 내부 PostSync Job이
+  API Service의 candidate endpoint 기능 계약을 확인한다. 이 Job은 개별 Pod image
+  균일성 검증이 아니라 Service 계약 검증이다.
+- verifier image digest는 API Deployment와 CI에서 일치 여부를 검사한다. Job은
+  Secret·Kubernetes API token·ServiceAccount·volume 없이 API Service TCP 8000과 DNS만 사용한다.
+- Job label·API ingress·verifier NetworkPolicy와 환경 카탈로그 services CIDR의
+  결합을 CI로 강제했다. 일시적인 image pull·node failure는 `backoffLimit=1`로
+  한 번 흡수하며, `DeadlineExceeded`는 Job condition·Pod event로 진단한다.
+- 실패 Job은 다음 PostSync 전까지 보존해 ArgoCD sync 실패와 기존 Job 실패 경보로
+  운영자가 확인한다. endpoint가 없는 이전 digest로 긴급 롤백할 때는 verifier와
+  전용 NetworkPolicy도 같은 revert PR에서 함께 제거한다.
+
 ## 2026-08-05: Agent Orchestration API 실험 Job 생성 권한 활성화 (#523)
 
 - #484/#485/#497로 이미 구축된 `autoresearch-experiments` 실행 경계의 go-live
