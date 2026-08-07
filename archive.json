@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T05:16:16Z",
+  "generated_at": "2026-08-07T05:17:14Z",
   "reports": [
+    {
+      "number": 567,
+      "title": "fix: Phase 2 API digest 승격 누락을 바로잡는다 (#566)",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T05:15:54Z",
+      "summary_ko": [
+        "Phase 2 API 이미지 승격 과정에서 누락되었던 3개 파일 5곳의 이미지 digest를 최신 버전으로 일괄 갱신했습니다.",
+        "동일 디렉터리 내 매니페스트 간 이미지 digest 일관성을 자동 검증하는 스크립트 규칙을 추가했습니다.",
+        "배포 시 구 버전 마이그레이션 실행으로 발생하던 DB 컬럼 미존재 에러 및 launcher 실패 현수를 해결했습니다."
+      ],
+      "report_url": "pr/567/"
+    },
     {
       "number": 565,
       "title": "feat: 실험 Job 어드미션 계약을 일반화하고 Phase 2 executor 경계를 추가한다 (#562)",
