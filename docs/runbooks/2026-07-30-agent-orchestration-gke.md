@@ -19,6 +19,10 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
 
 ## 적용 전 조건
 
+automated sync에서는 `main` merge 자체가 배포 트리거입니다. 아래 조건은 모두
+**merge 전(= PR 리뷰 시점)**에 충족돼야 하며, "sync 버튼을 누르기 전에 확인"하던
+manual sync 시절의 정지 지점은 더 이상 없습니다.
+
 1. `terraform/envs/dev`와 `terraform/admin/autoresearch-k8s` 변경이 별도 승인된
    Terraform plan을 거쳐 적용되어야 합니다. `agent_orchestration` DB/user, API·Runner
    GSA/KSA, 각 Secret Manager IAM이 먼저 존재해야 합니다.
@@ -36,6 +40,18 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
    `false`이면 존재하지 않는 `agent-orchestration-disabled` ref를 바라보는 비상 차단
    상태라 sync할 수 없습니다. automated sync는 신규 커밋을 최대 3분 폴링으로 자동
    반영하며, 별도 `argocd app sync` 수동 트리거가 필요 없습니다.
+
+   `prune=false`와 `selfHeal=false`는 운영상 다음을 의미합니다.
+
+   - `prune=false`: manifest에서 리소스를 **삭제**하는 commit을 merge해도 클러스터의
+     live 리소스는 삭제되지 않고 남습니다. NetworkPolicy 규칙 제거, container/volume
+     제거처럼 "추가를 되돌리는" 방향의 변경은 merge만으로 반영되지 않고, 별도
+     `kubectl delete`가 필요합니다.
+   - `selfHeal=false`: 새 Git revision이 생겼을 때만 sync가 트리거됩니다. `kubectl
+     edit`나 `argocd app sync --revision <old-sha>` 등으로 live 리소스가 직접
+     바뀌면 그 drift는 자동 교정되지 않고, 다음 main 커밋이 merge될 때까지 그대로
+     유지됩니다. [롤백과 보안 확인](#롤백과-보안-확인)에서 이 두 제약이 실제
+     복구 절차에 미치는 영향을 다룹니다.
 4. NetworkPolicy의 정적 CIDR이 현재 dev Terraform 값과 일치해야 합니다. manifest에
    값을 임의로 바꾸지 말고, `terraform/envs/dev`의 `dev_subnet_cidr`(현재
    `10.10.0.0/20`), `gke_services_cidr`(현재 `172.16.128.0/24`)와
@@ -43,7 +59,7 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
    승인된 변수 값으로 대조합니다. 첫 값은 node-originated kubelet probe·API
    port-forward ingress, 둘째 값은 Runner Service VIP·DNS egress, 셋째 값은 Cloud SQL
    private IP egress에 사용됩니다. CIDR 변경은 Terraform과 NetworkPolicy를 같은 배포
-   변경에서 함께 갱신한 뒤 sync합니다.
+   변경에서 함께 갱신한 뒤 main에 merge합니다.
 5. API manifest의 `ORCH_DB_HOST`가 reviewed Terraform state의
    `cloud_sql_private_ip_address` output과 일치해야 합니다. Cloud SQL instance를
    재생성하면 private IP가 달라질 수 있고, ArgoCD plain manifest의 리터럴 값은
@@ -51,12 +67,14 @@ PostgreSQL 저장 검증·롤백 절차를 다룹니다.
    현재 output을 반영해 main에 merge합니다. `agent_orchestration_deployment_enabled`가
    이미 `true`인 정상 운영 상태에서는 automated sync가 그 commit을 자동 반영하므로
    별도 admin apply가 필요 없습니다.
-6. v0.7.0 이상을 sync하기 전에 Kubernetes Secret `agent-orchestration-github-token`이
-   먼저 존재해야 합니다. 아래
+6. v0.7.0 이상을 main에 merge하기 전에 Kubernetes Secret
+   `agent-orchestration-github-token`이 먼저 존재해야 합니다. 아래
    [이슈 발행 GitHub 토큰 등록](#이슈-발행-github-토큰-등록-525) 절차를 따릅니다.
    API는 `load_settings()`를 uvicorn lifespan startup에서 호출하므로, 아래 필수
    환경변수 중 하나라도 비어 있으면 첫 요청 500이 아니라 **Pod 기동 자체가
-   실패**합니다.
+   실패**합니다. Secret 없이 merge되면 automated sync가 최대 3분 뒤 자동으로
+   반영해 새 Pod가 `CreateContainerConfigError`로 멈추므로, merge 전에 반드시
+   먼저 등록합니다.
 
    | 환경변수 | 출처 | 현재 값 |
    | --- | --- | --- |
@@ -702,6 +720,26 @@ python3 -c 'import json, sys; paths = json.load(open(sys.argv[1], encoding="utf-
 3. ArgoCD에서 반영된 revision과 diff를 확인한 뒤 Runner Ready 및 API
    `/healthcheck`를 확인하고
    [공통 post-sync end-to-end gate](#공통-post-sync-end-to-end-gate)를 통과합니다.
+
+위 1번의 "reviewed PR로 main에 merge"가 manual sync 시절 "ArgoCD diff를 sync
+**전에** 확인"하던 정지 게이트를 대체합니다. digest pin 검증(아래
+[배포 및 확인](#배포-및-확인) 체크리스트)은 이제 sync 후 확인이 아니라 **PR
+리뷰 시점의 필수 항목**이며, 그 승인 책임은 ArgoCD 운영자가 아니라 PR
+리뷰어에게 있습니다.
+
+automated sync는 나쁜 commit이 이미 main에 있고 클러스터에도 반영된 뒤에만
+발견되는 경우가 있으므로, 정지·복구 수단을 다음처럼 구분합니다.
+
+- **긴급 정지**: `AGENT_ORCHESTRATION_DEPLOYMENT_ENABLED=false` admin apply로
+  `targetRevision`을 존재하지 않는 ref로 되돌리는 것이 유일한 "새 commit을 더
+  받지 않는" 스위치입니다. 다만 `prune=false`이므로 이 flag를 내려도 **이미
+  떠 있는 workload는 그대로 계속 동작합니다** — 이것은 정지가 아니라 새
+  반영의 동결입니다.
+- **금지된 우회**: `argocd app sync --revision <old-sha>`로 임시 복구하지
+  않습니다. `selfHeal=false`라 이렇게 만든 상태는 자동 교정되지 않고 다음
+  main 커밋이 merge될 때까지 유지되므로, Git과 클러스터가 조용히 어긋난 채로
+  남습니다. 승인된 rollback은 revert commit을 reviewed PR로 main에 merge하는
+  경로뿐입니다.
 
 이미지 rollback도 같은 순서입니다. 이전에 검증된 API digest 다섯 container 참조와
 Runner digest를 포함한 새 rollback manifest commit을 만들어 reviewed PR로 main에
