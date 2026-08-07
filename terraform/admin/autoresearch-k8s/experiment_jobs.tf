@@ -395,15 +395,11 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # 저장소의 launcher 코드(`launcher/jobs.py`)인데, 그 코드는 이 저장소의
         # 리뷰·CI를 거치지 않는다. 따라서 같은 계약을 서버 측에서 한 번 더 강제한다.
         #
-        # 이 정책의 핵심 규칙이다. private key volume은 initContainer만, 그것도
-        # readOnly로 마운트할 수 있다. 본 컨테이너는 GitHub과 실제로 통신하며 더
-        # 오래 사는 쪽이라, 여기가 손상됐을 때 얻는 것이 "만료되는 token"인지
-        # "영구 private key"인지가 이 규칙 하나로 갈린다.
-        {
-          expression = "(!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, has(c.volumeMounts) && c.volumeMounts.exists_one(m, m.name == '${local.experiment_branch_writer_key_volume}' && has(m.readOnly) && m.readOnly == true))) && object.spec.template.spec.containers.all(c, !has(c.volumeMounts) || c.volumeMounts.all(m, m.name != '${local.experiment_branch_writer_key_volume}'))"
-          message    = "GitHub App private key volume은 initContainer에만 readOnly로 mount해야 하며 본 컨테이너에는 mount할 수 없습니다."
-        },
-        # volume 계약만으로는 키가 본 컨테이너에 도달하는 경로를 다 막지 못한다.
+        # 이 정책의 핵심 규칙은 아래 concat 인자가 `credential_mounts`에서 생성한다
+        # (#562). 자격 증명이 손상됐을 때 얻는 것이 "만료되는 token"인지 "영구
+        # private key"인지가 그 규칙들로 갈린다.
+        #
+        # volume 계약만으로는 키가 다른 컨테이너에 도달하는 경로를 다 막지 못한다.
         # `env[].valueFrom.secretKeyRef`나 `envFrom[].secretRef`는 volume을 전혀
         # 쓰지 않고 Secret 값을 환경 변수로 바로 주입하므로 위 다섯 규칙을 모두
         # 통과한다. Pod Security restricted도 Secret 참조 방식은 통제하지 않는다.
@@ -416,13 +412,6 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         {
           expression = "(!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))) && object.spec.template.spec.containers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, !has(e.valueFrom))))"
           message    = "실험 Job은 환경 변수로 Secret·ConfigMap 값을 주입할 수 없습니다(envFrom과 valueFrom 금지). 시크릿은 승인된 initContainer volume 경로만 사용합니다."
-        },
-        # 본 컨테이너는 token을 읽기만 한다. 쓰기 가능하게 마운트되면 컨테이너가
-        # 자기 token 파일을 덮어써 initContainer가 만든 자격 증명 경로를 우회할 수
-        # 있고, 사후 조사에서 어떤 token이 쓰였는지도 확정할 수 없게 된다.
-        {
-          expression = "variables.component != '${local.experiment_branch_bootstrap_component_label}' || object.spec.template.spec.containers.all(c, has(c.volumeMounts) && c.volumeMounts.exists_one(m, m.name == '${local.experiment_branch_token_volume}' && has(m.readOnly) && m.readOnly == true))"
-          message    = "본 컨테이너는 token volume을 readOnly로만 mount해야 합니다."
         },
         ],
         # ── 종류별 컨테이너 구성 (#562) ──────────────────────────────────────
@@ -457,6 +446,60 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
               "${jsonencode(contract.volumes)}.all(n, object.spec.template.spec.volumes.exists_one(v, v.name == n)))",
             ])
             message = "${component} Job은 승인된 volume ${length(contract.volumes)}개만 사용해야 합니다(${join(", ", contract.volumes)})."
+          }
+        ],
+        # ── 종류별 자격 증명 마운트 주체 (#562) ──────────────────────────────
+        #
+        # 이 정책의 핵심 규칙이다. 각 자격 증명 volume은 계약이 지정한 컨테이너만
+        # mount할 수 있다. 이전 판은 "모든 initContainer가 private key를 mount해야
+        # 한다"였는데, 그 문장은 initContainer가 minter 하나로 고정돼 있을 때만
+        # 의도대로 동작한다 — initContainer가 늘어나면 같은 문장이 그 새 컨테이너
+        # (예: Codex를 실행하는 컨테이너)에도 개인키를 넣으라는 요구가 된다.
+        #
+        # initContainers가 없는 Job은 위 컨테이너 구성 규칙에서 이미 거부되지만,
+        # 이 표현식이 먼저 평가되면 concat이 런타임 오류를 내 사유가 묻히므로
+        # 삼항으로 가드한다.
+        [
+          for pair in flatten([
+            for component, contract in local.experiment_job_contracts : [
+              for volume, holders in contract.credential_mounts : {
+                component = component
+                volume    = volume
+                holders   = concat(holders.readers, holders.writers)
+              }
+            ]
+            ]) : {
+            expression = join("", [
+              "variables.component != '${pair.component}' || ",
+              "((has(object.spec.template.spec.initContainers) ? object.spec.template.spec.initContainers : []) + object.spec.template.spec.containers)",
+              ".all(c, !has(c.volumeMounts) || c.volumeMounts.all(m, m.name != '${pair.volume}') || c.name in ${jsonencode(pair.holders)})",
+            ])
+            message = "${pair.component} Job에서 ${pair.volume} volume은 ${join(", ", pair.holders)}만 mount할 수 있습니다."
+          }
+        ],
+        # ── 종류별 자격 증명 읽기 전용 강제 (#562) ───────────────────────────
+        #
+        # `writers`로 지정되지 않은 컨테이너가 자격 증명 volume을 mount할 때는
+        # readOnly여야 한다. 소비자가 쓰기로 mount하면 자기 token 파일을 덮어써
+        # 발급 경로를 우회할 수 있고, 사후 조사에서 어떤 token이 쓰였는지도 확정할
+        # 수 없다. private key는 `writers`가 비어 있어 모든 mount가 readOnly가 된다.
+        [
+          for pair in flatten([
+            for component, contract in local.experiment_job_contracts : [
+              for volume, holders in contract.credential_mounts : {
+                component = component
+                volume    = volume
+                writers   = holders.writers
+              }
+            ]
+            ]) : {
+            expression = join("", [
+              "variables.component != '${pair.component}' || ",
+              "((has(object.spec.template.spec.initContainers) ? object.spec.template.spec.initContainers : []) + object.spec.template.spec.containers)",
+              ".all(c, c.name in ${jsonencode(pair.writers)} || !has(c.volumeMounts) || ",
+              "c.volumeMounts.all(m, m.name != '${pair.volume}' || (has(m.readOnly) && m.readOnly == true)))",
+            ])
+            message = "${pair.component} Job에서 ${pair.volume} volume은 ${length(pair.writers) == 0 ? "모든 컨테이너가" : "${join(", ", pair.writers)} 외 컨테이너가"} readOnly로만 mount해야 합니다."
           }
         ],
       )

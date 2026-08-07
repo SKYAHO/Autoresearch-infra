@@ -61,10 +61,18 @@ locals {
   # 한 종류만 통과시키도록 이름을 하드코딩하고 있었고, Phase 2 executor처럼
   # 형태가 다른 Job이 필요해질 때마다 정책 전체를 다시 쓰게 되기 때문이다.
   #
-  # `credential_mounts`는 "이 volume을 mount할 수 있는 컨테이너 이름"이다.
-  # 목록에 없는 컨테이너는 init/app 구분 없이 mount가 거부된다. 이 방향이
-  # 중요하다 — "모든 initContainer가 키를 mount해야 한다"는 형태로 쓰면
+  # `credential_mounts`는 "이 volume을 mount할 수 있는 컨테이너"를 `readers`(읽기
+  # 전용)와 `writers`(쓰기 허용)로 나눠 선언한다. 목록에 없는 컨테이너는 init/app
+  # 구분 없이 mount가 거부되고, `readers`는 `readOnly: true`가 아니면 거부된다.
+  #
+  # 이 방향이 중요하다 — "모든 initContainer가 키를 mount해야 한다"는 형태로 쓰면
   # initContainer가 늘어나는 순간 그 새 컨테이너에도 키를 넣으라는 요구가 된다.
+  # 그 문장은 initContainer가 minter 하나로 고정돼 있을 때만 의도대로 동작했다.
+  #
+  # `writers`를 따로 두는 이유는 token volume 때문이다. token을 발급하는
+  # 컨테이너는 그 volume에 써야 하고, 소비하는 컨테이너는 읽기만 해야 한다.
+  # 소비자가 쓰기로 mount하면 자기 token 파일을 덮어써 발급 경로를 우회할 수 있고
+  # 사후 조사에서 어떤 token이 쓰였는지도 확정할 수 없다.
   experiment_job_contracts = {
     (local.experiment_branch_bootstrap_component_label) = {
       init_containers = [local.experiment_branch_bootstrap_init_container]
@@ -74,13 +82,14 @@ locals {
         local.experiment_branch_token_volume,
       ]
       credential_mounts = {
-        (local.experiment_branch_writer_key_volume) = [
-          local.experiment_branch_bootstrap_init_container,
-        ]
-        (local.experiment_branch_token_volume) = [
-          local.experiment_branch_bootstrap_init_container,
-          local.experiment_branch_bootstrap_app_container,
-        ]
+        (local.experiment_branch_writer_key_volume) = {
+          readers = [local.experiment_branch_bootstrap_init_container]
+          writers = []
+        }
+        (local.experiment_branch_token_volume) = {
+          readers = [local.experiment_branch_bootstrap_app_container]
+          writers = [local.experiment_branch_bootstrap_init_container]
+        }
       }
     }
   }

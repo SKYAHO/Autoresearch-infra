@@ -69,6 +69,50 @@ run "branch_bootstrap_contract_is_preserved" {
   }
 }
 
+run "private_key_rule_is_an_allowlist_not_a_requirement" {
+  command = plan
+
+  # "모든 initContainer가 private key를 mount해야 한다"는 형태는 initContainer가
+  # minter 하나로 고정된 조건에서만 의도대로 동작한다. initContainer가 늘어나면
+  # 같은 문장이 "그 새 컨테이너에도 개인키를 넣어야 한다"는 요구가 된다.
+  # 규칙은 반드시 "지정된 컨테이너만 mount할 수 있다" 방향이어야 한다.
+  assert {
+    condition = alltrue([
+      for validation in kubernetes_manifest.experiment_job_admission_policy.manifest.spec.validations :
+      !strcontains(
+        validation.expression,
+        "initContainers.all(c, has(c.volumeMounts) && c.volumeMounts.exists_one(m, m.name == 'github-app-private-key'"
+      )
+    ])
+    error_message = "private key 규칙이 '모든 initContainer가 mount' 형태로 남으면 컨테이너가 늘 때 개인키를 넣으라는 요구가 된다."
+  }
+
+  # 선언된 모든 자격 증명 volume에 대해 마운트 주체를 제한하는 규칙이 생성되어야
+  # 한다. 하나라도 빠지면 그 volume은 아무 컨테이너나 mount할 수 있다.
+  assert {
+    condition = alltrue(flatten([
+      for component, contract in local.experiment_job_contracts : [
+        for volume in keys(contract.credential_mounts) :
+        anytrue([
+          for validation in kubernetes_manifest.experiment_job_admission_policy.manifest.spec.validations :
+          strcontains(validation.expression, "m.name != '${volume}'") &&
+          strcontains(validation.expression, "'${component}'")
+        ])
+      ]
+    ]))
+    error_message = "선언된 모든 자격 증명 volume에 마운트 주체 제한 규칙이 생성되어야 한다."
+  }
+
+  # private key는 허용된 컨테이너라도 readOnly로만 mount할 수 있어야 한다.
+  assert {
+    condition = anytrue([
+      for validation in kubernetes_manifest.experiment_job_admission_policy.manifest.spec.validations :
+      strcontains(validation.expression, "m.name != 'github-app-private-key' || (has(m.readOnly) && m.readOnly == true)")
+    ])
+    error_message = "private key는 readOnly mount만 허용해야 한다."
+  }
+}
+
 run "policy_covers_every_declared_contract" {
   command = plan
 
