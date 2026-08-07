@@ -110,6 +110,39 @@ module ExperimentLauncherManifestContractTest
       end
     end
 
+    # (#566) 승격이 일부 manifest만 갱신하면 서로 다른 커밋의 이미지가 한 배포에
+    # 섞인다. fixture는 launcher-cronjob.yaml 하나만 복사하므로, 같은 이미지를
+    # 다른 digest로 참조하는 manifest를 하나 더 놓아 검사를 실행시킨다.
+    expect_failure("같은 이미지의 digest 불일치") do |root|
+      manifest_directory = File.join(root, "deploy", "agent-orchestration")
+      launcher = YAML.load_stream(
+        File.read(File.join(manifest_directory, "launcher-cronjob.yaml"))
+      ).compact.find { |document| document["kind"] == "CronJob" }
+      bootstrap_image = launcher.dig(
+        "spec", "jobTemplate", "spec", "template", "spec", "initContainers", 0, "image"
+      )
+      repository = bootstrap_image.split("@", 2).fetch(0)
+
+      File.write(
+        File.join(manifest_directory, "zz-stale-digest.yaml"),
+        {
+          "apiVersion" => "apps/v1",
+          "kind" => "Deployment",
+          "metadata" => { "name" => "stale" },
+          "spec" => {
+            "template" => {
+              "spec" => {
+                "containers" => [{
+                  "name" => "stale",
+                  "image" => "#{repository}@sha256:#{'0' * 64}"
+                }]
+              }
+            }
+          }
+        }.to_yaml
+      )
+    end
+
     expect_failure("환경 카탈로그 services CIDR drift") do |root|
       environment_path = File.join(
         root,

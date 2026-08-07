@@ -56,6 +56,56 @@ module ExperimentLauncherManifestContract
       cron_job.dig("spec", "jobTemplate", "spec", "template"),
       YAML.safe_load(File.read(environment_path))
     )
+    check_image_digest_consistency!(File.dirname(manifest_path))
+  end
+
+  # (#566) 같은 애플리케이션 이미지를 여러 manifest가 참조하는데, 승격에서 일부만
+  # 갱신되면 서로 다른 커밋의 이미지가 한 배포에 섞인다. #562에서 실제로 발생했다 —
+  # launcher만 갱신하고 api-migration-job(ArgoCD PreSync hook)을 놓쳐, 마이그레이션이
+  # 옛 이미지로 실행되면서 새 launcher가 없는 컬럼을 조회해 매분 죽었다.
+  #
+  # 이 검사는 "어느 digest가 옳은가"를 알지 못한다. `deploy/agent-orchestration/`의
+  # 모든 manifest에서 같은 이미지 이름이 같은 digest를 가리키는지만 본다. 정본
+  # digest는 위 check_cron_job!의 기대값이 고정한다.
+  def check_image_digest_consistency!(manifest_directory)
+    digests = Hash.new { |store, key| store[key] = {} }
+
+    Dir.glob(File.join(manifest_directory, "*.yaml")).sort.each do |path|
+      YAML.load_stream(File.read(path)).compact.each do |document|
+        collect_images(document).each do |image|
+          repository, digest = image.split("@", 2)
+          next if digest.nil?
+
+          digests[repository][digest] ||= []
+          digests[repository][digest] << File.basename(path)
+        end
+      end
+    end
+
+    digests.each do |repository, by_digest|
+      next if by_digest.size <= 1
+
+      detail = by_digest.map do |digest, files|
+        "#{digest[0, 19]}… → #{files.uniq.sort.join(', ')}"
+      end
+      raise ContractError,
+            "#{File.basename(repository)} 이미지가 manifest마다 다른 digest를 " \
+            "가리킵니다(#{detail.join(' / ')}). 승격은 참조 전체를 함께 갱신합니다."
+    end
+  end
+
+  # container·initContainer 어디에 있든 image 필드를 모은다. Job/CronJob/Deployment의
+  # podSpec 깊이가 달라 구조를 가정하지 않고 재귀로 훑는다.
+  def collect_images(node)
+    case node
+    when Hash
+      images = node["image"].is_a?(String) ? [node["image"]] : []
+      images + node.values.flat_map { |value| collect_images(value) }
+    when Array
+      node.flat_map { |value| collect_images(value) }
+    else
+      []
+    end
   end
 
   def check_cron_job!(cron_job)
