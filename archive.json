@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T10:10:25Z",
+  "generated_at": "2026-08-07T12:09:53Z",
   "reports": [
+    {
+      "number": 586,
+      "title": "fix: Phase 2 executor digest를 승격한다",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T12:09:39Z",
+      "summary_ko": [
+        "Phase 2 구현 지시 계약 수정이 반영된 검증 완료 executor 컨테이너 이미지 digest를 승격했습니다.",
+        "매니페스트 계약 검증 스크립트의 기대 executor 이미지 식별자를 동일하게 갱신했습니다.",
+        "운영 런북 문서에 소스 커밋 SHA, 빌드 실행 번호 및 직전 롤백용 이미지 식별자 정보를 추가했습니다."
+      ],
+      "report_url": "pr/586/"
+    },
     {
       "number": 588,
       "title": "feat: Agent Orchestration digest 승격 계약 추가",
