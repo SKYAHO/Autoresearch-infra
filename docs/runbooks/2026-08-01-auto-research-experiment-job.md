@@ -31,7 +31,17 @@ terraform -chdir=terraform/admin/autoresearch-k8s plan -var-file=terraform.tfvar
 | Job KSA | `experiment-job` |
 | GSA | `autoresearch-dev-exp-job@<project>.iam.gserviceaccount.com` |
 | 결과 버킷 | `<project>-autoresearch-dev-experiment-results` |
-| 결과 권한 | Job GSA `roles/storage.objectCreator`, 상태 API GSA `roles/storage.objectViewer` |
+| 결과 권한 | Job GSA `roles/storage.objectCreator` + `roles/storage.objectViewer`, 상태 API GSA `roles/storage.objectViewer` |
+
+Job이 읽는 학습 입력은 같은 전용 버킷의 아래 사전 게시 객체다.
+
+```text
+gs://<project>-autoresearch-dev-experiment-results/training-snapshots/by-hash/<sha256>/training_dataset.csv
+gs://<project>-autoresearch-dev-experiment-results/training-snapshots/by-hash/<sha256>/snapshot_manifest.json
+```
+
+실험 결과 버킷은 다른 용도의 객체를 담지 않으므로 Job GSA의 viewer는 bucket-level로
+관리한다. 프로젝트 수준 권한, `objectAdmin`, 삭제 권한은 없다.
 
 Job 생성 권한은 고정 템플릿, 허용 image digest, admission 검증, batch-od
 용량 계획, NetworkPolicy sync 재확인, negative dry-run 4종 재실행까지 선행 조건이
@@ -127,9 +137,9 @@ versioning은 운영자 복구·정정으로 생긴 이전 generation의 명시�
 
 GKE Workload Identity에서 컨테이너의 ADC/GCS client는 GKE metadata server에 token을
 요청한다. metadata server는 호출 Pod의 source identity, `experiment-job` KSA annotation,
-GSA의 `roles/iam.workloadIdentityUser` binding을 사용해 결과 버킷 쓰기용 GCP access
-token을 발급한다. Kubernetes API token mount는 이 교환에 필요하지 않으므로 이 KSA는
-명시적으로 `false`다.
+GSA의 `roles/iam.workloadIdentityUser` binding을 사용해 결과 버킷 객체 생성·게시
+snapshot 읽기용 GCP access token을 발급한다. Kubernetes API token mount는 이 교환에
+필요하지 않으므로 이 KSA는 명시적으로 `false`다.
 
 저신뢰 에이전트가 Kubernetes 리소스 조회·수정, Secret 조회, exec, cluster 권한
 상승을 할 수 없는 근거는 서로 독립적인 세 겹이다. KSA에 설정한
@@ -147,21 +157,36 @@ token을 발급한다. Kubernetes API token mount는 이 교환에 필요하지 
    (`experiment-job-observer`는 API KSA에 바인딩된다). 도달하더라도 부여된 권한이
    없다.
 
-GCP 측에서도 결과 버킷 새 객체 생성 외 권한은 없다. 실제로 열려 있는 자격은
-metadata server(egress 허용 대상)를 통한 GSA token이며, 그 권한 범위가 이 워크로드의
-실질 신뢰 경계다.
+GCP 측에서도 결과 버킷 객체 생성과 게시 snapshot 읽기 외 권한은 없다. 실제로 열려
+있는 자격은 metadata server(egress 허용 대상)를 통한 GSA token이며, 그 권한 범위가
+이 워크로드의 실질 신뢰 경계다.
+
+### 학습 snapshot IAM 적용 후 확인
+
+Terraform apply 뒤에는 viewer가 대상 버킷에 붙었는지와 알려진 manifest를 읽을 수
+있는지를 확인한다. 아래 명령은 apply 권한을 부여하지 않는다.
+
+```bash
+gcloud storage buckets get-iam-policy \
+  gs://<project>-autoresearch-dev-experiment-results --format=json
+
+gsutil cat gs://<project>-autoresearch-dev-experiment-results/training-snapshots/by-hash/<sha256>/snapshot_manifest.json
+```
+
+권한 문제로 학습이 실패하면 launcher CronJob을 먼저 suspend하고, 승인된 Terraform
+revert로 viewer binding과 snapshot root 좌표를 되돌린다. 버킷·GSA·KSA는 삭제하지 않는다.
 
 Job 템플릿이 KSA를 누락하면 Kubernetes의 `default` KSA token mount 기본값을 따를 수
 있지만, 이 namespace에서는 ValidatingAdmissionPolicy가 해당 Job을 admission에서 거부한다.
 또한 default KSA에는 RoleBinding이 없고 namespace egress 정책은 Kubernetes API HTTPS를
 허용하지 않아, RBAC와 NetworkPolicy가 추가 방어층으로 남는다.
 
-`roles/storage.objectCreator`만 가진 Job은 업로드한 객체를 다시 GET/list하거나
-무결성 검증을 위해 읽을 수 없다. 업로드 요청은 `ifGenerationMatch=0` precondition과
+`experiment-job` GSA는 결과 버킷에서 객체를 만들고 게시 snapshot을 읽을 수 있지만
+삭제·overwrite 권한은 없다. 업로드 요청은 `ifGenerationMatch=0` precondition과
 응답의 generation/checksum으로 성공 여부를 확인한다. 같은 경로가 이미 있으면 GCS는
 새 generation을 만들지 않고 HTTP 412를 반환하므로 재시도하지 않는다. IAM 거부는 HTTP
-403이며 구성·권한 오류로 분류한다. 상태 API GSA만 bucket-scoped `objectViewer`로 결과를
-읽고 응답을 인증·감사하며, 사용자에게 버킷 IAM이나 공개 URL을 직접 부여하지 않는다.
+403이며 구성·권한 오류로 분류한다. 상태 API GSA는 같은 bucket-scoped `objectViewer`로
+결과를 읽고 응답을 인증·감사하며, 사용자에게 버킷 IAM이나 공개 URL을 직접 부여하지 않는다.
 
 ## 적용 후 권한 검증
 

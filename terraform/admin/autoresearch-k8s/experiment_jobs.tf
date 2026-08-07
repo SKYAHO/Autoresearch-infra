@@ -701,7 +701,8 @@ resource "kubernetes_network_policy_v1" "experiment_jobs_egress" {
 # 예외적으로 이 cluster의 GKE DNS 엔드포인트는 공개 주소라(gke.tf의
 # allow_external_traffic=true) 이 규칙의 대상에 들어온다. 실제 도달에는
 # container.clusters.connect IAM이 필요하고 이 Pod의 GSA(-exp-job)는 결과 버킷
-# objectCreator와 자기 Workload Identity 외에 아무 권한이 없어 접근할 수 없다.
+# objectCreator·objectViewer와 자기 Workload Identity 외에 아무 권한이 없어
+# GKE endpoint에 접근할 수 없다.
 # 공개 IP 엔드포인트 쪽은 master authorized networks가 비어 있어 별도로 막힌다.
 # 같은 판단이 API Pod 정책(#525)에도 기록돼 있다.
 resource "kubernetes_network_policy_v1" "experiment_jobs_branch_bootstrap_egress" {

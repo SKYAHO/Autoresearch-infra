@@ -3,6 +3,20 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-08: 실험 결과 버킷의 학습 snapshot read 좌표 정정 (#589)
+
+- live 확인에서 학습 snapshot 두 객체가
+  `autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/`
+  아래에 게시된 것을 확인했다. `experiment-job` GSA에는 이 버킷의
+  `roles/storage.objectViewer`를 bucket-level로 추가하고 기존 `objectCreator`는 유지한다.
+- 버킷은 실험 전용이므로 IAM Condition으로 prefix를 제한하지 않았다. 프로젝트 IAM,
+  `objectAdmin`, 삭제 권한은 추가하지 않는다.
+- 이전 #577의 MLflow artifact bucket viewer 선언은 live에 적용되지 않았고 실제 snapshot
+  좌표와 달랐으므로 제거했다. `experiment_job_execution_contract` output도
+  `experiment-results/training-snapshots/`를 가리키도록 정정했다.
+- Terraform 코드·문서만 반영하며 실제 GCP apply와 Pod 읽기 검증은 승인된 운영 절차에서
+  수행한다. 롤백은 viewer binding과 좌표를 Terraform revert로 되돌린다.
+
 ## 2026-08-07: 실험 Job에 canonical 학습 스냅샷 read 부여와 prefix 정정 (#577)
 
 - `experiment-job` GSA에 `mlflow_artifacts` 버킷의 `training-snapshots/` prefix

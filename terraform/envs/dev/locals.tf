@@ -65,8 +65,9 @@ locals {
   # #539 실험 브랜치 Job launcher. `-orch-launcher`는 account_id 상한 30자를 정확히
   # 채워 여유가 없으므로 `-orch-launch`로 줄인다(28자).
   agent_orchestration_launcher_sa_name = "${local.resource_prefix}-orch-launch"
-  # 실험 Job은 API·Codex Runner와 다른 GSA를 사용한다. 결과 버킷 object 생성만
-  # 허용하고 Secret Manager·Cloud SQL·Kubernetes API 권한은 부여하지 않는다.
+  # 실험 Job은 API·Codex Runner와 다른 GSA를 사용한다. 결과 버킷 object 생성과
+  # 게시된 학습 snapshot 읽기만 허용하고 Secret Manager·Cloud SQL·Kubernetes API
+  # 권한은 부여하지 않는다.
   experiment_job_sa_name         = "${local.resource_prefix}-exp-job"
   experiment_results_bucket_name = "${var.project_id}-${local.resource_prefix}-experiment-results"
   # #226: 앱팀이 수동 생성한 기존 버킷명(${project_id}-${name_prefix}-mlflow-artifacts)을
