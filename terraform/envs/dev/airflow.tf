@@ -333,6 +333,32 @@ resource "google_storage_bucket_iam_member" "airflow_batch_mlflow_training_snaps
   }
 }
 
+# #577 실험 executor Job이 학습 입력으로 같은 canonical 스냅샷을 읽는다.
+#
+# #464가 이 스토어를 만든 동기에 "seed sweep이나 baseline/challenger 학습을 반복하면
+# 동일 CSV가 각 MLflow run artifact에 중복 저장된다"가 들어 있다. 실험 파이프라인이
+# 바로 그 baseline/challenger 반복이므로, 별도 스토어를 만들지 않고 여기를 읽는다
+# (#464 작업 범위: "새 중복 버킷은 만들지 않는다").
+#
+# 위 airflow_batch 바인딩과 같은 조건식을 쓴다 — bucket-wide artifact 권한을 실험
+# 파드에 상속하지 않고 스냅샷 prefix로만 한정한다. **read만 부여한다**: 게시는
+# airflow_batch의 objectCreator가 담당하고, 실험 Job은 입력을 소비만 한다.
+#
+# 조건부 IAM은 object 단위로 평가되므로 objects.get은 prefix로 좁혀지지만
+# objects.list는 bucket resource에 대해 평가돼 조건이 성립하지 않는다. 즉 목록 조회는
+# 되지 않는데, 애플리케이션이 content-addressed 경로를 직접 지정해 읽으므로 문제없다.
+resource "google_storage_bucket_iam_member" "experiment_job_mlflow_training_snapshot_viewer" {
+  bucket = google_storage_bucket.mlflow_artifacts.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.experiment_job.email}"
+
+  condition {
+    title       = "training-snapshot-prefix-read-experiment-job"
+    description = "Allow experiment executor Jobs to read published training snapshots only."
+    expression  = "resource.name.startsWith('projects/_/buckets/${google_storage_bucket.mlflow_artifacts.name}/objects/${local.mlflow_training_snapshot_prefix}')"
+  }
+}
+
 # Feast registry/staging은 registry 갱신과 임시 staging 파일 처리에 객체 변경이 필요하다.
 # 프로젝트 전체가 아니라 bucket 단위 권한으로 제한한다.
 resource "google_storage_bucket_iam_member" "airflow_feast_registry_admin" {

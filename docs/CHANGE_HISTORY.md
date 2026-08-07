@@ -3,6 +3,25 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-07: 실험 Job에 canonical 학습 스냅샷 read 부여와 prefix 정정 (#577)
+
+- `experiment-job` GSA에 `mlflow_artifacts` 버킷의 `training-snapshots/` prefix
+  `objectViewer`를 조건부로 부여했다. `#464`가 만든 canonical store를 그대로 쓰며 **새
+  스토어를 만들지 않았다** — `#464` 작업 범위가 "새 중복 버킷은 만들지 않는다"를
+  명시하고, 그 이슈의 동기에 "seed sweep이나 baseline/challenger 학습 반복"이 들어 있어
+  실험 파이프라인이 이 store의 의도된 소비자다.
+- **read만 부여했다.** 게시는 `airflow_batch`의 `objectCreator`(create만, overwrite
+  불가)가 계속 담당한다. 실험 Job용 게시 principal을 따로 만들면 학습 데이터에 대한
+  write 경계가 하나 더 늘어난다.
+- 첫 시도(`PR #578`)는 `code_artifacts` 버킷에 별도 스냅샷 자리를 만들려 했으나 위
+  `#464` 계약과 충돌해 닫았다. 리뷰에서 중복이 지적됐고, `locals.tf`의 prefix 상수와 IAM
+  바인딩 목록을 확인하지 않고 버킷 정의만 본 것이 원인이었다.
+- **canonical prefix를 `sha256=<hex>/`에서 `by-hash/<hex>/`로 정정했다.** 이 저장소
+  문서(설계 spec·MLflow 운영 런북)와 애플리케이션 구현이 어긋나 있었는데, 버킷이 비어
+  있어(객체 0개) 실물로 판단할 수 없었다. `by-hash/`가 앱 저장소 10개 파일에 이미 계약으로
+  퍼져 있고 `sha256=`는 이 저장소 문서 3곳에만 있어 애플리케이션 구현을 정본으로 택했다.
+  아래 2026-07-31 항목은 그 시점의 기록이므로 고치지 않았다.
+
 ## 2026-08-07: 실험 Job 어드미션 계약 일반화와 Phase 2 executor 경계 (#562)
 
 - 어드미션 계약을 Job 종류별(`app.kubernetes.io/component`) 계약으로 일반화하고
@@ -184,6 +203,17 @@
 - prune·self-heal은 계속 비활성화하고, enabled=false는 존재하지 않는 ref를 유지하는
   비상 차단 스위치다. 이후 배포 manifest는 기존 PR·CI 검토 후 main merge로 반영하며,
   rollback은 이전 manifest commit을 main에 반영해 ArgoCD sync 상태를 확인한다.
+
+## 2026-08-07: Agent Orchestration release digest 자동 승격 (#587)
+
+- 검증된 Autoresearch release가 API 일곱 참조와 UI 한 참조를 immutable digest로만
+  갱신하도록 저장소 소유 승격 script와 self-test를 추가했다. 고정 GAR repository,
+  digest 형식, 참조 수, 기존 API digest 정합이 맞지 않으면 commit 전에 실패한다.
+- release GitHub App은 infra 단일 저장소 Contents read/write와 `main` Ruleset의
+  App 전용 bypass actor로 제한한다. 사람과 일반 token의 `main` 직접 push 금지는
+  유지하며, ArgoCD automated sync와 PostSync 검증 결과로 배포를 확인한다.
+- 최초 설정, 일상 확인, 실패 및 rollback 절차는
+  `docs/AGENT_ORCHESTRATION_DIGEST_PROMOTION_RUNBOOK.md`에 기록했다.
 
 ## 2026-08-07: Agent Orchestration PostSync 배포 검증 (#574)
 
