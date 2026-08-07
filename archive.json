@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T09:47:24Z",
+  "generated_at": "2026-08-07T10:10:25Z",
   "reports": [
+    {
+      "number": 588,
+      "title": "feat: Agent Orchestration digest 승격 계약 추가",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-07T10:10:06Z",
+      "summary_ko": [
+        "검증된 Agent Orchestration API 및 UI release digest를 main 브랜치 매니페스트에 자동 반영하는 승격 스크립트를 추가하였습니다.",
+        "고정 GAR 레포지토리, sha256 digest 형식, 참조 수 및 API digest 일치 여부를 검증하는 self-test를 CI lint에 연결하였습니다.",
+        "GitHub App 최소 권한 및 Ruleset bypass 설정, ArgoCD 연동 및 긴급 롤백 가이드를 다루는 운영 룬북과 문서를 새로 작성하였습니다."
+      ],
+      "report_url": "pr/588/"
+    },
     {
       "number": 584,
       "title": "feat: 실험 Job GSA에 canonical 학습 스냅샷 read를 부여한다 (#577)",
