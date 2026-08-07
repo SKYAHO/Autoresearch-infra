@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T17:09:31Z",
+  "generated_at": "2026-08-07T17:10:51Z",
   "reports": [
+    {
+      "number": 592,
+      "title": "feat: v0.9.0 학습 executor 배선 활성화",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T17:09:14Z",
+      "summary_ko": [
+        "dev 환경의 agent-orchestration launcher 및 executor 이미지 digest를 v0.9.0 버전으로 교체했습니다.",
+        "학습 snapshot URI와 필수 timeout 환경변수를 매니페스트에 배선하여 실제 모델 학습 및 ROC-AUC 평가가 가능하도록 설정했습니다.",
+        "정적 검사 스크립트에 v0.9.0 필수 환경변수 검증 및 구식 dataset path 재유입 차단 규칙을 추가하고 운영 문서를 업데이트했습니다."
+      ],
+      "report_url": "pr/592/"
+    },
     {
       "number": 590,
       "title": "feat: 실험 Job GSA에 실험 스냅샷 버킷 read 권한 추가",
