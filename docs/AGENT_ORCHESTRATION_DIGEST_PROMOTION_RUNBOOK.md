@@ -17,8 +17,8 @@
   기록하지 않습니다.
 - `main-protection` Ruleset bypass actor에는 이 GitHub App만 등록합니다. 사람,
   `GITHUB_TOKEN`, 개인 access token은 직접 push할 수 없어야 합니다.
-- infra 저장소의 `scripts/promote-agent-orchestration-digests.rb`는 API 일곱
-  참조와 UI 한 참조만 허용하며, 고정 GAR repository와
+- infra 저장소의 `scripts/promote-agent-orchestration-digests.rb`는 API 일곱,
+  UI·launcher·runner 각 한 참조만 허용하며, 고정 GAR repository와
   `@sha256:<64자리-소문자-hex>` 형식이 아닌 입력은 실패시킵니다.
 
 ## 최초 설정
@@ -27,13 +27,22 @@
    권한만 허용합니다.
 2. App의 ID와 private key를 `SKYAHO/Autoresearch` repository secret으로
    등록합니다. secret 값의 화면 캡처·CLI 출력·문서 기록은 금지합니다.
-3. GitHub 관리자만 `main-protection` Ruleset의 bypass actor에 해당 GitHub App을
+3. **Autoresearch release workflow 호출부가 merge된 뒤에만**, GitHub 관리자만
+   `main-protection` Ruleset의 bypass actor에 해당 GitHub App을
    추가합니다. bypass는 `Autoresearch-infra`의 release digest 갱신에만
    사용하며, 다른 App·사용자·token은 추가하지 않습니다.
 4. `Autoresearch` release workflow의 자동 승격 Job을 활성화합니다.
 5. 검증된 release 한 건으로 실행한 뒤, infra commit의 변경 파일이
    `deploy/agent-orchestration/`의 허용 manifest 여섯 개뿐인지, ArgoCD sync와
-   PostSync Job이 성공했는지 확인합니다.
+  PostSync Job이 성공했는지 확인합니다.
+
+## 신뢰 경계의 한계
+
+infra script는 호출될 때만 manifest 범위를 강제합니다. App token은 Contents
+write와 `main` bypass를 가지므로 실질적인 신뢰 경계는 `Autoresearch`의 release
+workflow 변경 권한과 release 게시 승인입니다. 해당 workflow 파일은 CODEOWNERS
+승인으로 보호하고, App key를 읽을 수 있는 workflow·secret 접근자를 최소화해야
+합니다.
 
 ## 일상 확인
 
