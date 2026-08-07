@@ -137,7 +137,7 @@ ArgoCD=앱" 책임 분리를 실제로 구현한다. **monitoring을 첫 파일�
 | airflow (#17) | 보류 | 2026-07-14 결정 보류 — #189(현행 CI 배포)와 방향 상충 |
 | mlflow (#91~#95) | ✅ 완료(운영 중) | 신규 배포(adopt 아님). `deploy/mlflow` **plain 매니페스트**(Deployment/Service/oauth2-proxy/PodMonitor) + `mlflow-k8s` root(ns/KSA/NP), ArgoCD Application automated sync(#460, prune·selfHeal 없음). 이미지=앱 Dockerfile을 인프라 Cloud Build로 GAR 빌드. DB host/비번은 operator 주입 Secret |
 | serving (#302) | ✅ 완료(운영 중) | 신규 배포(adopt 아님). `deploy/serving` **plain 매니페스트**(Deployment/Service/ServiceMonitor) + `autoresearch-k8s` root(ns/KSA/NP), ArgoCD Application automated sync(#460, prune·selfHeal 없음). 이미지=앱 저장소 release.yml이 GAR에 push한 digest. Redis endpoint는 operator 주입 Secret |
-| agent-orchestration (#453) | ✅ 배포 준비(수동 sync) | `deploy/agent-orchestration` 매니페스트 + `autoresearch-k8s` root(ns/KSA/NP). digest·DB 권한 검증 전까지 manual sync와 비활성 ref를 유지한다. |
+| agent-orchestration (#453) | ✅ 완료(운영 중) | `deploy/agent-orchestration` 매니페스트 + `autoresearch-k8s` root(ns/KSA/NP). digest·DB 권한 검증 완료 후 #465/#525에서 automated sync(prune·selfHeal 없음)로 전환, `targetRevision=main` 추적 중(실측 확인). |
 | vault | 드랍(#412) | 2026-07 Secret Manager로 충분 판단 — ArgoCD 이관 대상 아님 |
 | argocd 자체 | 보류 | 부트스트랩(설치)은 Terraform 유지가 표준 |
 
