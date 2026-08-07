@@ -17,9 +17,12 @@ module ExperimentLauncherManifestContractTest
       catalog_directory = File.join(root, "config", "environments", "dev")
       FileUtils.mkdir_p(manifest_directory)
       FileUtils.mkdir_p(catalog_directory)
+      # (#566/#575) digest 일관성·API token 검사가 디렉터리 전체를 보므로 fixture도
+      # 전체를 복사한다. launcher manifest 하나만 두면 두 검사가 fixture마다 무조건
+      # 실패해, 아래 expect_failure들이 의도한 mutation이 아닌 이유로 통과한다.
       FileUtils.cp(
-        ExperimentLauncherManifestContract::MANIFEST_PATH,
-        File.join(manifest_directory, "launcher-cronjob.yaml")
+        Dir.glob(File.join(File.dirname(ExperimentLauncherManifestContract::MANIFEST_PATH), "*.yaml")),
+        manifest_directory
       )
       FileUtils.cp(
         ExperimentLauncherManifestContract::ENVIRONMENT_PATH,
@@ -44,6 +47,16 @@ module ExperimentLauncherManifestContractTest
       manifest_path,
       documents.map(&:to_yaml).join("---\n")
     )
+  end
+
+  def mutate_api_deployment(root)
+    path = File.join(root, "deploy", "agent-orchestration", "api-deployment.yaml")
+    documents = YAML.load_stream(File.read(path)).compact
+    deployment = documents.find { |document| document["kind"] == "Deployment" }
+    raise "fixture API Deployment가 없습니다" unless deployment
+
+    yield deployment
+    File.write(path, documents.map(&:to_yaml).join("---\n"))
   end
 
   def expect_failure(label)
@@ -141,6 +154,25 @@ module ExperimentLauncherManifestContractTest
           }
         }.to_yaml
       )
+    end
+
+    # (#575) 이 참조가 없으면 새 API image가 startup에서 죽는데, Service는 직전
+    # Pod를 Ready로 유지해 배포가 성공한 것처럼 보인다. 정적으로 잡아야 한다.
+    expect_failure("API의 ORCH_EXECUTOR_API_TOKEN 참조 삭제") do |root|
+      mutate_api_deployment(root) do |deployment|
+        deployment.dig("spec", "template", "spec", "containers").each do |container|
+          container["env"]&.reject! { |item| item["name"] == "ORCH_EXECUTOR_API_TOKEN" }
+        end
+      end
+    end
+
+    expect_failure("API의 executor token Secret key 변경") do |root|
+      mutate_api_deployment(root) do |deployment|
+        entry = deployment.dig("spec", "template", "spec", "containers")
+          .flat_map { |container| container["env"] || [] }
+          .find { |item| item["name"] == "ORCH_EXECUTOR_API_TOKEN" }
+        entry.dig("valueFrom", "secretKeyRef")["key"] = "ORCH_EXECUTOR_API_TOKEN"
+      end
     end
 
     expect_failure("환경 카탈로그 services CIDR drift") do |root|

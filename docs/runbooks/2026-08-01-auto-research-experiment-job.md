@@ -502,6 +502,96 @@ done
 `ORCH_CODEX_HOME_SECRET_NAME`·`ORCH_EXECUTOR_API_TOKEN_SECRET_NAME` 양쪽이 같은
 값을 갖는다. 셋 중 하나만 바꾸면 **모든 executor Job이 거부된다.**
 
+#### executor API token의 API namespace 사본 (#575)
+
+candidate 보고 인증은 **양쪽이 같은 token을 가져야** 성립한다.
+
+| 주체 | namespace | 읽는 방식 |
+|---|---|---|
+| 발신 `candidate-finalizer` | `autoresearch-experiments` | volume mount → `/var/run/executor-api-token/token` |
+| 수신 API Pod | `autoresearch` | env `ORCH_EXECUTOR_API_TOKEN` (단일 key `secretKeyRef`) |
+
+Kubernetes Secret은 namespace-scoped라 한 객체를 두 Pod가 공유할 수 없다. **같은
+payload를 가진 Secret이 두 namespace에 각각 하나씩** 있어야 한다.
+
+새 API image는 이 값을 필수로 읽는다. 없으면 Pod가 startup에서
+`ValueError: Required environment variable 'ORCH_EXECUTOR_API_TOKEN' is not set.`
+로 죽고 `CrashLoopBackOff`에 머문다. 이때 Service는 **직전 이미지의 Pod를 Ready로
+유지**하므로 배포가 성공한 것처럼 보인다 — candidate endpoint만 조용히 없다.
+
+이미 executor namespace에 등록돼 있다면, 값을 화면에 띄우지 않고 그대로 복제한다.
+
+```bash
+set -eu
+umask 077
+
+kubectl -n autoresearch-experiments get secret \
+  autoresearch-experiment-executor-api-token \
+  -o jsonpath='{.data.token}' \
+| base64 -d \
+| kubectl -n autoresearch create secret generic \
+    autoresearch-experiment-executor-api-token \
+    --from-file=token=/dev/stdin \
+    --dry-run=client -o yaml \
+| kubectl apply -f -
+```
+
+파이프로만 흘려보내므로 token이 셸 히스토리·터미널·파일에 남지 않는다.
+
+#### 토큰 값 요건
+
+애플리케이션이 startup에서 세 조건을 강제한다(`app/config.py`). 어기면 API가
+`ValueError`로 죽는다.
+
+| 조건 | 위반 시 |
+|---|---|
+| **32자 이상** | `must be at least 32 characters long` |
+| `ORCH_API_TOKEN`과 다를 것 | `must differ` |
+| `ORCH_RUNNER_TOKEN`과 다를 것 | `must differ` |
+
+32자는 **디코딩된 값** 기준이다. `-o go-template`의 `{{len $v}}`는 base64
+인코딩 길이를 세므로 그 값으로 판단하면 안 된다(#575에서 실제로 오독해, 20자
+토큰을 28자로 착각하고 요건 충족으로 넘어갔다).
+
+새로 만들 때는 여유 있게 48자를 쓴다.
+
+```bash
+bash -c '
+set -eu
+umask 077
+t=$(openssl rand -base64 64 | tr -d "\n=+/" | cut -c1-48)
+[ ${#t} -ge 32 ] || { echo "토큰 길이 부족"; exit 1; }
+for ns in autoresearch autoresearch-experiments; do
+  printf %s "$t" | kubectl -n "$ns" create secret generic \
+    autoresearch-experiment-executor-api-token \
+    --from-file=token=/dev/stdin --dry-run=client -o yaml | kubectl apply -f -
+done
+unset t
+'
+```
+
+값을 변수에만 담고 파일·화면에 남기지 않는다.
+
+#### 등록 확인
+
+확인은 key 이름과 **디코딩 길이**까지만 한다. **값이나 hash를 출력해 동일성을
+증명하지 않는다** — 로그·PR에 남으면 그 자체가 유출이다.
+
+```bash
+for ns in autoresearch autoresearch-experiments; do
+  printf '%-28s decoded=' "$ns"
+  kubectl -n "$ns" get secret autoresearch-experiment-executor-api-token \
+    -o jsonpath='{.data.token}' | base64 -d | wc -c
+done
+# 기대: 양쪽 모두 같은 값이며 32 이상
+```
+
+길이가 같아도 값이 같다는 증명은 아니다. 실제 일치는 **새 API가 Ready가 되고
+candidate smoke가 401 없이 통과하는 것**으로만 확인된다.
+
+두 사본이 어긋나면 candidate 보고가 401로 실패한다. **회전은 실행 중 Experiment가
+없는 시점에** 양쪽을 함께 갱신하고 API를 재시작한다.
+
 #### 롤아웃 순서
 
 **Secret을 먼저 만들고 그 다음 launcher를 배포한다.** 순서가 뒤집히면 kubelet이
@@ -515,6 +605,37 @@ kubectl -n autoresearch-experiments get events --sort-by=.lastTimestamp | grep F
 
 `subPath` mount는 실행 중 Secret 갱신을 전파하지 않으므로, Secret을 교체해도 이미
 도는 Job에는 적용되지 않는다. 새 Experiment부터 반영된다.
+
+### 운영 smoke 배포 게이트 (#562 / #575)
+
+아래 네 조건이 모두 충족되기 **전에는 Experiment를 등록하지 않는다.** 어느 하나가
+빠져도 실패가 곧바로 드러나지 않고, 3600초 뒤 `DeadlineExceeded`나 401로만 나타나
+원인 판별이 어려워진다.
+
+| # | 게이트 | 확인 |
+|---|---|---|
+| 1 | 두 namespace에 executor token Secret | 위 절차의 key·길이 대조 |
+| 2 | API Deployment의 `ORCH_EXECUTOR_API_TOKEN` `secretKeyRef` | manifest 계약 검사(CI) |
+| 3 | 새 API Pod rollout 완료·Ready | 아래 명령 |
+| 4 | candidate endpoint 노출 | 아래 명령 |
+
+```bash
+# 3 — 새 digest의 Pod만 Ready여야 한다. 옛 digest Pod가 Ready로 남아 있으면
+#     새 Pod가 startup에서 죽고 Service가 옛 Pod로 버티는 상태다.
+kubectl -n autoresearch get pods -l app.kubernetes.io/name=agent-orchestration-api \
+  -o custom-columns='NAME:.metadata.name,READY:.status.containerStatuses[0].ready,\
+RESTARTS:.status.containerStatuses[0].restartCount,IMAGE:.spec.containers[0].image'
+
+# 4 — Service를 거쳐 OpenAPI에 candidate endpoint가 있는지
+kubectl -n autoresearch run openapi-probe --rm -i --restart=Never \
+  --image=curlimages/curl:8.10.1 -- \
+  -s http://agent-orchestration-api.autoresearch.svc.cluster.local:8000/openapi.json \
+| grep -o '/internal/executor/experiments/{experiment_id}/candidate' || echo '❌ candidate endpoint 없음'
+```
+
+3번이 특히 중요하다. 새 Pod가 죽어도 **Service는 직전 이미지 Pod를 Ready로 유지**해
+배포가 성공한 것처럼 보인다. `READY=false`인 Pod가 재시작을 쌓고 있는지 반드시
+본다.
 
 ### Phase 1 ↔ Phase 2 전환과 롤백 (#562)
 
@@ -532,7 +653,8 @@ sync하는 것**이다. 그때 생성되는 Job은 다시 `branch-bootstrap` 형
 | launcher 전환 | image digest를 직전 값으로 되돌리고 ArgoCD sync |
 | 어드미션 계약 | Terraform revert 후 apply. Phase 1 계약이 보존돼 있어 되돌린 launcher가 통과한다 |
 | NetworkPolicy | `experiment-jobs-executor-egress`만 삭제. Phase 1 정책은 손대지 않았다 |
-| Secret 2종 | launcher를 **먼저** 되돌린 뒤 삭제한다. 반대로 하면 진행 중인 Job이 `FailedMount`로 매달린다 |
+| executor namespace Secret 2종 | launcher를 **먼저** 되돌린 뒤 삭제한다. 반대로 하면 진행 중인 Job이 `FailedMount`로 매달린다 |
+| API namespace token 사본 (#575) | API Deployment를 token 비필수 직전 digest로 되돌려 Ready를 확인한 뒤 env 참조와 Secret을 제거한다. 진행 중인 Phase 2 Job이 있으면 그 종료 결과를 먼저 확정한다 |
 
 어드미션 계약 변경은 `failurePolicy: Fail` + `Deny`라 잘못되면 실험 Job이 **전부**
 거부된다. apply 직후 dry-run으로 회귀를 확인한다.
