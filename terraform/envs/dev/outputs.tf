@@ -158,6 +158,11 @@ output "experiment_job_execution_contract" {
     kubernetes_namespace        = var.experiment_job_k8s_namespace
     kubernetes_service_account  = var.experiment_job_k8s_service_account
     object_retention_days       = var.experiment_results_object_retention_days
+    # #577 학습 입력 좌표. 애플리케이션이 `TRAINING_SNAPSHOT_ROOT`로 받는 값이므로
+    # output으로 노출한다 — 없으면 매니페스트 쪽에서 버킷명과 prefix를 다시 조립하게
+    # 되고, 그러면 같은 좌표가 두 곳에서 관리된다. 결과 버킷과 달리 **read 전용**이며
+    # 게시는 airflow_batch가 담당한다(#464).
+    training_snapshot_root_url = "gs://${google_storage_bucket.mlflow_artifacts.name}/${local.mlflow_training_snapshot_prefix}"
   }
 }
 
