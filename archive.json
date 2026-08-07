@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T17:31:18Z",
+  "generated_at": "2026-08-07T17:32:35Z",
   "reports": [
+    {
+      "number": 593,
+      "title": "feat: API v0.9.0 digest 승격",
+      "author": "bbungjun",
+      "merged_at": "2026-08-07T17:31:05Z",
+      "summary_ko": [
+        "PR #592의 launcher/executor 승격에 이어 Agent Orchestration API 이미지를 v0.9.0 디제스트로 원자적 승격하였습니다.",
+        "API Deployment, Migration Job, Verification Job, Runner 및 Launcher의 총 7개 이미지 참조를 일괄 반영하였습니다.",
+        "매니페스트 검증 계약 스크립트 및 디제스트 승격 테스트를 동기화하고 런북 및 변경 이력을 업데이트하였습니다."
+      ],
+      "report_url": "pr/593/"
+    },
     {
       "number": 592,
       "title": "feat: v0.9.0 학습 executor 배선 활성화",
