@@ -39,7 +39,7 @@
 - MLflow artifact GCS 버킷의 immutable content-addressed training snapshot registry
   (`mlflow.tf`, `training-snapshots/`, #464)
 - Auto Research 실험 결과 전용 GCS 버킷과 실험 Job Workload Identity
-  (`experiment_jobs.tf`, 객체 생성 전용 권한)
+  (`experiment_jobs.tf`, 결과 객체 생성 + 게시 학습 스냅샷 읽기 권한)
 - GitHub Actions plan용 bootstrap 리소스는 `terraform/bootstrap`에서 별도 관리
 - 셀프 호스티드 러너(ARC) PoC 컨트롤러 GSA + Workload Identity + GitHub App 자격
   증명용 Secret Manager 컨테이너(`actions_runner.tf`, #533). K8s 설치(namespace/
@@ -115,8 +115,8 @@ BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있
 학습 CSV는 다음 canonical prefix에 SHA-256으로 주소화합니다.
 
 ```text
-gs://<mlflow_artifacts_bucket>/training-snapshots/sha256=<64자리 hex>/training_dataset.csv
-gs://<mlflow_artifacts_bucket>/training-snapshots/sha256=<64자리 hex>/snapshot_manifest.json
+gs://<mlflow_artifacts_bucket>/training-snapshots/by-hash/<64자리 hex>/training_dataset.csv
+gs://<mlflow_artifacts_bucket>/training-snapshots/by-hash/<64자리 hex>/snapshot_manifest.json
 ```
 
 `airflow/autoresearch-batch`의 GSA에는 이 prefix에 한해 `objectCreator`와
@@ -125,6 +125,23 @@ publisher는 generation `0` create-if-absent로 업로드하고, 재실행 시 �
 읽어 SHA-256·generation을 검증한 뒤 재사용해야 합니다. 기본
 `mlflow_training_snapshot_retention_days = 0`은 age 기반 자동 삭제를 비활성화하며,
 bucket versioning과 기존 7일 soft delete가 복구층으로 유지됩니다.
+
+## Auto Research executor 학습 snapshot (#589)
+
+실험 executor가 읽는 사전 게시 학습 입력은 MLflow artifact bucket이 아니라 실험 결과
+전용 버킷에 둡니다.
+
+```text
+gs://<project>-autoresearch-dev-experiment-results/training-snapshots/by-hash/<64자리 hex>/training_dataset.csv
+gs://<project>-autoresearch-dev-experiment-results/training-snapshots/by-hash/<64자리 hex>/snapshot_manifest.json
+```
+
+`experiment-job` GSA에는 이 전용 버킷의 `roles/storage.objectCreator`와
+`roles/storage.objectViewer`를 부여합니다. 버킷에 다른 용도의 객체가 없어 prefix
+IAM Condition 없이 버킷 수준으로 읽기를 허용하지만, 프로젝트 수준 IAM·`objectAdmin`·삭제
+권한은 부여하지 않습니다. Terraform output
+`experiment_job_execution_contract.training_snapshot_root_url`이 위 버킷과
+`training-snapshots/` prefix의 단일 좌표를 제공합니다.
 
 ## Feast apply 환경별 런타임 경계 (#424)
 

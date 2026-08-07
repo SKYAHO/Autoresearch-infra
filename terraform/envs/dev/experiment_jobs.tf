@@ -1,5 +1,6 @@
-# Auto Research 실험 Job 결과 저장 경계. 실행 Job은 이 전용 버킷에 새 객체만
-# 만들 수 있으며, 기존 객체 조회·변경·삭제와 다른 GCP 서비스 접근은 허용하지 않는다.
+# Auto Research 실험 Job 결과·학습 입력 저장 경계. 실행 Job은 이 전용 버킷에 결과
+# 객체를 만들고 게시된 training snapshot을 읽을 수 있으며, 다른 GCP 서비스 접근은
+# 허용하지 않는다.
 resource "google_storage_bucket" "experiment_results" {
   name                        = local.experiment_results_bucket_name
   location                    = var.experiment_results_bucket_location
@@ -72,12 +73,21 @@ resource "google_service_account_iam_member" "experiment_job_wi" {
 #
 # 따라서 경로 재사용을 실제로 막는 것은 IAM이 아니라 앱의 create-if-absent
 # precondition(`ifGenerationMatch=0`, 기존 live 객체가 있으면 HTTP 412)과 새
-# attempt id prefix다. IAM이 보장하는 것은 "Job이 이전 결과를 읽거나 삭제할 수
-# 없다"는 것(objectViewer·objectAdmin 미부여)이고, 감사 관점에서는 versioning이
-# 이전 generation을 보존해 덮어쓰기가 발생해도 원본이 남는다.
+# attempt id prefix다. IAM이 보장하는 것은 "Job이 버킷 객체를 읽을 수 있지만
+# 삭제할 수 없다"는 것이며, versioning이 켜진 버킷에서는 같은 경로에 새
+# generation이 만들어질 수 있으므로 애플리케이션 precondition도 필요하다.
 resource "google_storage_bucket_iam_member" "experiment_job_object_creator" {
   bucket = google_storage_bucket.experiment_results.name
   role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.experiment_job.email}"
+}
+
+# #589 게시된 학습 스냅샷은 실험 결과 전용 버킷에 함께 보관한다. 버킷에 다른 용도의
+# 객체가 없으므로 prefix condition 없이 이 버킷의 objectViewer를 부여한다. 프로젝트
+# 수준 권한이나 objectAdmin은 추가하지 않는다.
+resource "google_storage_bucket_iam_member" "experiment_job_object_viewer" {
+  bucket = google_storage_bucket.experiment_results.name
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.experiment_job.email}"
 }
 
