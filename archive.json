@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-07T08:13:07Z",
+  "generated_at": "2026-08-07T08:28:21Z",
   "reports": [
+    {
+      "number": 583,
+      "title": "chore: agent-orchestration API·UI digest를 v0.8.0으로 승격한다",
+      "author": "hyochangsung",
+      "merged_at": "2026-08-07T08:28:03Z",
+      "summary_ko": [
+        "Autoresearch v0.8.0 릴리즈에 맞춰 agent-orchestration API 및 UI 컨테이너 이미지 digest를 최신으로 승격하였습니다.",
+        "API 이미지 digest가 사용되는 매니페스트 6곳과 매니페스트 계약 검사 스크립트의 하드코딩 참조값을 일치시켰습니다.",
+        "v0.8.0 롤아웃 계획 문서 및 머지 후 ArgoCD 자동 동기화 시 DB 마이그레이션 확인 절차를 정리했습니다."
+      ],
+      "report_url": "pr/583/"
+    },
     {
       "number": 581,
       "title": "fix: Phase 2 smoke 관측성을 배포한다",
