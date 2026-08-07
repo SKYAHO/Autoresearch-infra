@@ -185,7 +185,7 @@ module ExperimentLauncherManifestContractTest
       end
     end
 
-    expect_failure("smoke 완료 Job TTL 회수 누락") do |root|
+    expect_failure("smoke 기간 TTL 3600 고정 위반") do |root|
       mutate_launcher(root) do |cron_job|
         environment = cron_job.dig(
           "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
