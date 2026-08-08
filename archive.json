@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-08T16:03:19Z",
+  "generated_at": "2026-08-08T16:38:01Z",
   "reports": [
+    {
+      "number": 598,
+      "title": "fix: executor 이미지 digest를 v0.9.3으로 승격한다 (#597)",
+      "author": "waieiches",
+      "merged_at": "2026-08-08T16:37:45Z",
+      "summary_ko": [
+        "에이전트 오케스트레이션 executor 이미지 digest를 v0.9.2에서 v0.9.3으로 수동 승격하였습니다.",
+        "자동 승격 스크립트 범위 밖이어서 발생했던 Git 매니페스트와 클러스터 실제 상태 간의 드리프트를 해결했습니다.",
+        "향후 타 컴포넌트 자동 배포 시 executor가 이전 버전(v0.9.2)으로 예기치 않게 롤백되는 위험을 예방했습니다."
+      ],
+      "report_url": "pr/598/"
+    },
     {
       "number": 594,
       "title": "feat: bump executor image digest to v0.9.1 for launcher",
