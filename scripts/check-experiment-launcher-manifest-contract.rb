@@ -198,6 +198,11 @@ module ExperimentLauncherManifestContract
       "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
       "ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC" => "600",
       "ORCH_UV_SYNC_TIMEOUT_SEC" => "900",
+      # (#599) 값이 빠지거나 틀리면 mlflow가 Pod 로컬 file store로 조용히 fallback해
+      # run이 Pod과 함께 사라진다. 학습은 그대로 성공하고 exit 0으로 끝나므로 사유
+      # 코드도 로그도 남지 않는다 — 정적으로 잡아야 하는 부류다. executor egress가
+      # 이 좌표만 따로 열어 두므로 host·port를 바꾸면 정책도 함께 고쳐야 한다.
+      "ORCH_MLFLOW_TRACKING_URI" => "http://mlflow.mlflow.svc.cluster.local:5000",
       "ORCH_GITHUB_APP_SECRET_NAME" => "autoresearch-experiment-branch-writer-app",
       "ORCH_GITHUB_REPOSITORY" => "SKYAHO/Autoresearch",
       "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "2",

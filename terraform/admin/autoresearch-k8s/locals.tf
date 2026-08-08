@@ -64,6 +64,15 @@ locals {
   experiment_executor_api_service_selector = "agent-orchestration-api"
   experiment_executor_api_port             = "8000"
 
+  # 학습이 MLflow run을 기록할 in-cluster tracking server 좌표. `mlflow-k8s` root가
+  # 소유한 Service이고, `deploy/serving/deployment.yaml`의 `MLFLOW_TRACKING_URI`가
+  # 가리키는 것과 같은 좌표다. namespace와 Pod가 같은 label 값을 쓴다.
+  # 이 좌표가 열려 있지 않으면 학습은 Pod 로컬 file store로 떨어지고, run이 Pod과
+  # 함께 사라져 paired 비교가 artifact를 내려받을 대상을 잃는다.
+  experiment_executor_mlflow_namespace = "mlflow"
+  experiment_executor_mlflow_selector  = "mlflow"
+  experiment_executor_mlflow_port      = "5000"
+
   # (#562) Job 종류별 어드미션 계약. key는 Pod template의
   # `app.kubernetes.io/component` label 값이다. 이 map에 없는 종류는 정책이
   # 거부하므로, 새 Job 종류를 도입하는 변경은 여기 항목을 먼저 추가한다.
