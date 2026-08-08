@@ -69,6 +69,11 @@ CronJob YAML, Ruby YAML contract tests, Docker `ruby:3.4-alpine`.
 
 - [x] `check-...rb`의 `expected_literals`에 `ORCH_MLFLOW_TRACKING_URI`를 추가한다
 - [x] `test-...rb`에 mutation 2건을 추가한다(env 삭제, 포트 5000→8080)
+- [x] `tests/experiment_jobs_contract.tftest.hcl`의 포트 allowlist에 MLflow 포트를
+      추가한다. 이 단언은 fail-closed라 규칙을 추가하는 것만으로 깨진다 —
+      `terraform validate`로는 안 잡히고 `terraform test`에서만 드러난다
+- [x] 같은 파일에 반대 방향 단언을 추가한다. 규칙이 사라지면 학습은 `exit 0`으로
+      성공한 채 로컬 file store에 남으므로 조용히 드러나지 않는다
 
 **Step 5: 검증**
 
@@ -78,6 +83,10 @@ CronJob YAML, Ruby YAML contract tests, Docker `ruby:3.4-alpine`.
       (통과만으로는 새 mutation 케이스가 헛돌았을 가능성을 배제하지 못한다)
 - [x] `terraform -chdir=terraform/admin/autoresearch-k8s fmt -check -recursive`
 - [x] `terraform -chdir=terraform/admin/autoresearch-k8s validate`
+- [x] `terraform -chdir=terraform/admin/autoresearch-k8s test` — **필수.**
+      `validate`는 계약 단언을 실행하지 않아 egress 규칙 추가가 `.tftest.hcl`을
+      깨뜨리는 것을 놓친다. CI `lint`가 이 명령을 돌린다
+- [x] **역검증**: mlflow egress 규칙을 제거하면 `terraform test`가 실패하는지 확인한다
 - [x] `git diff --check`
 
 **Step 6: 적용 (사용자 승인 후)**

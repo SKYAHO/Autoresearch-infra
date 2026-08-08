@@ -211,12 +211,33 @@ run "executor_egress_preserves_phase1_path" {
   }
 
   # Cloud SQL 직접 연결은 열지 않는다. 보고 경로는 API 경유다.
+  # (#599) MLflow tracking 포트를 세 번째 목적지로 추가했다. 학습 run을 남기는
+  # 유일한 경로이며, 이 포트가 닫히면 학습이 timeout까지 매달린다.
   assert {
     condition = alltrue([
       for rule in kubernetes_network_policy_v1.experiment_executor_egress.spec[0].egress :
-      alltrue([for port in rule.ports : contains(["443", local.experiment_executor_api_port], port.port)])
+      alltrue([for port in rule.ports : contains([
+        "443",
+        local.experiment_executor_api_port,
+        local.experiment_executor_mlflow_port,
+      ], port.port)])
     ])
-    error_message = "executor egress는 공개 443과 in-cluster API 포트 외의 목적지를 열지 않아야 한다."
+    error_message = "executor egress는 공개 443·in-cluster API·MLflow 포트 외의 목적지를 열지 않아야 한다."
+  }
+
+  # (#599) 반대 방향도 고정한다. 규칙이 사라지면 학습은 exit 0으로 성공한 채
+  # run을 Pod 로컬 file store에 남기므로, 없어진 것이 조용히 드러나지 않는다.
+  assert {
+    condition = anytrue([
+      for rule in kubernetes_network_policy_v1.experiment_executor_egress.spec[0].egress :
+      alltrue([
+        length(rule.to) == 1,
+        try(rule.to[0].namespace_selector[0].match_labels["app.kubernetes.io/name"], "") == local.experiment_executor_mlflow_namespace,
+        try(rule.to[0].pod_selector[0].match_labels["app.kubernetes.io/name"], "") == local.experiment_executor_mlflow_selector,
+        alltrue([for port in rule.ports : port.port == local.experiment_executor_mlflow_port]),
+      ])
+    ])
+    error_message = "executor egress는 mlflow namespace·Pod를 한 to 블록에 둔 MLflow 규칙을 유지해야 한다."
   }
 }
 
