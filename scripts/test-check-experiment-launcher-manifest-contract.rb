@@ -75,7 +75,7 @@ module ExperimentLauncherManifestContractTest
     raise "#{description} 불일치: 기대=#{expected.inspect}, 실제=#{actual.inspect}"
   end
 
-  def check_v09_training_release!
+  def check_training_release_pins!
     documents = YAML.load_stream(
       File.read(ExperimentLauncherManifestContract::MANIFEST_PATH)
     ).compact
@@ -86,9 +86,9 @@ module ExperimentLauncherManifestContractTest
     environment = container.fetch("env").to_h { |item| [item.fetch("name"), item] }
 
     expect_equal(
-      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:24bf725cab23ff2b1e54086a5366538f23aea408aae7f6e12073e19454e6b04e",
+      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:5df85dc4f4c66f2503310dd610005fa180a80ad86bfc20575bff5bb86dce4e41",
       container.fetch("image"),
-      "v0.9.0 launcher image"
+      "launcher image"
     )
     expected = {
       "ORCH_EXECUTOR_IMAGE" => "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:49f15d54b3cdb15c22912364b0b89bd457fa3fcdeee132a952bebb0908344625",
@@ -118,7 +118,7 @@ module ExperimentLauncherManifestContractTest
 
   def run!
     ExperimentLauncherManifestContract.check!
-    check_v09_training_release!
+    check_training_release_pins!
 
     expect_failure("공개 인터넷 egress 추가") do |root|
       mutate_policy(root) do |policy|
