@@ -95,7 +95,8 @@ module ExperimentLauncherManifestContractTest
       "ORCH_TRAINING_DATASET_URI" => "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
       "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
       "ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC" => "600",
-      "ORCH_UV_SYNC_TIMEOUT_SEC" => "900"
+      "ORCH_UV_SYNC_TIMEOUT_SEC" => "900",
+      "ORCH_MLFLOW_TRACKING_URI" => "http://mlflow.mlflow.svc.cluster.local:5000"
     }
     expected.each do |name, value|
       expect_equal({ "name" => name, "value" => value }, environment.fetch(name), name)
@@ -249,6 +250,27 @@ module ExperimentLauncherManifestContractTest
           "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
         )
         environment.reject! { |item| item["name"] == "ORCH_TRAINING_TIMEOUT_SEC" }
+      end
+    end
+
+    # (#599) 이 둘은 실패가 조용하다 — mlflow가 Pod 로컬 file store로 fallback하고
+    # 학습은 exit 0으로 끝나므로, 비교 판정 단계에 가서야 run이 없다는 걸 안다.
+    expect_failure("MLflow tracking 좌표 누락") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        environment.reject! { |item| item["name"] == "ORCH_MLFLOW_TRACKING_URI" }
+      end
+    end
+
+    expect_failure("MLflow tracking 좌표 변경") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        entry = environment.find { |item| item["name"] == "ORCH_MLFLOW_TRACKING_URI" }
+        entry["value"] = "http://mlflow.mlflow.svc.cluster.local:8080"
       end
     end
 

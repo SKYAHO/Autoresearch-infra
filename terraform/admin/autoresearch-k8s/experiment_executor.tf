@@ -11,7 +11,7 @@
 # `var.experiment_executor_api_token_secret_name`) 계약으로 고정한다.
 
 # executor Pod는 기본 경계(DNS, Workload Identity metadata, Private Google Access)
-# 위에 두 목적지를 더 필요로 한다. NetworkPolicy는 선택된 Pod에 대해 각 정책의
+# 위에 세 목적지를 더 필요로 한다. NetworkPolicy는 선택된 Pod에 대해 각 정책의
 # 허용 규칙을 합집합으로 적용하므로, 이 정책은 `experiment_jobs_egress`가 세운
 # 기본 경계를 되돌리지 않고 추가만 한다.
 #
@@ -33,6 +33,16 @@
 # 한다. namespace와 Pod를 한 `to` 블록에 함께 두어 교집합으로 좁힌다(블록을
 # 나누면 합집합이 되어 "그 namespace의 모든 Pod"까지 열린다). Cloud SQL은 계속
 # 닫아 둔다 — 보고 경로가 API 경유이므로 DB 직접 연결이 필요 없다.
+#
+# 규칙 3 — in-cluster MLflow tracking server. `workspace-preparer`(baseline)와
+# `candidate-finalizer`(candidate)가 도는 `src.cli train-model`이 run을 기록할
+# 목적지다. 규칙 2와 같은 이유로 사설 대역 `except`에 걸려 별도로 열어야 하고,
+# 같은 이유로 두 selector를 한 `to` 블록에 둔다.
+#
+# **이 규칙만으로는 부족하다.** executor Pod에 `MLFLOW_TRACKING_URI`가 실제로
+# 주입되어야 하며 그 전달은 애플리케이션 저장소 `launcher/jobs.py`가 한다
+# (`_training_environment()`). 그 변경 없이 이 규칙만 넣으면 경로만 열리고
+# 학습은 계속 Pod 로컬 file store에 기록된다.
 resource "kubernetes_network_policy_v1" "experiment_executor_egress" {
   metadata {
     name      = "experiment-jobs-executor-egress"
@@ -84,6 +94,27 @@ resource "kubernetes_network_policy_v1" "experiment_executor_egress" {
       ports {
         protocol = "TCP"
         port     = local.experiment_executor_api_port
+      }
+    }
+
+    egress {
+      to {
+        namespace_selector {
+          match_labels = {
+            "app.kubernetes.io/name" = local.experiment_executor_mlflow_namespace
+          }
+        }
+
+        pod_selector {
+          match_labels = {
+            "app.kubernetes.io/name" = local.experiment_executor_mlflow_selector
+          }
+        }
+      }
+
+      ports {
+        protocol = "TCP"
+        port     = local.experiment_executor_mlflow_port
       }
     }
   }

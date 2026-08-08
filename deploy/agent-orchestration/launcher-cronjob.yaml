@@ -127,6 +127,12 @@ spec:
                   value: "600"
                 - name: ORCH_UV_SYNC_TIMEOUT_SEC
                   value: "900"
+                # launcher가 executor Job의 학습 container에 그대로 넘길 MLflow 좌표.
+                # 값이 비어 있으면 launcher는 아무것도 붙이지 않고, 학습은 Pod 로컬
+                # file store로 떨어져 run이 Pod과 함께 사라진다(= 현행 동작).
+                # 전달 코드는 애플리케이션 저장소 `launcher/jobs.py`에 있다.
+                - name: ORCH_MLFLOW_TRACKING_URI
+                  value: http://mlflow.mlflow.svc.cluster.local:5000
                 - name: ORCH_GITHUB_APP_SECRET_NAME
                   value: autoresearch-experiment-branch-writer-app
                 - name: ORCH_GITHUB_APP_ID
