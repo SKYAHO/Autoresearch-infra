@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-08T23:23:22Z",
+  "generated_at": "2026-08-08T23:46:50Z",
   "reports": [
+    {
+      "number": 602,
+      "title": "feat: executor에 MLflow tracking 좌표와 egress를 추가한다",
+      "author": "waieiches",
+      "merged_at": "2026-08-08T23:46:35Z",
+      "summary_ko": [
+        "실험 실행기(executor) 파드가 클러스터 내 MLflow 추적 서버에 학습 기록을 남길 수 있도록 주소 환경변수를 추가했습니다.",
+        "실행기 파드에서 클러스터 내 MLflow 서비스(TCP/5000)로 통신을 허용하는 NetworkPolicy Egress 규칙을 추가했습니다.",
+        "환경변수 및 네트워크 정책 누락 시 학습 결과 유실이나 타임아웃이 발생하는 문제를 막기 위해 계약 검사 스크립트와 Terraform 테스트를 강화했습니다."
+      ],
+      "report_url": "pr/602/"
+    },
     {
       "number": 601,
       "title": "fix: launcher 이미지 digest를 v0.10.0으로 승격한다 (#600)",
