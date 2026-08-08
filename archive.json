@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-08T23:12:41Z",
+  "generated_at": "2026-08-08T23:23:22Z",
   "reports": [
+    {
+      "number": 601,
+      "title": "fix: launcher 이미지 digest를 v0.10.0으로 승격한다 (#600)",
+      "author": "waieiches",
+      "merged_at": "2026-08-08T23:23:08Z",
+      "summary_ko": [
+        "외부 자동 승격 작업 실패로 미반영 상태였던 오케스트레이션 launcher 이미지를 v0.10.0 버전 digest로 수동 승격합니다.",
+        "CronJob 배포 매니페스트와 이를 검증하는 루비 계약 스크립트 및 테스트 파일의 기대값을 동시 업데이트했습니다.",
+        "로직 변경이 없는 executor 컨테이너 이미지는 기존 v0.9.3 버전을 유지하여 검증 안정성을 확보했습니다."
+      ],
+      "report_url": "pr/601/"
+    },
     {
       "number": 598,
       "title": "fix: executor 이미지 digest를 v0.9.3으로 승격한다 (#597)",
