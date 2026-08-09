@@ -3,6 +3,23 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-09: v0.12.0 Agent Orchestration 5개 digest 승격 (#609)
+
+- Autoresearch source `8750bce`에서 검증·게시된 다섯 immutable digest를 dev
+  manifest에 함께 반영했다. 이번 release의 executor는 Codex #2·harness 교체와
+  결과 report 게시를, launcher는 candidate-finalizer의 Codex Secret·`CODEX_HOME`
+  wiring을 포함하므로 두 이미지를 분리해 승격하지 않는다.
+- API 일곱 참조는
+  `sha256:657bb3bb64a6e900b422f868ac2f5ac75459210654fe87f1fa892a2b815ba3d6`,
+  UI는 `sha256:5c6619f1487560ed3ae6769b9eb0964d2155ee9ce6ca0e3135ef6ee7e8374590`,
+  launcher는 `sha256:6b4f113f271c3965c93504d8656681e14eb6a18671c48ea33ff0b18bd3a99eaa`,
+  runner는 `sha256:c39f7a90b7ee761e84016afd6f6ae62a92ee963356ce92671357d5029a54597a`,
+  executor는 `sha256:c607d19eecdd6c55a969b8cb6ebf7c9f0b324c53b1d33835a17ba93a70e068dc`이다.
+- launcher만 올리면 executor가 report를 게시하지 않고, executor만 올리면 새
+  launcher가 전달하는 Codex home 좌표를 사용하지 못한다. 장애 시 launcher를
+  suspend한 뒤 v0.11.0의 직전 검증 digest 다섯 개로 함께 rollback하고 ArgoCD
+  sync와 PostSync 검증 결과를 확인한다.
+
 ## 2026-08-09: Stage 1 결과 게시와 실행 시간 설정 (#604)
 
 - launcher CronJob이 executor에 `ORCH_EXPERIMENT_RESULTS_ROOT`를 전달해 Stage 1
