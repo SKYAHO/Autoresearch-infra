@@ -24,9 +24,10 @@ ORCH_EXPERIMENT_RESULTS_ROOT=gs://autoresearch-503903-autoresearch-dev-experimen
 ```
 
 executor는 이 root 아래 `experiments/{issue_number}/{experiment_id}/`에만 결과를
-쓴다. `experiment-job` GSA의 기존 bucket-level `roles/storage.objectCreator`는
-create만 허용하므로, 기존 객체 교체 없이 write-once 성질을 유지한다. 새 IAM,
-GCP 리소스, project-level binding은 추가하지 않는다.
+쓴다. `experiment-job` GSA의 기존 bucket-level `roles/storage.objectCreator`와
+executor `results_store`의 `if_generation_match=0` precondition이 기존 객체 교체를
+막아 write-once 성질을 유지한다. 새 IAM, GCP 리소스, project-level binding은 추가하지
+않는다.
 
 ### 실행 시간
 

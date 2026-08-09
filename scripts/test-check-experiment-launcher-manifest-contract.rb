@@ -257,8 +257,8 @@ module ExperimentLauncherManifestContractTest
     end
 
     # (#604) 결과 root가 없으면 executor는 results_root_unset만 기록하고 Pod와 함께
-    # 사라진다. objectCreator의 write-once 경계는 유지하되 이 값의 누락은 정적으로
-    # 거부해 Stage 1 측정 결과 소실을 막는다.
+    # 사라진다. objectCreator와 executor precondition의 write-once 경계는 유지하되
+    # 이 값의 누락은 정적으로 거부해 Stage 1 측정 결과 소실을 막는다.
     expect_failure("실험 결과 root 누락") do |root|
       mutate_launcher(root) do |cron_job|
         environment = cron_job.dig(

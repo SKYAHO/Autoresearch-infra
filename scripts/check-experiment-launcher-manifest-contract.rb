@@ -192,8 +192,9 @@ module ExperimentLauncherManifestContract
       "ORCH_JOB_NAMESPACE" => "autoresearch-experiments",
       "ORCH_EXECUTOR_IMAGE" => expected_executor_image,
       # (#604) 값이 없으면 executor가 results_root_unset 경고만 남기고 측정 산출물을
-      # Pod와 함께 잃는다. 결과 버킷의 objectCreator IAM은 write-once를 강제하므로
-      # 새 IAM 없이 이 root만 launcher가 executor Job에 전달한다.
+      # Pod와 함께 잃는다. 기존 objectCreator IAM과 executor의
+      # if_generation_match=0 precondition이 write-once 경계를 이루므로 새 IAM 없이
+      # 이 root만 launcher가 executor Job에 전달한다.
       "ORCH_EXPERIMENT_RESULTS_ROOT" =>
         "gs://autoresearch-503903-autoresearch-dev-experiment-results",
       "ORCH_EXECUTOR_SERVICE_ACCOUNT" => "experiment-job",

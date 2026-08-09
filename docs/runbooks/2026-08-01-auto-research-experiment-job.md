@@ -466,9 +466,9 @@ kubectl -n autoresearch get job agent-orchestration-api-migration \
 
 Stage 1 executor는 아래 세 literal env를 launcher에서 전달받아 측정 결과를
 `experiments/{issue_number}/{experiment_id}/` 아래에 게시한다. 결과 버킷의 기존
-`roles/storage.objectCreator`는 overwrite를 허용하지 않으므로 같은 experiment prefix를
-재사용하지 않는다. 이 작업은 새 IAM·project-level binding·NetworkPolicy를 추가하지
-않는다.
+`roles/storage.objectCreator`와 executor의 `if_generation_match=0` precondition이
+기존 live 객체 교체를 막으므로 같은 experiment prefix를 재사용하지 않는다. 이 작업은
+새 IAM·project-level binding·NetworkPolicy를 추가하지 않는다.
 
 | 이름 | 값 |
 |---|---|

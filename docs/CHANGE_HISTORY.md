@@ -7,8 +7,9 @@
 
 - launcher CronJob이 executor에 `ORCH_EXPERIMENT_RESULTS_ROOT`를 전달해 Stage 1
   측정 산출물을 `experiment-results/experiments/{issue_number}/{experiment_id}/`에
-  남기게 했다. 기존 `experiment-job` GSA의 bucket-level `objectCreator`는 create만
-  허용하므로 결과는 write-once이며, IAM·project-level binding은 추가하지 않았다.
+  남기게 했다. 기존 `experiment-job` GSA의 bucket-level `objectCreator`와 executor의
+  `if_generation_match=0` precondition으로 결과 write-once를 유지하며, IAM·project-
+  level binding은 추가하지 않았다.
 - 8-container 실행과 2조건×3 seed 채점 budget에 맞춰
   `ORCH_ACTIVE_DEADLINE_SEC=60000`, `ORCH_CODEX_TIMEOUT_SEC=6000`으로 올렸다.
   manifest만 바꾸면 ValidatingAdmissionPolicy가 Job을 거부하므로 같은 변경에서
