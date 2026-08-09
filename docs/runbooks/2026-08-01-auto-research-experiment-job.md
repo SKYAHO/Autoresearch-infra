@@ -104,12 +104,13 @@ Job을 만드는 주체는 사용자가 보낸 임의 manifest를 Kubernetes API
   Job 기준. Phase 1의 branch-bootstrap Job은 위 안내대로 다른 규칙을 쓴다).
 - image는 registry path와 `@sha256:` digest를 포함하며 mutable tag를 허용하지 않는다.
 - `serviceAccountName: experiment-job`, `restartPolicy: Never`, `backoffLimit: 0`을 쓴다.
-- `activeDeadlineSeconds`와 `ttlSecondsAfterFinished`는 각각 3,600초 이하로 제한한다.
-  두 값이 **각각** 상한이므로 한 Job이 슬롯을 잡는 최악 시간은 실행 최대 1시간 +
-  완료 후 TTL 최대 1시간 = **최대 2시간**이다. `count/jobs.batch=2`와 결합하면
-  최악의 경우 처리량은 2시간당 2개다. 상한이 아니라 실제 처리량을 높이려면 API
-  고정 템플릿이 TTL을 짧게(예: 300초) 넣어야 하며, 그 값이 실질 회수 주기를
-  결정한다.
+- `activeDeadlineSeconds`는 60,000초 이하, `ttlSecondsAfterFinished`는 3,600초
+  이하로 제한한다. 두 값이 **각각** 상한이므로 한 Job이 슬롯을 잡는 최악 시간은
+  실행 최대 16시간 40분 + 완료 후 TTL 최대 1시간 = **최대 17시간 40분**이다.
+  `count/jobs.batch=2`와 결합하면 완료 Job도 TTL까지 quota를 점유하므로 Stage 1
+  budget을 쓰는 최대 처리량은 17시간 40분당 2개다. 이는 batch-od 비용과 대기 시간을
+  늘리는 의도된 상한이다. 더 빠른 회수가 필요하면 API 고정 템플릿이 TTL을
+  짧게(예: 300초) 넣어야 하며, 그 값이 실질 회수 주기를 결정한다.
 - `suspend: true`로 제출하지 않는다. suspend 상태 Job은 Pod를 만들지 않고
   `activeDeadlineSeconds` 타이머도 돌지 않으며 TTL도 적용되지 않아 quota를
   무기한 점유한다. admission 정책이 이를 거부한다.
@@ -273,7 +274,7 @@ EOF
 | `serviceAccountName` 미지정 | 승인된 serviceAccountName 명시 |
 | `tolerations`에 batch-od 외 항목 추가, `tolerations: []`, key/value/effect 누락 | `workload=batch-od:NoSchedule` 하나만 사용 (`operator` 생략은 허용 — Kubernetes 의미상 Equal) |
 | 허용 Artifact Registry 밖 이미지(digest는 고정) | 승인된 저장소에서만 pull |
-| `activeDeadlineSeconds`/`ttlSecondsAfterFinished` 미지정 또는 3600 초과 | 각 필드 범위 |
+| `activeDeadlineSeconds` 미지정 또는 60000 초과, `ttlSecondsAfterFinished` 미지정 또는 3600 초과 | 각 필드 범위 |
 | `automountServiceAccountToken: true` | ServiceAccount token mount 금지 |
 | `suspend: true` | suspend 상태 제출 금지 |
 
@@ -453,13 +454,39 @@ kubectl -n autoresearch get cronjob agent-orchestration-launcher \
   -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}{"\n"}'
 kubectl -n autoresearch get cronjob agent-orchestration-launcher \
   -o jsonpath='{range .spec.jobTemplate.spec.template.spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' \
-  | grep -E '^(ORCH_EXECUTOR_IMAGE|ORCH_TRAINING_)'
+  | grep -E '^(ORCH_EXECUTOR_IMAGE|ORCH_TRAINING_|ORCH_EXPERIMENT_RESULTS_ROOT|ORCH_ACTIVE_DEADLINE_SEC|ORCH_CODEX_TIMEOUT_SEC)'
 kubectl -n autoresearch get deployment agent-orchestration-api \
   -o jsonpath='{.spec.template.spec.containers[?(@.name=="api")].image}{"\n"}'
 kubectl -n autoresearch get job agent-orchestration-api-migration \
   agent-orchestration-deployment-verification --ignore-not-found \
   -o jsonpath='{range .items[*].spec.template.spec.containers[*]}{.image}{"\n"}{end}'
 ```
+
+### Stage 1 결과 게시와 실행 시간 (#604)
+
+Stage 1 executor는 아래 세 literal env를 launcher에서 전달받아 측정 결과를
+`experiments/{issue_number}/{experiment_id}/` 아래에 게시한다. 결과 버킷의 기존
+`roles/storage.objectCreator`는 overwrite를 허용하지 않으므로 같은 experiment prefix를
+재사용하지 않는다. 이 작업은 새 IAM·project-level binding·NetworkPolicy를 추가하지
+않는다.
+
+| 이름 | 값 |
+|---|---|
+| `ORCH_EXPERIMENT_RESULTS_ROOT` | `gs://autoresearch-503903-autoresearch-dev-experiment-results` |
+| `ORCH_ACTIVE_DEADLINE_SEC` | `60000` |
+| `ORCH_CODEX_TIMEOUT_SEC` | `6000` |
+
+ArgoCD sync 뒤 launcher CronJob의 env 출력에서 위 값이 모두 보이는지 확인한 다음,
+실험 한 건을 발행해 결과 객체와 API 보고를 확인한다.
+
+```bash
+gcloud storage ls \
+  gs://autoresearch-503903-autoresearch-dev-experiment-results/experiments/<issue_number>/<experiment_id>/metrics.json
+```
+
+`metrics.json`이 없으면 executor 로그의 `results_root_unset`, GCS 권한 오류와 실제
+executor Job env를 조사한다. 같은 `base_dev_sha`의 두 실행에서는 baseline seed별 값이
+일치하는지, 워크벤치의 `metric_summary`가 null이 아닌지도 함께 확인한다.
 
 학습 배선 또는 이미지 문제가 생기면 launcher를 먼저 suspend하고, 위 표의 launcher와
 executor digest를 **한 쌍으로** 직전 값으로 되돌리면서 네 학습 env를 함께 제거한다.
@@ -712,7 +739,7 @@ candidate smoke가 401 없이 통과하는 것**으로만 확인된다.
 
 **Secret을 먼저 만들고 그 다음 launcher를 배포한다.** 순서가 뒤집히면 kubelet이
 volume mount를 완료하지 못해 Pod가 `Pending`에 머물고, Job은
-`activeDeadlineSeconds`(3600초) 뒤에야 `Failed`가 된다. 즉 실패를 1시간 뒤에 알게
+`activeDeadlineSeconds`(60000초) 뒤에야 `Failed`가 된다. 즉 실패를 최대 16시간 40분 뒤에 알게
 된다. 판별 근거는 Pod event의 `FailedMount`와 Job의 `DeadlineExceeded`다.
 
 ```bash
@@ -725,7 +752,7 @@ kubectl -n autoresearch-experiments get events --sort-by=.lastTimestamp | grep F
 ### 운영 smoke 배포 게이트 (#562 / #575)
 
 아래 네 조건이 모두 충족되기 **전에는 Experiment를 등록하지 않는다.** 어느 하나가
-빠져도 실패가 곧바로 드러나지 않고, 3600초 뒤 `DeadlineExceeded`나 401로만 나타나
+빠져도 실패가 곧바로 드러나지 않고, 최대 60000초 뒤 `DeadlineExceeded`나 401로만 나타나
 원인 판별이 어려워진다.
 
 | # | 게이트 | 확인 |
@@ -1024,7 +1051,7 @@ pool 전체 allocatable CPU는 노드 2대 기준 약 3860m이고, 실험 namesp
 남는지는 우선순위가 아니라 어느 Pod가 나중에 제출돼 가용 용량이 이미 소진된
 상태에 걸리는지(제출 순서·스케줄 타이밍)로 결정된다. Pending은 자동으로 사라지지
 않고, 상대 워크로드의 Pod가 끝나 용량이 비어야 풀린다 — experiment Job 쪽은
-admission이 강제하는 `activeDeadlineSeconds`(최대 3600초)로 상한이 있지만, KPO
+admission이 강제하는 `activeDeadlineSeconds`(최대 60000초)로 상한이 있지만, KPO
 쪽 재시도·timeout 정책은 이 저장소가 아니라 `Autoresearch-airflow`가 정하므로
 이 문서가 그 대기 시간을 보장하지 않는다. 즉 이 문단은 그런 경합에서 #297이
 재현되지 않는다고 주장하지 않는다 — 오히려 실제로 이런 경합이 생기면 #297

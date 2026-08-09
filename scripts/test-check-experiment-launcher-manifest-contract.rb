@@ -92,11 +92,14 @@ module ExperimentLauncherManifestContractTest
     )
     expected = {
       "ORCH_EXECUTOR_IMAGE" => "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:49f15d54b3cdb15c22912364b0b89bd457fa3fcdeee132a952bebb0908344625",
+      "ORCH_EXPERIMENT_RESULTS_ROOT" => "gs://autoresearch-503903-autoresearch-dev-experiment-results",
       "ORCH_TRAINING_DATASET_URI" => "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
       "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
       "ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC" => "600",
       "ORCH_UV_SYNC_TIMEOUT_SEC" => "900",
-      "ORCH_MLFLOW_TRACKING_URI" => "http://mlflow.mlflow.svc.cluster.local:5000"
+      "ORCH_MLFLOW_TRACKING_URI" => "http://mlflow.mlflow.svc.cluster.local:5000",
+      "ORCH_ACTIVE_DEADLINE_SEC" => "60000",
+      "ORCH_CODEX_TIMEOUT_SEC" => "6000"
     }
     expected.each do |name, value|
       expect_equal({ "name" => name, "value" => value }, environment.fetch(name), name)
@@ -250,6 +253,38 @@ module ExperimentLauncherManifestContractTest
           "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
         )
         environment.reject! { |item| item["name"] == "ORCH_TRAINING_TIMEOUT_SEC" }
+      end
+    end
+
+    # (#604) 결과 root가 없으면 executor는 results_root_unset만 기록하고 Pod와 함께
+    # 사라진다. objectCreator의 write-once 경계는 유지하되 이 값의 누락은 정적으로
+    # 거부해 Stage 1 측정 결과 소실을 막는다.
+    expect_failure("실험 결과 root 누락") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        environment.reject! { |item| item["name"] == "ORCH_EXPERIMENT_RESULTS_ROOT" }
+      end
+    end
+
+    expect_failure("Stage 1 active deadline 회귀") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        entry = environment.find { |item| item["name"] == "ORCH_ACTIVE_DEADLINE_SEC" }
+        entry["value"] = "3600"
+      end
+    end
+
+    expect_failure("Codex timeout이 Stage 1 deadline 이상") do |root|
+      mutate_launcher(root) do |cron_job|
+        environment = cron_job.dig(
+          "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"
+        )
+        entry = environment.find { |item| item["name"] == "ORCH_CODEX_TIMEOUT_SEC" }
+        entry["value"] = "60000"
       end
     end
 

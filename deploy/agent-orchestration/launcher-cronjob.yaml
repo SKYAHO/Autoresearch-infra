@@ -115,6 +115,11 @@ spec:
                   value: autoresearch-experiments
                 - name: ORCH_EXECUTOR_IMAGE
                   value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:49f15d54b3cdb15c22912364b0b89bd457fa3fcdeee132a952bebb0908344625
+                # (#604) Stage 1 측정 산출물은 executor Pod 종료 뒤에도 이 root 아래
+                # experiments/{issue_number}/{experiment_id}/에 남아야 한다. Job GSA의
+                # objectCreator는 기존 객체 교체를 막아 결과를 write-once로 유지한다.
+                - name: ORCH_EXPERIMENT_RESULTS_ROOT
+                  value: gs://autoresearch-503903-autoresearch-dev-experiment-results
                 - name: ORCH_EXECUTOR_SERVICE_ACCOUNT
                   value: experiment-job
                 - name: ORCH_EXECUTOR_NODE_POOL
@@ -176,15 +181,15 @@ spec:
                 # 두 시간 값에는 제약이 두 겹이다.
                 #   ORCH_CODEX_TIMEOUT_SEC < ORCH_ACTIVE_DEADLINE_SEC
                 #     → 어기면 launcher가 기동 시 LauncherConfigError로 죽는다.
-                #   ORCH_ACTIVE_DEADLINE_SEC <= 3600
+                #   ORCH_ACTIVE_DEADLINE_SEC <= 60000
                 #     → 어기면 launcher는 뜨지만 어드미션이 Job을 거부하고 실패가
                 #       launcher 로그에만 남아, 조용히 아무 Job도 만들어지지 않는다.
-                # 값은 애플리케이션 spec이 고정한 MVP 운영값이다. 나머지 시간은
-                # clone·검증·push가 쓴다.
+                # Stage 1은 8-container 실행 뒤 2조건×3 seed 채점을 수행하므로,
+                # 60000초 Job budget과 그보다 작은 6000초 Codex 상한을 사용한다.
                 - name: ORCH_ACTIVE_DEADLINE_SEC
-                  value: "3600"
+                  value: "60000"
                 - name: ORCH_CODEX_TIMEOUT_SEC
-                  value: "1800"
+                  value: "6000"
                 # (#579) #582 실패 원인을 수집하는 단일 smoke 동안 완료 Job을
                 # 1시간 보존한다. EVALUATING 완주 증거 수집 뒤 30으로 회수한다.
                 - name: ORCH_TTL_AFTER_FINISHED_SEC

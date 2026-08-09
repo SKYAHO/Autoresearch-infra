@@ -241,6 +241,21 @@ run "executor_egress_preserves_phase1_path" {
   }
 }
 
+run "active_deadline_allows_stage1_budget" {
+  command = plan
+
+  # (#604) launcher가 60000초를 Job에 복사하므로 admission이 3600초를 유지하면
+  # Pod가 하나도 생성되지 않은 채 FailedCreate로 끝난다. rendered CEL에서 server-side
+  # 상한이 실제 결정값과 같은지 확인한다. 완료 뒤 회수 상한(TTL 3600)은 별도다.
+  assert {
+    condition = anytrue([
+      for validation in kubernetes_manifest.experiment_job_admission_policy.manifest.spec.validations :
+      strcontains(validation.expression, "object.spec.activeDeadlineSeconds <= 60000")
+    ])
+    error_message = "Stage 1 executor는 activeDeadlineSeconds 60000초를 admission에서 허용해야 한다."
+  }
+}
+
 run "policy_covers_every_declared_contract" {
   command = plan
 

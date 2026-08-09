@@ -191,6 +191,11 @@ module ExperimentLauncherManifestContract
     expected_literals = {
       "ORCH_JOB_NAMESPACE" => "autoresearch-experiments",
       "ORCH_EXECUTOR_IMAGE" => expected_executor_image,
+      # (#604) 값이 없으면 executor가 results_root_unset 경고만 남기고 측정 산출물을
+      # Pod와 함께 잃는다. 결과 버킷의 objectCreator IAM은 write-once를 강제하므로
+      # 새 IAM 없이 이 root만 launcher가 executor Job에 전달한다.
+      "ORCH_EXPERIMENT_RESULTS_ROOT" =>
+        "gs://autoresearch-503903-autoresearch-dev-experiment-results",
       "ORCH_EXECUTOR_SERVICE_ACCOUNT" => "experiment-job",
       "ORCH_EXECUTOR_NODE_POOL" => "batch-od",
       "ORCH_TRAINING_DATASET_URI" =>
@@ -217,13 +222,13 @@ module ExperimentLauncherManifestContract
         "autoresearch-experiment-executor-api-token",
       "ORCH_CODEX_HOME_SECRET_NAME" => "autoresearch-experiment-codex-auth",
       "ORCH_EXECUTOR_WORKSPACE_SIZE_LIMIT" => "8Gi",
-      # 3600은 어드미션 계약의 activeDeadlineSeconds 상한과 같은 값이다. 이 값을
+      # 60000은 어드미션 계약의 activeDeadlineSeconds 상한과 같은 값이다. 이 값을
       # 넘기면 launcher는 기동하지만 어드미션이 Job을 거부하고 실패가 launcher
       # 로그에만 남아, 조용히 아무 Job도 만들어지지 않는다. Codex 상한은 Job 전체
       # 상한보다 작아야 하며(작지 않으면 launcher가 기동 시 거부한다) 나머지
-      # 시간은 clone·검증·push가 쓴다.
-      "ORCH_ACTIVE_DEADLINE_SEC" => "3600",
-      "ORCH_CODEX_TIMEOUT_SEC" => "1800",
+      # 시간은 Stage 1 채점·clone·검증·push가 쓴다.
+      "ORCH_ACTIVE_DEADLINE_SEC" => "60000",
+      "ORCH_CODEX_TIMEOUT_SEC" => "6000",
       # (#579) 장애 smoke 동안 완료 Job/Pod event를 조사할 시간을 확보한다.
       # end-to-end 성공 증거 수집 후 애플리케이션 기본값 30으로 회수한다.
       "ORCH_TTL_AFTER_FINISHED_SEC" => "3600"
