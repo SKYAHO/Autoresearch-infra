@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-09T06:44:36Z",
+  "generated_at": "2026-08-09T06:52:04Z",
   "reports": [
+    {
+      "number": 608,
+      "title": "fix: Agent Orchestration 5개 digest 승격",
+      "author": "bbungjun",
+      "merged_at": "2026-08-09T06:51:52Z",
+      "summary_ko": [
+        "Autoresearch v0.11.0 릴리스에서 검증된 5개 구성요소(API, UI, launcher, runner, executor)의 이미지 해시를 dev 매니페스트에 반영하였습니다.",
+        "자동 승격 스크립트와 검증 테스트 대상에 executor 이미지를 추가하여 5개 구성요소 전체 승격 계약을 확장하였습니다.",
+        "관련 배포 운영 문서 및 변경 이력을 업데이트하고 배포 선행 조건과 롤백 절차를 명시하였습니다."
+      ],
+      "report_url": "pr/608/"
+    },
     {
       "number": 596,
       "title": "fix: persist executor-to-API ingress policy",
