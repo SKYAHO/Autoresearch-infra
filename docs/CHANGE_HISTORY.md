@@ -3,6 +3,21 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-09: v0.11.0 Agent Orchestration 5개 digest 수동 승격 (#606)
+
+- Autoresearch source `8242d3b`에서 검증·게시된 다섯 immutable digest를 dev
+  manifest에 함께 반영했다. API 일곱 참조는
+  `sha256:30722cb72601cfe1e16cc0e940ad5942729c293cef414d719b5fccfa16599a8b`,
+  UI는 `sha256:e80f6720103ad236fe4177c135688e1195e8a1c55fbe2bb57c74068faec8cad2`,
+  launcher는 `sha256:2a4f047c58aa9d0eed00c5994616b5c29dfdab715e5f0a1be9c5c575e691d7e3`,
+  runner는 `sha256:aae85f533f91f641d70860dff58b4eb1d75b6f6c13c59c781ea29e4c8dae6a5a`,
+  executor는 `sha256:c114b608c5e83a8ff467e4ca51dc4439837cf2779b9f5afdc1decff7c9b35f40`이다.
+- 승격 스크립트와 self-test의 대상 표에 executor를 추가했다. executor digest는
+  Stage 1 측정·GCS 게시·Experiment API 보고 코드가 실제로 실행되는 이미지이므로,
+  #605의 결과 root/timeout 및 VAP 상한을 적용한 뒤 이 변경을 배포한다.
+- 장애 시 launcher를 suspend하고 ArgoCD sync가 완료된 뒤 다섯 digest를 직전
+  검증 release로 함께 되돌린다. 기존 Artifact Registry 객체와 IAM은 삭제하지 않는다.
+
 ## 2026-08-08: Agent Orchestration API v0.9.0 digest 승격
 
 - 기존 PR #592에서 승격한 launcher·executor 학습 배선에 이어, API v0.9.0 digest

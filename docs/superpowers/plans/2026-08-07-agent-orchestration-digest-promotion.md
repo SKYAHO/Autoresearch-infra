@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- API 7개·UI 1개 참조만 수정한다.
+- API 7개·UI·launcher·runner·executor 각 1개 참조만 수정한다.
 - immutable digest 외 입력은 거부한다.
 - secret 값은 기록하지 않는다.
 
