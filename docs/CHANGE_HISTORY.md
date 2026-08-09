@@ -15,6 +15,11 @@
 - 승격 스크립트와 self-test의 대상 표에 executor를 추가했다. executor digest는
   Stage 1 측정·GCS 게시·Experiment API 보고 코드가 실제로 실행되는 이미지이므로,
   #605의 결과 root/timeout 및 VAP 상한을 적용한 뒤 이 변경을 배포한다.
+- API PreSync migration은 `0005_experiment_candidate_sha`의 nullable column과 형식
+  CHECK만 추가하는 backward-compatible 변경이다. 따라서 migration 완료와 Deployment
+  rollout 사이의 기존 API Pod는 새 column을 무시할 수 있고, image rollback도
+  migration downgrade를 실행하지 않고 schema head를 유지한다. 향후 비호환 migration은
+  이 rollback 절차의 대상이 아니다.
 - 장애 시 launcher를 suspend하고 ArgoCD sync가 완료된 뒤 다섯 digest를 직전
   검증 release로 함께 되돌린다. 기존 Artifact Registry 객체와 IAM은 삭제하지 않는다.
 
