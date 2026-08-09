@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-09T12:33:26Z",
+  "generated_at": "2026-08-09T12:34:20Z",
   "reports": [
+    {
+      "number": 612,
+      "title": "fix: candidate-finalizer의 Codex 인증 mount를 계약에 반영한다",
+      "author": "bbungjun",
+      "merged_at": "2026-08-09T12:33:10Z",
+      "summary_ko": [
+        "v0.12.0 버전에서 리포트를 작성하는 Codex #2 실행을 위해 candidate-finalizer 컨테이너의 codex-home 마운트가 필요해졌습니다.",
+        "기존 쿠버네티스 어드미션 검증 정책이 해당 마운트를 차단하여 생성된 작업이 422 오류로 거부되던 문제를 해결했습니다.",
+        "허용 대상 컨테이너를 두 개로 엄격히 고정하고 보안 경계 무름과 잔여 위험, 적용 및 롤백 절차를 관련 문서에 명시했습니다."
+      ],
+      "report_url": "pr/612/"
+    },
     {
       "number": 610,
       "title": "fix: v0.12.0 Agent Orchestration digest 승격",
