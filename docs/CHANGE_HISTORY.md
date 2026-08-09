@@ -16,8 +16,10 @@
   3600초로 유지한다.
 - Job 두 개가 각각 최대 16시간 40분, 완료 후 1시간 동안 batch-od와
   `count/jobs.batch`를 점유할 수 있다. 실제 apply·ArgoCD sync·실험 발행은 이 PR
-  범위 밖이며, 장애 시 launcher를 suspend한 뒤 세 env와 admission 상한을 함께
-  revert한다. 이미 생성된 Job과 GCS 결과 객체는 삭제하지 않는다.
+  범위 밖이며, admin root의 live VAP를 먼저 60000초로 올린 뒤 launcher를 suspend한
+  상태에서 ArgoCD manifest를 sync해야 한다. 반대로 env가 먼저 반영되면 기존 VAP가
+  executor Job을 `FailedCreate`로 거부한다. 장애 시 launcher를 suspend한 뒤 세 env와
+  admission 상한을 함께 revert한다. 이미 생성된 Job과 GCS 결과 객체는 삭제하지 않는다.
 
 ## 2026-08-08: Agent Orchestration API v0.9.0 digest 승격
 

@@ -476,8 +476,57 @@ Stage 1 executor는 아래 세 literal env를 launcher에서 전달받아 측정
 | `ORCH_ACTIVE_DEADLINE_SEC` | `60000` |
 | `ORCH_CODEX_TIMEOUT_SEC` | `6000` |
 
-ArgoCD sync 뒤 launcher CronJob의 env 출력에서 위 값이 모두 보이는지 확인한 다음,
-실험 한 건을 발행해 결과 객체와 API 보고를 확인한다.
+#### 적용 순서: admin admission을 먼저, ArgoCD manifest를 나중에
+
+`terraform/admin/autoresearch-k8s`는 ArgoCD가 관리하지 않는 별도 Terraform state이고,
+`agent-orchestration` ArgoCD Application은 `main` 변경을 자동 sync한다. 따라서 이
+변경에서는 **launcher를 멈춘 상태에서 admission 계약을 먼저 올린 뒤 manifest를
+sync해야 한다.** `launcher-cronjob.yaml`에는 `spec.suspend`를 정본으로 넣지 않았으므로,
+아래 suspend는 일시적인 live 운영 게이트다. 이 순서를 지키지 않고 새 env가 먼저
+반영되면 live VAP의 3600초 상한이 60000초 Job을 `FailedCreate`로 거부한다.
+
+1. #604를 merge하기 **전에** launcher CronJob을 suspend하고 값이 `true`인지 확인한다.
+   이 단계에서 권한이나 값 확인이 실패하면 merge/sync를 진행하지 않는다.
+
+   ```bash
+   kubectl -n autoresearch patch cronjob agent-orchestration-launcher \
+     --type=merge -p '{"spec":{"suspend":true}}'
+   kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+     -o jsonpath='{.spec.suspend}{"\n"}'
+   ```
+
+2. PR merge 뒤 `apply` workflow를 `scope=admin`으로 dispatch한다. 승인된 plan에서
+   `autoresearch-experiment-job-contract`의 active deadline validation 변경을 확인한
+   뒤 admin apply를 완료한다. 이 PR만으로는 Terraform apply를 수행하지 않는다.
+
+3. live VAP가 `activeDeadlineSeconds <= 60000`을 허용하고 TTL 상한은 계속
+   `ttlSecondsAfterFinished <= 3600`인지 확인한다. `activeDeadlineSeconds <= 3600`이
+   남아 있으면 다음 단계로 진행하지 않는다.
+
+   ```bash
+   kubectl get validatingadmissionpolicy autoresearch-experiment-job-contract -o yaml \
+     | grep -A2 -E 'activeDeadlineSeconds|ttlSecondsAfterFinished'
+   ```
+
+4. ArgoCD가 `main` revision을 sync할 때까지 기다린다. Application이 `Synced`/적용
+   성공인지 확인하고, 그 뒤 live CronJob에서 세 env가 모두 새 값인지 확인한다.
+
+   ```bash
+   kubectl -n argocd get application agent-orchestration \
+     -o jsonpath='{.status.sync.status}{" "}{.status.sync.revision}{" "}{.status.operationState.phase}{"\n"}'
+   kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+     -o jsonpath='{range .spec.jobTemplate.spec.template.spec.containers[?(@.name=="launcher")].env[*]}{.name}={.value}{"\n"}{end}' \
+     | grep -E '^(ORCH_EXPERIMENT_RESULTS_ROOT|ORCH_ACTIVE_DEADLINE_SEC|ORCH_CODEX_TIMEOUT_SEC)='
+   ```
+
+5. VAP와 CronJob env를 다시 확인한 뒤에만 live suspend를 해제하고 실험 한 건을
+   발행한다. ArgoCD desired manifest에는 suspend 필드가 없으므로, sync가 끝나기
+   전에 `false`로 바꾸지 않는다. sync 후에도 `true`가 유지되는지 확인하고, 이후
+   해제 결과가 `false`인지 확인한다.
+
+이 순서 중 어느 단계에서든 새 executor Job이 `FailedCreate`가 되면 즉시 launcher를
+다시 suspend하고, 실패 Job의 admission Event를 보존한 채 2~4단계를 완료한다. 이미
+생성된 실패 Job은 자동 재시도하지 않으며, 원인을 확인하기 전 삭제하지 않는다.
 
 ```bash
 gcloud storage ls \

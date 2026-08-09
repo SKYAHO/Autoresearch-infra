@@ -53,6 +53,19 @@ seed 채점의 결정값이며, 별도 apply 없이 PR에서는 코드·문서·
 관리한다. Stage 1 결과 게시에는 필요한 기존 경로지만, 이 작업에서 값·NetworkPolicy·IAM을
 변경하지 않는다.
 
+## 적용 순서와 실패 모드
+
+`terraform/admin/autoresearch-k8s`의 ValidatingAdmissionPolicy는 ArgoCD Application의
+소유가 아닌 별도 state다. 반면 `agent-orchestration` Application은 infra `main` 변경을
+자동 sync한다. 따라서 merge 전에 live launcher CronJob을 `spec.suspend=true`로
+일시 정지하고, admin root apply로 active deadline 상한을 60000초로 올린 뒤 live VAP를
+확인해야 한다. 그 다음에야 ArgoCD sync 결과에서 세 env를 확인하고 suspend를 해제한다.
+
+CronJob manifest에는 suspend를 넣지 않는다. suspend는 GitOps desired state가 아니라
+이 배포 순서를 보호하는 일시적인 운영 게이트이며, sync 뒤 `false`로 되돌린다. VAP가
+아직 3600초인 상태에서 ArgoCD가 새 env를 먼저 반영하면 launcher가 만든 60000초
+executor Job이 `FailedCreate`로 거부된다.
+
 ## 파일과 책임
 
 | 파일 | 책임 |
@@ -68,8 +81,9 @@ seed 채점의 결정값이며, 별도 apply 없이 PR에서는 코드·문서·
 ## 검증과 롤백
 
 PR에서는 Ruby manifest contract와 self-test, admin Terraform test, `kubectl` client
-dry-run, `git diff --check`를 실행한다. 실제 apply, ArgoCD sync, launcher resume 및
-실험 발행은 이 작업 범위 밖이다.
+dry-run, `git diff --check`를 실행한다. 실제 apply, ArgoCD sync, launcher suspend/resume
+및 실험 발행은 이 작업 범위 밖이다. 적용 순서는 runbook의 admin admission → ArgoCD
+manifest → live env 확인 절차를 따른다.
 
 배포 후에는 실험 한 건에서 `metrics.json`이 결과 root의 experiment prefix에 남고,
 API가 보고한 `metric_summary`가 null이 아닌지를 확인한다. 두 번째 동일

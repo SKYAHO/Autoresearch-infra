@@ -103,6 +103,7 @@ message    = "실험 Job은 activeDeadlineSeconds를 1~60000초로 명시해야 
 
 - [x] runbook의 current admission contract를 60000초 deadline과 3600초 TTL로 분리해 기록하고, 60000 + 3600초 quota/cost 영향을 명시한다.
 - [x] live CronJob env grep에 결과 root와 두 timeout을 추가하고, `gcloud storage ls`로 expected experiment prefix의 `metrics.json`을 확인하는 명령을 추가한다.
+- [x] admin root apply로 live admission 상한을 먼저 갱신하고, ArgoCD sync 뒤 CronJob env를 확인한 다음 launcher suspend를 해제하는 순서를 runbook에 명시한다. VAP가 3600초인 채 env가 먼저 반영되면 `FailedCreate`가 된다는 실패 모드도 기록한다.
 - [x] CHANGE_HISTORY 최상단에 #604의 write-once 결과 게시, 새 IAM 없음, admission 동시 변경, suspend→revert rollback을 기록한다.
 
 ### Task 5: 최종 검증·self-review·커밋
@@ -113,7 +114,7 @@ message    = "실험 Job은 activeDeadlineSeconds를 1~60000초로 명시해야 
 
 - [x] `git diff --check`, scoped diff, Docker Ruby contract/self-test, promotion self-test, admin Terraform test, Kubernetes client dry-run을 실행한다.
 - [x] IAM binding·public ingress·image digest·TTL upper bound가 diff에 없는지 self-review한다.
-- [ ] 아래 하나의 논리적 커밋을 만든다.
+- [x] 아래 하나의 논리적 커밋을 만든다.
 
 ```text
 fix: Stage 1 결과 게시 시간 설정 수정
