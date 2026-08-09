@@ -44,6 +44,16 @@ ValidatingAdmissionPolicy가 `activeDeadlineSeconds <= 3600`을 강제하므로,
 `60000`초로 올린다. `ttlSecondsAfterFinished` 상한은 회수·quota 경계를 위해
 기존 `3600`초로 유지한다.
 
+`ORCH_CODEX_TIMEOUT_SEC=6000`은 8개 container 각각의 상한이나 8회 합산값이 아니다.
+`codex-worker`가 한 번 실행하는 단일 `codex exec` subprocess의 상한이다. 6000이라는
+10배 값은 애플리케이션 spec에서 고정한 운영 결정이며 container 수에서 산술적으로
+도출한 값은 아니다. 반면 `ORCH_TRAINING_TIMEOUT_SEC=1800`은 baseline/candidate
+각 조건에서 seed 하나의 `train-model` subprocess에 적용되고, 같은 값이 측정 단계의
+seed 하나 `evaluate-model` subprocess에도 적용된다. 다운로드 timeout은 baseline의
+snapshot 1회(이후 재사용), `uv sync` timeout은 candidate 의존성 변경 시 1회다.
+이 값들은 각각의 subprocess 상한이고 전체 Job 합계가 아니며, 전체 경계는
+`activeDeadlineSeconds=60000`이다.
+
 이 결정은 executor Job 두 개가 각각 최대 16시간 40분 동안 batch-od 용량과
 `count/jobs.batch` quota를 점유할 수 있음을 뜻한다. 이 비용·처리량 영향은 Stage 1
 seed 채점의 결정값이며, 별도 apply 없이 PR에서는 코드·문서·정적 검증만 수행한다.

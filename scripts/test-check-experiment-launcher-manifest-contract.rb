@@ -120,9 +120,37 @@ module ExperimentLauncherManifestContractTest
     raise "#{label} mutation을 감지하지 못했습니다"
   end
 
+  def expect_contract_error(label)
+    raised = false
+    begin
+      yield
+    rescue ExperimentLauncherManifestContract::ContractError
+      raised = true
+    end
+    raise "#{label} 계약 위반을 감지하지 못했습니다" unless raised
+  end
+
   def run!
     ExperimentLauncherManifestContract.check!
     check_training_release_pins!
+
+    expect_contract_error("Codex timeout이 active deadline 이상") do
+      ExperimentLauncherManifestContract.check_timeout_values!(
+        {
+          "ORCH_ACTIVE_DEADLINE_SEC" => { "value" => "60000" },
+          "ORCH_CODEX_TIMEOUT_SEC" => { "value" => "60000" }
+        }
+      )
+    end
+
+    expect_contract_error("active deadline admission 상한 초과") do
+      ExperimentLauncherManifestContract.check_timeout_values!(
+        {
+          "ORCH_ACTIVE_DEADLINE_SEC" => { "value" => "60001" },
+          "ORCH_CODEX_TIMEOUT_SEC" => { "value" => "6000" }
+        }
+      )
+    end
 
     expect_failure("공개 인터넷 egress 추가") do |root|
       mutate_policy(root) do |policy|
@@ -278,7 +306,7 @@ module ExperimentLauncherManifestContractTest
       end
     end
 
-    expect_failure("Codex timeout이 Stage 1 deadline 이상") do |root|
+    expect_failure("Codex timeout literal 변조") do |root|
       mutate_launcher(root) do |cron_job|
         environment = cron_job.dig(
           "spec", "jobTemplate", "spec", "template", "spec", "containers", 0, "env"

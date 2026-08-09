@@ -20,7 +20,9 @@
   범위 밖이며, admin root의 live VAP를 먼저 60000초로 올린 뒤 launcher를 suspend한
   상태에서 ArgoCD manifest를 sync해야 한다. 반대로 env가 먼저 반영되면 기존 VAP가
   executor Job을 `FailedCreate`로 거부한다. 장애 시 launcher를 suspend한 뒤 세 env와
-  admission 상한을 함께 revert한다. 이미 생성된 Job과 GCS 결과 객체는 삭제하지 않는다.
+  admission 상한을 함께 revert한다. 정상 KSA에는 조기 delete 경로가 없으므로 장시간
+  Job은 stage 로그·Event를 관측하고 필요 시 break-glass로 회수한다. 이미 생성된 Job과
+  GCS 결과 객체는 삭제하지 않는다.
 
 ## 2026-08-08: Agent Orchestration API v0.9.0 digest 승격
 

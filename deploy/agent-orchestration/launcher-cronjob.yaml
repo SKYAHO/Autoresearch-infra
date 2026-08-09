@@ -187,6 +187,10 @@ spec:
                 #       launcher 로그에만 남아, 조용히 아무 Job도 만들어지지 않는다.
                 # Stage 1은 8-container 실행 뒤 2조건×3 seed 채점을 수행하므로,
                 # 60000초 Job budget과 그보다 작은 6000초 Codex 상한을 사용한다.
+                # Codex 상한은 8개 container 각각이 아니라 codex-worker의 단일
+                # `codex exec` subprocess 한 번에 적용된다. 학습 timeout 1800초는
+                # 조건별 seed 하나의 train-model 실행, 같은 값이 측정 단계의
+                # evaluate-model seed 하나에도 적용된다(전체 Job/단계 합계가 아님).
                 - name: ORCH_ACTIVE_DEADLINE_SEC
                   value: "60000"
                 - name: ORCH_CODEX_TIMEOUT_SEC

@@ -476,6 +476,15 @@ Stage 1 executor는 아래 세 literal env를 launcher에서 전달받아 측정
 | `ORCH_ACTIVE_DEADLINE_SEC` | `60000` |
 | `ORCH_CODEX_TIMEOUT_SEC` | `6000` |
 
+시간 변수의 적용 단위는 서로 다르다. `ORCH_ACTIVE_DEADLINE_SEC`는 8-container
+executor Job 전체의 상한이다. `ORCH_CODEX_TIMEOUT_SEC`는 `codex-worker` 한 container가
+실행하는 단일 `codex exec` subprocess의 상한이며 8개 container 각각에 복사되지 않는다.
+`ORCH_TRAINING_TIMEOUT_SEC=1800`은 baseline/candidate 각 조건의 seed 하나
+`train-model` 실행과 측정 단계의 seed 하나 `evaluate-model` 실행에 각각 적용된다.
+다운로드 timeout `600`은 baseline snapshot 1회(이후 같은 Pod에서 재사용), `uv sync`
+timeout `900`은 candidate 의존성 변경 시 1회다. 따라서 6000은 8-container 수에서
+계산한 값이 아니라 애플리케이션 spec이 정한 단일 Codex 호출 운영 상한이다.
+
 #### 적용 순서: admin admission을 먼저, ArgoCD manifest를 나중에
 
 `terraform/admin/autoresearch-k8s`는 ArgoCD가 관리하지 않는 별도 Terraform state이고,
@@ -527,6 +536,40 @@ sync해야 한다.** `launcher-cronjob.yaml`에는 `spec.suspend`를 정본으�
 이 순서 중 어느 단계에서든 새 executor Job이 `FailedCreate`가 되면 즉시 launcher를
 다시 suspend하고, 실패 Job의 admission Event를 보존한 채 2~4단계를 완료한다. 이미
 생성된 실패 Job은 자동 재시도하지 않으며, 원인을 확인하기 전 삭제하지 않는다.
+
+#### 장시간 Job 관측과 회수
+
+`launcher` suspend는 새 제출만 막고 이미 생성된 executor Job을 멈추지 않는다. 일반
+`experiment-job` KSA와 launcher/API KSA에는 Job delete 권한이 없으므로, 무한 대기나
+노드 장애를 정상 운영 권한으로 즉시 회수하는 경로는 없다. 자동 회수는
+`activeDeadlineSeconds` 만료(최대 16시간 40분)와 TTL controller뿐이다. 그 전에
+다음 신호를 주기적으로 확인한다.
+
+```bash
+kubectl -n autoresearch-experiments get jobs \
+  -l app.kubernetes.io/component=experiment-executor \
+  -o custom-columns='NAME:.metadata.name,ACTIVE:.status.active,SUCCEEDED:.status.succeeded,FAILED:.status.failed,START:.status.startTime,COND:.status.conditions[0].type'
+kubectl -n autoresearch-experiments get pods \
+  -l app.kubernetes.io/component=experiment-executor \
+  -o custom-columns='NAME:.metadata.name,PHASE:.status.phase,READY:.status.containerStatuses[*].ready,RESTARTS:.status.containerStatuses[*].restartCount'
+kubectl -n autoresearch-experiments get events --sort-by=.lastTimestamp | tail -n 40
+kubectl -n autoresearch-experiments logs job/<executor-job> -c workspace-preparer --since=15m
+kubectl -n autoresearch-experiments logs job/<executor-job> -c codex-worker --since=15m
+kubectl -n autoresearch-experiments logs job/<executor-job> -c candidate-finalizer --since=15m
+```
+
+stage 시작·종료, `training_timeout`, `evaluation_timeout`, `codex_timeout`, GCS
+`publish_failed`, API 보고 사유는 container 로그에 남는다. Pod metrics가 설치된 경우에는
+`kubectl top pod`로 CPU/memory 포화도 함께 본다. 현재 이 변경은 별도 heartbeat/알림을
+추가하지 않으므로, 위 신호가 진행 정지나 `FailedCreate`를 보이면 즉시 launcher를
+suspend하고 로그·Event·결과 URI를 보존한다.
+
+`batch-od`는 최대 2개 노드이고 namespace `count/jobs.batch=2`와 함께 실험 두 건이
+동시에 최대 16시간 40분 동안 두 슬롯을 점유할 수 있다. 현재 확인된 Airflow KPO는
+`batch-spot` 기본값이라 이 변경 시점에는 같은 pool 경쟁자가 없지만, 이후 workload가
+`batch-od`로 이동하면 이 장시간 점유·비용·대기 상한을 다시 계산해야 한다. 정상 권한으로
+회수할 수 없는 stuck Job은 break-glass cluster 관리자만 결과·Event를 보존한 뒤 명시적으로
+삭제할 수 있다.
 
 ```bash
 gcloud storage ls \

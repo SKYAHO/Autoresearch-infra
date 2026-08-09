@@ -244,6 +244,7 @@ module ExperimentLauncherManifestContract
         name
       )
     end
+    check_timeout_values!(environment)
     if environment.key?("ORCH_TRAINING_DATASET_PATH")
       raise ContractError, "구식 ORCH_TRAINING_DATASET_PATH는 사용할 수 없습니다"
     end
@@ -261,6 +262,28 @@ module ExperimentLauncherManifestContract
         "#{name} Secret 참조"
       )
     end
+  end
+
+  # Codex timeout은 8개 container 각각에 적용되는 Pod 상한이 아니다. executor의
+  # codex-worker 한 container가 한 번 실행하는 단일 `codex exec` subprocess의 상한이며,
+  # active deadline은 Job 전체 상한이다. exact literal 검사만 두면 두 값의 관계를
+  # 바꾼 뒤 launcher가 기동 시 실패하는 경로를 이 저장소에서 설명할 수 없으므로, 숫자
+  # 관계와 admission 상한도 별도로 계산한다.
+  def check_timeout_values!(environment)
+    active_deadline = parse_positive_timeout!(environment, "ORCH_ACTIVE_DEADLINE_SEC")
+    codex_timeout = parse_positive_timeout!(environment, "ORCH_CODEX_TIMEOUT_SEC")
+    raise ContractError, "Codex timeout은 active deadline보다 작아야 합니다" unless codex_timeout < active_deadline
+    raise ContractError, "active deadline은 60000초 이하여야 합니다" unless active_deadline <= 60000
+  end
+
+  def parse_positive_timeout!(environment, name)
+    value = environment.dig(name, "value")
+    parsed = Integer(value, 10)
+    raise ArgumentError if parsed < 1
+
+    parsed
+  rescue ArgumentError, TypeError
+    raise ContractError, "#{name}은 양의 정수여야 합니다"
   end
 
   def check_network_policy!(network_policy, pod_template, environment)
