@@ -15,7 +15,7 @@ def refs
   suffixes = { api: "a", ui: "b", launcher: "c", runner: "d", executor: "e" }
   AgentOrchestrationDigestPromotion::TARGETS.to_h { |name, target| [name, "#{target[:repository]}@sha256:#{suffixes.fetch(name) * 64}"] }
 end
-V11_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:30722cb72601cfe1e16cc0e940ad5942729c293cef414d719b5fccfa16599a8b"
+V12_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:657bb3bb64a6e900b422f868ac2f5ac75459210654fe87f1fa892a2b815ba3d6"
 
 def expect_equal(expected, actual, description)
   return if expected == actual
@@ -23,7 +23,7 @@ def expect_equal(expected, actual, description)
   raise "#{description} 불일치: 기대=#{expected.inspect}, 실제=#{actual.inspect}"
 end
 
-def check_v11_api_digest!
+def check_v12_api_digest!
   target = AgentOrchestrationDigestPromotion::TARGETS.fetch(:api)
   directory = File.join(AgentOrchestrationDigestPromotion::ROOT, "deploy/agent-orchestration")
   actual = Dir.glob(File.join(directory, "*.yaml")).sort.flat_map do |path|
@@ -32,10 +32,10 @@ def check_v11_api_digest!
       target.fetch(:repository)
     )
   end
-  expect_equal(Array.new(7, V11_API_REF), actual, "v0.11.0 API image references")
+  expect_equal(Array.new(7, V12_API_REF), actual, "v0.12.0 API image references")
 end
 
-check_v11_api_digest!
+check_v12_api_digest!
 
 def expect_error
   yield

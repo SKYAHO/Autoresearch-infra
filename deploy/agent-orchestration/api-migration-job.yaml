@@ -41,7 +41,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: bootstrap-db
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:30722cb72601cfe1e16cc0e940ad5942729c293cef414d719b5fccfa16599a8b
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:657bb3bb64a6e900b422f868ac2f5ac75459210654fe87f1fa892a2b815ba3d6
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -71,7 +71,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: migrate
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:30722cb72601cfe1e16cc0e940ad5942729c293cef414d719b5fccfa16599a8b
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:657bb3bb64a6e900b422f868ac2f5ac75459210654fe87f1fa892a2b815ba3d6
           imagePullPolicy: IfNotPresent
           command:
             - python
