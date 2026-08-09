@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-09T05:54:17Z",
+  "generated_at": "2026-08-09T06:32:17Z",
   "reports": [
+    {
+      "number": 596,
+      "title": "fix: persist executor-to-API ingress policy",
+      "author": "bbungjun",
+      "merged_at": "2026-08-09T06:32:00Z",
+      "summary_ko": [
+        "실험 실행 파드의 Experiment API 접근 허용 NetworkPolicy 규칙을 Git desired state에 영구 반영하였습니다.",
+        "동일한 peer 내 네임스페이스 및 파드 셀렉터를 조합하여 특정 네임스페이스의 실행 파드만 TCP 8000 포트에 접근하도록 제한했습니다.",
+        "배포 검증 스크립트 및 돌연변이 테스트를 통해 규칙 수 유효성과 셀렉터 분리 변형 감지 체계를 강화했습니다."
+      ],
+      "report_url": "pr/596/"
+    },
     {
       "number": 602,
       "title": "feat: executor에 MLflow tracking 좌표와 egress를 추가한다",
