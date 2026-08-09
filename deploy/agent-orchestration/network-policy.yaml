@@ -50,16 +50,18 @@ spec:
           port: 8000
     # 실험 executor만 내부 Experiment API에 candidate SHA와 실행 결과를 보고한다.
     # namespaceSelector와 podSelector를 같은 peer에 두어 두 조건을 AND로 강제한다.
+    # namespace 이름 selector는 Kubernetes가 자동 주입하는 immutable label을 사용하고,
+    # executor Pod label은 terraform/admin/autoresearch-k8s의 Job admission 계약이 소유한다.
     - from:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: autoresearch-experiments
+              kubernetes.io/metadata.name: autoresearch-experiments
           podSelector:
             matchLabels:
               app.kubernetes.io/component: experiment-executor
       ports:
-        - port: 8000
-          protocol: TCP
+        - protocol: TCP
+          port: 8000
   egress:
     # Calico가 Service 트래픽을 DNAT 이전 ClusterIP로 평가하는 경로에서는
     # podSelector만으로 Runner Service VIP를 매칭할 수 없다. 이 CIDR은 dev

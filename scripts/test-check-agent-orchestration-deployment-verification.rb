@@ -72,6 +72,36 @@ expect_failure do |root|
       item.dig("from", 0, "podSelector", "matchLabels", "app.kubernetes.io/component") ==
         "experiment-executor"
     end
+    rule.dig("from", 0, "podSelector", "matchLabels").clear
+  end
+end
+expect_failure do |root|
+  mutate_policies(root) do |documents|
+    api = documents.find { |document| document.dig("metadata", "name") == "agent-orchestration-api-egress" }
+    rule = api.dig("spec", "ingress").find do |item|
+      item.dig("from", 0, "podSelector", "matchLabels", "app.kubernetes.io/component") ==
+        "experiment-executor"
+    end
+    rule.fetch("ports").first["port"] = 8080
+  end
+end
+expect_failure do |root|
+  mutate_policies(root) do |documents|
+    api = documents.find { |document| document.dig("metadata", "name") == "agent-orchestration-api-egress" }
+    rule = api.dig("spec", "ingress").find do |item|
+      item.dig("from", 0, "podSelector", "matchLabels", "app.kubernetes.io/component") ==
+        "experiment-executor"
+    end
+    rule.fetch("ports") << { "protocol" => "TCP", "port" => 8081 }
+  end
+end
+expect_failure do |root|
+  mutate_policies(root) do |documents|
+    api = documents.find { |document| document.dig("metadata", "name") == "agent-orchestration-api-egress" }
+    rule = api.dig("spec", "ingress").find do |item|
+      item.dig("from", 0, "podSelector", "matchLabels", "app.kubernetes.io/component") ==
+        "experiment-executor"
+    end
     source = rule.fetch("from").first
     # 같은 peer의 두 selector를 별도 peer로 나누면 OR 의미가 되어 source 범위가
     # 넓어진다. 계약 검사는 이 문법상 작지만 보안상 중요한 변형을 거부해야 한다.

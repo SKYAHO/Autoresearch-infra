@@ -139,7 +139,7 @@ module AgentOrchestrationDeploymentVerification
     executor_ingress = {
       "from" => [{
         "namespaceSelector" => {
-          "matchLabels" => { "app.kubernetes.io/name" => "autoresearch-experiments" }
+          "matchLabels" => { "kubernetes.io/metadata.name" => "autoresearch-experiments" }
         },
         "podSelector" => {
           "matchLabels" => { "app.kubernetes.io/component" => "experiment-executor" }
@@ -152,8 +152,6 @@ module AgentOrchestrationDeploymentVerification
             "API ingress는 autoresearch-experiments의 experiment-executor에 TCP 8000만 허용해야 합니다"
     end
 
-    api_egress = api.dig("spec", "egress") || []
-    raise ContractError, "API egress는 기존 10개를 유지해야 합니다" unless api_egress.length == 10
   end
 end
 

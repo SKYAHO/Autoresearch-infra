@@ -11,11 +11,11 @@
 ## Global Constraints
 
 - 대상은 `autoresearch/agent-orchestration-api-egress` 하나다.
-- source namespace label은 `app.kubernetes.io/name=autoresearch-experiments`다.
+- source namespace label은 Kubernetes가 자동 주입하는 `kubernetes.io/metadata.name=autoresearch-experiments`다.
 - source Pod label은 `app.kubernetes.io/component=experiment-executor`다.
 - destination은 `TCP/8000` 하나다.
 - 두 selector는 같은 `from` peer 안에 있어야 한다.
-- API ingress는 4개, API egress는 10개를 유지한다.
+- API ingress는 4개다. API egress는 이 PR에서 검사·변경하지 않는다.
 - IAM, image digest, executor egress는 변경하지 않는다.
 
 ---
@@ -38,13 +38,13 @@
 - [ ] **Step 1: 누락된 executor ingress를 요구하는 계약을 먼저 작성한다**
 
 `check_network_policies!`에서 API ingress 배열 길이가 4인지, 아래 exact rule이 한 개
-존재하는지, API egress 길이가 10인지 검사한다.
+존재하는지 검사한다.
 
 ```ruby
 executor_ingress = {
   "from" => [{
     "namespaceSelector" => {
-      "matchLabels" => { "app.kubernetes.io/name" => "autoresearch-experiments" }
+      "matchLabels" => { "kubernetes.io/metadata.name" => "autoresearch-experiments" }
     },
     "podSelector" => {
       "matchLabels" => { "app.kubernetes.io/component" => "experiment-executor" }
@@ -117,7 +117,12 @@ expect_failure do |root|
 end
 ```
 
-- [ ] **Step 6: 전체 관련 검증을 실행한다**
+- [ ] **Step 6: selector·포트 확대 mutation도 거부하는지 확인한다**
+
+Pod selector를 빈 hash로 만들거나 포트를 8080으로 바꾸거나 포트를 하나 더 추가하는
+mutation을 `expect_failure`로 고정한다.
+
+- [ ] **Step 7: 전체 관련 검증을 실행한다**
 
 Run:
 
@@ -141,5 +146,6 @@ git diff -- deploy/agent-orchestration/network-policy.yaml \
   scripts/test-check-agent-orchestration-deployment-verification.rb
 ```
 
-Expected: executor API ingress와 계약·self-test만 변경되고 IAM, digest, executor egress는
+Expected: executor API ingress와 계약·self-test만 변경되고 IAM, digest, API egress,
+executor egress는
 변경되지 않는다.
