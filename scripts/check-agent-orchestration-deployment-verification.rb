@@ -130,6 +130,28 @@ module AgentOrchestrationDeploymentVerification
         rule["ports"] == [{ "protocol" => "TCP", "port" => 8000 }]
     end
     raise ContractError, "API ingress에 verifier TCP 8000 허용이 없습니다" unless allowed
+
+    api_ingress = api.dig("spec", "ingress") || []
+    unless api_ingress.length == 4
+      raise ContractError, "API ingress는 UI, node probe, verifier, executor 4개여야 합니다"
+    end
+
+    executor_ingress = {
+      "from" => [{
+        "namespaceSelector" => {
+          "matchLabels" => { "kubernetes.io/metadata.name" => "autoresearch-experiments" }
+        },
+        "podSelector" => {
+          "matchLabels" => { "app.kubernetes.io/component" => "experiment-executor" }
+        }
+      }],
+      "ports" => [{ "protocol" => "TCP", "port" => 8000 }]
+    }
+    unless api_ingress.count { |rule| rule == executor_ingress } == 1
+      raise ContractError,
+            "API ingress는 autoresearch-experiments의 experiment-executor에 TCP 8000만 허용해야 합니다"
+    end
+
   end
 end
 
