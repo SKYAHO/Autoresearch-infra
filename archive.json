@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-09T06:52:04Z",
+  "generated_at": "2026-08-09T06:59:39Z",
   "reports": [
+    {
+      "number": 605,
+      "title": "fix: Stage 1 결과 게시 시간 설정 수정",
+      "author": "bbungjun",
+      "merged_at": "2026-08-09T06:59:28Z",
+      "summary_ko": [
+        "Stage 1 실험 결과 보존을 위해 실행 환경에 GCS 저장소 경로(ORCH_EXPERIMENT_RESULTS_ROOT)를 추가했습니다.",
+        "8개 컨테이너 실행 및 채점에 필요한 시간을 확보하고자 작업 제한 시간을 60,000초, Codex 타임아웃을 6,000초로 상향했습니다.",
+        "쿠버네티스 어드미션 정책 상한을 60,000초로 맞추고 매니페스트 검증 코드, 테스트, 운용 런북을 함께 갱신했습니다."
+      ],
+      "report_url": "pr/605/"
+    },
     {
       "number": 608,
       "title": "fix: Agent Orchestration 5개 digest 승격",
