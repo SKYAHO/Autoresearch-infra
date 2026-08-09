@@ -3,6 +3,30 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-09: candidate-finalizer의 Codex 인증 mount 허용 (#611)
+
+- v0.12.0 launcher가 리포트를 쓰는 Codex #2를 위해 `candidate-finalizer`에
+  `codex-home` Secret volume을 readOnly `subPath`로 추가 mount하는데, 어드미션
+  계약이 그 mount 주체를 `codex-worker` 하나로 고정하고 있어 모든 executor Job이
+  422로 거부됐다. `credential_mounts["codex-home"].readers`에
+  `candidate-finalizer`를 추가했다. writers는 계속 비어 있어 두 컨테이너 모두
+  readOnly로만 mount할 수 있다.
+- **이 변경은 초판 설계의 역방향 경계를 하나 무른다.** 이전 계약은 "Codex 인증이
+  GitHub을 만지는 컨테이너로 새지 않는다"였으나, 이제 push token·내부 API token과
+  Codex 인증이 `candidate-finalizer` 한 컨테이너에 함께 있다. Codex sandbox가
+  `danger-full-access`라 코드로 막지 않으며 금지는 애플리케이션 하네스 지침이
+  담당한다. 근본 해소는 계약 완화가 아니라 컨테이너 분리(애플리케이션 Stage 2의
+  8 → 4/5 재구성)이며, 그때까지 예외는 `candidate-finalizer` 하나로 한정하고
+  `tftest` 고정값이 목록을 두 개로 못 박는다. `codex-worker` 쪽 경계(GitHub 자격
+  증명·API 토큰 없음)는 그대로 유지한다.
+- digest 승격(#609)은 ArgoCD가 자동 sync하지만 어드미션 계약은
+  `terraform/admin/autoresearch-k8s`의 별도 state다. **image digest와 계약을 함께
+  바꾸는 release는 계약을 먼저 apply한다.** 롤백은 `readers`를 `["codex-worker"]`로
+  되돌리고 admin apply를 다시 수행하는 것이며, 그 경우 v0.12.0 executor Job은 다시
+  거부되므로 launcher digest도 함께 v0.11.0으로 되돌린다. 거부된 Job은 Pod를
+  만들지 않아 정리 대상이 없고, launcher가 매 tick 재시도하므로 계약 반영 즉시
+  다음 tick에서 Job이 생성된다.
+
 ## 2026-08-09: v0.12.0 Agent Orchestration 5개 digest 승격 (#609)
 
 - Autoresearch source `8750bce`에서 검증·게시된 다섯 immutable digest를 dev

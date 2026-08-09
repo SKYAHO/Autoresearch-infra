@@ -393,7 +393,8 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # 문자열로 고정해 노드 ephemeral storage 소비 상한을 계약에 남긴다.
         #
         # codex-home은 items를 `auth.json` 하나로 못 박는다. Secret에 다른 key가
-        # 추가될 때 계약이 그것까지 codex-worker에 노출하지 않도록 한다.
+        # 추가될 때 계약이 그것까지 Codex 실행 컨테이너에 노출하지 않도록 한다
+        # (#611 이후 mount 주체는 codex-worker와 candidate-finalizer 둘이다).
         {
           expression = join("", [
             "variables.component != '${local.experiment_executor_component_label}' || (",
