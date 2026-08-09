@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-09T23:39:07Z",
+  "generated_at": "2026-08-09T23:40:30Z",
   "reports": [
+    {
+      "number": 614,
+      "title": "fix: v0.12.1 executor·launcher digest 승격",
+      "author": "bbungjun",
+      "merged_at": "2026-08-09T23:38:50Z",
+      "summary_ko": [
+        "v0.12.1 수동 승격에 따라 실험 런처 및 이그제큐터의 신규 이미지 다이제스트를 매니페스트에 반영하였습니다.",
+        "런처 매니페스트 정적 계약 검증 스크립트와 셀프 테스트 픽스처의 이미지 기댓값을 신규 좌표로 갱신하였습니다.",
+        "변경 이력 문서와 실행 런북에 새로 반영된 이미지 다이제스트 정보, 검증 명령어, 롤백 절차를 명시하였습니다."
+      ],
+      "report_url": "pr/614/"
+    },
     {
       "number": 612,
       "title": "fix: candidate-finalizer의 Codex 인증 mount를 계약에 반영한다",
