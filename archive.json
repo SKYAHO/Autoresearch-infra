@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-09T06:59:39Z",
+  "generated_at": "2026-08-09T12:02:35Z",
   "reports": [
+    {
+      "number": 610,
+      "title": "fix: v0.12.0 Agent Orchestration digest 승격",
+      "author": "bbungjun",
+      "merged_at": "2026-08-09T12:02:18Z",
+      "summary_ko": [
+        "Autoresearch main 커밋 8750bce에서 빌드된 Agent Orchestration v0.12.0 컨테이너 이미지 불변 다이제스트 5종을 매니페스트에 반영하였습니다.",
+        "Codex 연동 계약 일치를 위해 실행 요청기(launcher)와 실행기(executor)를 포함한 5개 이미지 다이제스트를 원자적으로 동시 승격하였습니다.",
+        "정적 계약 검증 스크립트와 셀프 테스트 기대값을 v0.12.0으로 동기화하고 변경 이력 및 롤백 운영 가이드를 추가하였습니다."
+      ],
+      "report_url": "pr/610/"
+    },
     {
       "number": 605,
       "title": "fix: Stage 1 결과 게시 시간 설정 수정",
