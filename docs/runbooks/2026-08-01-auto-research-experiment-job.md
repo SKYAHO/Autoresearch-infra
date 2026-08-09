@@ -647,6 +647,33 @@ launcher CronJob 실패 이력은 `FailedCreate` Event만 남기고 Pod를 만�
 인증이 함께 있다)은 설계 문서 3.3.1에 기록돼 있다:
 `docs/superpowers/specs/2026-08-07-experiment-executor-phase2-admission-design.md`.
 
+#### v0.12.1 executor·launcher digest 승격 (#613)
+
+source `fb42ddf`의 executor 수정과 함께 구운 두 image만 갱신한다. 환경 변수·volume·
+컨테이너 구성이 v0.12.0과 같아 어드미션 계약은 바꾸지 않으며, ArgoCD sync만으로
+반영된다. API·UI·runner는 v0.12.0 digest를 유지한다.
+
+| 역할 | v0.12.1 digest | rollback(v0.12.0) |
+|---|---|---|
+| executor | `sha256:f9a73d1ed207644e89750971e88f1e7e5ab32dfba2092e0fc71d7352b632354a` | `sha256:c607d19eecdd6c55a969b8cb6ebf7c9f0b324c53b1d33835a17ba93a70e068dc` |
+| launcher | `sha256:f463fd301e3e3b42e525aa7fd03e92ea2bf5ee0b98dea8921438231067f66701` | `sha256:6b4f113f271c3965c93504d8656681e14eb6a18671c48ea33ff0b18bd3a99eaa` |
+
+sync 후 live CronJob의 두 좌표를 확인한다. **DB bootstrap initContainer는 launcher가
+아니라 API image를 쓰므로 v0.12.0(`657bb3bb…`) 그대로여야 한다.**
+
+```bash
+kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+  -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[?(@.name=="launcher")].image}{"\n"}'
+kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+  -o jsonpath='{range .spec.jobTemplate.spec.template.spec.containers[?(@.name=="launcher")].env[*]}{.name}={.value}{"\n"}{end}' \
+  | grep '^ORCH_EXECUTOR_IMAGE='
+kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+  -o jsonpath='{.spec.jobTemplate.spec.template.spec.initContainers[0].image}{"\n"}'
+```
+
+롤백은 launcher를 suspend한 뒤 두 참조를 **함께** v0.12.0으로 되돌린다. executor
+수정이 이 release의 목적이므로 분리해 되돌리지 않는다.
+
 ### branch-writer GitHub App 자격 증명 등록
 
 executor는 branch-writer GitHub App(`SKYAHO/Autoresearch` 한 저장소, `Contents:

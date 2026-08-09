@@ -3,6 +3,25 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-10: v0.12.1 executor·launcher digest 승격 (#613)
+
+- Autoresearch source `fb42ddf`(v0.12.1)의 executor
+  `sha256:f9a73d1ed207644e89750971e88f1e7e5ab32dfba2092e0fc71d7352b632354a`와
+  launcher
+  `sha256:f463fd301e3e3b42e525aa7fd03e92ea2bf5ee0b98dea8921438231067f66701`를
+  반영했다. 애플리케이션 저장소의 자동 승격 workflow가 실패해 #606·#609와 같은
+  수동 승격으로 진행했다.
+- **API·UI·runner는 v0.12.0 digest를 유지한다.** 이번 release가 새로 구운 것은 두
+  이미지뿐이다. launcher CronJob의 DB bootstrap initContainer는 launcher가 아니라
+  API image를 쓰므로 그 참조도 v0.12.0(`657bb3bb…`)에 그대로 둔다.
+- 환경 변수·volume·컨테이너 구성이 v0.12.0과 같아 `terraform/admin/autoresearch-k8s`
+  어드미션 계약은 바꾸지 않았다. #611이 추가한 `candidate-finalizer`의 `codex-home`
+  mount 허용이 이 release에도 그대로 적용된다.
+- 롤백은 launcher를 suspend한 뒤 두 참조를 v0.12.0(executor `c607d19e…`, launcher
+  `6b4f113f…`)으로 함께 되돌리는 것이다. executor 수정이 이 release의 목적이므로
+  두 이미지를 분리해 되돌리지 않는다. 승격 전 두 digest가 Artifact Registry에
+  존재하는지 확인했다.
+
 ## 2026-08-09: candidate-finalizer의 Codex 인증 mount 허용 (#611)
 
 - v0.12.0 launcher가 리포트를 쓰는 Codex #2를 위해 `candidate-finalizer`에
