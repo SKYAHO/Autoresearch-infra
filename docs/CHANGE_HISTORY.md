@@ -3,6 +3,26 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-09: Stage 1 결과 게시와 실행 시간 설정 (#604)
+
+- launcher CronJob이 executor에 `ORCH_EXPERIMENT_RESULTS_ROOT`를 전달해 Stage 1
+  측정 산출물을 `experiment-results/experiments/{issue_number}/{experiment_id}/`에
+  남기게 했다. 기존 `experiment-job` GSA의 bucket-level `objectCreator`와 executor의
+  `if_generation_match=0` precondition으로 결과 write-once를 유지하며, IAM·project-
+  level binding은 추가하지 않았다.
+- 8-container 실행과 2조건×3 seed 채점 budget에 맞춰
+  `ORCH_ACTIVE_DEADLINE_SEC=60000`, `ORCH_CODEX_TIMEOUT_SEC=6000`으로 올렸다.
+  manifest만 바꾸면 ValidatingAdmissionPolicy가 Job을 거부하므로 같은 변경에서
+  server-side active deadline upper bound도 60000초로 갱신했다. 완료 후 TTL 상한은
+  3600초로 유지한다.
+- Job 두 개가 각각 최대 16시간 40분, 완료 후 1시간 동안 batch-od와
+  `count/jobs.batch`를 점유할 수 있다. 실제 apply·ArgoCD sync·실험 발행은 이 PR
+  범위 밖이며, admin root의 live VAP를 먼저 60000초로 올린 뒤 launcher를 suspend한
+  상태에서 ArgoCD manifest를 sync해야 한다. 반대로 env가 먼저 반영되면 기존 VAP가
+  executor Job을 `FailedCreate`로 거부한다. 장애 시 launcher를 suspend한 뒤 세 env와
+  admission 상한을 함께 revert한다. 정상 KSA에는 조기 delete 경로가 없으므로 장시간
+  Job은 stage 로그·Event를 관측하고 필요 시 break-glass로 회수한다. 이미 생성된 Job과
+  GCS 결과 객체는 삭제하지 않는다.
 ## 2026-08-09: v0.11.0 Agent Orchestration 5개 digest 수동 승격 (#606)
 
 - Autoresearch source `8242d3b`에서 검증·게시된 다섯 immutable digest를 dev
