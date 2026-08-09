@@ -39,6 +39,7 @@
 ```
 
 - [x] 결과 root 삭제, deadline을 `"3600"`으로 변경, Codex timeout을 `"60000"`으로 변경하는 세 `expect_failure` mutation을 추가한다.
+- [x] exact literal과 별도로 Codex timeout < active deadline 및 active deadline <= 60000을 계산하는 계약과 synthetic self-test를 추가한다.
 - [x] `docker run --rm -v "$PWD":/workspace -w /workspace ruby:3.4-alpine ruby scripts/test-check-experiment-launcher-manifest-contract.rb`를 실행해 결과 root assertion이 RED로 실패하는지 확인한다.
 
 ### Task 2: CronJob과 Ruby contract를 GREEN으로 만든다
