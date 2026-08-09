@@ -115,7 +115,7 @@ locals {
 
     # (#562) Phase 2 executor. 값의 정본은 애플리케이션 저장소
     # `agent_orchestration/launcher/jobs.py`의 `build_executor_job()`이며
-    # source SHA e5ce030 기준이다. 불일치하면 launcher가 만드는 모든 Job이
+    # source SHA 8750bce(v0.12.0) 기준이다. 불일치하면 launcher가 만드는 모든 Job이
     # admission에서 거부된다.
     (local.experiment_executor_component_label) = {
       # 순서까지 계약이다. token을 발급하는 컨테이너가 그 token을 쓰는 컨테이너
@@ -151,6 +151,21 @@ locals {
       #
       # 토큰을 용도별로 셋으로 나눈 것도 계약이다. 하나로 합치면 clone용 read
       # 권한 토큰과 push용 write 권한 토큰이 같은 파일을 공유하게 된다.
+      #
+      # (#611) v0.12.0에서 `candidate-finalizer`가 `codex-home`을 추가로 읽는다.
+      # 리포트를 쓰는 Codex #2가 그 컨테이너에서 돌기 때문이다 — 채점 결과가
+      # 나오는 시점이 거기이고, `report.md`는 git 커밋 대상이 아니라 GCS 게시
+      # 산출물이라 push 뒤에 와도 된다.
+      #
+      # 이것은 원래 설계의 역방향 경계를 하나 무르는 변경이다. 이전 계약은
+      # "Codex 인증은 GitHub을 만지는 컨테이너에 닿지 않는다"였는데, 이제
+      # push token·내부 API token과 Codex 인증이 같은 컨테이너에 함께 있다.
+      # Codex sandbox가 `danger-full-access`라 그 안에서 토큰 파일을 읽는 것을
+      # 코드로 막지 않으며, 금지는 애플리케이션 측 하네스 지침이 담당한다.
+      # 감수하는 위험은 "리포트 생성 실패 시 Codex #2가 push token을 볼 수
+      # 있다"이고, 이를 없애는 방법은 계약 완화가 아니라 컨테이너 분리다
+      # (애플리케이션 Stage 2의 8 → 4/5 재구성). 그 전까지는 이 표가 그
+      # 예외를 명시적으로 기록한다 — codex-worker 쪽 경계는 그대로 유지한다.
       credential_mounts = {
         (local.experiment_branch_writer_key_volume) = {
           readers = ["branch-token-minter", "clone-token-minter", "push-token-minter"]
@@ -173,7 +188,7 @@ locals {
           writers = []
         }
         "codex-home" = {
-          readers = ["codex-worker"]
+          readers = ["codex-worker", "candidate-finalizer"]
           writers = []
         }
       }

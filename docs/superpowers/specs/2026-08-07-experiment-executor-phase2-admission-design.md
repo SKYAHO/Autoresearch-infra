@@ -46,7 +46,7 @@
 | init 5 | `codex-worker` | `codex-home`의 `auth.json`(RO, subPath) | Codex 실행. **GitHub 자격 증명은 없음** |
 | init 6 | `candidate-verifier` | **없음** | |
 | init 7 | `push-token-minter` | private key(RO), `push-token`(RW) | |
-| app | `candidate-finalizer` | `push-token`(RO), `executor-api-token`(RO) | push·보고 |
+| app | `candidate-finalizer` | `push-token`(RO), `executor-api-token`(RO), `codex-home`의 `auth.json`(RO, subPath) | push·보고·리포트(Codex #2). `codex-home`은 v0.12.0(#611)에서 추가 |
 
 volume 10개:
 
@@ -133,15 +133,33 @@ Phase 2에서 initContainer는 7개가 되고 그중 하나가 `codex-worker`다
 | `clone-token` | `clone-token-minter`(RW), `workspace-preparer`(RO) |
 | `push-token` | `push-token-minter`(RW), `candidate-finalizer`(RO) |
 | `executor-api-token` | `candidate-finalizer`(RO) |
-| `codex-home` | `codex-worker`(RO) |
+| `codex-home` | `codex-worker`(RO), `candidate-finalizer`(RO) |
 
 이 표의 결과로 다음이 규칙에서 직접 따라 나온다.
 
 - **`codex-worker`는 GitHub 자격 증명과 내부 API 토큰을 가질 수 없다.** 가질 수
   있는 것은 자기 실행에 필요한 `codex-home`의 `auth.json` 하나뿐이다.
 - **`candidate-verifier`는 어떤 자격 증명도 가질 수 없다.**
-- 반대로 `codex-home`은 `codex-worker` 외 어떤 컨테이너도 마운트할 수 없다.
-  Codex 인증이 GitHub을 만지는 컨테이너로 새는 경로도 함께 닫힌다.
+- `codex-home`을 마운트할 수 있는 컨테이너는 Codex를 직접 실행하는 둘뿐이며,
+  쓰기 주체는 없다.
+
+#### 3.3.1 v0.12.0(#611)에서 무른 역방향 경계
+
+초판 계약은 `codex-home`을 `codex-worker` 하나로 묶어 **"Codex 인증이 GitHub을
+만지는 컨테이너로 새는 경로"까지 함께 닫았다.** v0.12.0에서 리포트를 쓰는
+Codex #2가 `candidate-finalizer`에서 돌게 되면서 이 역방향 경계를 뺐다. 채점
+결과가 나오는 시점이 그 컨테이너이고, `report.md`는 git 커밋 대상이 아니라 GCS
+게시 산출물이라 push 뒤에 와도 되기 때문이다.
+
+결과적으로 **push token·내부 API token과 Codex 인증이 한 컨테이너에 함께 있다.**
+Codex sandbox는 `danger-full-access`라 그 안에서 토큰 파일을 읽는 것을 코드로
+막지 않으며, 금지는 애플리케이션 측 하네스 지침이 담당한다. 감수하는 위험은
+"Codex #2가 push token을 볼 수 있다"이고, 이를 없애는 방법은 계약을 더 푸는 것이
+아니라 컨테이너 분리다(애플리케이션 Stage 2의 8 → 4/5 재구성).
+
+`codex-worker` 쪽 경계(GitHub 자격 증명·API 토큰 없음)는 그대로 유지한다. 이
+예외는 `candidate-finalizer` 하나에 한정되며, 계약 표와 `tftest` 고정값이 그
+목록을 두 개로 못 박아 "한 컨테이너 더"가 조용히 추가되지 않게 한다.
 
 3.4가 설명하듯 이 자격 증명 분리가 유일하게 강제 가능한 경계다.
 
@@ -175,8 +193,8 @@ dataplane은 Calico라 `FQDNNetworkPolicy`를 쓸 수 없어 공개 443을 통�
 `autoresearch-experiments` namespace의 Kubernetes Secret이며, #562에서 만들었다.
 
 - **Codex 인증 Secret** (`codex-home` volume의 원본) — `auth.json` key 하나를
-  제공한다. `codex-worker`만 `/var/lib/codex/auth.json`에 readOnly `subPath`로
-  마운트한다. `defaultMode` 0440은 launcher가 지정하므로 이 저장소는 Secret과 key
+  제공한다. `codex-worker`와 `candidate-finalizer`(3.3.1)가
+  `/var/lib/codex/auth.json`에 readOnly `subPath`로 마운트한다. `defaultMode` 0440은 launcher가 지정하므로 이 저장소는 Secret과 key
   존재만 소유한다.
 - **`executor-api-token` Secret** — `candidate-finalizer`가 in-cluster Experiment
   API에 보고할 때 쓰는 토큰. 이름은
@@ -382,6 +400,9 @@ API Pod만 단일 key `secretKeyRef`로 읽으며, UI·runner·launcher에는 �
 
 ## 12. 검토 근거
 
+- **개정(#611, 2026-08-09)**: 관찰 대상 SHA `SKYAHO/Autoresearch@8750bce`(v0.12.0).
+  `candidate-finalizer`가 Codex #2로 `report.md`를 쓰면서 `codex-home`을 추가로
+  마운트한다. 3.1·3.3·4절을 갱신하고 근거와 잔여 위험을 3.3.1에 기록했다.
 - 관찰 대상 SHA: `SKYAHO/Autoresearch@e5ce030979f573dfcd9117a1bfaf456e4a6aff75`
   (`launcher/jobs.py`, `launcher/config.py`, `launcher/main.py`,
   `executor/token_minter.py`, `.env.example`, `README.md`,

@@ -429,7 +429,7 @@ variable "experiment_executor_api_token_secret_name" {
 }
 
 variable "experiment_codex_home_secret_name" {
-  description = "codex-worker만 readOnly subPath로 mount하는 Codex 인증 Kubernetes Secret 이름. auth.json key 하나만 제공하며 값은 Terraform이 관리하지 않는다. launcher의 ORCH_CODEX_HOME_SECRET_NAME과 같아야 한다."
+  description = "codex-worker와 candidate-finalizer만 readOnly subPath로 mount하는 Codex 인증 Kubernetes Secret 이름. auth.json key 하나만 제공하며 값은 Terraform이 관리하지 않는다. launcher의 ORCH_CODEX_HOME_SECRET_NAME과 같아야 한다."
   type        = string
   default     = "autoresearch-experiment-codex-auth"
 

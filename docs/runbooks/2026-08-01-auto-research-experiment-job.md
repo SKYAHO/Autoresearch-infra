@@ -612,6 +612,41 @@ rollback 좌표다. launcher CronJob을 먼저 suspend한 뒤 세 참조를 함�
 이 Phase는 Job 완료·실패를 DB status로 회수하지 않는다. Job이 `Complete`가 되어도
 Experiment는 `RUNNING`에 남는다. 이는 의도된 경계이며 reconciler는 후속 이슈다.
 
+### v0.12.0 리포트용 Codex #2와 어드미션 계약 (#611)
+
+v0.12.0 launcher는 `candidate-finalizer`에 `codex-home`을 readOnly `subPath`로 하나
+더 mount한다. 리포트를 쓰는 Codex #2가 그 컨테이너에서 돌기 때문이다. 이 저장소의
+어드미션 계약이 그 mount 주체를 `codex-worker` 하나로 고정하고 있었으므로, 계약을
+먼저 올리지 않으면 **모든 executor Job이 422로 거부된다.**
+
+```
+Jobs.batch "…" is forbidden: ValidatingAdmissionPolicy
+'autoresearch-experiment-job-contract' denied request:
+experiment-executor Job에서 codex-home volume은 codex-worker만 mount할 수 있습니다.
+```
+
+이 증상은 digest 승격(manifest sync)만 하고 admin apply를 하지 않았을 때 나타난다.
+digest 승격은 ArgoCD가 자동 sync하지만 계약은 `terraform/admin/autoresearch-k8s`의
+별도 state라 `apply` workflow를 `scope=admin`으로 dispatch해야 반영된다. **image
+digest와 admission 계약을 함께 바꾸는 release는 계약을 먼저 apply한다.**
+
+적용 후 live 정책에 두 컨테이너가 모두 들어갔는지 확인한다.
+
+```bash
+kubectl get validatingadmissionpolicy autoresearch-experiment-job-contract -o yaml \
+  | grep -n 'codex-home'
+# 기대: mount 주체 규칙의 목록이 ["codex-worker","candidate-finalizer"]
+```
+
+이미 거부된 Job은 정리할 것이 없다. launcher가 매 tick(1분)마다 같은 실험으로 Job
+생성을 재시도하므로, 계약이 반영되면 다음 tick에서 Job이 생성된다. 그때까지 쌓인
+launcher CronJob 실패 이력은 `FailedCreate` Event만 남기고 Pod를 만들지 않으므로
+노드·quota를 점유하지 않는다. 원인 확인 전에는 실패 Job과 Event를 삭제하지 않는다.
+
+계약이 무르는 경계와 그 잔여 위험(같은 컨테이너에 push token·API token과 Codex
+인증이 함께 있다)은 설계 문서 3.3.1에 기록돼 있다:
+`docs/superpowers/specs/2026-08-07-experiment-executor-phase2-admission-design.md`.
+
 ### branch-writer GitHub App 자격 증명 등록
 
 executor는 branch-writer GitHub App(`SKYAHO/Autoresearch` 한 저장소, `Contents:
@@ -676,7 +711,7 @@ Phase 2는 위 branch-writer Secret 외에 두 개를 더 요구한다. 둘 다 
 
 | Secret 이름 | key | mount하는 컨테이너 | 쓰임 |
 |---|---|---|---|
-| `autoresearch-experiment-codex-auth` | `auth.json` | `codex-worker` **만** | Codex 인증 |
+| `autoresearch-experiment-codex-auth` | `auth.json` | `codex-worker`, `candidate-finalizer` **만** | Codex 인증(후자는 v0.12.0 리포트용 Codex #2) |
 | `autoresearch-experiment-executor-api-token` | `token` | `candidate-finalizer` **만** | candidate SHA 보고 |
 
 Codex 인증은 PVC가 아니라 Secret이다. `standard-rwo` PVC는 단일 노드 attach라 여러

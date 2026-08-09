@@ -137,13 +137,16 @@ run "executor_contract_separates_credentials_by_container" {
     error_message = "candidate-verifier는 어떤 자격 증명도 mount할 수 없다."
   }
 
-  # 역방향. Codex 인증이 GitHub을 만지는 컨테이너로 새는 경로도 닫아야 한다.
+  # 역방향. Codex 인증을 읽는 컨테이너 목록은 열려 있으면 안 된다. v0.12.0(#611)
+  # 부터 리포트를 쓰는 Codex #2가 candidate-finalizer에서 돌아 두 컨테이너가
+  # 됐지만, 그 둘 외에는 늘어날 수 없고 쓰기 주체는 계속 없어야 한다. 목록을
+  # 그대로 고정해 "한 컨테이너 더"가 조용히 추가되지 않게 한다.
   assert {
     condition = local.experiment_job_contracts["experiment-executor"].credential_mounts["codex-home"] == {
-      readers = ["codex-worker"]
+      readers = ["codex-worker", "candidate-finalizer"]
       writers = []
     }
-    error_message = "Codex 인증 Secret은 codex-worker만 읽기 전용으로 mount할 수 있어야 한다."
+    error_message = "Codex 인증 Secret은 codex-worker와 candidate-finalizer만 읽기 전용으로 mount할 수 있어야 한다."
   }
 
   # private key는 token을 발급하는 세 컨테이너만 본다. 쓰기 주체는 없다.
