@@ -8,7 +8,8 @@ module AgentOrchestrationDigestPromotion
     api: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api", files: { "api-deployment.yaml" => 2, "api-migration-job.yaml" => 2, "launcher-cronjob.yaml" => 1, "runner-deployment.yaml" => 1, "deployment-verification-job.yaml" => 1 } },
     ui: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-ui", files: { "ui-deployment.yaml" => 1 } },
     launcher: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher", files: { "launcher-cronjob.yaml" => 1 } },
-    runner: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-runner", files: { "runner-deployment.yaml" => 1 } }
+    runner: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-runner", files: { "runner-deployment.yaml" => 1 } },
+    executor: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor", files: { "launcher-cronjob.yaml" => 1 } }
   }.freeze
   class PromotionError < StandardError; end
   module_function
@@ -54,6 +55,6 @@ module AgentOrchestrationDigestPromotion
 end
 
 if $PROGRAM_NAME == __FILE__
-  AgentOrchestrationDigestPromotion.promote!(api: ENV.fetch("API_DIGEST_REF"), ui: ENV.fetch("UI_DIGEST_REF"), launcher: ENV.fetch("LAUNCHER_DIGEST_REF"), runner: ENV.fetch("RUNNER_DIGEST_REF"))
+  AgentOrchestrationDigestPromotion.promote!(api: ENV.fetch("API_DIGEST_REF"), ui: ENV.fetch("UI_DIGEST_REF"), launcher: ENV.fetch("LAUNCHER_DIGEST_REF"), runner: ENV.fetch("RUNNER_DIGEST_REF"), executor: ENV.fetch("EXECUTOR_DIGEST_REF"))
   puts "Agent Orchestration digest promotion: passed"
 end
