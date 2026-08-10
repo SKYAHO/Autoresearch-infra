@@ -209,7 +209,8 @@ flowchart TB
 ```mermaid
 flowchart TB
     gh["GitHub PR"]
-    ci["GitHub Actions<br/>lint / plan / approved apply / review"]
+    checks["GitHub Actions<br/>lint / review"]
+    ci["GitHub Actions<br/>terraform plan / approved apply"]
     wif["Workload Identity Federation<br/>terraform-ci / dev-apply / admin-apply"]
     gcp["GCP project<br/>autoresearch-503903"]
 
@@ -237,6 +238,7 @@ flowchart TB
     ar["Artifact Registry"]
     run["Cloud Run proxy<br/>internal + IAM"]
 
+    gh --> checks
     gh --> ci --> wif --> gcp
     gcp --> vpc --> subnet
     subnet --> nat
