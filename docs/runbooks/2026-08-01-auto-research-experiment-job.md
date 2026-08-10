@@ -360,9 +360,13 @@ launcher는 Job 생성 전에 DB 상태를 `RUNNING`으로 바꾸므로 인프�
 3. dev 검증 뒤에만 `scope: admin`을 실행해 LimitRange Container/Pod max
    4 CPU/8Gi와 ResourceQuota Jobs/Pods 5, requests 5 CPU/10Gi, limits
    20 CPU/40Gi를 적용합니다. `scope: all`은 사용하지 않습니다.
-4. launcher 상한을 2로 유지한 채 #669 자원값으로 실험 2건 canary를 실행합니다.
+4. #669를 병합·release한 뒤 launcher/executor digest를 infra manifest에 승격하고,
+   ArgoCD Application이 `Synced`·`Healthy`인지 확인합니다. live Job template의 모든
+   app/init container가 requests 1 CPU/2Gi, limits 4 CPU/8Gi이고 launcher 상한이
+   여전히 2인지 확인하기 전에는 canary를 시작하지 않습니다.
+5. launcher 상한을 2로 유지한 채 #669 자원값으로 실험 2건 canary를 실행합니다.
    quota 403, LimitRange `FailedCreate`, 장기 `Pending`이 없어야 합니다.
-5. canary 통과 후 별도 GitOps PR에서만 `ORCH_MAX_CONCURRENT_EXPERIMENTS=5`를
+6. canary 통과 후 별도 GitOps PR에서만 `ORCH_MAX_CONCURRENT_EXPERIMENTS=5`를
    반영하고 실험 5건 smoke를 수행합니다.
 
 스케줄러와 ResourceQuota가 계산하는 Pod request는 일반 app container request 합과

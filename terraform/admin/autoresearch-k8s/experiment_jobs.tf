@@ -334,7 +334,7 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         },
         # quota 회수의 서버 측 강제. 이 root는 제출자 KSA에 delete를 주지 않고
         # enable_experiment_job_creation=false 롤백도 실행 중 Job을 멈추지 않으므로,
-        # 두 필드가 없으면 count/jobs.batch=2가 영구 점유돼 회수 경로가 break-glass
+        # 두 필드가 없으면 count/jobs.batch=5가 영구 점유돼 회수 경로가 break-glass
         # 관리자 권한밖에 남지 않는다. Stage 1 채점을 위한 상한 60000초는 runbook의
         # Job 계약과 같은 값이다. 완료 뒤 회수 상한은 별도 TTL 3600초로 유지한다.
         # KSA의 automount_service_account_token=false는 Pod spec이 되돌릴 수 있는
@@ -348,7 +348,7 @@ resource "kubernetes_manifest" "experiment_job_admission_policy" {
         # 타이머도 돌지 않는다(suspend 시 status.startTime이 리셋된다). TTL은
         # Complete/Failed Job에만 적용되므로, 아래 두 시간 검증을 모두 만족하면서도
         # count/jobs.batch 슬롯을 무기한 점유하는 Job이 만들어진다. 손상된 제출자를
-        # 가정하는 이 정책의 위협 모델에서는 Job 2개만으로 실험 실행이 영구 정지된다.
+        # 가정하는 이 정책의 위협 모델에서는 Job 5개만으로 실험 실행이 영구 정지된다.
         {
           expression = "!has(object.spec.suspend) || object.spec.suspend == false"
           message    = "실험 Job은 suspend 상태로 제출할 수 없습니다."

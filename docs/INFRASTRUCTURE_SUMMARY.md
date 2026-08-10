@@ -730,7 +730,7 @@ live cluster 설정을 조회해야 확정된다. 계층 7의 외부 기본값 �
 | `airflow` | pods 20, PVC 4, requests 4 CPU/8Gi | 250m/256Mi → 500m/512Mi | `airflow-k8s` |
 | `actions-runner` | pods 12, requests 6 CPU/12Gi, limits 12 CPU/24Gi | 500m/1Gi → 1/2Gi, max 2/4Gi | `actions-runner-k8s` |
 | `experiment-runtime` | Jobs/Pods 4, requests 4 CPU/8Gi, limits 8 CPU/16Gi | 1/2Gi → 2/4Gi, max 2/4Gi | `autoresearch-k8s` |
-| `autoresearch-experiments` | Jobs/Pods 2, requests·limits 2 CPU/4Gi | 500m/1Gi → 500m/1Gi, container max 1/2Gi와 Pod 합계 max 1/2Gi | `autoresearch-k8s` |
+| `autoresearch-experiments` | Jobs/Pods 5, requests 5 CPU/10Gi, limits 20 CPU/40Gi | 500m/1Gi → 500m/1Gi, container max 4/8Gi와 Pod 합계 max 4/8Gi | `autoresearch-k8s` |
 | `loadtest` | Jobs/Pods 16, ConfigMap 20, requests 4 CPU/4Gi, limits 16 CPU/16Gi | 250m/256Mi → 500m/512Mi, max 1/1Gi. KSA·quota·policy 이름은 `rerank-loadtest-*` | `autoresearch-k8s` |
 
 `autoresearch`, `mlflow`, `elastic`, `argocd`, `monitoring`, `argo-rollouts`,
