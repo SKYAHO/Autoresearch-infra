@@ -682,7 +682,8 @@ flowchart TB
 
 | Quota | 한도 | 실측 영향 |
 | --- | --- | --- |
-| `E2_CPUS` (리전) | 24 (#404 새 프로젝트 실측) | 상주 풀(dev-default·airflow·batch-od) 최악 16 vCPU — 여유 확보를 위해 버스트는 N2로 이전(#422) |
+| `CPUS` (리전) | 100 (2026-08-10 live) | 적용 전 사용 15. `batch-od` 교체 중 기존 2 vCPU와 새 16 vCPU가 공존해도 예상 31/100 |
+| `E2_CPUS` (리전) | 24 (#404), 사용 0 (2026-08-10 live) | 기존 E2 노드가 usage에 반영되지 않아 #624 apply 승인 시 `CPUS`와 함께 다시 확인 |
 | `N2_CPUS` (리전) | 200 (#404 실측) | batch-spot(max8=16) + retrain(max2=8) 동시 최악 24/200 |
 | `PREEMPTIBLE_CPUS` (리전) | 0 (#422 실측) | 한도 0이면 Spot이 해당 계열 일반 quota를 소모 — batch-spot N2 전환의 직접 근거 |
 | `SSD_TOTAL_GB` (리전) | 500 (#404 실측) | pd-balanced 실패 사례(#98) → 노드/ES 디스크는 pd-standard |
@@ -700,7 +701,7 @@ Auto-Provisioning)가 꺼져 있어 클러스터 수준 `resourceLimits`도 없�
 | `dev-default` | e2-standard-4 (4/16GB) | min1 / max2 | 앱·플랫폼 상주 워크로드 |
 | `airflow-dev` | e2-standard-2 (2/8GB) | min1 / max2 | Airflow 제어영역 고정 |
 | `batch-spot` | n2-standard-2 (2/8GB) Spot | min0 / max8 (#330/#331 상향, #422 N2 전환 — E2 quota 회피) | 재시도 내성 KPO |
-| `batch-od` | e2-standard-2 (2/8GB) | min0 / max2 | 재시도 내성 없는 KPO(#297) |
+| `batch-od` | e2-standard-16 (16/64GB) | min0 / max2 | 실험 5건 동시 실행·재시도 내성 없는 KPO(#297/#624) |
 | `ctr-model-retrain` | n2-highmem-4 (4/32GB) | min0 / max2 (#316 도입, #330/#331 상향) | 재학습(#316). #331로 main 편입 완료(#404 재구축에서 신규 생성) |
 
 min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된다. max는 상한일 뿐
@@ -715,6 +716,7 @@ min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된
 | --- | --- | --- |
 | e2-standard-4 | 4 CPU / 16GB | **3920m / ~13.0GB** |
 | e2-standard-2 | 2 CPU / 8GB | **1930m / ~5.9GB** |
+| e2-standard-16 | 16 CPU / 64GB | 배포 후 live 확인 |
 
 **노드당 파드 수**: 어떤 노드풀(`dev-default`/`airflow-dev`/`batch-spot`/`batch-od`/
 `ctr-model-retrain`)도 `node_config`에 `max_pods_per_node`를 지정하지 않는다

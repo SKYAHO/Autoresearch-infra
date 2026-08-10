@@ -107,14 +107,14 @@ Job을 만드는 주체는 사용자가 보낸 임의 manifest를 Kubernetes API
 - `activeDeadlineSeconds`는 60,000초 이하, `ttlSecondsAfterFinished`는 3,600초
   이하로 제한한다. 두 값이 **각각** 상한이므로 한 Job이 슬롯을 잡는 최악 시간은
   실행 최대 16시간 40분 + 완료 후 TTL 최대 1시간 = **최대 17시간 40분**이다.
-  `count/jobs.batch=2`와 결합하면 완료 Job도 TTL까지 quota를 점유하므로 Stage 1
-  budget을 쓰는 최대 처리량은 17시간 40분당 2개다. 이는 batch-od 비용과 대기 시간을
+  `count/jobs.batch=5`와 결합하면 완료 Job도 TTL까지 quota를 점유하므로 Stage 1
+  budget을 쓰는 최대 처리량은 17시간 40분당 5개다. 이는 batch-od 비용과 대기 시간을
   늘리는 의도된 상한이다. 더 빠른 회수가 필요하면 API 고정 템플릿이 TTL을
   짧게(예: 300초) 넣어야 하며, 그 값이 실질 회수 주기를 결정한다.
 - `suspend: true`로 제출하지 않는다. suspend 상태 Job은 Pod를 만들지 않고
   `activeDeadlineSeconds` 타이머도 돌지 않으며 TTL도 적용되지 않아 quota를
   무기한 점유한다. admission 정책이 이를 거부한다.
-- 모든 컨테이너에 CPU·메모리 request/limit을 명시하고 namespace의 단일 컨테이너 최대 1 vCPU/2 GiB를 넘기지 않는다.
+- 모든 컨테이너에 CPU·메모리 request/limit을 명시하고 namespace의 단일 컨테이너 최대 4 vCPU/8 GiB를 넘기지 않는다.
 - `nodeSelector`는 `cloud.google.com/gke-nodepool: batch-od`, toleration은
   `workload=batch-od:NoSchedule`만 사용한다. 일반 앱 pool에는 스케줄하지 않으며,
   admission 검증은 이 두 값을 변경·누락한 Job을 거부해야 한다.
@@ -309,7 +309,7 @@ EOF
 ```
 
 `activeDeadlineSeconds`와 `ttlSecondsAfterFinished`는 이 정책이 서버 측에서 강제한다.
-두 필드가 없으면 완료 Job이 `count/jobs.batch=2` quota를 무기한 점유하는데, 이 root는
+두 필드가 없으면 완료 Job이 `count/jobs.batch=5` quota를 무기한 점유하는데, 이 root는
 API KSA에 `delete`를 부여하지 않고 `enable_experiment_job_creation = false` 롤백도
 실행 중 Job을 멈추지 않으므로 회수 경로가 break-glass 관리자 권한만 남는다. 정책이
 두 필드를 필수·상한으로 요구하면 그 상태 자체가 만들어지지 않는다.
@@ -346,6 +346,28 @@ Cloud DNS for GKE를 활성화하면 Pod nameserver가
 allowlist에도 없다. 이미지 pull은 노드가 수행하는 별도 경로이므로, 실험 이미지와
 Artifact Registry 접근은 Job 제출 전에 검증한다.
 
+## 실험 5건 용량 상향 배포 (#624)
+
+launcher는 Job 생성 전에 DB 상태를 `RUNNING`으로 바꾸므로 인프라보다 동시 실행
+상한을 먼저 올리면 Job 없는 `RUNNING` 실험이 남습니다. 다음 게이트를 순서대로
+통과합니다.
+
+1. #672가 terminal 상태이고 active experiment Job/Pod 및 다른 `batch-od` 사용자가
+   없는지 확인합니다.
+2. `apply.yml`을 `scope: dev`로 실행해 `batch-od`를 `e2-standard-16`으로 교체하고
+   machine type, min 0/max 2, taint를 live에서 확인합니다.
+3. dev 검증 뒤에만 `scope: admin`을 실행해 LimitRange Container/Pod max
+   4 CPU/8Gi와 ResourceQuota Jobs/Pods 5, requests 10 CPU/20Gi, limits
+   20 CPU/40Gi를 적용합니다. `scope: all`은 사용하지 않습니다.
+4. launcher 상한을 2로 유지한 채 #669 자원값으로 실험 2건 canary를 실행합니다.
+   quota 403, LimitRange `FailedCreate`, 장기 `Pending`이 없어야 합니다.
+5. canary 통과 후 별도 GitOps PR에서만 `ORCH_MAX_CONCURRENT_EXPERIMENTS=5`를
+   반영하고 실험 5건 smoke를 수행합니다.
+
+실패 시 launcher를 먼저 2로 낮춰 새 선점을 막습니다. active Job 종료 후 admin
+quota·LimitRange, dev node pool 순서로 되돌립니다. namespace, KSA, 결과 버킷 삭제나
+Terraform state 직접 조작은 롤백 수단으로 사용하지 않습니다.
+
 ## 실험 브랜치 launcher 운영 (#539)
 
 Phase 1에서 이 namespace에 Job을 만드는 주체는 `autoresearch` namespace의 1분 주기
@@ -364,7 +386,7 @@ CronJob **launcher** 하나다. API는 Job을 만들지 않고 상태만 조회�
 | 수집기 GSA (#616) | `autoresearch-dev-orch-logcol@<project>.iam.gserviceaccount.com` |
 | 수집기 RBAC (#616) | `autoresearch-experiments`의 `experiment-job-observer` (jobs·pods·pods/log·events read). **Job 생성 권한은 없다** — launcher와 신원을 나눈 이유가 그것이다 |
 | Job 이름 | `ar-branch-<experiment UUID hex>` |
-| 동시 실행 상한 | `ORCH_MAX_CONCURRENT_EXPERIMENTS=2` (namespace quota와 같은 값) |
+| 동시 실행 상한 | `ORCH_MAX_CONCURRENT_EXPERIMENTS=2` (#669 2건 canary까지 유지, namespace hard ceiling은 5) |
 
 ### Phase 1 release provenance (#551)
 
@@ -567,8 +589,9 @@ stage 시작·종료, `training_timeout`, `evaluation_timeout`, `codex_timeout`,
 추가하지 않으므로, 위 신호가 진행 정지나 `FailedCreate`를 보이면 즉시 launcher를
 suspend하고 로그·Event·결과 URI를 보존한다.
 
-`batch-od`는 최대 2개 노드이고 namespace `count/jobs.batch=2`와 함께 실험 두 건이
-동시에 최대 16시간 40분 동안 두 슬롯을 점유할 수 있다. 현재 확인된 Airflow KPO는
+`batch-od`는 e2-standard-16, 최대 2개 노드이고 namespace `count/jobs.batch=5`와
+함께 실험 5건이 동시에 최대 16시간 40분 동안 다섯 슬롯을 점유할 수 있다. 현재
+확인된 Airflow KPO는
 `batch-spot` 기본값이라 이 변경 시점에는 같은 pool 경쟁자가 없지만, 이후 workload가
 `batch-od`로 이동하면 이 장시간 점유·비용·대기 상한을 다시 계산해야 한다. 정상 권한으로
 회수할 수 없는 stuck Job은 break-glass cluster 관리자만 결과·Event를 보존한 뒤 명시적으로
@@ -1226,7 +1249,7 @@ Pod env·log에 token·private key 없음
 2. 이미지 pull 실패, Pending, OOMKilled, deadline 초과, 애플리케이션 exit code를
    구분해 원인을 조사한다. API는 해당 Job/Pod Event에서 `ImagePullBackOff`,
    `FailedScheduling`, `FailedCreate`를 확인한다. `FailedCreate`는 quota 초과
-   외에 `experiment_jobs.tf`의 Pod 합계 `LimitRange`(컨테이너 합계가 1 vCPU/2 GiB를
+   외에 `experiment_jobs.tf`의 Pod 합계 `LimitRange`(Pod 실효값이 4 vCPU/8 GiB를
    넘음) 위반으로도 발생할 수 있다 — 이 경우 Pod 자체가 생성되지 않으므로
    `pods`/`requests.cpu` quota는 소비되지 않는다(#523). 실패한 Job을 자동
    재시도하지 않는다.
@@ -1236,10 +1259,10 @@ Pod env·log에 token·private key 없음
    적용되는 반면 이쪽은 승인된 apply가 필요하므로, 순서는 항상 suspend → apply다.
 4. 결과 버킷, namespace, KSA, GSA를 삭제하지 않는다. 삭제는 감사·재현·다른 실행의 복구를 훼손할 수 있으므로 별도 변경과 승인 절차가 필요하다.
 5. 수정된 템플릿과 digest로 새 시도 ID의 Job을 만든다. 같은 prefix를 재사용하지 않는다.
-   단, 완료 Job도 `count/jobs.batch=2` quota를 TTL controller가 삭제할 때까지 점유한다.
-   두 개의 완료 Job이 남은 상태에서는 세 번째 create가 `Forbidden` quota 초과로
+   단, 완료 Job도 `count/jobs.batch=5` quota를 TTL controller가 삭제할 때까지 점유한다.
+   다섯 개의 완료 Job이 남은 상태에서는 여섯 번째 create가 `Forbidden` quota 초과로
    거부되며, API는 재시도 가능 상태로 기록해 TTL 정리 후 제출한다. terminal Pod는
-   `pods=2` 계산에서 제외될 수 있으므로 운영 병목은 Job 객체 quota다.
+   `pods=5` 계산에서 제외될 수 있으므로 운영 병목은 Job 객체 quota다.
 
 `ttlSecondsAfterFinished` 누락 또는 TTL controller 장애로 quota가 회수되지 않으면
 새 제출이 quota 초과로 막히고 운영자에게 escalate된다. launcher에도 API에도 delete
@@ -1264,9 +1287,9 @@ CPU/memory request를 관측한다. 이후 Airflow나 다른 컴포넌트가 `ba
 시점에 capacity·우선순위 경합 계획을 다시 검토한다.
 
 이 유휴 상태 전제는 이 저장소 밖(`Autoresearch-airflow`)의 상태에 의존하고, 그
-저장소의 변경은 이 저장소의 CI·리뷰를 거치지 않는다. 정확한 수치로 다시 쓰면:
-pool 전체 allocatable CPU는 노드 2대 기준 약 3860m이고, 실험 namespace quota는
-`requests.cpu = 2`(2000m)로 그 일부만 쓴다. `LimitRange` 기본 request는 500m라
+저장소의 변경은 이 저장소의 CI·리뷰를 거치지 않는다. 정확한 수치로 다시 쓰면 한
+e2-standard-16 노드가 실험 5건의 총 requests 10 CPU/20Gi를 수용하며, pool max 2와
+namespace quota가 각각 노드와 제출의 상한을 정한다. `LimitRange` 기본 request는 500m라
 실제 experiment 점유는 제출된 Job의 request 값에 따라 다르다. Airflow DAG 하나가
 `node_selector`를 `batch-od`로 override하면, 두 워크로드의 request 합이 그 순간
 가용 노드 용량을 넘어설 때만 경합이 생긴다. 이 계약에는 `priorityClassName`이
