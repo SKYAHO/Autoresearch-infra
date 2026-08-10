@@ -287,6 +287,47 @@ DB 비밀번호 rotation도 Secret version 변경만으로 기존 API Pod를 자
    manifest rollback으로는 `versions/latest`를 되돌리지 못하므로, 승인된 password와
    Secret version을 다시 일치시킨 뒤 새 restart manifest revision으로 복구합니다.
 
+### 이 secret을 읽는 주체는 셋이고 반영 방식이 갈립니다 (#616)
+
+`autoresearch-dev-agent-orchestration-db-password`를 읽는 워크로드는 API, launcher
+CronJob, 실험 로그 수집기 Deployment입니다. 회전 시 동작이 서로 다릅니다.
+
+| 워크로드 | 반영 방식 |
+|---|---|
+| launcher CronJob | **자동.** 1분마다 새 Pod가 뜨면서 `versions/latest`를 다시 읽습니다 |
+| API Deployment | 위 1~4번 절차 필요 |
+| 로그 수집기 Deployment | **위 1~4번 절차 필요** — 아래 참조 |
+
+수집기는 상주 Deployment라 launcher와 달리 자동으로 수렴하지 않습니다. `bootstrap-db`
+init container가 기동 시 `versions/latest`를 한 번만 읽고, 그 URL을 프로세스가 수명
+내내 사용합니다. 회전 뒤 커넥션이 갱신되는 시점부터 인증에 실패하며, **수집기에는
+probe가 없어 kubelet이 재시작시키지 않습니다.** 증상은 "워크벤치 원본 로그 탭이 다시
+비어 있다" 하나뿐이라 수집기 자체의 회귀와 구분되지 않습니다.
+
+그러므로 2번의 `autoresearch.io/db-bootstrap-revision` annotation 갱신을
+`log-collector-deployment.yaml`에도 **함께** 적용합니다. `kubectl rollout restart`는
+쓰지 않습니다 — 이 절 서두의 원칙대로 ArgoCD 관리 manifest를 직접 변경하지 않습니다.
+
+### 수집기 동작 확인 (probe 부재 동안의 대체 수단)
+
+수집기에 liveness/readiness probe가 없는 동안에는 아래를 주기적으로 확인합니다.
+근본 해결(heartbeat 파일 + `exec` probe)은 앱 저장소 변경이 필요해 별도 이슈입니다.
+
+```bash
+# 1) 기동 로그. 재시작마다 한 번 찍힌다.
+kubectl -n autoresearch logs deploy/agent-orchestration-log-collector \
+  | grep "log collector started"
+
+# 2) 수집 실패 사유. tick_failed / job_collection_failed / pod_log_read_failed /
+#    log_write_failed / log_write_conflict 다섯 가지 고정 코드로만 남는다.
+kubectl -n autoresearch logs deploy/agent-orchestration-log-collector --since=1h \
+  | grep "reason="
+
+# 3) 실험이 도는 동안 experiment_logs가 실제로 늘어나는지 (워크벤치 원본 로그 탭)
+```
+
+`reason=` 줄이 없고 로그도 안 쌓이면 루프가 블록된 상태를 의심합니다.
+
 ## OAuth bootstrap 시크릿 초기 등록·회전·장애 복구
 
 Runner PVC는 Codex가 갱신한 인증 상태를 유지합니다. bootstrap 시크릿은 PVC에
