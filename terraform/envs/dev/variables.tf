@@ -358,6 +358,27 @@ variable "agent_orchestration_launcher_k8s_service_account" {
   }
 }
 
+# #616 실험 로그 수집기는 launcher와 같은 image를 쓰지만 진입점과 권한이 다르다.
+# launcher SA를 재사용하지 않는 이유는 #539가 세운 "표면적이 좁은 쪽이 권한을
+# 갖는다"는 원칙이다 — 재사용하면 "Job을 만들 수 있는 신원"과 "namespace의 모든
+# Pod 로그를 읽을 수 있는 신원"이 하나로 합쳐지고, 하나가 침해되면 나머지 권한까지
+# 노출된다. 수집기는 Job을 만들지 않고 launcher는 Pod 로그를 읽지 않는다.
+#
+# 이 값은 terraform/admin/autoresearch-k8s의
+# agent_orchestration_log_collector_k8s_service_account와 반드시 같아야 한다 —
+# 불일치는 두 root의 apply를 모두 통과한 뒤 Workload Identity principal이 어긋나
+# 수집기 Pod의 Secret Manager 접근 403으로만 드러난다.
+variable "agent_orchestration_log_collector_k8s_service_account" {
+  description = "실험 로그 수집기 GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "agent-orchestration-log-collector"
+
+  validation {
+    condition     = length(var.agent_orchestration_log_collector_k8s_service_account) >= 1 && length(var.agent_orchestration_log_collector_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.agent_orchestration_log_collector_k8s_service_account))
+    error_message = "agent_orchestration_log_collector_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
 variable "mlflow_db_name" {
   description = "기존 Cloud SQL 인스턴스 내 MLflow 전용 database 이름(Airflow/앱과 분리)."
   type        = string

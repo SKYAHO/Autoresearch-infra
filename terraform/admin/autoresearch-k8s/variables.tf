@@ -172,6 +172,35 @@ variable "agent_orchestration_launcher_gcp_service_account_email" {
   }
 }
 
+# #616 이 값은 terraform/envs/dev의
+# agent_orchestration_log_collector_k8s_service_account와 반드시 같아야 한다 —
+# 불일치는 두 root의 apply를 모두 통과한 뒤 Workload Identity principal이 어긋나
+# 수집기 Pod의 Secret Manager 접근 403으로만 드러난다.
+variable "agent_orchestration_log_collector_k8s_service_account" {
+  description = "실험 로그 수집기의 전용 Kubernetes service account 이름."
+  type        = string
+  default     = "agent-orchestration-log-collector"
+
+  validation {
+    condition     = length(var.agent_orchestration_log_collector_k8s_service_account) >= 1 && length(var.agent_orchestration_log_collector_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.agent_orchestration_log_collector_k8s_service_account))
+    error_message = "agent_orchestration_log_collector_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
+variable "agent_orchestration_log_collector_gcp_service_account_email" {
+  description = "실험 로그 수집기 GSA email. 빈 값이면 resource_prefix/project_id에서 dev 기본값을 파생한다."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      trimspace(var.agent_orchestration_log_collector_gcp_service_account_email) == "" ||
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.iam\\.gserviceaccount\\.com$", var.agent_orchestration_log_collector_gcp_service_account_email))
+    )
+    error_message = "agent_orchestration_log_collector_gcp_service_account_email must be a GSA email when set."
+  }
+}
+
 # #424 환경 이름은 GitHub Environment → WIF provider → GSA → namespace → KSA
 # 신뢰 경계 전체의 키다. null 기본값은 resource_prefix/project_id에서 안전한 기본값을
 # 파생하며, map override는 두 환경의 완전한 튜플만 허용한다.

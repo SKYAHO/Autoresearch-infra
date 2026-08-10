@@ -29,6 +29,11 @@ output "agent_orchestration_service_accounts" {
       name                      = kubernetes_service_account_v1.agent_orchestration_launcher.metadata[0].name
       gcp_service_account_email = local.agent_orchestration_launcher_gcp_service_account_email
     }
+    # #616 실험 로그 수집기. dev root output의 log_collector 좌표와 정확히 같아야 한다.
+    log_collector = {
+      name                      = kubernetes_service_account_v1.agent_orchestration_log_collector.metadata[0].name
+      gcp_service_account_email = local.agent_orchestration_log_collector_gcp_service_account_email
+    }
   }
 }
 
@@ -70,11 +75,13 @@ output "rerank_loadtest_contract" {
 output "experiment_job_contract" {
   description = "Auto Research 실험 Job namespace·KSA·GSA·RBAC·NetworkPolicy 계약. Job 생성 주체는 #539에서 API KSA에서 launcher KSA로 옮겼고, API는 상태 조회만 유지한다."
   value = {
-    namespace                     = kubernetes_namespace_v1.experiment_jobs.metadata[0].name
-    service_account               = kubernetes_service_account_v1.experiment_job.metadata[0].name
-    gcp_service_account_email     = local.experiment_job_gcp_service_account_email
-    api_observer_role             = kubernetes_role_v1.experiment_job_observer.metadata[0].name
-    launcher_service_account      = kubernetes_service_account_v1.agent_orchestration_launcher.metadata[0].name
+    namespace                 = kubernetes_namespace_v1.experiment_jobs.metadata[0].name
+    service_account           = kubernetes_service_account_v1.experiment_job.metadata[0].name
+    gcp_service_account_email = local.experiment_job_gcp_service_account_email
+    api_observer_role         = kubernetes_role_v1.experiment_job_observer.metadata[0].name
+    launcher_service_account  = kubernetes_service_account_v1.agent_orchestration_launcher.metadata[0].name
+    # #616 observer Role을 함께 갖는 두 번째 주체. Job **생성** Role은 갖지 않는다.
+    log_collector_service_account = kubernetes_service_account_v1.agent_orchestration_log_collector.metadata[0].name
     launcher_job_creation_enabled = var.enable_experiment_job_creation
     ingress_network_policy        = kubernetes_network_policy_v1.experiment_jobs_ingress.metadata[0].name
     egress_network_policy         = kubernetes_network_policy_v1.experiment_jobs_egress.metadata[0].name

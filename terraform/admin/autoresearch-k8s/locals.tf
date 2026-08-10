@@ -10,6 +10,10 @@ locals {
   # account_id 30자 제한 때문에 `-orch-launcher`가 아니라 `-orch-launch`(28자)다.
   agent_orchestration_launcher_gcp_service_account_email = var.agent_orchestration_launcher_gcp_service_account_email != "" ? var.agent_orchestration_launcher_gcp_service_account_email : "${var.resource_prefix}-orch-launch@${var.project_id}.iam.gserviceaccount.com"
 
+  # #616 실험 로그 수집기 GSA. dev root local의 `-orch-logcol`과 같은 규칙으로
+  # 파생한다 — account_id 30자 제한 때문에 `-orch-log-collector`가 아니다.
+  agent_orchestration_log_collector_gcp_service_account_email = var.agent_orchestration_log_collector_gcp_service_account_email != "" ? var.agent_orchestration_log_collector_gcp_service_account_email : "${var.resource_prefix}-orch-logcol@${var.project_id}.iam.gserviceaccount.com"
+
   # dev root의 experiment_runtime_contract와 같은 기본값을 사용한다. override는
   # 두 root output을 대조할 때만 사용한다.
   experiment_runtime_gcp_service_account_email = var.experiment_runtime_gcp_service_account_email != "" ? var.experiment_runtime_gcp_service_account_email : "${var.resource_prefix}-exp-runtime@${var.project_id}.iam.gserviceaccount.com"
