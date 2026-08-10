@@ -202,12 +202,12 @@ module ExperimentLauncherManifestContract
   end
 
   def check_cron_job!(cron_job)
-    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:fe7e9c34cca92d40e635e0adcfce27c830726b014b57eaeeec84d93df29f17e8"
-    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:1ce54c594490e5262b824c24725322f895074c5d895e96027e7c596f7bc65927"
+    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:d6aa767ae052a1499275fc631c926b89b48cbed73d3d0c0ef33fe491fbf6008e"
+    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:0604c56e2a51e690860bb2e33089b4fa3abd9d898f84d7ce94a31369720e9ee8"
     # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
     # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
     # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
-    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:81b301a2bcd14f4ab8dfe402b2a77798bbf7fbd8cd6b2908488081bc5d421fa7"
+    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:136a6c692b2347dfafdf76c0b62d5ec59ca9848965c76630f139928b299e7e53"
 
     spec = cron_job.fetch("spec")
     expect_equal("* * * * *", spec["schedule"], "launcher schedule")
