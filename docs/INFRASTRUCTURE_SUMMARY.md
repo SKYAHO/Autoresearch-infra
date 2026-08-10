@@ -4,9 +4,11 @@
 세부 변수, apply 절차, 운영 명령은 `TERRAFORM_DEV.md`와
 `TEAM_OPERATIONS_RUNBOOK.md`를 우선한다.
 
-> #424의 Feast dev/prod 런타임 경계는 Terraform 구성만 완료된 상태입니다.
-> 실제 GCP/Kubernetes apply, 애플리케이션 workflow·GitHub Environment 변경,
-> live 검증은 아직 수행하지 않았습니다.
+> #424에서 설계한 Feast dev/prod 런타임 경계는 #541에서 ARC self-hosted runner
+> 경로로 이관됐습니다. 현재 기본 경로는 `actions-runner` namespace의 환경별 scale
+> set과 KSA/Workload Identity이며, 기존 Environment WIF와 GKE Job 구성은 rollback
+> 경로로 보존합니다. 코드 구성과 과거 rollout 기록은 확인했지만 최신 live 상태는
+> ArgoCD와 클러스터에서 다시 확인합니다.
 
 > #485의 paired Feast experiment runtime도 dev Terraform 계약만 추가된 상태입니다.
 > `experiment-runtime`의 Job 생성은 `job_creation_enabled=false`로 fail-closed이며,
@@ -16,25 +18,28 @@
 > #484 Auto Research 실험 Job 경계는 apply·go-live를 마쳤습니다. `enable_experiment_job_creation`이
 > `true`로 전환됐고(#523, `terraform/admin/autoresearch-k8s/variables.tf`
 > default), 실험 브랜치 생성 주체는 API에서 launcher CronJob으로 옮겨졌습니다
-> (#539/#540, T6 CronJob 배포는 #552). **CronJob 매니페스트는 이 저장소 소유가
-> 아니라 앱/ArgoCD 쪽(#552 경로)**이라 이 문서로는 재검증할 수 없습니다 —
-> 2026-08-06 `kubectl` 확인 시점에는 `agent-orchestration-launcher` CronJob이
-> 1분 주기로 정상 실행 중이었으나, 최신 상태는 해당 쪽 저장소/ArgoCD Application
-> 기준으로 다시 확인합니다. 다만 실제 실험 실행 Job·GCS/MLflow 증적 저장·완료
-> 판정·dev merge·main Draft PR 단계는 아직 없습니다(Phase 1 의도적 종료점, 앱
-> PR #547).
+> (#539/#540). CronJob 매니페스트는 이 저장소의
+> `deploy/agent-orchestration/launcher-cronjob.yaml`이 소유하며 ArgoCD Application
+> `agent-orchestration`이 배포합니다. 2026-08-06 `kubectl` 확인 시점에는
+> `agent-orchestration-launcher`가 1분 주기로 정상 실행 중이었으나, 최신 live 상태는
+> ArgoCD와 클러스터에서 다시 확인합니다.
 >
 > #562에서 Phase 2 executor 경계를 추가했습니다. 어드미션 계약이 Job 종류별
 > (`app.kubernetes.io/component`) 계약으로 일반화됐고, 8-container executor
 > (initContainer 7 + app 1) 계약과 전용 egress
-> (`experiment-jobs-executor-egress`, 공개 443 + in-cluster Experiment API)가
+> (`experiment-jobs-executor-egress`, 공개 443 + in-cluster Experiment API + MLflow)가
 > 추가됐습니다. Phase 1 `branch-bootstrap` 계약·egress는 롤백 경로로 보존합니다 —
 > 앱 `launcher/main.py`에 Phase 1/2 스위치가 없어 전환·롤백이 launcher image
 > digest 하나로 결정되기 때문입니다. 실험 namespace에 Secret 2종
 > (`autoresearch-experiment-codex-auth`,
 > `autoresearch-experiment-executor-api-token`)이 **선행 등록**되어야 하며 절차는
 > [`runbooks/2026-08-01-auto-research-experiment-job.md`](runbooks/2026-08-01-auto-research-experiment-job.md)에
-> 있습니다. Job 1건의 노드 점유 상한은 300초에서 3600초로 늘었습니다.
+> 있습니다. 현재 Stage 1 배선은 executor immutable digest, 게시된 학습 snapshot,
+> GCS 결과 root, in-cluster Experiment API와 MLflow tracking URI를 launcher에
+> 고정합니다. Job 실행 상한(`activeDeadlineSeconds`)은 60,000초, Codex subprocess
+> 상한은 6,000초이며 완료 Job 보존 TTL은 별도 3,600초입니다. 이 저장소 코드로는
+> 실행 경로 구성을 확인할 수 있지만 특정 실험의 완료 판정·dev merge·main Draft PR
+> 생성 여부는 애플리케이션 상태와 live 증적으로 별도 확인해야 합니다.
 >
 > 바로 아래 #485 블록의 `job_creation_enabled=false`는 이것과는 별개로
 > `terraform/envs/dev/outputs.tf`·`admin/autoresearch-k8s/outputs.tf`에 하드코딩된
@@ -49,7 +54,7 @@
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
-| Kubernetes admin roots | `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s` (= `apply.yml`의 `ADMIN_ROOTS` 7개). `terraform/admin/gke-team-access`는 GCP IAM root이고, `terraform/admin/vault-k8s`는 #412에서 운영 제외되어 #478에서 root 디렉터리가 삭제됐습니다(원격 state 정리는 승인 대기). 둘 다 CI apply 대상에서 제외됩니다. | 별도 state |
+| Kubernetes admin roots | `terraform/admin/autoresearch-k8s`, `terraform/admin/airflow-k8s`, `terraform/admin/monitoring-k8s`, `terraform/admin/argocd-k8s`, `terraform/admin/argo-rollouts-k8s`, `terraform/admin/elastic-k8s`, `terraform/admin/mlflow-k8s`, `terraform/admin/actions-runner-k8s` (= `apply.yml`의 `ADMIN_ROOTS` 8개). `terraform/admin/gke-team-access`는 GCP IAM root이고, `terraform/admin/vault-k8s`는 #412에서 운영 제외되어 #478에서 root 디렉터리가 삭제됐습니다(원격 state 정리는 승인 대기). 둘 다 CI apply 대상에서 제외됩니다. | 별도 state |
 | 일반 애플리케이션 저장소 | `SKYAHO/Autoresearch` |
 | Airflow 저장소 | `SKYAHO/Autoresearch-airflow` |
 
@@ -81,13 +86,15 @@ flowchart TB
                 app["App pods<br/>KSA autoresearch-app"]
                 airflow["Airflow components<br/>KSA airflow"]
                 batch["KPO batch pods<br/>KSA autoresearch-batch"]
+                experiment["Experiment executor Jobs<br/>KSA experiment-job"]
+                arc["Feast apply ARC runners<br/>actions-runner namespace"]
             end
         end
 
         sql["Cloud SQL<br/>private IP only"]
-        gcs["GCS buckets<br/>raw / Feast / Airflow"]
+        gcs["GCS buckets<br/>raw / Feast / Airflow / artifacts"]
         bq["BigQuery<br/>analytics / Feast offline store"]
-        sm["Secret Manager<br/>payload는 Terraform 외부 주입"]
+        sm["Secret Manager<br/>운영자 주입 + Terraform 관리 version"]
         ar["Artifact Registry"]
         run["Cloud Run proxy<br/>internal + IAM"]
 
@@ -96,6 +103,8 @@ flowchart TB
         appgsa["GSA<br/>autoresearch-dev-app"]
         airflowgsa["GSA<br/>autoresearch-dev-airflow"]
         batchgsa["GSA<br/>autoresearch-dev-airflow-batch"]
+        experimentgsa["GSA<br/>autoresearch-dev-exp-job"]
+        feastgsa["GSA<br/>autoresearch-dev-feast-dev/prod"]
     end
 
     member -->|"Airflow UI: -L 8080"| iap --> bastion --> dns --> ilb --> airflow
@@ -107,6 +116,8 @@ flowchart TB
     app --> appgsa
     airflow --> airflowgsa
     batch --> batchgsa
+    experiment --> experimentgsa
+    arc --> feastgsa
 
     appgsa --> sql
     appgsa --> gcs
@@ -116,6 +127,9 @@ flowchart TB
     batchgsa --> gcs
     batchgsa --> bq
     batchgsa -->|"roles/run.invoker<br/>service-level"| run
+    experimentgsa --> gcs
+    feastgsa --> gcs
+    feastgsa --> bq
 
     gke --> ar
     gke --> nat
@@ -127,9 +141,10 @@ flowchart TB
 |---|---|---|
 | Airflow UI | 로컬 `gcloud compute ssh --tunnel-through-iap -L 8080:airflow.dev.autoresearch.internal:8080` → `http://localhost:8080` | IAP, OS Login, Google OAuth |
 | kubectl | `gcloud container clusters get-credentials ... --dns-endpoint` | `roles/container.viewer` + GKE auth plugin |
+| 내부 운영 UI | `kubectl port-forward`: ArgoCD `8443:443`, Grafana `3000:80`, MLflow OAuth proxy `4180:4180`, Kibana OAuth proxy `4181:4180`, Agent Orchestration UI `8501:8501` | 모두 ClusterIP/내부 경로. 서비스별 Google OAuth·OIDC 또는 API token 경계는 운영 runbook 기준 |
 | PR plan | GitHub Actions → OIDC/WIF → CI service account → GCS state/dev plan | service account key 없음 |
 | 이미지 push | Autoresearch 또는 Autoresearch-airflow Actions → OIDC/WIF → 저장소별 pusher SA → 기존 GAR | provider 허용 목록 + SA principalSet 2단 경계, repository 단위 writer |
-| Feast apply(#424) | Autoresearch Actions → 환경 전용 WIF/GSA → 환경별 GKE Job | repository + Environment + main `feast-apply.yml` 조건, 환경별 GCS/BQ/RBAC; prod만 Redis/CA |
+| Feast apply(#541) | Autoresearch Actions → 환경별 ARC scale set(`feast-apply-dev`/`feast-apply-prod`) → runner KSA/WI → 환경별 GSA | GitHub App으로 runner 등록, 환경별 GCS/BQ 경계; prod runner만 Redis PSC egress. 기존 Environment WIF → GKE Job 경로는 롤백용으로 유지 |
 | Cloud Run proxy | Airflow batch pod → Workload Identity → batch GSA → Cloud Run ID token → proxy | `roles/run.invoker`는 필요조건. ID token, `YOUTUBE_PROXY_URL`, `X-Goog-Api-Key`, VPC 내부 경로가 함께 필요 |
 
 ## 이 문서에서 쓰는 기본 용어
@@ -165,12 +180,12 @@ flowchart TB
 | Ingress | 밖에서 안으로 들어오는 트래픽 | Airflow UI 8080 접근 허용 범위 |
 | Egress | 안에서 밖으로 나가는 트래픽 | GKE node/Pod의 외부 API 호출 경로 |
 | IAM | GCP 권한 관리 체계 | 사람/서비스 계정별 최소 권한 부여 |
-| Secret Manager | 민감값 저장 서비스 | API key, OAuth secret, DB password 저장소, Redis server CA, MLflow OAuth client id/secret(#420) |
-| Payload | secret의 실제 값 본문 | Terraform 밖에서 주입하고 문서/PR에 쓰지 않음 |
+| Secret Manager | 민감값 저장 서비스 | API key·OAuth 자격·DB password·Redis server CA·ARC GitHub App 자격 저장소. DB password와 Redis CA version은 Terraform 관리 예외라 state 접근 통제가 필요 |
+| Payload | secret의 실제 값 본문 | 원칙적으로 문서/PR에 쓰지 않는다. 운영자 주입 값과 Terraform 관리 DB password·Redis CA version을 구분 |
 | Service account key | service account 장기 인증 키 파일 | 유출 위험 때문에 발급하지 않는 것이 원칙 |
-| GCS | Google Cloud Storage | 원본 데이터, DAG/log, Feast registry/staging 저장 |
+| GCS | Google Cloud Storage | 원본 데이터, DAG/log, Feast registry/staging, MLflow·코드·실험·ES snapshot artifact 저장 |
 | BigQuery | 분석용 columnar data warehouse | 분석 dataset과 Feast offline store |
-| Cloud SQL | 관리형 RDBMS | PostgreSQL 앱 DB와 Airflow metadata DB |
+| Cloud SQL | 관리형 RDBMS | PostgreSQL 앱·Airflow·MLflow·Agent Orchestration DB |
 | Artifact Registry | 컨테이너 이미지 저장소 | 앱/Airflow/Cloud Run 이미지 저장 |
 | Cloud Run | 컨테이너를 serverless로 실행하는 서비스 | dev proxy 서비스 |
 | ILB | Internal Load Balancer | Airflow UI를 VPC 내부에만 노출 |
@@ -178,6 +193,7 @@ flowchart TB
 | DNS endpoint | GKE control plane에 DNS 이름으로 접속하는 방식 | 팀원 IP 등록 없이 IAM으로 kubeconfig 발급 |
 | OIDC | 짧게 발급되는 신원 토큰 표준 | GitHub Actions가 GCP에 인증할 때 사용 |
 | WIF | Workload Identity Federation | GitHub OIDC를 GCP service account로 연결 |
+| ARC | Actions Runner Controller | `actions-runner` namespace에서 GitHub Actions ephemeral self-hosted runner를 scale set으로 관리 |
 | OAuth | 외부 계정 로그인을 위임하는 인증 표준 | Airflow Google 로그인에 사용 |
 | KPO | KubernetesPodOperator | Airflow DAG에서 Kubernetes pod를 띄우는 operator |
 | Proxy | 호출을 대신 받아 내부 서비스로 전달하거나 중계하는 컴포넌트 | dev Cloud Run proxy |
@@ -242,23 +258,24 @@ flowchart TB
 | Bastion | `autoresearch-dev-bastion` | IAP 터널로 VPC 내부 서비스에 접근하는 진입점 |
 | DNS / ILB | `dev.autoresearch.internal`, `airflow.dev.autoresearch.internal`, `mlflow.dev.autoresearch.internal`(#244), Airflow·MLflow ILB 예약 IP | Airflow·MLflow UI를 VPC 내부에서만 접근 |
 | Artifact Registry | `autoresearch-dev-docker` | 애플리케이션/Airflow 컨테이너 이미지 저장 |
-| Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, `airflow`, `mlflow`(#93) | 앱 DB·Airflow metadata DB·MLflow backend DB |
+| Cloud SQL | `autoresearch-dev-pg`, DB `autoresearch`, `airflow`, `mlflow`(#93), `agent_orchestration` | 앱 DB·Airflow metadata DB·MLflow backend DB·Agent Orchestration 상태 DB |
 | Redis Cluster | `autoresearch-dev-redis-cluster` | Feast Online Store, single-zone primary shard 2개, private PSC + IAM auth/TLS (#129, apply·검증 완료) |
 | GKE | `autoresearch-dev-gke`, node pool `dev-default`, `airflow-dev`, `batch-spot`(#173), `batch-od`(#297), `ctr-model-retrain`(#316) | 앱 워크로드와 Airflow 실행 기반. batch-spot은 재시도 내성 있는 KPO, batch-od는 재시도 내성 없는 장시간 KPO용 |
 | Cloud Run | `autoresearch-dev-proxy` | 내부 전용 proxy 서비스, invoker IAM 기반 |
-| GCS | raw data, prod/dev Feast registry·staging, Airflow DAG/log bucket | 원본 데이터, 환경별 feature store 메타데이터, DAG/log 저장 |
+| GCS | raw data, prod/dev Feast registry·staging, Airflow DAG/log, MLflow artifact, code artifact, experiment result, ES snapshot bucket | 원본 데이터, 환경별 feature store 메타데이터, 배포 코드, 실험·학습·로그 artifact 저장 |
 | BigQuery | `autoresearch_dev_analytics`(임베딩 중간 테이블 2종 IaC #296 포함), `feast_offline_store`, `feast_offline_store_dev`, `data_lake_raw`(#286) | 분석·환경별 Feast offline store·raw 계층 |
 | Vertex AI | BigQuery↔Vertex `CLOUD_RESOURCE` connection(#281) | BigQuery ML `ML.GENERATE_EMBEDDING` 다국어 임베딩 호출 |
 | MLflow | `mlflow` ns — tracking server(#94), 전용 Cloud SQL DB/user + Secret(#93), artifact GCS bucket + 전용 GSA(#92), OAuth2-proxy + 내부 ILB(#232/#244) | 실험 추적 UI. 내부 ILB + Google OAuth |
-| Secret Manager | DB password, YouTube/OpenRouter API key, OAuth client 자격 metadata(서비스별 정본), MLflow DB secret | OAuth client payload와 K8s Secret 사본 관계·allowlist·갱신 절차는 [`OAUTH_OPERATIONS_RUNBOOK.md`](OAUTH_OPERATIONS_RUNBOOK.md)에서 서비스별로 관리하며, payload는 Terraform 밖에서 주입 |
-| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 환경 전용 WIF(#424), experiment runtime dev 전용 GSA/KSA(#485, Job create disabled), Cloud Build 전용 build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341, role 19종 열거·3중 통제) | 워크로드·Feast 환경별 최소 권한과 Workload Identity. #485는 dev `experiments/`·code archive·dev offline store만 허용하며 production 접근과 public HTTPS egress는 허용하지 않는다. Vault GSA/WI 바인딩/custom role은 #478 코드에서 제거됐고 승인 apply로 destroy 대기 중 |
-| 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155). 커스텀 대시보드 6장 as-code(#355~#358: K8s 리소스·네트워크·스케일 판단·MLflow·Airflow·Serving), 수집: serving ServiceMonitor(#302)·mlflow oauth2-proxy PodMonitor(#357)·airflow statsd ServiceMonitor+ingress 9102(#358) | 운영 관측 dashboard. 접근은 port-forward. 대시보드는 `deploy/monitoring/dashboards/*.json`이 정본 |
-| GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85). Application: `monitoring`(#183)·`argo-rollouts`(#186)·`mlflow`(#94)·`serving`(#302)·`agent-orchestration`(#453) | ArgoCD Application으로 관리. UI는 Google 로그인 + 이메일 RBAC |
+| Secret Manager | 앱·MLflow·Agent Orchestration DB password, Redis CA, YouTube/OpenRouter API key, UI OAuth client, Agent Orchestration Codex bootstrap, ARC GitHub App 자격 컨테이너 | DB password와 Redis CA는 Terraform이 version까지 관리해 state에 값이 남는다. API key·OAuth·Codex bootstrap·GitHub App payload는 운영자가 Terraform 밖에서 주입한다. OAuth와 K8s Secret 사본 관계·allowlist·갱신은 [`OAUTH_OPERATIONS_RUNBOOK.md`](OAUTH_OPERATIONS_RUNBOOK.md) 및 서비스별 runbook 기준 |
+| IAM / WI | GKE node SA, app SA, Airflow SA, Airflow batch SA, proxy SA, CI SA, GAR pusher SA(#121), 코드 업로더 SA(#238), dev/prod Feast apply SA와 WIF·ARC runner KSA(#424/#541), experiment runtime GSA/KSA(#485, Job create disabled), experiment Job GSA/KSA, Agent Orchestration API·runner·launcher GSA/KSA, ARC controller GSA/KSA, Cloud Build SA(#269/#272), MLflow GSA(#92), ES snapshot GSA(#102), admin-apply SA(#307), dev-apply SA(#341) | 워크로드·환경별 최소 권한과 Workload Identity. #485 paired runtime은 production 접근과 public HTTPS egress를 허용하지 않는다. 실험 Job은 전용 결과 bucket create/read와 게시된 학습 snapshot read만 갖는다. Vault GSA/WI 바인딩/custom role은 #478 코드에서 제거됐고 승인 apply로 destroy 대기 중 |
+| 모니터링 | kube-prometheus-stack (`monitoring` ns, #79) — Prometheus 7d/30Gi, Grafana(Google OAuth #155). 커스텀 대시보드 7장 as-code(K8s 리소스·네트워크·스케일 판단·MLflow·Airflow·Serving·rerank load test), 수집: serving ServiceMonitor(#302)·mlflow oauth2-proxy PodMonitor(#357)·airflow statsd ServiceMonitor+ingress 9102(#358) | 운영 관측 dashboard. 접근은 port-forward. 대시보드는 `deploy/monitoring/dashboards/*.json`이 정본 |
+| GitOps | ArgoCD(#84, Google OIDC 로그인 #292) + AppProject(#85). Application 9개: `monitoring`·`argo-rollouts`·`mlflow`·`serving`·`agent-orchestration`·`actions-runner-controller`·`actions-runner-scale-set`·`actions-runner-scale-set-feast-dev`·`actions-runner-scale-set-feast-prod` | `agent-orchestration`은 enable flag가 true일 때만 `main` 자동 sync하며, 나머지 8개는 자동 sync한다. 자동 sync가 활성화된 Application의 `automated` 설정은 모두 `prune=false`, `selfHeal=false`라 삭제와 live drift 회수는 자동화하지 않는다. |
+| Actions Runner Controller | `actions-runner` ns, controller 1개 + scale set 3개(PoC/dev/prod) | GitHub Actions ephemeral runner를 0~4/0~2/0~2로 확장한다. Terraform admin root는 namespace/KSA/quota/NetworkPolicy, ArgoCD는 chart를 소유한다. |
 | 로그(ELK) | ECK operator(#97), ES single-node 30Gi(#98), Kibana(#99, oauth2-proxy Google 로그인 + basic 인증 — anonymous 폐기 #325), Filebeat allowlist 수집(#100, ndjson 구조화 파싱 #359, 자기 로그 관측 #365), ILM(#101)/snapshot(#102)/runbook(#103), saved object 자동 import Job(#365) — `elastic` ns | airflow/autoresearch 로그 검색·분석 + Logs Overview 대시보드. Airflow task 로그 정본은 GCS 원격 로깅(airflow#147) — ELK는 stdout만 |
 | Secret(학습) | Vault 운영 제외(#412) | 실 서비스 secret은 Secret Manager. Vault dev root 코드(`vault.tf`)와 `terraform/admin/vault-k8s` root는 #478에서 삭제 완료, 원격 state 정리(GSA/WI 바인딩/custom role/key IAM binding 4개 destroy)는 승인 대기 |
 | KMS | `autoresearch-dev-vault` key ring / `vault-unseal` crypto key (#132) | Vault workload는 없음. GCP에서 삭제 불가능한 리소스라 `kms_vault_orphan.tf`(#478)로 config 유지 — rotation 제거 + `prevent_destroy`, 나머지 Vault IAM 리소스는 destroy 대상으로 분리 — 승인 apply 대기 |
 | DNS(googleapis) | private zone `googleapis.com` → 199.36.153.8/30 (#138) | VPC의 Google API private routing. Vault 전용 운영 경로는 폐기됨 |
-| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **단일 진입점 승인 게이트 CI apply**(`apply.yml`, #451 — admin root #307/#312 + dev root #341 통합) | drift 시 [DRIFT] 이슈 자동 생성. dev root + K8s admin root 7개(#412로 `vault-k8s` 제외)를 한 번의 dispatch·승인으로 CI apply(순서: dev root 먼저), 로컬 apply는 break-glass |
+| CI 자동화 | PR plan(#6) + **일일 drift 감지**(#153) + **단일 진입점 승인 게이트 CI apply**(`apply.yml`, #451 — admin root #307/#312/#533 + dev root #341 통합) | drift 시 [DRIFT] 이슈 자동 생성. dev root + K8s admin root 8개(#412로 `vault-k8s` 제외)를 한 번의 dispatch·승인으로 CI apply(순서: dev root 먼저), 로컬 apply는 break-glass |
 
 ## 인프라별 상세 구조
 
@@ -285,7 +302,7 @@ flowchart LR
   GCS, BigQuery, Cloud Run, Secret Manager, Airflow GCP 리소스가 여기 있다.
 - PR이 열리면 GitHub Actions가 실제 GCP 자격 증명을 service account key 없이
   OIDC/WIF로 얻고, dev root에 대해 plan을 실행한다.
-- dev root apply(#341)와 K8s admin root 7개 apply(#307/#312, #412로 vault-k8s
+- dev root apply(#341)와 K8s admin root 8개 apply(#307/#312/#533, #412로 vault-k8s
   제외)는 `apply.yml` 승인 게이트 CI apply로 이관됐다(#451에서 단일 워크플로우로
   통합 — 한 번의 dispatch·승인으로 전체 적용, 민감 tfvars는 GitHub Secrets 단일
   원천). 로컬 apply는 break-glass. gke-team-access(사람 IAM)는 로컬 유지(#314).
@@ -297,10 +314,11 @@ flowchart LR
 | `terraform/bootstrap` | 별도 root | state bucket, WIF, CI SA처럼 dev root를 실행하기 전에 필요한 기반을 만든다. |
 | `terraform/envs/dev` | dev root | 실제 dev GCP 리소스 대부분을 관리한다. |
 | `terraform/admin/gke-team-access` | 별도 state | 팀원 Google 계정 IAM을 관리한다. 사람 이메일이 일반 PR plan에 노출되지 않게 분리했다. |
-| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress, 환경별 Feast apply namespace/KSA/RBAC/NetworkPolicy(#424), dev 전용 `experiment-runtime` namespace/KSA·observer RBAC·default-deny NetworkPolicy·quota(#485)를 관리한다. #424와 #485 항목은 아직 미적용이며 #485 Job create는 disabled다. |
+| `terraform/admin/autoresearch-k8s` | 별도 state | 일반 앱 namespace/KSA와 Cloud SQL/Redis 최소 egress, 환경별 Feast apply GKE Job 롤백 경계(#424), paired `experiment-runtime` fail-closed 경계(#485), `autoresearch-experiments` Job/RBAC/admission/quota/Phase 1·2 egress, `rerank-loadtest` 경계를 관리한다. #485 `job_creation_enabled`는 disabled이고 Auto Research 실험 Job 생성 권한은 별도 `enable_experiment_job_creation=true`다. |
 | `terraform/admin/airflow-k8s` | 별도 state | Kubernetes namespace/RBAC/NetworkPolicy를 관리한다. GKE API 접근이 필요해 dev root와 분리했다. |
 | `terraform/admin/monitoring-k8s` | 별도 state | monitoring namespace와 port-forward RBAC(플랫폼 경계)를 관리한다. chart는 #183에서 ArgoCD Application `monitoring`으로 이관(helm_release 제거). |
-| `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application(`monitoring` #183, `argo-rollouts` #186)을 관리한다. |
+| `terraform/admin/actions-runner-k8s` | 별도 state | `actions-runner` namespace, ARC controller·runner KSA, quota/LimitRange와 deny-by-default NetworkPolicy를 관리한다. chart와 scale set은 ArgoCD Application이 소유한다. |
+| `terraform/admin/argocd-k8s` | 별도 state | ArgoCD namespace·argo-cd Helm release·AppProject와 Application 9개를 관리한다. AppProject destination은 `monitoring`, `argo-rollouts`, `kube-system`, `mlflow`, `autoresearch`, `actions-runner` 6개다. |
 | `terraform-plan.yml` | GitHub Actions | PR마다 fmt/validate/plan을 실행하고 결과를 댓글/check로 보여준다. |
 | WIF/OIDC | GitHub Actions -> GCP | service account JSON key 없이 CI가 GCP 권한을 얻는다. 키 파일 유출 위험을 줄이기 위한 설정이다. |
 | Apply 승인 게이트 | GitHub Environment | plan은 자동, apply는 Environment required reviewer 승인 후 CI가 수행한다(admin-apply·dev-apply). 로컬 apply는 break-glass·import 선행용으로만 남긴다. |
@@ -379,6 +397,8 @@ flowchart TB
 - `dev-default` node pool은 일반 앱 워크로드용이다.
 - `airflow-dev` node pool은 Airflow component를 분리해 배치하기 위한 전용 node
   pool이다.
+- `batch-spot`은 재시도 내성 batch, `batch-od`는 실험 executor처럼 재시도 내성이
+  낮은 Job, `ctr-model-retrain`은 재학습 workload가 사용하는 min 0 pool이다.
 - Kubernetes service account와 GCP service account는 Workload Identity로 연결한다.
   pod는 JSON key 없이 GCP 권한을 얻는다.
 - `airflow/airflow`는 Airflow webserver/scheduler 등 component용이고,
@@ -386,6 +406,11 @@ flowchart TB
 - batch GSA는 YouTube/OpenRouter secret, raw data bucket, Feast registry/staging,
   BigQuery offline store에 필요한 권한만 갖는다. Cloud SQL metadata DB나 Airflow
   DAG/log bucket 권한은 Airflow component GSA가 담당한다.
+- `autoresearch-experiments/experiment-job`은 `batch-od`에 executor Job을 실행하며
+  전용 결과 bucket create/read와 게시된 학습 snapshot read만 허용한다.
+- `actions-runner` namespace의 ARC는 controller 1개와 PoC/dev/prod scale set 3개를
+  관리한다. Feast dev/prod runner KSA는 환경별 Feast GSA를 Workload Identity로
+  가장하고, prod scale set에만 Redis PSC egress가 추가된다.
 
 주요 설정 상세:
 
@@ -400,8 +425,11 @@ flowchart TB
 | App KSA/GSA | `autoresearch-app` -> `autoresearch-dev-app` | 일반 앱 pod가 DB password, Redis CA, cluster 한정 IAM 연결 token, Cloud SQL, GCS/BigQuery 권한을 얻는 경로다(#129, apply·검증 완료). |
 | Airflow KSA/GSA | `airflow` -> `autoresearch-dev-airflow` | webserver/scheduler 등 Airflow component의 GCP 접근 경로다. |
 | Batch KSA/GSA | `autoresearch-batch` -> `autoresearch-dev-airflow-batch` | KPO batch pod 전용 권한이다. Airflow component 권한과 분리했다. |
-| Feast apply dev KSA/GSA | `feast-apply-dev/feast-apply` -> `autoresearch-dev-feast-dev` | dev GCS/BQ와 dev namespace만 사용하며 Redis/CA 권한과 Redis PSC egress가 없다(#424, 미적용). |
-| Feast apply prod KSA/GSA | `feast-apply-prod/feast-apply` -> `autoresearch-dev-feast-prod` | prod GCS/BQ와 prod namespace를 사용하며 Redis/CA 및 Redis PSC egress는 이 경로에만 있다(#424, 미적용). |
+| Experiment Job KSA/GSA | `autoresearch-experiments/experiment-job` -> `autoresearch-dev-exp-job` | executor Job 결과와 immutable 학습 snapshot을 위한 전용 GCS 경계다. Job 생성은 `autoresearch/agent-orchestration-launcher` KSA에만 부여한다. |
+| Feast apply ARC dev KSA/GSA | `actions-runner/feast-apply-dev-runner` -> `autoresearch-dev-feast-dev` | 현재 self-hosted runner 경로. dev GCS/BQ만 사용하며 Redis PSC egress가 없다(#541). |
+| Feast apply ARC prod KSA/GSA | `actions-runner/feast-apply-prod-runner` -> `autoresearch-dev-feast-prod` | 현재 self-hosted runner 경로. prod GCS/BQ와 Redis/CA 권한, Redis PSC egress를 사용한다(#541). |
+| Feast apply GKE Job 롤백 KSA/GSA | `feast-apply-{dev,prod}/feast-apply` -> 환경별 Feast GSA | 기존 환경별 GKE Job 경계(#424)를 롤백 경로로 보존한다. paired runtime과 별개다. |
+| ARC controller KSA/GSA | `actions-runner/actions-runner-controller` -> `autoresearch-dev-runner` | ARC CRD와 ephemeral runner lifecycle을 `actions-runner` namespace 안에서 관리한다. |
 
 ### 4. 데이터 저장 계층
 
@@ -410,13 +438,20 @@ flowchart LR
     app["App workloads"]
     airflowComp["Airflow components"]
     batch["Airflow batch pods"]
+    executor["Experiment executor Jobs"]
+    mlflow["MLflow"]
+    elastic["Elasticsearch"]
     raw["GCS raw data bucket"]
     bqanalytics["BigQuery<br/>autoresearch_dev_analytics"]
     feastbq["BigQuery<br/>Feast prod / dev"]
     registry["GCS<br/>Feast registry prod / dev"]
     staging["GCS<br/>Feast staging prod / dev"]
-    sql["Cloud SQL<br/>autoresearch / airflow"]
+    sql["Cloud SQL<br/>autoresearch / airflow / mlflow / agent_orchestration"]
     redis["Redis Cluster<br/>2 primary shards"]
+    experiment["GCS experiment results<br/>results / training snapshots"]
+    mlflowArtifacts["GCS MLflow artifacts"]
+    codeArtifacts["GCS code archive"]
+    esSnapshots["GCS ES snapshots"]
 
     app --> raw
     app --> bqanalytics
@@ -427,6 +462,11 @@ flowchart LR
     batch --> registry
     batch --> staging
     airflowComp --> sql
+    executor --> experiment
+    executor --> codeArtifacts
+    mlflow --> sql
+    mlflow --> mlflowArtifacts
+    elastic --> esSnapshots
 ```
 
 - GCS raw data bucket은 원본 데이터를 오래 남기는 landing zone이다. YouTube raw,
@@ -436,11 +476,15 @@ flowchart LR
   Feast feature table 저장소다.
 - prod와 dev Feast registry/staging은 별도 bucket이다. prod는 기존 주소를
   유지하고 dev는 `-dev` bucket을 사용한다.
-- Cloud SQL은 private IP only다. `autoresearch` DB는 앱 운영 데이터, `airflow` DB는
-  Airflow component의 metadata DB로 사용한다. batch pod는 Cloud SQL 권한이 아니라
-  raw data, Feast, BigQuery, API key secret 권한만 갖는다.
+- Cloud SQL은 private IP only다. `autoresearch`, `airflow`, `mlflow`,
+  `agent_orchestration` DB를 같은 instance 안에서 사용자와 용도별로 분리한다. batch
+  pod는 Cloud SQL 권한이 아니라 raw data, Feast, BigQuery, API key secret 권한만
+  갖는다.
 - Redis Cluster는 Feast Online Store이며 primary shard 두 개에 hash slot을
   분산한다. app pod는 PSC, IAM 인증과 TLS로만 접속한다.
+- 게시된 training snapshot과 experiment result는 experiment result bucket 안의 서로
+  다른 prefix에 저장한다. MLflow artifact, code archive, Elasticsearch snapshot은
+  각각 별도 GCS bucket과 IAM 경계를 사용한다.
 
 주요 설정 상세:
 
@@ -449,12 +493,16 @@ flowchart LR
 | Raw data bucket | `autoresearch-503903-autoresearch-dev-raw-data` | YouTube, action log, virtual user, persona 원본을 prefix로 나누어 저장한다. |
 | Raw bucket versioning | enabled | 원본 데이터 실수 삭제/덮어쓰기 대응을 위해 versioning을 켰다. |
 | Feast prod registry/staging | `gs://<project>-feast-registry/registry.db`, `gs://<project>-feast-staging/` | 기존 prod 객체·주소를 유지한다. |
-| Feast dev registry/staging | `gs://<project>-feast-registry-dev/registry.db`, `gs://<project>-feast-staging-dev/` | bucket-level IAM에서 prod와 분리한다(#424, 미적용). |
+| Feast dev registry/staging | `gs://<project>-feast-registry-dev/registry.db`, `gs://<project>-feast-staging-dev/` | bucket-level IAM에서 prod와 분리하며 ARC dev runner가 사용한다(#424/#541). |
 | BigQuery analytics | `autoresearch_dev_analytics` | 분석/집계 결과를 저장하는 dataset이다. |
 | BigQuery Feast | prod `feast_offline_store`, dev `feast_offline_store_dev` | 환경별 Feast offline feature table 저장소다. |
 | Cloud SQL instance | `autoresearch-dev-pg` | PostgreSQL 15 dev instance다. private IP only로 구성했다. |
-| Cloud SQL DB | `autoresearch`, `airflow` | 앱 운영 DB와 Airflow metadata DB를 같은 instance 안의 별도 database로 둔다. |
+| Cloud SQL DB | `autoresearch`, `airflow`, `mlflow`, `agent_orchestration` | 앱 운영, Airflow metadata, MLflow backend, Agent Orchestration 상태를 같은 instance 안의 별도 database/user로 둔다. |
 | Redis Cluster | `autoresearch-dev-redis-cluster` | `asia-northeast3-a` single-zone의 shared-core nano primary shard 2개, replica 0개인 dev Online Store다. |
+| MLflow artifact bucket | `<project>-autoresearch-mlflow-artifacts` | MLflow artifact를 저장한다. 게시된 training snapshot은 experiment result bucket의 `training-snapshots/` prefix를 사용한다. |
+| Code artifact bucket | `<project>-code-artifacts` | main 기준 코드 archive를 저장하며 배포·실험 workload가 read-only로 소비한다. |
+| Experiment result bucket | `<project>-autoresearch-dev-experiment-results` | executor 결과와 `training-snapshots/`의 게시된 학습 snapshot을 보관한다. Job GSA는 create/read만 갖고 delete 권한은 없다. |
+| Elasticsearch snapshot bucket | `<project>-autoresearch-dev-es-snapshots` | Elasticsearch snapshot repository 전용 bucket이다. |
 
 ### 5. Airflow 운영 계층
 
@@ -556,8 +604,11 @@ flowchart TB
 
 - 사람 계정은 GKE 접속, Bastion 터널, `airflow` namespace 내부 작업 권한을 갖는다.
 - 사람 계정에 Secret Manager payload 직접 읽기 권한을 주지 않는다.
-- secret payload는 Terraform으로 관리하지 않고, secret metadata와 accessor IAM만
-  Terraform이 관리한다.
+- API key·OAuth·Agent Orchestration Codex bootstrap·ARC GitHub App payload는
+  Terraform 밖에서 주입하고, Terraform은 secret container와 필요한 IAM만 관리한다.
+- 앱·MLflow·Agent Orchestration DB password와 Redis server CA는 예외로 Terraform이
+  Secret Manager version까지 관리하므로 값이 Terraform state에 남는다. 원격 state와
+  CI 접근 권한을 민감정보 경계로 취급한다.
 - 워크로드는 Workload Identity를 통해 필요한 secret과 데이터 리소스에 접근한다.
 
 주요 설정 상세:
@@ -570,7 +621,8 @@ flowchart TB
 | App workload IAM | app GSA | 일반 앱에 필요한 Cloud SQL, Secret, GCS, BigQuery 권한을 부여한다. |
 | Airflow component IAM | Airflow GSA | Airflow metadata DB, DAG/log bucket, OAuth secret 등 component 운영 권한을 부여한다. |
 | Airflow batch IAM | Airflow batch GSA | batch pod 실행에 필요한 API key, raw data, Feast, BigQuery 권한만 부여한다. |
-| Secret payload | Terraform 밖에서 주입 | Terraform state에 민감값이 남지 않도록 payload 관리는 분리한다. |
+| 운영자 주입 payload | API key·OAuth·Codex bootstrap·ARC GitHub App 자격 | Terraform은 container/IAM만 관리하고 값은 서비스별 runbook으로 주입한다. |
+| Terraform 관리 payload | 앱·MLflow·Agent Orchestration DB password, Redis server CA | `google_secret_manager_secret_version`이 값을 state에 기록하므로 GCS backend와 CI 권한을 엄격히 제한한다. |
 
 ## 리소스(CPU·메모리) 지정 계층
 
@@ -617,18 +669,23 @@ min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된
 
 **노드당 파드 수**: 어떤 노드풀(`dev-default`/`airflow-dev`/`batch-spot`/`batch-od`/
 `ctr-model-retrain`)도 `node_config`에 `max_pods_per_node`를 지정하지 않는다
-(`gke.tf`, `ctr-model-retrain`만 `gke_ctr_retrain.tf`). VPC-native 클러스터의
-GKE 기본값인 **노드당 최대 110 파드**가 전 풀에 그대로 적용된다(2026-08-06 코드
-대조 — override 없음 확인). 110은 노드마다 pods 2차 대역에서 **/24를 통째로
-할당**한다는 뜻이기도 하다 — 계층 7의 pods CIDR 상한 참고.
+(`gke.tf`, `ctr-model-retrain`만 `gke_ctr_retrain.tf`). 코드로 확정되는 사실은
+override가 없다는 점까지이며, 실제 노드당 상한과 Pod CIDR 할당은 현재 GKE 기본값과
+live cluster 설정을 조회해야 확정된다. 계층 7의 외부 기본값 주의사항을 함께 본다.
 
-### 계층 4 — 네임스페이스 (ResourceQuota / LimitRange) — `terraform/admin/airflow-k8s`
+### 계층 4 — 네임스페이스 (ResourceQuota / LimitRange) — `terraform/admin/*-k8s`
 
-- **airflow ns에만** ResourceQuota: `requests.cpu 4, requests.memory 8Gi, pods 20,
-  PVC 4`. KPO 폭주가 노드풀을 넘어 확장돼도 ns 수준에서 잘린다.
-- **airflow ns에만** LimitRange: request/limit 미지정 컨테이너에 기본값 주입
-  (request 250m/256Mi → limit 500m/512Mi). 명시 spec이 있으면 그것이 우선.
-- 다른 ns(autoresearch·mlflow·elastic·argocd 등)는 quota/limitrange 없음.
+| namespace | ResourceQuota 핵심 상한 | LimitRange 컨테이너 기본값(request → limit) | 소유 root |
+| --- | --- | --- | --- |
+| `airflow` | pods 20, PVC 4, requests 4 CPU/8Gi | 250m/256Mi → 500m/512Mi | `airflow-k8s` |
+| `actions-runner` | pods 12, requests 6 CPU/12Gi, limits 12 CPU/24Gi | 500m/1Gi → 1/2Gi, max 2/4Gi | `actions-runner-k8s` |
+| `experiment-runtime` | Jobs/Pods 4, requests 4 CPU/8Gi, limits 8 CPU/16Gi | 1/2Gi → 2/4Gi, max 2/4Gi | `autoresearch-k8s` |
+| `autoresearch-experiments` | Jobs/Pods 2, requests·limits 2 CPU/4Gi | 500m/1Gi → 500m/1Gi, container max 1/2Gi와 Pod 합계 max 1/2Gi | `autoresearch-k8s` |
+| `rerank-loadtest` | Jobs/Pods 16, ConfigMap 20, requests 4 CPU/4Gi, limits 16 CPU/16Gi | 250m/256Mi → 500m/512Mi, max 1/1Gi | `autoresearch-k8s` |
+
+`autoresearch`, `mlflow`, `elastic`, `argocd`, `monitoring`, `argo-rollouts`에는
+ResourceQuota/LimitRange가 없다. 명시된 Pod resources 또는 namespace 밖의 node pool
+capacity가 이 workload들의 직접 상한이다.
 
 ### 계층 5 — 파드/컨테이너 (requests/limits) — 소유 저장소별
 
@@ -638,6 +695,11 @@ GKE 기본값인 **노드당 최대 110 파드**가 전 풀에 그대로 적용�
 | 워크로드 | requests → limits | 소유 |
 | --- | --- | --- |
 | serving | 250m/1Gi → 1/2Gi | infra `deploy/serving`(ArgoCD) |
+| Agent Orchestration API | 100m/256Mi → 500m/512Mi | infra `deploy/agent-orchestration`(ArgoCD) |
+| Agent Orchestration runner | 250m/512Mi → 1/2Gi (+PVC 1Gi) | 〃 |
+| Agent Orchestration UI | 100m/256Mi → 500m/512Mi | 〃 |
+| Agent Orchestration launcher(init/app 각각) | 50m/128Mi → 250m/256Mi | 〃 |
+| ARC ephemeral runner | 매니페스트 미지정 → `actions-runner` LimitRange가 500m/1Gi → 1/2Gi 주입 | infra `deploy/actions-runner-scale-set*` + `actions-runner-k8s` |
 | Airflow scheduler | 200m/512Mi → 1500m/1536Mi (+git-sync 250m/256Mi→500m/512Mi) | 앱 airflow repo Helm values |
 | Airflow webserver ×2 | 100m/512Mi → 500m/1Gi | 〃 |
 | KPO collect/merge | 500m/1Gi → 2/4Gi | airflow repo dags |
@@ -653,8 +715,10 @@ GKE 기본값인 **노드당 최대 110 파드**가 전 풀에 그대로 적용�
 | filebeat(DaemonSet) | 100m/150Mi → 300Mi | `terraform/admin/elastic-k8s` |
 | **ArgoCD 전 컴포넌트** | **미지정(BestEffort)** — 메모리 압박 시 최우선 eviction 대상. 하드닝 백로그 | `terraform/admin/argocd-k8s` |
 
-HPA는 어느 워크로드에도 없다(파드 수 고정, 노드만 오토스케일). replica 확장은
-수동이며, 운영 승격 시 HPA·PDB가 선행 항목이다(#330 논의).
+Kubernetes HPA는 어느 workload에도 없다. Deployment replica는 고정이지만 ARC는
+GitHub Actions 수요에 따라 ephemeral runner를 PoC 0~4, Feast dev/prod 각각 0~2로
+늘리고, CronJob/launcher는 실행 시 Job/Pod를 동적으로 만든다. 이 Pod 수 변화와 GKE
+node pool autoscaling은 서로 다른 계층이다.
 
 ### 계층 6 — GKE 밖 인스턴스 — `terraform/envs/dev/*.tf`
 
@@ -665,17 +729,18 @@ HPA는 어느 워크로드에도 없다(파드 수 고정, 노드만 오토스�
 | bastion | e2-micro | `bastion.tf` |
 | Cloud Run proxy | 1 CPU / 512Mi, min instances 0, `cpu_idle` | `cloud_run.tf` |
 
-### 계층 7 — 그 외 미문서화 기본값·상한 (2026-08-06 코드 감사)
+### 계층 7 — 코드 미지정 외부 기본값·상한 (2026-08-10 재감사)
 
-Terraform이 명시적으로 override하지 않아 GCP 기본값이 그대로 적용되는 항목 중,
-이전까지 어떤 md에도 값이 적히지 않았던 것들이다. 실제 장애 시 원인 후보가 될 수
-있어 여기 기록한다.
+아래 항목은 Terraform이 명시적으로 override하지 않는다. 따라서 코드에서 확인되는
+것은 "미지정"이라는 사실까지이며, 실제 적용 값은 provider/GCP 기본값과 live 설정을
+조회해야 한다. 기존 문서의 기본값 가정은 장애 가설로만 남기고 확정값으로 사용하지
+않는다.
 
 | 항목 | 적용 값 | 근거 | 실무 영향 |
 | --- | --- | --- | --- |
-| 노드당 파드 수 | 110(GKE 기본, override 없음) | 전 node pool `max_pods_per_node` 미지정(`gke.tf`, `ctr-model-retrain`은 `gke_ctr_retrain.tf`) | 110 → 노드당 /24 할당. pods 대역 `gke_pods_cidr`(`terraform.tfvars.example` 기준 `172.16.64.0/20`)은 /24 16개뿐이고 노드풀 max 합(dev-default 2 + airflow-dev 2 + batch-spot 8 + batch-od 2 + ctr-model-retrain 2 = 16)이 정확히 16이라 **이미 상한** — 어느 노드풀이든 max를 올리려면 pods 대역 확장이 선행 조건(#330/#331처럼 max 상향은 이미 두 차례 있었다) |
-| Cloud NAT VM당 포트 | 64(GCP 기본 static 할당, `min_ports_per_vm` 미지정) | `nat.tf`에 `min_ports_per_vm`/`enable_dynamic_port_allocation` 없음 | 동시 outbound 연결이 많은 워크로드(예: 다수 KPO pod 동시 AR pull)가 몰리면 포트 고갈로 NAT 오류 가능. `nat.tf`에 `log_config`도 없어 NAT 로깅이 꺼져 있으므로 고갈 시 워크로드 쪽엔 그냥 간헐 실패/타임아웃으로만 보이고 `OUT_OF_RESOURCES` 같은 NAT 쪽 원인 신호가 로그에 안 남는다 — 발생 시 `min_ports_per_vm` 상향 또는 dynamic allocation 검토 전에 `log_config { filter = "ERRORS_ONLY" }`부터 켜야 원인 규명이 가능하다 |
-| Cloud SQL 자동 백업 보존 개수 | 7개(GCP 기본, `backup_retention_settings` 미지정) | `cloud_sql.tf`의 `backup_configuration`에 `enabled`/`point_in_time_recovery_enabled`/`start_time`만 있고 보존 개수 지정 없음 | 자동 백업이 하루 1회(`start_time = "17:00"`)라는 전제 하에 **7일**치 automated backup까지만 복구 가능. `transaction_log_retention_days`도 미지정(GCP 기본)이라 PITR로 되돌릴 수 있는 트랜잭션 로그 보존 기간도 같은 기본값에 묶여 있다 |
+| 노드당 파드 수 | Terraform 미지정 | 전 node pool `max_pods_per_node` 미지정(`gke.tf`, `ctr-model-retrain`은 `gke_ctr_retrain.tf`) | 기존 문서는 GKE 기본 110과 노드당 /24를 가정해 pods 대역을 상한으로 계산했다. 증설 전 `gcloud container clusters/node-pools describe`로 실제 `maxPodsConstraint`와 secondary range 할당을 확인한다. |
+| Cloud NAT VM당 포트 | Terraform 미지정 | `nat.tf`에 `min_ports_per_vm`/`enable_dynamic_port_allocation` 없음 | 동시 outbound 연결이 많은 워크로드에서 포트 고갈 가능성이 있다. `log_config`도 없어 원인 신호가 남지 않으므로 effective 설정 확인과 NAT 로깅 도입을 별도 변경으로 검토한다. |
+| Cloud SQL 자동 백업·transaction log 보존 | Terraform 미지정 | `backup_configuration`에 `enabled`/`point_in_time_recovery_enabled`/`start_time`만 있고 `backup_retention_settings`·`transaction_log_retention_days` 없음 | 기존 문서의 7개·7일 가정은 코드로 확정할 수 없다. 복구 정책 판단 전 provider/GCP 기본값과 live instance 설정을 확인한다. |
 | GKE release channel | `REGULAR` | `gke.tf` `release_channel.channel = var.gke_release_channel`, 기본값 `REGULAR`(`variables.tf`) | GKE가 자동으로 patch/minor 버전을 주기적으로 올린다 — 예고 없는 노드풀 롤링 재생성 가능성의 근거 |
 
 ## 데이터 저장 위치
@@ -690,10 +755,16 @@ Terraform이 명시적으로 override하지 않아 GCP 기본값이 그대로 �
 | Feast prod offline store | BigQuery `feast_offline_store` | prod feature table 저장 |
 | Feast dev offline store | BigQuery `feast_offline_store_dev` | dev feature table 저장 |
 | Feast prod registry/staging | GCS `<project>-feast-registry`, `<project>-feast-staging` | 기존 prod registry.db와 staging 주소 유지 |
-| Feast dev registry/staging | GCS `<project>-feast-registry-dev`, `<project>-feast-staging-dev` | 환경별 bucket IAM 경계(#424, 미적용) |
+| Feast dev registry/staging | GCS `<project>-feast-registry-dev`, `<project>-feast-staging-dev` | 환경별 bucket IAM 경계(#424/#541) |
 | Airflow DAG/log | GCS Airflow DAG/log buckets | DAG 버전관리와 task log 영속화 |
+| MLflow artifact | GCS `<project>-autoresearch-mlflow-artifacts` | MLflow run artifact |
+| 배포 code archive | GCS `<project>-code-artifacts` | main 코드 archive; 업로더 SA write, 승인 workload read |
+| Auto Research 실험 결과·학습 snapshot | GCS `<project>-autoresearch-dev-experiment-results` | executor 결과와 `training-snapshots/`의 게시된 학습 snapshot; versioning과 lifecycle 적용 |
+| Elasticsearch snapshot | GCS `<project>-autoresearch-dev-es-snapshots` | ES snapshot repository 전용 |
 | 앱 운영 DB | Cloud SQL `autoresearch` DB | private IP only |
 | Airflow metadata DB | Cloud SQL `airflow` DB | Airflow 내부 상태 |
+| MLflow backend DB | Cloud SQL `mlflow` DB | tracking metadata와 run 상태 |
+| Agent Orchestration DB | Cloud SQL `agent_orchestration` DB | Experiment·runner·launcher 상태 |
 
 ## 접근 경로
 
@@ -701,6 +772,11 @@ Terraform이 명시적으로 override하지 않아 GCP 기본값이 그대로 �
 |---|---|---|
 | GKE API server | `gcloud container clusters get-credentials ... --dns-endpoint` | `TEAM_OPERATIONS_RUNBOOK.md` |
 | Airflow UI | Bastion IAP 터널 `-L 8080` 후 `http://localhost:8080` | `TEAM_OPERATIONS_RUNBOOK.md` |
+| ArgoCD UI | `kubectl -n argocd port-forward svc/argo-cd-argocd-server 8443:443` | `ARGOCD_OPERATIONS_RUNBOOK.md` |
+| Grafana UI | `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80` | `GRAFANA_OPERATIONS_RUNBOOK.md` |
+| MLflow UI | Bastion IAP `-L 4180` 또는 `kubectl -n mlflow port-forward svc/mlflow-oauth-proxy 4180:4180` | `MLFLOW_OPERATIONS_RUNBOOK.md` |
+| Kibana UI | `kubectl -n elastic port-forward svc/kibana-oauth-proxy 4181:4180` | `KIBANA_OPERATIONS_RUNBOOK.md` |
+| Agent Orchestration UI/API | `kubectl -n autoresearch port-forward svc/agent-orchestration-ui 8501:8501` 또는 API `8000:8000` | `runbooks/2026-07-30-agent-orchestration-gke.md` |
 | VPC 내부 DNS 확인 | Bastion SOCKS5 `-D 1080` | `TEAM_OPERATIONS_RUNBOOK.md` |
 | Cloud SQL private IP | GKE 내부 proxy/pod 경유 | `TERRAFORM_DEV.md` |
 | Terraform dev apply | 운영자 로컬 인증 + `terraform/envs/dev` | `TERRAFORM_DEV.md` |
@@ -715,21 +791,31 @@ Terraform이 명시적으로 override하지 않아 GCP 기본값이 그대로 �
   접근한다.
 - 팀원 개인 계정에는 Secret Manager payload 직접 읽기 권한을 부여하지 않는다.
 - Secret payload, Terraform state, 로컬 `terraform.tfvars` 실값은 커밋하지 않는다.
-- GKE는 Calico NetworkPolicy enforcement를 켜고(#116), `airflow`/`argocd`
-  namespace에 deny-by-default NetworkPolicy 경계를 둔다.
-- Feast apply 환경 전용 WIF provider는 repository, GitHub Environment,
+- GKE는 Calico NetworkPolicy enforcement를 켜고(#116), `airflow`, `argocd`,
+  `actions-runner`, `autoresearch-experiments`, `experiment-runtime`,
+  `rerank-loadtest`, `elastic`, `mlflow`, `argo-rollouts`와 앱 workload에 목적지별
+  NetworkPolicy 경계를 둔다.
+- Feast apply의 기존 환경 전용 WIF provider는 repository, GitHub Environment,
   정확한 main `feast-apply.yml` workflow ref를 AND로 검사한다. GSA IAM member는
   같은 `attribute.environment` 하나만 사용하며, 기존 범용 provider에는 이
-  attribute mapping이 없어 두 GSA를 가장할 수 없다(#424, 미적용).
-- Feast dev/prod는 registry/staging/BQ와 namespace/RBAC을 분리하고 prod에만
-  Redis/CA와 Redis PSC egress를 허용한다. 두 GSA의 공용 `code-artifacts`
-  `objectViewer`는 의도된 배포 자산 공유이며 환경 데이터 저장소 경계가 아니다.
+  attribute mapping이 없어 두 GSA를 가장할 수 없다(#424). 이 경로는 현재 ARC
+  self-hosted runner 경로의 롤백 수단으로 보존한다.
+- Feast dev/prod는 registry/staging/BQ와 KSA/NetworkPolicy를 분리하고 prod에만
+  Redis/CA와 Redis PSC egress를 허용한다. ARC runner KSA도 같은 환경별 GSA를
+  Workload Identity로 가장한다. 두 GSA의 공용 `code-artifacts` `objectViewer`는
+  의도된 배포 자산 공유이며 환경 데이터 저장소 경계가 아니다.
+- Experiment executor는 공개 443, in-cluster Experiment API와 MLflow만 추가로
+  허용하며 Cloud SQL 직접 접근은 막는다. API token과 Codex 인증은 서로 다른
+  Kubernetes Secret과 container mount 계약으로 분리한다.
 
 ## 월 비용 추정
 
 dev 환경은 최소 비용 원칙으로 구성했지만, GKE와 Cloud NAT는 고정 비용이 생긴다.
 아래 값은 대략적인 운영 감각을 위한 추정치이며 실제 청구액은 사용량, 환율,
-할인, 로그/스토리지 증가에 따라 달라질 수 있다.
+할인, 로그/스토리지 증가에 따라 달라질 수 있다. 금액은 Terraform 코드에서 검증할
+수 없는 기존 추정치이며 이번 코드 정합성 감사에서 가격을 갱신하지 않았다. ARC
+runner·min 0 batch node pool·Cloud Run의 사용량 증가와 Redis Cluster 비용은 합계에
+포함되지 않으므로 변경 전 GCP Pricing Calculator와 실제 Billing으로 다시 확인한다.
 
 | 항목 | 대략 |
 |---|---|
@@ -768,6 +854,11 @@ dev 환경은 최소 비용 원칙으로 구성했지만, GKE와 Cloud NAT는 �
 | #84 | ArgoCD 최소 설치 | argo-cd chart `10.1.3`, ClusterIP + port-forward 내부 접근, dex/notifications/applicationSet 비활성 |
 | #116 | NetworkPolicy enforcement + argocd 경계 | Calico 활성화(그 전에는 NetworkPolicy 미강제), airflow same-ns egress 보완, argocd deny-by-default |
 | #85 | ArgoCD AppProject/Application 샘플 | `autoresearch-dev` AppProject(최소 허용) + guestbook 샘플 manual sync로 sync/diff/rollback 검증 |
+| #424/#485 | 환경별 Feast와 paired experiment runtime 격리 | dev/prod GCS·BQ·KSA 경계와 fail-closed paired runtime 계약 |
+| #484/#523/#539/#562 | Auto Research 실험 Job과 Phase 2 executor | 전용 namespace·quota·admission, launcher 단독 Job create, 8-container executor와 목적지별 egress |
+| #533/#541 | ARC self-hosted runner와 Feast apply 이관 | `actions-runner` 플랫폼 경계, PoC/dev/prod scale set, 환경별 runner KSA/WI |
+| #460/#526 | ArgoCD 자동 sync 확대 | `prune=false`, `selfHeal=false`를 유지한 main 자동 반영; Agent Orchestration은 enable flag로 fail-closed |
+| #589/#602/#604 | Stage 1 학습 입력·MLflow·결과 게시 | immutable training snapshot read, MLflow tracking, write-once experiment result 경로 |
 
 남은 백로그:
 
@@ -794,16 +885,19 @@ chart values와 DAG 구현은 `SKYAHO/Autoresearch-airflow`에서 관리한다.
 Prometheus/Grafana는 `terraform/admin/monitoring-k8s`에서 monitoring namespace와
 monitoring port-forward allowlist RBAC(플랫폼 경계)를 관리한다. chart/values는
 #183 이관으로 ArgoCD Application `monitoring`(infra repo `deploy/monitoring`)이
-관리한다(manual sync). Grafana UI는 `kubectl port-forward`로 `localhost:3000`에서
-접근하며, dashboard 운영 절차는 `docs/GRAFANA_OPERATIONS_RUNBOOK.md`를 기준으로 한다.
+자동 sync한다(`prune=false`, `selfHeal=false`). Grafana UI는 `kubectl port-forward`로
+`localhost:3000`에서 접근하며, dashboard 운영 절차는
+`docs/GRAFANA_OPERATIONS_RUNBOOK.md`를 기준으로 한다.
 
 ArgoCD는 `terraform/admin/argocd-k8s`에서 `argocd` namespace와 argo-cd Helm
-release(`10.1.3`), AppProject(`autoresearch-dev`, destination `monitoring`·`kube-system`·
-`argo-rollouts`·`autoresearch` #303), Application(`monitoring` #183, `argo-rollouts`
-#186, `serving`(Inference Server) #303)을 관리한다. UI는 ClusterIP + `kubectl
-port-forward` 내부 접근이며, **Google(Gmail) OIDC 로그인 + 이메일 기준 RBAC**(admin/
-readonly, `policy.default` 거부, dex 미사용 직접 OIDC)를 쓴다(#292). 로컬 `admin`은
-break-glass. 접속·credential·Secret 절차는 해당 root의 README를 기준으로 한다.
+release(`10.1.3`), AppProject `autoresearch-dev`를 관리한다. destination은
+`monitoring`, `argo-rollouts`, `kube-system`, `mlflow`, `autoresearch`,
+`actions-runner` 6개이고, Application은 `monitoring`, `argo-rollouts`, `mlflow`,
+`serving`, `agent-orchestration`, ARC controller 1개와 scale set 3개로 총 9개다.
+UI는 ClusterIP + `kubectl port-forward` 내부 접근이며, **Google(Gmail) OIDC 로그인 +
+이메일 기준 RBAC**(admin/readonly, `policy.default` 거부, dex 미사용 직접 OIDC)를
+쓴다(#292). 로컬 `admin`은 break-glass. 접속·credential·Secret 절차는 해당 root의
+README를 기준으로 한다.
 
 ## 운영 문서
 
@@ -813,5 +907,8 @@ break-glass. 접속·credential·Secret 절차는 해당 root의 README를 기�
 - Grafana 운영 점검: [`GRAFANA_OPERATIONS_RUNBOOK.md`](GRAFANA_OPERATIONS_RUNBOOK.md)
 - ArgoCD 운영 점검: [`ARGOCD_OPERATIONS_RUNBOOK.md`](ARGOCD_OPERATIONS_RUNBOOK.md)
 - ArgoCD GitOps 설계: [`GITOPS_STRATEGY.md`](GITOPS_STRATEGY.md)
+- Agent Orchestration digest 승격: [`AGENT_ORCHESTRATION_DIGEST_PROMOTION_RUNBOOK.md`](AGENT_ORCHESTRATION_DIGEST_PROMOTION_RUNBOOK.md)
+- Auto Research 실험 Job 운영: [`runbooks/2026-08-01-auto-research-experiment-job.md`](runbooks/2026-08-01-auto-research-experiment-job.md)
+- ARC GitHub App Secret 운영: [`runbooks/2026-08-05-actions-runner-github-app-secret.md`](runbooks/2026-08-05-actions-runner-github-app-secret.md)
 - bootstrap/WIF/CI SA: [`TERRAFORM_BOOTSTRAP.md`](TERRAFORM_BOOTSTRAP.md)
 - 완료된 변경 이력: [`CHANGE_HISTORY.md`](CHANGE_HISTORY.md)
