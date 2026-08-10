@@ -49,7 +49,7 @@ spec:
             # 해당 모듈을 추가하는 애플리케이션 변경이 선행돼야 하며, 그 전까지는
             # API image 참조가 유일하게 동작하는 구성이다.
             - name: bootstrap-db
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:657bb3bb64a6e900b422f868ac2f5ac75459210654fe87f1fa892a2b815ba3d6
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:391976b3cf9e2379e60040d8e4944af0a9afc6299d384a4d432312efc31f06b3
               imagePullPolicy: IfNotPresent
               command:
                 - python
@@ -86,7 +86,7 @@ spec:
                   drop: ["ALL"]
           containers:
             - name: launcher
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:40e89a060a646d6a3ed73dae7115ec7fac7e3f2aeb64a63d93d0179c1569b8ce
+              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:a3b1ac27e541aabc186fe13f98e0c8f423184959920d8918cacce7b24a3fb8f1
               imagePullPolicy: IfNotPresent
               # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
               # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
@@ -114,7 +114,7 @@ spec:
                 - name: ORCH_JOB_NAMESPACE
                   value: autoresearch-experiments
                 - name: ORCH_EXECUTOR_IMAGE
-                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:f9a73d1ed207644e89750971e88f1e7e5ab32dfba2092e0fc71d7352b632354a
+                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:c53561f592b0f958ba80182fbc8bd6b8e319e6ca4b1bd1a734e2c4476ef6e1b9
                 # (#604) Stage 1 측정 산출물은 executor Pod 종료 뒤에도 이 root 아래
                 # experiments/{issue_number}/{experiment_id}/에 남아야 한다. Job GSA의
                 # objectCreator와 executor results_store의 if_generation_match=0
