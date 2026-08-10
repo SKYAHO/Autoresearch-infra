@@ -682,7 +682,7 @@ flowchart TB
 
 | Quota | 한도 | 실측 영향 |
 | --- | --- | --- |
-| `E2_CPUS` (리전) | 24 (#404 새 프로젝트 실측) | 상주 풀(dev-default·airflow·batch-od) 최악 16 vCPU — 여유 확보를 위해 버스트는 N2로 이전(#422) |
+| `CPUS` (리전) | 100 (2026-08-11 live) | E2/N1 공용 pool. 적용 전 사용 13, `batch-od` e2-standard-8 한 대면 21/100, max 두 대면 29/100 |
 | `N2_CPUS` (리전) | 200 (#404 실측) | batch-spot(max8=16) + retrain(max2=8) 동시 최악 24/200 |
 | `PREEMPTIBLE_CPUS` (리전) | 0 (#422 실측) | 한도 0이면 Spot이 해당 계열 일반 quota를 소모 — batch-spot N2 전환의 직접 근거 |
 | `SSD_TOTAL_GB` (리전) | 500 (#404 실측) | pd-balanced 실패 사례(#98) → 노드/ES 디스크는 pd-standard |
@@ -699,8 +699,8 @@ Auto-Provisioning)가 꺼져 있어 클러스터 수준 `resourceLimits`도 없�
 | --- | --- | --- | --- |
 | `dev-default` | e2-standard-4 (4/16GB) | min1 / max2 | 앱·플랫폼 상주 워크로드 |
 | `airflow-dev` | e2-standard-2 (2/8GB) | min1 / max2 | Airflow 제어영역 고정 |
-| `batch-spot` | n2-standard-2 (2/8GB) Spot | min0 / max8 (#330/#331 상향, #422 N2 전환 — E2 quota 회피) | 재시도 내성 KPO |
-| `batch-od` | e2-standard-2 (2/8GB) | min0 / max2 | 재시도 내성 없는 KPO(#297) |
+| `batch-spot` | n2-standard-2 (2/8GB) Spot | min0 / max8 (#330/#331 상향, #422 N2 quota pool 격리) | 재시도 내성 KPO |
+| `batch-od` | e2-standard-8 (8/32GB), pd-standard 100GB | min0 / max2 | 실험 5건 동시 실행·재시도 내성 없는 KPO(#297/#624) |
 | `ctr-model-retrain` | n2-highmem-4 (4/32GB) | min0 / max2 (#316 도입, #330/#331 상향) | 재학습(#316). #331로 main 편입 완료(#404 재구축에서 신규 생성) |
 
 min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된다. max는 상한일 뿐
@@ -715,6 +715,7 @@ min0 풀은 평시 노드 0(비용 0), Pending 파드 발생 시에만 생성된
 | --- | --- | --- |
 | e2-standard-4 | 4 CPU / 16GB | **3920m / ~13.0GB** |
 | e2-standard-2 | 2 CPU / 8GB | **1930m / ~5.9GB** |
+| e2-standard-8 | 8 CPU / 32GB | 배포 후 live 확인 |
 
 **노드당 파드 수**: 어떤 노드풀(`dev-default`/`airflow-dev`/`batch-spot`/`batch-od`/
 `ctr-model-retrain`)도 `node_config`에 `max_pods_per_node`를 지정하지 않는다
@@ -729,7 +730,7 @@ live cluster 설정을 조회해야 확정된다. 계층 7의 외부 기본값 �
 | `airflow` | pods 20, PVC 4, requests 4 CPU/8Gi | 250m/256Mi → 500m/512Mi | `airflow-k8s` |
 | `actions-runner` | pods 12, requests 6 CPU/12Gi, limits 12 CPU/24Gi | 500m/1Gi → 1/2Gi, max 2/4Gi | `actions-runner-k8s` |
 | `experiment-runtime` | Jobs/Pods 4, requests 4 CPU/8Gi, limits 8 CPU/16Gi | 1/2Gi → 2/4Gi, max 2/4Gi | `autoresearch-k8s` |
-| `autoresearch-experiments` | Jobs/Pods 2, requests·limits 2 CPU/4Gi | 500m/1Gi → 500m/1Gi, container max 1/2Gi와 Pod 합계 max 1/2Gi | `autoresearch-k8s` |
+| `autoresearch-experiments` | Jobs/Pods 5, requests 5 CPU/10Gi, limits 20 CPU/40Gi | 500m/1Gi → 500m/1Gi, container max 4/8Gi와 Pod 합계 max 4/8Gi | `autoresearch-k8s` |
 | `loadtest` | Jobs/Pods 16, ConfigMap 20, requests 4 CPU/4Gi, limits 16 CPU/16Gi | 250m/256Mi → 500m/512Mi, max 1/1Gi. KSA·quota·policy 이름은 `rerank-loadtest-*` | `autoresearch-k8s` |
 
 `autoresearch`, `mlflow`, `elastic`, `argocd`, `monitoring`, `argo-rollouts`,

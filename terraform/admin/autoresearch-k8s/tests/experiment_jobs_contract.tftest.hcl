@@ -42,6 +42,76 @@ override_data {
   }
 }
 
+run "experiment_capacity_supports_five_jobs" {
+  command = plan
+
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["count/jobs.batch"] == "5"
+    error_message = "experiment Job quota는 동시 5건이어야 한다."
+  }
+
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["pods"] == "5"
+    error_message = "experiment Pod quota는 Job당 1개씩 동시 5개여야 한다."
+  }
+
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.cpu"] == "5"
+    error_message = "requests.cpu quota는 5 × 1 CPU = 5여야 한다."
+  }
+
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.memory"] == "10Gi"
+    error_message = "requests.memory quota는 5 × 2Gi = 10Gi여야 한다."
+  }
+
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["limits.cpu"] == "20"
+    error_message = "limits.cpu quota는 5 × 4 CPU = 20이어야 한다."
+  }
+
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["limits.memory"] == "40Gi"
+    error_message = "limits.memory quota는 5 × 8Gi = 40Gi여야 한다."
+  }
+
+  assert {
+    condition = (
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].type == "Container" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].max["cpu"] == "4" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].max["memory"] == "8Gi"
+    )
+    error_message = "Container max는 4 CPU/8Gi여야 한다."
+  }
+
+  assert {
+    condition = (
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[1].type == "Pod" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[1].max["cpu"] == "4" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[1].max["memory"] == "8Gi"
+    )
+    error_message = "Pod max는 Container와 같은 4 CPU/8Gi여야 한다."
+  }
+
+  assert {
+    condition = (
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].type == "Container" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].default["cpu"] == "500m" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].default["memory"] == "1Gi"
+    )
+    error_message = "LimitRange default는 500m/1Gi를 유지해야 한다."
+  }
+
+  assert {
+    condition = (
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].type == "Container" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].default_request["cpu"] == "500m" &&
+      kubernetes_limit_range_v1.experiment_jobs.spec[0].limit[0].default_request["memory"] == "1Gi"
+    )
+    error_message = "LimitRange default_request는 500m/1Gi를 유지해야 한다."
+  }
+}
+
 run "branch_bootstrap_contract_is_preserved" {
   command = plan
 

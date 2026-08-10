@@ -15,7 +15,7 @@ def refs
   suffixes = { api: "a", ui: "b", launcher: "c", runner: "d", executor: "e" }
   AgentOrchestrationDigestPromotion::TARGETS.to_h { |name, target| [name, "#{target[:repository]}@sha256:#{suffixes.fetch(name) * 64}"] }
 end
-V12_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:657bb3bb64a6e900b422f868ac2f5ac75459210654fe87f1fa892a2b815ba3d6"
+V12_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:81b301a2bcd14f4ab8dfe402b2a77798bbf7fbd8cd6b2908488081bc5d421fa7"
 
 def expect_equal(expected, actual, description)
   return if expected == actual

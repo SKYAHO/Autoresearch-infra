@@ -234,51 +234,35 @@ Calico여서 GKE Dataplane V2의 `FQDNNetworkPolicy`를 쓸 수 없기 때문입
 적용돼 있고 `except` 목록도 같습니다. label이 없는 Pod는 이 정책의 대상이 아니어서
 GitHub에 도달하지 못하고 실패합니다(fail-closed).
 
-초기 dev 상한은 Job·Pod 각각 2개, 총 request/limit 2 vCPU/4 GiB입니다.
+dev 상한은 Job·Pod 각각 5개, requests 5 vCPU/10 GiB, limits 20 vCPU/40 GiB입니다.
 `count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로, 실제 제출
-병목은 terminal Pod가 아닌 Job 객체 수입니다. 컨테이너 기본 request/limit은
-500m/1 GiB이고, 단일 컨테이너는 1 vCPU/2 GiB를 넘을 수 없습니다. Job 템플릿과
-admission 검증은 `batch-od` nodeSelector와 `workload=batch-od:NoSchedule` toleration을
-강제해야 합니다. `batch-od`는 #297 대응으로 만든 min 0/max 2 on-demand pool이지만,
-현재 `Autoresearch-airflow`의 어떤 KPO도 이 pool로 스케줄되지 않습니다(#523 —
-`AutoresearchBatchPodOperator` 기본값은 `batch-spot`이고 override하는 DAG가 없음).
-따라서 지금은 experiment Job이 이 pool을 사실상 독점합니다. `LimitRange`는 컨테이너당
-상한(`type = "Container"`, 1 vCPU/2 GiB)과 별도로 Pod 합계 상한(`type = "Pod"`, 동일
-1 vCPU/2 GiB)도 강제합니다 — 컨테이너 request 합계와 limit 합계 양쪽 모두 이 값을
-넘을 수 없습니다. 단, 같은 root의 `autoresearch-experiment-job-contract` 정책은
-컨테이너 `resources`를 검사하지 않으므로, 컨테이너 2개짜리 Pod의 Job `create` 자체는
-제출자(#539 이후 launcher KSA) 요청 수준에서는 성공합니다. 거부되는 것은 그 뒤 Job controller가 템플릿으로
-만드는 Pod입니다 — Pod 합계가 상한을 넘으면 LimitRange가 Pod 생성을 막고 Job에
-`FailedCreate` 이벤트가 비동기로 남습니다. Job controller는 Pod 생성을 계속
-재시도하지만 Pod 객체 자체가 만들어지지 않으므로 `requests.cpu`/`requests.memory`/
-`pods`/`limits.*` quota는 전혀 소비되지 않고 `count/jobs.batch`만 평소처럼
-점유됩니다. 이 Job도 다른 Job과 동일하게 `activeDeadlineSeconds`(최대 3600초,
-`status.startTime` 기준)로 상한이 걸려 있어 e2-standard-2 allocatable(약 1930m)을
-넘겨 노드에 스케줄되지 못하는 Pending Pod가 대기하는 경우와 마찬가지로 deadline+TTL로
-종료됩니다 — 이 LimitRange가 새로운 시간 상한을 만드는 것은 아닙니다. `status.startTime`은
-Pod 생성 성공 여부와 무관하게 Job controller가 Job을 처음 처리하는 시점에 설정되므로,
-Pod가 한 번도 만들어지지 못해도 `activeDeadlineSeconds` 타이머는 정상적으로 돕니다.
-실제 효과는 (1) 잘못된 Pod가 `pods`/`requests.cpu`/`requests.memory`/`limits.*` quota를
-전혀 점유하지 않게 하는 것과 (2) 스케줄러의 `FailedScheduling`/Pending 대신 admission
-단계의 명확한 `FailedCreate` 사유를 남기는 것뿐입니다(#523) — **`count/jobs.batch`
-슬롯 점유는 이 변경과 무관하게 그대로**이므로, "정상 실험 Job 제출까지 막는 상황을
-없앤다"는 뜻은 아닙니다. `count/jobs.batch=2`가 이런 Job으로 모두 채워지면 세 번째
-`create`는 이 LimitRange 도입 전과 동일하게 `Forbidden` quota 초과로 즉시(동기)
-거부되며, 회수 주체는 TTL controller(deadline 최대 3600초 + TTL 최대 3600초 = 슬롯당
-최대 2시간, 위 "초기 dev 상한" 문단과 동일한 병목)입니다 — 제출자 KSA(#539 이후
-launcher KSA)에는 `delete`가
-없어 그 전에 수동 회수는 break-glass 관리자 권한으로만 가능합니다(runbook "장애 처리와
-롤백" 참조). #539의 branch-bootstrap Job은 initContainer 1개 + app 컨테이너 1개인데,
-Kubernetes가 일반(non-sidecar) initContainer를 app 컨테이너 합계와 `max()`로 비교하므로
-Pod 합계는 500m/1 GiB로 상한 안에 들어옵니다. 다만 이는 여유가 아니라 "sidecar가
-아니어서" 통과하는 것이라, token-minter를 native sidecar(`restartPolicy: Always`)로
-바꾸면 합산 대상이 되어 이 상한에 먼저 걸립니다. 그런 변경에서는 상한 값을 함께
-재검토합니다. 이 상한은 컨테이너 상한과 동일한 값이라
-헤드룸이 0입니다 — 승인된 두 컨테이너 외에 하나라도 추가되면(의도적이든 GCS FUSE
-CSI 같은 주입형 sidecar든) 거부되며, admission 정책이 그 이전에 제출 자체를
-막습니다. 이 namespace에는 현재 sidecar를 주입하는 mutating
-webhook이 없으므로, 값을 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를
-명시적 제약으로 유지합니다.
+병목은 terminal Pod가 아닌 Job 객체 수입니다. LimitRange 기본값은 500m/1 GiB이고,
+단일 컨테이너와 Pod 합계는 각각 4 vCPU/8 GiB를 넘을 수 없습니다. Container와 Pod
+max를 같게 둬 최대 자원을 쓰는 executor에 sidecar 헤드룸을 두지 않습니다. Job
+템플릿과 admission 검증은 `batch-od` nodeSelector와
+`workload=batch-od:NoSchedule` toleration을 강제해야 합니다. `batch-od`는
+e2-standard-8, pd-standard 100GB, min 0/max 2 on-demand pool이며 한 노드가 실험
+5건의 총 requests 5 vCPU/10 GiB를 수용합니다. limits 총합 20 vCPU/40 GiB는 노드
+8 vCPU/32GB보다 커, 동시 버스트 시 CPU throttling 또는 MemoryPressure가 생길 수
+있습니다. 이는 2건 canary와 5건 smoke에서 확인하는 비용 절충 계약입니다. 현재
+`Autoresearch-airflow`의 어떤 KPO도 이 pool로 스케줄되지 않아(#523) experiment
+Job이 사실상 독점합니다.
+
+같은 root의 `autoresearch-experiment-job-contract` 정책은 컨테이너 `resources`를
+검사하지 않으므로 상한을 넘는 템플릿의 Job `create` 자체는 성공할 수 있습니다.
+거부되는 것은 Job controller가 만드는 Pod입니다. LimitRange가 Pod 생성을 막아
+`FailedCreate` 이벤트를 남기며, Pod 객체가 없으므로 `pods`와 자원 quota는 소비하지
+않지만 `count/jobs.batch`는 점유합니다. 이 Job은 `activeDeadlineSeconds` 최대
+60,000초와 TTL 최대 3,600초로 회수됩니다. Job 5개가 슬롯을 채운 상태에서 여섯 번째
+`create`는 `Forbidden` quota 초과로 즉시 거부됩니다. launcher와 API에는 `delete`
+권한이 없으므로 TTL 전 수동 회수는 break-glass 관리자만 수행합니다.
+
+executor의 일반 initContainer 7개는 순차 실행되고 app 컨테이너는 하나이므로 Pod
+실효값은 `max(initContainer 최댓값, app 컨테이너 합계)`인 4 vCPU/8 GiB입니다.
+native sidecar는 app 컨테이너와 합산돼 상한을 넘습니다. branch-bootstrap은 기본값을
+쓰는 initContainer 1개와 app 컨테이너 1개라 Pod 실효값 500m/1 GiB로 통과하며,
+admission 정책이 그 구성을 고정합니다. 컨테이너 구성이나 sidecar 정책이 바뀌면
+LimitRange를 함께 재검토합니다.
 운영 중에는 batch-od node/pod Pending·autoscaler·CPU/memory를 관측합니다. 운영 검증
 절차와 Job manifest 계약은
 [`docs/runbooks/2026-08-01-auto-research-experiment-job.md`](../../../docs/runbooks/2026-08-01-auto-research-experiment-job.md)를
