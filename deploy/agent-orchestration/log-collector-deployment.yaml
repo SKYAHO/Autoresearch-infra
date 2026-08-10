@@ -169,3 +169,87 @@ spec:
         - name: db-runtime
           emptyDir:
             medium: Memory
+---
+# 수집기는 Cloud SQL·Secret Manager·DNS와 Kubernetes API만 호출한다. 공개 인터넷
+# egress는 열지 않는다 — Pod 로그도 kube-apiserver 경유로 읽는다.
+#
+# 규칙은 `launcher-cronjob.yaml`의 `agent-orchestration-launcher` 정책과 같은
+# 집합이다. 두 워크로드가 같은 image로 같은 목적지(DB·Secret Manager·apiserver)만
+# 호출하기 때문이며, 정책을 공유하지 않고 복제하는 이유는 podSelector가 component를
+# 정확히 하나만 고르기 때문이다.
+#
+# 이 정책이 없으면 이 Pod의 egress가 무제한이 된다. namespace에 default-deny가 없고
+# terraform의 `autoresearch-egress`가 `part-of NotIn [agent-orchestration]`으로
+# 제외하므로, 어느 정책에도 걸리지 않은 agent-orchestration Pod은 아무 데나 나갈 수
+# 있다. 이 Pod은 codex-worker 출력을 포함한 실험 namespace의 모든 Pod 로그를 읽고 DB
+# 쓰기 자격증명을 가지므로 그 상태로 두지 않는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-log-collector
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-log-collector
+      app.kubernetes.io/part-of: agent-orchestration
+      app.kubernetes.io/component: log-collector
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            # dev Terraform var.private_services_cidr와 반드시 일치한다.
+            cidr: 192.168.0.0/20
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.252/32
+      ports:
+        - protocol: TCP
+          port: 987
+        - protocol: TCP
+          port: 988
+    - to:
+        - ipBlock:
+            # Secret Manager private.googleapis.com 고정 VIP.
+            cidr: 199.36.153.8/30
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        # Calico의 Service DNAT 전·후 평가 경로를 모두 허용하되 Kubernetes API
+        # Service 한 개와 control plane CIDR로만 제한한다.
+        - ipBlock:
+            cidr: 172.16.128.1/32
+        - ipBlock:
+            cidr: 172.16.0.0/28
+      ports:
+        - protocol: TCP
+          port: 443
