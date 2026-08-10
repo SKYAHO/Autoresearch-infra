@@ -136,7 +136,7 @@
 
   커밋 메시지는 `docs: 인프라 요약 peer review 반영`을 사용합니다.
 
-- [ ] **Step 4: 최종 검증을 새로 실행합니다.**
+- [x] **Step 4: 최종 검증을 새로 실행합니다.**
 
   root/Application/dashboard/quota/DB/bucket 대조와 `git diff --check`, 보안 범위,
   `git status --short --branch`를 다시 실행해 결과를 확인합니다.
