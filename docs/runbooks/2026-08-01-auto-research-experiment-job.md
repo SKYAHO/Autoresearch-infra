@@ -354,15 +354,28 @@ launcher는 Job 생성 전에 DB 상태를 `RUNNING`으로 바꾸므로 인프�
 
 1. #672가 terminal 상태이고 active experiment Job/Pod 및 다른 `batch-od` 사용자가
    없는지 확인합니다.
-2. `apply.yml`을 `scope: dev`로 실행해 `batch-od`를 `e2-standard-16`으로 교체하고
-   machine type, min 0/max 2, taint를 live에서 확인합니다.
+2. `apply.yml`을 `scope: dev`로 실행해 `batch-od`를 `e2-standard-8`,
+   `pd-standard` 100GB로 갱신하고 machine type, disk, min 0/max 2, taint를
+   live에서 확인합니다.
 3. dev 검증 뒤에만 `scope: admin`을 실행해 LimitRange Container/Pod max
-   4 CPU/8Gi와 ResourceQuota Jobs/Pods 5, requests 10 CPU/20Gi, limits
+   4 CPU/8Gi와 ResourceQuota Jobs/Pods 5, requests 5 CPU/10Gi, limits
    20 CPU/40Gi를 적용합니다. `scope: all`은 사용하지 않습니다.
 4. launcher 상한을 2로 유지한 채 #669 자원값으로 실험 2건 canary를 실행합니다.
    quota 403, LimitRange `FailedCreate`, 장기 `Pending`이 없어야 합니다.
 5. canary 통과 후 별도 GitOps PR에서만 `ORCH_MAX_CONCURRENT_EXPERIMENTS=5`를
    반영하고 실험 5건 smoke를 수행합니다.
+
+스케줄러와 ResourceQuota가 계산하는 Pod request는 일반 app container request 합과
+순차 initContainer 각각의 request 중 최댓값이다. executor는 app container 1개와
+일반 initContainer 7개이고 native sidecar가 없으므로 #669의 컨테이너별
+`1 CPU/2Gi` request는 Pod당 그대로 `1 CPU/2Gi`이며, 5건은 `5 CPU/10Gi`다.
+반대로 limit 합계 `20 CPU/40Gi`는 e2-standard-8의 8 CPU/32GB보다 크다. CPU limit은
+스케줄링에 쓰이지 않아 두 번째 노드를 만들지 않고, 동시 버스트는 CFS throttling으로
+흡수된다. 메모리는 동시에 크게 사용하면 MemoryPressure 축출이 가능하므로 5건
+smoke에서 `kubectl top`, node condition, event와 training timeout을 함께 확인한다.
+100GB boot disk는 workspace `sizeLimit` 최악 합계 40Gi에 이미지·로그·kubelet
+headroom을 더한 값이며 canary node의 allocatable ephemeral storage와
+`DiskPressure=False`를 확인한다.
 
 실패 시 launcher를 먼저 2로 낮춰 새 선점을 막습니다. active Job 종료 후 admin
 quota·LimitRange, dev node pool 순서로 되돌립니다. namespace, KSA, 결과 버킷 삭제나
@@ -589,7 +602,8 @@ stage 시작·종료, `training_timeout`, `evaluation_timeout`, `codex_timeout`,
 추가하지 않으므로, 위 신호가 진행 정지나 `FailedCreate`를 보이면 즉시 launcher를
 suspend하고 로그·Event·결과 URI를 보존한다.
 
-`batch-od`는 e2-standard-16, 최대 2개 노드이고 namespace `count/jobs.batch=5`와
+`batch-od`는 e2-standard-8·pd-standard 100GB, 최대 2개 노드이고 namespace
+`count/jobs.batch=5`와
 함께 실험 5건이 동시에 최대 16시간 40분 동안 다섯 슬롯을 점유할 수 있다. 현재
 확인된 Airflow KPO는
 `batch-spot` 기본값이라 이 변경 시점에는 같은 pool 경쟁자가 없지만, 이후 workload가
@@ -1288,7 +1302,7 @@ CPU/memory request를 관측한다. 이후 Airflow나 다른 컴포넌트가 `ba
 
 이 유휴 상태 전제는 이 저장소 밖(`Autoresearch-airflow`)의 상태에 의존하고, 그
 저장소의 변경은 이 저장소의 CI·리뷰를 거치지 않는다. 정확한 수치로 다시 쓰면 한
-e2-standard-16 노드가 실험 5건의 총 requests 10 CPU/20Gi를 수용하며, pool max 2와
+e2-standard-8 노드가 실험 5건의 총 requests 5 CPU/10Gi를 수용하며, pool max 2와
 namespace quota가 각각 노드와 제출의 상한을 정한다. `LimitRange` 기본 request는 500m라
 실제 experiment 점유는 제출된 Job의 request 값에 따라 다르다. Airflow DAG 하나가
 `node_selector`를 `batch-od`로 override하면, 두 워크로드의 request 합이 그 순간

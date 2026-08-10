@@ -715,7 +715,7 @@ variable "batch_spot_gke_node_pool_name" {
 }
 
 variable "batch_spot_gke_machine_type" {
-  description = "batch Spot pool 머신 타입(#173). #422에서 n2로 전환 — 새 프로젝트는 PREEMPTIBLE quota 0이라 Spot도 E2_CPUS(한도 24)를 소모해 8노드 버스트가 한도 초과. N2_CPUS(한도 200)로 수요를 이전한다."
+  description = "batch Spot pool 머신 타입(#173). #422에서 PREEMPTIBLE quota 0과 E2 계열 quota 우려를 분리하기 위해 N2_CPUS pool로 이전했다. 현재 E2/N1은 공용 CPUS quota를 쓰지만 기존 N2 격리는 유지한다."
   type        = string
   default     = "n2-standard-2"
 }
@@ -733,9 +733,9 @@ variable "batch_od_gke_node_pool_name" {
 }
 
 variable "batch_od_gke_machine_type" {
-  description = "실험 5건 동시 실행용 batch on-demand pool 머신 타입(#297, #624). e2-standard-16 한 노드가 requests 10 vCPU/20Gi를 수용하며 min 0이라 유휴 비용은 없다."
+  description = "실험 5건 동시 실행용 batch on-demand pool 머신 타입(#297, #624). e2-standard-8 한 노드가 requests 5 vCPU/10Gi를 수용하며 min 0이라 유휴 비용은 없다."
   type        = string
-  default     = "e2-standard-16"
+  default     = "e2-standard-8"
 }
 
 variable "ctr_retrain_gke_node_count_max" {

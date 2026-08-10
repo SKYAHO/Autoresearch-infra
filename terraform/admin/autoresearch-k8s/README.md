@@ -234,16 +234,19 @@ Calico여서 GKE Dataplane V2의 `FQDNNetworkPolicy`를 쓸 수 없기 때문입
 적용돼 있고 `except` 목록도 같습니다. label이 없는 Pod는 이 정책의 대상이 아니어서
 GitHub에 도달하지 못하고 실패합니다(fail-closed).
 
-dev 상한은 Job·Pod 각각 5개, requests 10 vCPU/20 GiB, limits 20 vCPU/40 GiB입니다.
+dev 상한은 Job·Pod 각각 5개, requests 5 vCPU/10 GiB, limits 20 vCPU/40 GiB입니다.
 `count/jobs.batch`는 완료 Job도 TTL controller가 삭제할 때까지 계산하므로, 실제 제출
 병목은 terminal Pod가 아닌 Job 객체 수입니다. LimitRange 기본값은 500m/1 GiB이고,
 단일 컨테이너와 Pod 합계는 각각 4 vCPU/8 GiB를 넘을 수 없습니다. Container와 Pod
 max를 같게 둬 최대 자원을 쓰는 executor에 sidecar 헤드룸을 두지 않습니다. Job
 템플릿과 admission 검증은 `batch-od` nodeSelector와
 `workload=batch-od:NoSchedule` toleration을 강제해야 합니다. `batch-od`는
-e2-standard-16, min 0/max 2 on-demand pool이며 한 노드가 실험 5건의 총 requests
-10 vCPU/20 GiB를 수용합니다. 현재 `Autoresearch-airflow`의 어떤 KPO도 이 pool로
-스케줄되지 않아(#523) experiment Job이 사실상 독점합니다.
+e2-standard-8, pd-standard 100GB, min 0/max 2 on-demand pool이며 한 노드가 실험
+5건의 총 requests 5 vCPU/10 GiB를 수용합니다. limits 총합 20 vCPU/40 GiB는 노드
+8 vCPU/32GB보다 커, 동시 버스트 시 CPU throttling 또는 MemoryPressure가 생길 수
+있습니다. 이는 2건 canary와 5건 smoke에서 확인하는 비용 절충 계약입니다. 현재
+`Autoresearch-airflow`의 어떤 KPO도 이 pool로 스케줄되지 않아(#523) experiment
+Job이 사실상 독점합니다.
 
 같은 root의 `autoresearch-experiment-job-contract` 정책은 컨테이너 `resources`를
 검사하지 않으므로 상한을 넘는 템플릿의 Job `create` 자체는 성공할 수 있습니다.

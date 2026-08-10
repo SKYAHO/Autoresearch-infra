@@ -318,7 +318,8 @@ resource "google_container_node_pool" "batch_spot" {
 # - min 0: 평시 노드 0대(비용 0). batch-spot과 동일 구조.
 # - taint: workload=batch-od — batch-spot과 분리해 앱이 명시적으로 선택.
 #   DaemonSet(filebeat/node-exporter)은 Exists/NoSchedule toleration으로 자동 커버.
-# - 부트 디스크 pd-standard: batch-spot과 동일(#98 교훈).
+# - 부트 디스크 pd-standard 100GB: 실험 workspace 최악 상한 5 × 8Gi와
+#   이미지·로그·kubelet eviction headroom을 함께 수용한다(#98, #624).
 resource "google_container_node_pool" "batch_od" {
   name       = var.batch_od_gke_node_pool_name
   cluster    = google_container_cluster.dev.name
@@ -332,7 +333,7 @@ resource "google_container_node_pool" "batch_od" {
 
   node_config {
     machine_type    = var.batch_od_gke_machine_type
-    disk_size_gb    = 30
+    disk_size_gb    = 100
     disk_type       = "pd-standard"
     service_account = google_service_account.gke_nodes.email
 

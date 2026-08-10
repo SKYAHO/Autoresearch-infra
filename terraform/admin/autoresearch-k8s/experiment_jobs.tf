@@ -39,8 +39,8 @@ resource "kubernetes_service_account_v1" "experiment_job" {
 # 만들었지만 Autoresearch-airflow의 어떤 KPO도 현재 이 pool로 스케줄되지 않는다
 # (#523) — 유휴 상태이므로 별도 경합 계획 없이 실험 Job이 그대로 쓴다. 다른
 # 컴포넌트가 이 pool을 실제로 쓰기 시작하면 그 변경에서 capacity·우선순위 계획을
-# 다시 승인한다. e2-standard-16 한 노드가 실험 5건의 총 requests
-# 10 CPU/20Gi를 수용한다. pool의 min 0/max 2는 유지하며, quota는 5건을 넘는
+# 다시 승인한다. e2-standard-8 한 노드가 실험 5건의 총 requests
+# 5 CPU/10Gi를 수용한다. pool의 min 0/max 2는 유지하며, quota는 5건을 넘는
 # 제출과 총 limits 20 CPU/40Gi를 차단한다. 완료 Job도 TTL 전에는 quota에
 # 포함되므로 무한 재시도·대량 제출로 batch 비용이 늘어나는 경로를 차단한다.
 resource "kubernetes_resource_quota_v1" "experiment_jobs" {
@@ -53,8 +53,8 @@ resource "kubernetes_resource_quota_v1" "experiment_jobs" {
     hard = {
       "count/jobs.batch" = "5"
       "pods"             = "5"
-      "requests.cpu"     = "10"
-      "requests.memory"  = "20Gi"
+      "requests.cpu"     = "5"
+      "requests.memory"  = "10Gi"
       "limits.cpu"       = "20"
       "limits.memory"    = "40Gi"
     }

@@ -56,13 +56,13 @@ run "experiment_capacity_supports_five_jobs" {
   }
 
   assert {
-    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.cpu"] == "10"
-    error_message = "requests.cpu quota는 5 × 2 CPU = 10이어야 한다."
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.cpu"] == "5"
+    error_message = "requests.cpu quota는 5 × 1 CPU = 5여야 한다."
   }
 
   assert {
-    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.memory"] == "20Gi"
-    error_message = "requests.memory quota는 5 × 4Gi = 20Gi여야 한다."
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.memory"] == "10Gi"
+    error_message = "requests.memory quota는 5 × 2Gi = 10Gi여야 한다."
   }
 
   assert {
