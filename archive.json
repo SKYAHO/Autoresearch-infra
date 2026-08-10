@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-10T15:05:21Z",
+  "generated_at": "2026-08-10T15:54:22Z",
   "reports": [
+    {
+      "number": 625,
+      "title": "feat: 실험 5건 실행 용량을 상향한다",
+      "author": "bbungjun",
+      "merged_at": "2026-08-10T15:54:10Z",
+      "summary_ko": [
+        "실험 동시 실행 용량을 2건에서 5건으로 확장하기 위해 Kubernetes 자원 할당량 및 제한 범위를 상향 조정하였습니다.",
+        "batch-od 노드 풀 사양을 e2-standard-16으로 변경하여 5건의 실험 요청 자원을 단일 노드에서 수용하도록 설정하였습니다.",
+        "목표 자원 설정을 검증하는 Terraform 계약 테스트와 관련 인프라 문서 및 단계적 배포 실행 계획을 반영하였습니다."
+      ],
+      "report_url": "pr/625/"
+    },
     {
       "number": 618,
       "title": "feat: 실험 로그 수집기 배포 — 전용 SA·RoleBinding·Deployment (#616)",
