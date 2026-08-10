@@ -122,17 +122,17 @@
 - Consumes: Task 3의 검증 완료 커밋과 이슈 #615 완료 조건
 - Produces: Critical/Important 발견 사항이 없는 최종 문서와 검증 증거
 
-- [ ] **Step 1: 독립 reviewer에게 전체 diff 검토를 요청합니다.**
+- [x] **Step 1: 독립 reviewer에게 전체 diff 검토를 요청합니다.**
 
   현재 코드와 문서의 수치·소유권·경로·configured/apply/live 구분, 누락, 보안상
   오해 가능성을 심각도 순으로 검토하도록 요청합니다.
 
-- [ ] **Step 2: reviewer 발견 사항을 기술적으로 검증합니다.**
+- [x] **Step 2: reviewer 발견 사항을 기술적으로 검증합니다.**
 
   각 발견 사항을 실제 코드 줄과 대조하고 Critical/Important는 수정하며, 잘못된
   지적은 근거를 기록하고 반영하지 않습니다.
 
-- [ ] **Step 3: 수정이 있으면 별도 커밋합니다.**
+- [x] **Step 3: 수정이 있으면 별도 커밋합니다.**
 
   커밋 메시지는 `docs: 인프라 요약 peer review 반영`을 사용합니다.
 
