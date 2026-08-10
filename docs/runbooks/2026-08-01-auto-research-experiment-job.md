@@ -361,11 +361,11 @@ launcher는 Job 생성 전에 DB 상태를 `RUNNING`으로 바꾸므로 인프�
    4 CPU/8Gi와 ResourceQuota Jobs/Pods 5, requests 5 CPU/10Gi, limits
    20 CPU/40Gi를 적용합니다. `scope: all`은 사용하지 않습니다.
 4. #669를 병합·release한 뒤 launcher/executor digest를 infra manifest에 승격하고,
-   ArgoCD Application이 `Synced`·`Healthy`인지 확인합니다. live Job template의 모든
-   app/init container가 requests 1 CPU/2Gi, limits 4 CPU/8Gi이고 launcher 상한이
-   여전히 2인지 확인하기 전에는 canary를 시작하지 않습니다.
+   ArgoCD Application이 `Synced`·`Healthy`이고 launcher 상한이 여전히 2인지
+   확인합니다.
 5. launcher 상한을 2로 유지한 채 #669 자원값으로 실험 2건 canary를 실행합니다.
-   quota 403, LimitRange `FailedCreate`, 장기 `Pending`이 없어야 합니다.
+   생성된 두 Job의 모든 app/init container가 requests 1 CPU/2Gi, limits 4 CPU/8Gi인지
+   먼저 확인합니다. quota 403, LimitRange `FailedCreate`, 장기 `Pending`이 없어야 합니다.
 6. canary 통과 후 별도 GitOps PR에서만 `ORCH_MAX_CONCURRENT_EXPERIMENTS=5`를
    반영하고 실험 5건 smoke를 수행합니다.
 
@@ -1095,11 +1095,12 @@ Autoresearch #582 실패 관측 image를 승격하는 단일 smoke에서는 laun
 2. rollout과 설정을 확인한 뒤 suspend를 해제하고 새 Experiment 하나만 발행한다.
 3. 평가 중 (`EVALUATING`) 완주 또는 정제된 `stage`·`error_type`·`reason` 실패 로그와
    보존된 Job event를 수집한다.
-4. 완주 증거를 수집하면 manifest의 TTL을 `30`으로 되돌린다. 이때
+4. 완주 증거를 수집하면 manifest의 TTL을 `120`으로 되돌린다. 1분 launcher가
+   Failed Job을 삭제 전에 적어도 한 번 관측할 수 있게 120초 미만은 허용하지 않는다. 이때
    `scripts/check-experiment-launcher-manifest-contract.rb`의 기대 리터럴과
    `scripts/test-check-experiment-launcher-manifest-contract.rb`의 음성 self-test도
    같은 PR에서 함께 되돌려야 `lint` required check가 통과한다.
-5. 회수 PR을 병합하고 TTL 30 manifest를 다시 적용한 뒤 live CronJob 값을 확인한다.
+5. 회수 PR을 병합하고 TTL 120 manifest를 다시 적용한 뒤 live CronJob 값을 확인한다.
 
 TTL 3600을 상시값으로 남기면 완료 Job이 최대 한 시간 누적되므로 smoke 종료 후 회수를
 완료 조건으로 취급한다. 로그가 Kubernetes API 또는 목적지 egress 차단을 구체적으로
