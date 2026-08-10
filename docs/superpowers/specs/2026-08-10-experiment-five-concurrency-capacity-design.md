@@ -1,8 +1,8 @@
 # 실험 5건 동시 실행 용량 상향 설계
 
-> Issue: #624  
-> 작성일: 2026-08-10  
-> 대상 환경: GCP project `autoresearch-503903`, dev (`asia-northeast3-a`)  
+> Issue: #624
+> 작성일: 2026-08-10
+> 대상 환경: GCP project `autoresearch-503903`, dev (`asia-northeast3-a`)
 > 상태: 구현 승인
 
 ## 1. 목적
