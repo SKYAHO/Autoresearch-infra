@@ -182,6 +182,17 @@ resource "kubernetes_role_binding_v1" "experiment_job_observer" {
     name      = kubernetes_service_account_v1.agent_orchestration_api.metadata[0].name
     namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
   }
+
+  # #616 실험 로그 수집기. 별도 RoleBinding을 만들지 않고 subject를 추가한다 —
+  # 두 주체가 필요로 하는 동사 집합이 정확히 같고(jobs/pods/pods/log/events read),
+  # 바인딩을 쪼개면 "이 Role을 누가 갖는가"가 두 곳으로 흩어져 다음에 하나만 보고
+  # 판단하게 된다. 권한 분리는 여기가 아니라 Job **생성** Role
+  # (experiment-job-launcher)이 launcher KSA에만 붙어 있는 것으로 지켜진다.
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account_v1.agent_orchestration_log_collector.metadata[0].name
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+  }
 }
 
 # Kubernetes RBAC만으로는 Job 내부 image·volume·환경 변수를 제한할 수 없다. 따라서

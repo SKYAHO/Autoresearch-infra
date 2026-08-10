@@ -360,6 +360,9 @@ CronJob **launcher** 하나다. API는 Job을 만들지 않고 상태만 조회�
 | launcher GSA | `autoresearch-dev-orch-launch@<project>.iam.gserviceaccount.com` |
 | launcher RBAC | `autoresearch-experiments`의 `experiment-job-launcher` (Jobs `create/get/list`) |
 | executor KSA | `autoresearch-experiments/experiment-job` (Kubernetes RBAC 없음) |
+| 수집기 KSA (#616) | `autoresearch/agent-orchestration-log-collector` |
+| 수집기 GSA (#616) | `autoresearch-dev-orch-logcol@<project>.iam.gserviceaccount.com` |
+| 수집기 RBAC (#616) | `autoresearch-experiments`의 `experiment-job-observer` (jobs·pods·pods/log·events read). **Job 생성 권한은 없다** — launcher와 신원을 나눈 이유가 그것이다 |
 | Job 이름 | `ar-branch-<experiment UUID hex>` |
 | 동시 실행 상한 | `ORCH_MAX_CONCURRENT_EXPERIMENTS=2` (namespace quota와 같은 값) |
 
@@ -673,6 +676,72 @@ kubectl -n autoresearch get cronjob agent-orchestration-launcher \
 
 롤백은 launcher를 suspend한 뒤 두 참조를 **함께** v0.12.0으로 되돌린다. executor
 수정이 이 release의 목적이므로 분리해 되돌리지 않는다.
+
+#### v0.13.0 launcher digest 승격과 로그 수집기 배포 (#616)
+
+source `04183a5`(release run `31355243954`). **자동 승격이 실패해 수동으로 올린
+건이다** — `Promote Agent Orchestration digests to infra main` 잡이
+`GET /repos/SKYAHO/Autoresearch-infra/installation` 404로 죽는다(App 미설치,
+v0.10.0부터 네 번 연속. `SKYAHO/Autoresearch-infra#619`).
+
+launcher만 올린다. `v0.12.1..v0.13.0`에서 `agent_orchestration/executor/`는 변경이
+없고 `launcher/`는 `log_collector.py` 추가가 유일한 변경이라 CronJob 동작은 그대로다.
+api·ui·runner는 v0.12.x를 유지한다 — api를 올리면 8곳이 함께 바뀌어 이 변경이
+API·UI·Runner 세 릴리스치 드리프트를 한꺼번에 배포하게 된다.
+
+| 역할 | v0.13.0 digest | rollback(v0.12.1) |
+|---|---|---|
+| launcher | `sha256:40e89a060a646d6a3ed73dae7115ec7fac7e3f2aeb64a63d93d0179c1569b8ce` | `sha256:f463fd301e3e3b42e525aa7fd03e92ea2bf5ee0b98dea8921438231067f66701` |
+
+executor는 `sha256:f9a73d1e…`, DB bootstrap API image는 `sha256:657bb3bb…` 그대로여야
+한다. 같은 launcher digest를 **두 곳**이 참조한다 — CronJob과 수집기 Deployment다.
+
+```bash
+# CronJob·Deployment의 launcher image가 같은 digest여야 한다.
+kubectl -n autoresearch get cronjob agent-orchestration-launcher \
+  -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[?(@.name=="launcher")].image}{"\n"}'
+kubectl -n autoresearch get deploy agent-orchestration-log-collector \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="log-collector")].image}{"\n"}'
+
+# 수집기가 실제로 돌기 시작했는지.
+kubectl -n autoresearch logs deploy/agent-orchestration-log-collector \
+  | grep "log collector started"
+```
+
+**롤백·정지 수단.** CronJob의 `suspend`에 해당하는 것이 Deployment에는 없으므로
+replica를 0으로 내린다. 수집은 관측 경로라 멈춰도 실험 실행에는 영향이 없다.
+
+```bash
+kubectl -n autoresearch scale deploy/agent-orchestration-log-collector --replicas=0
+```
+
+digest 롤백이 필요하면 `launcher-cronjob.yaml`과 `log-collector-deployment.yaml`의
+launcher 참조를 **함께** 위 rollback 값으로 되돌린다. 한쪽만 되돌리면
+`check-experiment-launcher-manifest-contract.rb`의 digest 일관성 검사가 CI에서 막는다.
+
+#### merge와 apply 사이 구간 (#616)
+
+`agent-orchestration` ArgoCD Application은 `targetRevision = main`에 automated sync라
+**PR이 머지되는 순간 수집기 Deployment가 먼저 적용된다.** 그런데 그 Deployment가
+필요로 하는 KSA·GSA는 같은 PR의 Terraform이 만들고, 두 root의 apply는 별도 수동
+워크플로우다. 즉 "apply 먼저"를 머지 순서로 강제할 수 없다.
+
+그 사이 예상 증상은 다음과 같다. **둘 다 apply 후 자동 회복되며 실험 실행에는 영향이
+없다** — 수집기는 관측 경로이고 launcher·executor와 프로세스가 분리돼 있다.
+
+| 상태 | 증상 |
+|---|---|
+| KSA 없음 | Pod 생성이 admission에서 거부(`serviceaccount not found`), ReplicaSet 백오프 재시도 |
+| KSA 있고 GSA/WI 없음 | `bootstrap-db` initContainer가 Secret Manager 403으로 CrashLoopBackOff |
+
+**이 구간은 조용하다.** PostSync verifier(`deployment-verification-job.yaml`)는 API의
+`/openapi.json`만 보므로 수집기가 어떤 상태든 sync는 성공으로 끝난다. 그러므로 머지
+후에는 위 `log collector started` 확인을 **사람이** 해야 한다. verifier가 신규
+컴포넌트의 readiness까지 보게 하는 것은 별도 과제다(`SKYAHO/Autoresearch-infra#622`).
+
+apply 순서 자체는 **dev root → admin root**여야 한다. KSA의 annotation이 GSA email을
+문자열로 확정해 갖고 있어, 반대로 하면 KSA는 생기지만 Workload Identity가 붙지 않아
+위 표의 두 번째 상태에 머문다.
 
 ### branch-writer GitHub App 자격 증명 등록
 

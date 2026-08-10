@@ -32,7 +32,10 @@ def check_v12_api_digest!
       target.fetch(:repository)
     )
   end
-  expect_equal(Array.new(7, V12_API_REF), actual, "v0.12.0 API image references")
+  # #616 log-collector-deployment.yaml의 bootstrap-db initContainer가 8번째 참조다.
+  # 개수를 상수로 박아 두는 이유는 manifest가 늘 때 TARGETS 등록을 강제하기 위해서다 —
+  # 등록을 빠뜨리면 promote!의 validate_directory_references!가 승격을 막는다.
+  expect_equal(Array.new(8, V12_API_REF), actual, "v0.12.0 API image references")
 end
 
 check_v12_api_digest!

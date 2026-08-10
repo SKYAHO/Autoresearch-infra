@@ -1,0 +1,262 @@
+# #616 실험 로그 수집기는 executor Pod의 컨테이너 로그를 밖에서 읽어 애플리케이션
+# DB의 experiment_logs에 적재한다. 워크벤치의 "원본 로그" 탭이 비어 있는 원인은
+# UI·API 결함이 아니라 그 리소스를 쓰는 주체가 없었기 때문이고, 없던 조각이 이것
+# 하나다. 읽기 경로(API cursor polling)는 이미 있다.
+#
+# executor 컨테이너는 건드리지 않으므로 credential 경계가 유지된다 — codex-worker에
+# API 토큰을 주는 방식은 Codex가 `--sandbox danger-full-access`로 도는 컨테이너에
+# 쓰기 자격증명을 놓는 것이라 기각했다. 정본 계약은 애플리케이션 저장소의
+# docs/specs/2026-08-09-experiment-log-collector.md다.
+#
+# CronJob이 아니라 Deployment인 이유는 CronJob 최소 주기가 1분인데 워크벤치 폴링이
+# 5초라, 그 위에 1분을 더 얹으면 체감 지연이 그만큼 나빠지기 때문이다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestration-log-collector
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-log-collector
+    app.kubernetes.io/part-of: agent-orchestration
+    app.kubernetes.io/component: log-collector
+spec:
+  # replica 1이다. 여러 개 띄워도 멱등키(pod_name:container:seq)가 중복 row를 막지만
+  # kube-apiserver 조회와 DB 트랜잭션만 배로 늘어난다.
+  replicas: 1
+  # 상주 프로세스가 이미 적재한 청크를 프로세스 메모리(SeqCursor)로 기억하므로,
+  # 교체 중 두 Pod이 겹치면 새 Pod이 처음부터 다시 계산한다. 결과는 같지만(멱등)
+  # 그동안 쓰기가 중복되므로 겹치지 않게 교체한다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-log-collector
+      app.kubernetes.io/part-of: agent-orchestration
+      app.kubernetes.io/component: log-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-orchestration-log-collector
+        app.kubernetes.io/part-of: agent-orchestration
+        app.kubernetes.io/component: log-collector
+    spec:
+      # launcher SA를 재사용하지 않는다. #539가 "표면적이 좁은 쪽이 권한을 갖는다"는
+      # 원칙을 세우며 pods read를 "launcher 코드에 해당 호출이 없어" 최소 권한으로
+      # 뺐다. 재사용하면 "Job을 만들 수 있는 신원"과 "namespace의 모든 Pod 로그를
+      # 읽을 수 있는 신원"이 하나로 합쳐지고, 하나가 침해되면 나머지 권한까지
+      # 노출된다. 이 KSA는 terraform/admin/autoresearch-k8s가 만들고
+      # experiment-job-observer Role에 바인딩한다 — Job **생성** Role은 갖지 않는다.
+      serviceAccountName: agent-orchestration-log-collector
+      # Job 목록·Pod 목록·Pod 로그를 kube-apiserver에서 읽으므로 in-cluster token이
+      # 필요하다. 기본값 true를 그대로 두지 않고 명시한다.
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
+        # agent_orchestration/bootstrap_secrets.py는 애플리케이션 저장소 최상위
+        # 모듈인데 launcher.Dockerfile이 COPY하지 않아 launcher image에 없다.
+        # launcher image로 실행하면 ModuleNotFoundError로 죽는다.
+        # launcher-cronjob.yaml·api-migration-job.yaml과 같은 패턴이다.
+        - name: bootstrap-db
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:657bb3bb64a6e900b422f868ac2f5ac75459210654fe87f1fa892a2b815ba3d6
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - agent_orchestration.bootstrap_secrets
+          env:
+            - name: ORCH_DB_PASSWORD_SECRET_ID
+              value: projects/autoresearch-503903/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
+            - name: ORCH_DB_HOST
+              value: 192.168.0.3
+            - name: ORCH_DB_NAME
+              value: agent_orchestration
+            - name: ORCH_DB_USER
+              value: agent_orchestration_app
+            - name: ORCH_RUNTIME_DIR
+              value: /runtime
+          volumeMounts:
+            - name: db-runtime
+              mountPath: /runtime
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: log-collector
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:40e89a060a646d6a3ed73dae7115ec7fac7e3f2aeb64a63d93d0179c1569b8ce
+          imagePullPolicy: IfNotPresent
+          # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
+          # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
+          # 남지 않는다. launcher-cronjob.yaml과 같은 방식이며 진입점만 다르다.
+          command:
+            - python
+            - -c
+            - |
+              import os
+              from pathlib import Path
+
+              entries = [
+                  line.split("=", 1)[1]
+                  for line in Path("/runtime/db.env").read_text(encoding="utf-8").splitlines()
+                  if line.startswith("ORCH_DATABASE_URL=")
+              ]
+              if len(entries) != 1:
+                  raise SystemExit("Expected exactly one ORCH_DATABASE_URL runtime entry")
+              os.environ["ORCH_DATABASE_URL"] = entries[0]
+              os.execvp(
+                  "python",
+                  ["python", "-m", "agent_orchestration.launcher.log_collector"],
+              )
+          env:
+            # 수집 대상 Job이 사는 namespace다. launcher가 Job을 만드는 곳
+            # (launcher-cronjob.yaml의 ORCH_JOB_NAMESPACE)과 같아야 한다 — 갈리면
+            # 수집기가 아무것도 못 찾고 조용히 빈 결과만 남긴다.
+            - name: ORCH_JOB_NAMESPACE
+              value: autoresearch-experiments
+            # 이 값은 launcher CronJob의 ORCH_TTL_AFTER_FINISHED_SEC보다 작아야
+            # 한다. 마지막 컨테이너가 종료된 뒤 꼬리 청크를 flush하려면 완료 Job이
+            # 아직 목록에 남아 있어야 하는데, 그 창이 곧 TTL이다. 지금 launcher는
+            # 3600이지만 그것은 #579가 #582 실패 원인을 모으려고 넣은 회수 예정
+            # 임시값이고 기본값은 30이다 — 회수할 때 이 값도 함께 본다.
+            #
+            # **이것은 필요조건일 뿐 충분조건이 아니다.** sleep은 tick이 끝난 뒤
+            # 시작하므로 실제 주기는 `tick 소요 + interval`이다. 한 tick은 Job
+            # 목록 1회 + Job마다 Pod 목록 + Pod마다 컨테이너 수만큼 pods/log
+            # 조회이고, 매 주기 로그 전체를 다시 받으므로 로그가 자랄수록 길어진다.
+            # tick 소요 시간을 측정한 적이 없어 TTL 30에서도 성립한다고 단정할 수
+            # 없다 — #620의 실측 항목이다.
+            #
+            # 코드로 강제할 수 없다. 두 값이 서로 다른 워크로드(launcher CronJob과
+            # 이 Deployment)에 주입되어 한쪽 프로세스가 다른 쪽 설정을 읽을 수 없다.
+            #
+            # 워크벤치가 5초 cursor polling을 하므로 둘을 합쳐 최악 지연이 정해진다.
+            - name: ORCH_LOG_COLLECT_INTERVAL_SEC
+              value: "5"
+            # 수집기가 읽는 환경 변수는 위 셋(ORCH_DATABASE_URL 포함)뿐이다
+            # (launcher/log_collector.py의 LogCollectorSettings). LauncherSettings를
+            # 재사용하지 않으므로 executor image digest·GitHub App 좌표 같은 Job
+            # 생성용 값은 주지 않는다 — 안 쓰는 값에 배포를 묶으면 executor 릴리스
+            # 마다 이 파일을 따라 고쳐야 하고, launcher에 필수 변수가 하나 늘 때마다
+            # 그 값을 한 번도 쓰지 않는 이 Pod이 CrashLoopBackOff로 조용히 깨진다.
+          volumeMounts:
+            - name: db-runtime
+              mountPath: /runtime
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: db-runtime
+          emptyDir:
+            medium: Memory
+---
+# 수집기는 Cloud SQL·Secret Manager·DNS와 Kubernetes API만 호출한다. 공개 인터넷
+# egress는 열지 않는다 — Pod 로그도 kube-apiserver 경유로 읽는다.
+#
+# 규칙은 `launcher-cronjob.yaml`의 `agent-orchestration-launcher` 정책과 같은
+# 집합이다. 두 워크로드가 같은 image로 같은 목적지(DB·Secret Manager·apiserver)만
+# 호출하기 때문이며, 정책을 공유하지 않고 복제하는 이유는 podSelector가 component를
+# 정확히 하나만 고르기 때문이다.
+#
+# 이 정책이 없으면 이 Pod의 egress가 무제한이 된다. namespace에 default-deny가 없고
+# terraform의 `autoresearch-egress`가 `part-of NotIn [agent-orchestration]`으로
+# 제외하므로, 어느 정책에도 걸리지 않은 agent-orchestration Pod은 아무 데나 나갈 수
+# 있다. 이 Pod은 codex-worker 출력을 포함한 실험 namespace의 모든 Pod 로그를 읽고 DB
+# 쓰기 자격증명을 가지므로 그 상태로 두지 않는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-log-collector
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-log-collector
+      app.kubernetes.io/part-of: agent-orchestration
+      app.kubernetes.io/component: log-collector
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            # dev Terraform var.private_services_cidr와 반드시 일치한다.
+            cidr: 192.168.0.0/20
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.252/32
+      ports:
+        - protocol: TCP
+          port: 987
+        - protocol: TCP
+          port: 988
+    - to:
+        - ipBlock:
+            # Secret Manager private.googleapis.com 고정 VIP.
+            cidr: 199.36.153.8/30
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        # Calico의 Service DNAT 전·후 평가 경로를 모두 허용하되 Kubernetes API
+        # Service 한 개와 control plane CIDR로만 제한한다.
+        - ipBlock:
+            cidr: 172.16.128.1/32
+        - ipBlock:
+            cidr: 172.16.0.0/28
+      ports:
+        - protocol: TCP
+          port: 443

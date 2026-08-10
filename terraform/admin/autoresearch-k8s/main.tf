@@ -50,6 +50,27 @@ resource "kubernetes_service_account_v1" "agent_orchestration_launcher" {
   automount_service_account_token = true
 }
 
+# #616 실험 로그 수집기. launcher와 같은 image를 쓰지만 진입점(log_collector)과 권한이
+# 다른 네 번째 Workload Identity 주체다. launcher KSA를 재사용하지 않는 이유는 #539가
+# 세운 원칙 그대로다 — 재사용하면 "Job을 만들 수 있는 신원"과 "namespace의 모든 Pod
+# 로그를 읽을 수 있는 신원"이 하나로 합쳐진다. 수집기는 Job을 만들지 않고 launcher는
+# Pod 로그를 읽지 않는다.
+#
+# launcher와 마찬가지로 Kubernetes API 토큰이 필요하다(Job 목록·Pod 목록·Pod 로그).
+# 기본값 true를 그대로 두지 않고 명시한다 — 이 namespace에서 토큰을 갖는 주체가
+# 무엇인지가 경계의 계약이기 때문이다.
+resource "kubernetes_service_account_v1" "agent_orchestration_log_collector" {
+  metadata {
+    name      = var.agent_orchestration_log_collector_k8s_service_account
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = local.agent_orchestration_log_collector_gcp_service_account_email
+    }
+  }
+
+  automount_service_account_token = true
+}
+
 resource "kubernetes_service_account_v1" "agent_orchestration_runner" {
   metadata {
     name      = var.agent_orchestration_runner_k8s_service_account

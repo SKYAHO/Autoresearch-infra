@@ -92,6 +92,36 @@ resource "google_service_account_iam_member" "agent_orchestration_launcher_wi" {
   depends_on = [google_container_cluster.dev]
 }
 
+# #616 실험 로그 수집기. executor Pod의 컨테이너 로그를 밖에서 읽어 experiment_logs에
+# 적재하는 상주 Deployment다. GCP 권한은 launcher와 같은 Cloud SQL client와 같은 DB
+# password secret 하나뿐이고(secret_manager.tf), 결과 버킷·Codex OAuth secret·다른
+# Secret에는 접근하지 않는다. 로그를 읽는 권한은 GCP IAM이 아니라 admin root의
+# Kubernetes RBAC(experiment-job-observer)가 이 KSA에만 부여한다.
+#
+# launcher GSA를 재사용하지 않는다. 재사용하면 Kubernetes RBAC를 갈라 놓아도 GCP
+# 층에서 두 워크로드가 같은 주체가 되어, 감사 로그에서 "Job을 만든 것"과 "로그를
+# 읽은 것"을 구분할 수 없다.
+resource "google_service_account" "agent_orchestration_log_collector" {
+  account_id   = local.agent_orchestration_log_collector_sa_name
+  display_name = "Autoresearch dev Agent Orchestration experiment log collector workload identity SA"
+}
+
+# roles/cloudsql.client는 주지 않는다. 이 워크로드는 Cloud SQL Auth Proxy도
+# Python connector도 쓰지 않고 `ORCH_DB_HOST=192.168.0.3` private IP에 직접 붙어
+# 비밀번호로 인증한다(`bootstrap_secrets.py`가 host를 URL에 그대로 넣고,
+# `create_database_engine`은 순수 SQLAlchemy다). 그래서 그 role이 부여하는
+# `cloudsql.instances.connect`/`get`은 한 번도 호출되지 않는다.
+#
+# API·launcher·runner는 같은 이유로 쓰지 않으면서도 이 role을 갖고 있다. 신규
+# 주체까지 그 상태를 답습하지 않되, 기존 셋은 이 PR 범위 밖이라 #623으로 분리했다.
+resource "google_service_account_iam_member" "agent_orchestration_log_collector_wi" {
+  service_account_id = google_service_account.agent_orchestration_log_collector.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.agent_orchestration_log_collector_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
 resource "google_service_account" "agent_orchestration_runner" {
   account_id   = local.agent_orchestration_runner_sa_name
   display_name = "Autoresearch dev Agent Orchestration Codex Runner workload identity SA"

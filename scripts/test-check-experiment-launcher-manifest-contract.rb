@@ -86,7 +86,7 @@ module ExperimentLauncherManifestContractTest
     environment = container.fetch("env").to_h { |item| [item.fetch("name"), item] }
 
     expect_equal(
-      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:f463fd301e3e3b42e525aa7fd03e92ea2bf5ee0b98dea8921438231067f66701",
+      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:40e89a060a646d6a3ed73dae7115ec7fac7e3f2aeb64a63d93d0179c1569b8ce",
       container.fetch("image"),
       "launcher image"
     )
@@ -105,6 +105,39 @@ module ExperimentLauncherManifestContractTest
       expect_equal({ "name" => name, "value" => value }, environment.fetch(name), name)
     end
     raise "구식 ORCH_TRAINING_DATASET_PATH가 남아 있습니다" if environment.key?("ORCH_TRAINING_DATASET_PATH")
+  end
+
+  # (#616) 수집기 Deployment를 열어 수정하고 다시 쓴다. NetworkPolicy 문서가 같은
+  # 파일에 있으므로 문서 목록 전체를 보존한다.
+  def mutate_log_collector(root)
+    path = File.join(root, "deploy", "agent-orchestration", "log-collector-deployment.yaml")
+    documents = YAML.load_stream(File.read(path)).compact
+    deployment = documents.find { |document| document["kind"] == "Deployment" }
+    raise "fixture 수집기 Deployment가 없습니다" unless deployment
+
+    yield deployment
+    File.write(path, documents.map(&:to_yaml).join("---\n"))
+  end
+
+  def mutate_cron_job(root)
+    path = File.join(root, "deploy", "agent-orchestration", "launcher-cronjob.yaml")
+    documents = YAML.load_stream(File.read(path)).compact
+    cron_job = documents.find { |document| document["kind"] == "CronJob" }
+    raise "fixture CronJob이 없습니다" unless cron_job
+
+    yield cron_job
+    File.write(path, documents.map(&:to_yaml).join("---\n"))
+  end
+
+  # podSpec(또는 그것을 감싼 template)에서 이름으로 환경 변수 항목을 찾는다.
+  def environment_entry(node, name)
+    containers = node.dig("spec", "template", "spec", "containers") ||
+                 node.dig("spec", "containers")
+    entry = Array(containers).flat_map { |container| Array(container["env"]) }
+                             .find { |item| item["name"] == name }
+    raise "fixture에 #{name}이 없습니다" unless entry
+
+    entry
   end
 
   def expect_failure(label)
@@ -346,6 +379,33 @@ module ExperimentLauncherManifestContractTest
           "name" => "ORCH_TRAINING_DATASET_PATH",
           "value" => "/workspace/training_dataset.csv"
         }
+      end
+    end
+
+    # (#616) 수집기와 launcher가 공유하는 두 계약. 둘 다 한쪽 manifest만 고쳐도
+    # 조용히 어긋나는 종류라, 각 방향을 따로 흔들어 본다.
+    expect_failure("수집 대상 namespace가 launcher와 갈림") do |root|
+      mutate_log_collector(root) do |deployment|
+        environment_entry(deployment, "ORCH_JOB_NAMESPACE")["value"] = "autoresearch"
+      end
+    end
+
+    expect_failure("수집 주기가 TTL 이상으로 올라감") do |root|
+      mutate_log_collector(root) do |deployment|
+        environment_entry(deployment, "ORCH_LOG_COLLECT_INTERVAL_SEC")["value"] = "3600"
+      end
+    end
+
+    # 회수 PR이 launcher만 건드리는 실제 시나리오. 수집기 파일은 그대로다.
+    expect_failure("TTL을 기본값 30으로 회수했는데 수집 주기가 그 이상") do |root|
+      mutate_log_collector(root) do |deployment|
+        environment_entry(deployment, "ORCH_LOG_COLLECT_INTERVAL_SEC")["value"] = "60"
+      end
+      mutate_cron_job(root) do |cron_job|
+        environment_entry(
+          cron_job.dig("spec", "jobTemplate", "spec", "template"),
+          "ORCH_TTL_AFTER_FINISHED_SEC"
+        )["value"] = "30"
       end
     end
 
