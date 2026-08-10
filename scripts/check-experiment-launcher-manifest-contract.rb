@@ -259,7 +259,11 @@ module ExperimentLauncherManifestContract
       "ORCH_MLFLOW_TRACKING_URI" => "http://mlflow.mlflow.svc.cluster.local:5000",
       "ORCH_GITHUB_APP_SECRET_NAME" => "autoresearch-experiment-branch-writer-app",
       "ORCH_GITHUB_REPOSITORY" => "SKYAHO/Autoresearch",
-      "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "2",
+      # (#624) namespace ResourceQuota의 hard ceiling(Jobs/Pods 5, requests
+      # 5 CPU/10Gi)과 같은 값이다. launcher는 Job을 만들기 전에 DB 상태를 먼저
+      # RUNNING으로 바꾸므로, 이 값이 quota보다 크면 Job 없는 RUNNING 실험이
+      # 남는다. quota를 낮추는 변경은 이 값을 먼저 낮춘 뒤에만 한다.
+      "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "5",
       # (#562) Phase 2 좌표. launcher/config.py의 from_environment()가 아래를 모두
       # _required_environment로 읽으므로, 하나라도 빠지면 launcher가 기동 즉시
       # 죽고 실험이 0건이 된다. 두 Secret 이름은 어드미션 계약이 volume의

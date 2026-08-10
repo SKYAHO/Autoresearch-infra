@@ -153,8 +153,14 @@ spec:
                       key: installation-id
                 - name: ORCH_GITHUB_REPOSITORY
                   value: SKYAHO/Autoresearch
+                # (#624) 2건 canary 통과 후 상향한 값이다. namespace ResourceQuota의
+                # hard ceiling(Jobs/Pods 5, requests 5 CPU/10Gi)과 같은 값이며 그보다
+                # 크게 두지 않는다. launcher는 Job 생성 전에 DB 상태를 RUNNING으로
+                # 바꾸므로, 이 값이 quota보다 크면 Job 없는 RUNNING 실험이 남는다.
+                # 되돌릴 때는 이 값을 먼저 "2"로 낮춰 새 선점을 막고, active Job이
+                # 끝난 뒤에만 quota·LimitRange·node pool을 되돌린다.
                 - name: ORCH_MAX_CONCURRENT_EXPERIMENTS
-                  value: "2"
+                  value: "5"
                 # (#562) Phase 2 executor 좌표. launcher/config.py의
                 # from_environment()가 아래 다섯 개를 모두 _required_environment로
                 # 읽으므로, 하나라도 빠지면 launcher가 기동 즉시 죽고 실험이 0건이
