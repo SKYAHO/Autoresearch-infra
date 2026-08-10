@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-10T03:44:04Z",
+  "generated_at": "2026-08-10T03:44:46Z",
   "reports": [
+    {
+      "number": 617,
+      "title": "docs: 인프라 요약을 현재 코드와 정합화한다",
+      "author": "bbungjun",
+      "merged_at": "2026-08-10T03:43:51Z",
+      "summary_ko": [
+        "현재 Terraform, K8s, ArgoCD 및 Actions 워크플로우 구성을 반영하여 인프라 요약 문서를 현행화하였습니다.",
+        "launcher 소유권, ARC Feast apply 경로, admin root 8개 등 실제 코드 기준의 인벤토리를 명시하였습니다.",
+        "저장소 코드로 확인된 구성 상태와 과거 live 검증 상태를 명확히 구분하여 운영 오해를 방지하였습니다."
+      ],
+      "report_url": "pr/617/"
+    },
     {
       "number": 614,
       "title": "fix: v0.12.1 executor·launcher digest 승격",
