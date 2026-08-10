@@ -106,12 +106,14 @@ resource "google_service_account" "agent_orchestration_log_collector" {
   display_name = "Autoresearch dev Agent Orchestration experiment log collector workload identity SA"
 }
 
-resource "google_project_iam_member" "agent_orchestration_log_collector_cloudsql" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.agent_orchestration_log_collector.email}"
-}
-
+# roles/cloudsql.client는 주지 않는다. 이 워크로드는 Cloud SQL Auth Proxy도
+# Python connector도 쓰지 않고 `ORCH_DB_HOST=192.168.0.3` private IP에 직접 붙어
+# 비밀번호로 인증한다(`bootstrap_secrets.py`가 host를 URL에 그대로 넣고,
+# `create_database_engine`은 순수 SQLAlchemy다). 그래서 그 role이 부여하는
+# `cloudsql.instances.connect`/`get`은 한 번도 호출되지 않는다.
+#
+# API·launcher·runner는 같은 이유로 쓰지 않으면서도 이 role을 갖고 있다. 신규
+# 주체까지 그 상태를 답습하지 않되, 기존 셋은 이 PR 범위 밖이라 #623으로 분리했다.
 resource "google_service_account_iam_member" "agent_orchestration_log_collector_wi" {
   service_account_id = google_service_account.agent_orchestration_log_collector.name
   role               = "roles/iam.workloadIdentityUser"
