@@ -202,12 +202,12 @@ module ExperimentLauncherManifestContract
   end
 
   def check_cron_job!(cron_job)
-    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:fe7e9c34cca92d40e635e0adcfce27c830726b014b57eaeeec84d93df29f17e8"
-    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:1ce54c594490e5262b824c24725322f895074c5d895e96027e7c596f7bc65927"
+    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:d6aa767ae052a1499275fc631c926b89b48cbed73d3d0c0ef33fe491fbf6008e"
+    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:0604c56e2a51e690860bb2e33089b4fa3abd9d898f84d7ce94a31369720e9ee8"
     # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
     # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
     # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
-    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:81b301a2bcd14f4ab8dfe402b2a77798bbf7fbd8cd6b2908488081bc5d421fa7"
+    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:136a6c692b2347dfafdf76c0b62d5ec59ca9848965c76630f139928b299e7e53"
 
     spec = cron_job.fetch("spec")
     expect_equal("* * * * *", spec["schedule"], "launcher schedule")
@@ -259,7 +259,11 @@ module ExperimentLauncherManifestContract
       "ORCH_MLFLOW_TRACKING_URI" => "http://mlflow.mlflow.svc.cluster.local:5000",
       "ORCH_GITHUB_APP_SECRET_NAME" => "autoresearch-experiment-branch-writer-app",
       "ORCH_GITHUB_REPOSITORY" => "SKYAHO/Autoresearch",
-      "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "2",
+      # (#624) namespace ResourceQuota의 hard ceiling(Jobs/Pods 5, requests
+      # 5 CPU/10Gi)과 같은 값이다. launcher는 Job을 만들기 전에 DB 상태를 먼저
+      # RUNNING으로 바꾸므로, 이 값이 quota보다 크면 Job 없는 RUNNING 실험이
+      # 남는다. quota를 낮추는 변경은 이 값을 먼저 낮춘 뒤에만 한다.
+      "ORCH_MAX_CONCURRENT_EXPERIMENTS" => "5",
       # (#562) Phase 2 좌표. launcher/config.py의 from_environment()가 아래를 모두
       # _required_environment로 읽으므로, 하나라도 빠지면 launcher가 기동 즉시
       # 죽고 실험이 0건이 된다. 두 Secret 이름은 어드미션 계약이 volume의

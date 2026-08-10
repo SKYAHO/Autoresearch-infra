@@ -369,6 +369,15 @@ launcher는 Job 생성 전에 DB 상태를 `RUNNING`으로 바꾸므로 인프�
 6. canary 통과 후 별도 GitOps PR에서만 `ORCH_MAX_CONCURRENT_EXPERIMENTS=5`를
    반영하고 실험 5건 smoke를 수행합니다.
 
+**canary 판정 기준은 인프라 경로이지 가설의 성패가 아닙니다.** 확인 대상은
+어드미션·quota·스케줄링, 새 자원값의 컨테이너 반영, 동시 실행 시 노드 배치,
+그리고 동시 2건이 같은 Codex 자격 증명 Secret을 읽을 때의 경합 여부입니다.
+컨테이너가 `OOMKilled`로 끝나더라도, 그 가설의 측정된 메모리 요구량이 container
+limit 8 GiB를 넘는 것이 이미 알려진 경우라면 canary 실패로 취급하지 않습니다
+(#673 MLP 가설은 실측 피크 10.3 GiB로 이 경우에 해당하며 데모 가설 목록에서
+제외합니다). 반대로 요구량이 8 GiB 안에 있는 가설이 `OOMKilled`되면 그때는
+limit·LimitRange를 다시 봅니다.
+
 스케줄러와 ResourceQuota가 계산하는 Pod request는 일반 app container request 합과
 순차 initContainer 각각의 request 중 최댓값이다. executor는 app container 1개와
 일반 initContainer 7개이고 native sidecar가 없으므로 #669의 컨테이너별
@@ -403,7 +412,7 @@ CronJob **launcher** 하나다. API는 Job을 만들지 않고 상태만 조회�
 | 수집기 GSA (#616) | `autoresearch-dev-orch-logcol@<project>.iam.gserviceaccount.com` |
 | 수집기 RBAC (#616) | `autoresearch-experiments`의 `experiment-job-observer` (jobs·pods·pods/log·events read). **Job 생성 권한은 없다** — launcher와 신원을 나눈 이유가 그것이다 |
 | Job 이름 | `ar-branch-<experiment UUID hex>` |
-| 동시 실행 상한 | `ORCH_MAX_CONCURRENT_EXPERIMENTS=2` (#669 2건 canary까지 유지, namespace hard ceiling은 5) |
+| 동시 실행 상한 | `ORCH_MAX_CONCURRENT_EXPERIMENTS=5` (#624에서 2건 canary 통과 후 상향, namespace hard ceiling과 같은 값) |
 
 ### Phase 1 release provenance (#551)
 

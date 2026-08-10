@@ -15,7 +15,9 @@ def refs
   suffixes = { api: "a", ui: "b", launcher: "c", runner: "d", executor: "e" }
   AgentOrchestrationDigestPromotion::TARGETS.to_h { |name, target| [name, "#{target[:repository]}@sha256:#{suffixes.fetch(name) * 64}"] }
 end
-V12_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:81b301a2bcd14f4ab8dfe402b2a77798bbf7fbd8cd6b2908488081bc5d421fa7"
+# 승격 봇이 갱신하는 현재 API digest다. 특정 version이 아니라 "지금 main에 승격된 값"을
+# 뜻하므로, digest 승격 PR은 이 상수도 함께 옮긴다.
+PROMOTED_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:136a6c692b2347dfafdf76c0b62d5ec59ca9848965c76630f139928b299e7e53"
 
 def expect_equal(expected, actual, description)
   return if expected == actual
@@ -23,7 +25,7 @@ def expect_equal(expected, actual, description)
   raise "#{description} 불일치: 기대=#{expected.inspect}, 실제=#{actual.inspect}"
 end
 
-def check_v12_api_digest!
+def check_promoted_api_digest!
   target = AgentOrchestrationDigestPromotion::TARGETS.fetch(:api)
   directory = File.join(AgentOrchestrationDigestPromotion::ROOT, "deploy/agent-orchestration")
   actual = Dir.glob(File.join(directory, "*.yaml")).sort.flat_map do |path|
@@ -35,10 +37,10 @@ def check_v12_api_digest!
   # #616 log-collector-deployment.yaml의 bootstrap-db initContainer가 8번째 참조다.
   # 개수를 상수로 박아 두는 이유는 manifest가 늘 때 TARGETS 등록을 강제하기 위해서다 —
   # 등록을 빠뜨리면 promote!의 validate_directory_references!가 승격을 막는다.
-  expect_equal(Array.new(8, V12_API_REF), actual, "v0.12.0 API image references")
+  expect_equal(Array.new(8, PROMOTED_API_REF), actual, "승격된 API image 참조")
 end
 
-check_v12_api_digest!
+check_promoted_api_digest!
 
 def expect_error
   yield
