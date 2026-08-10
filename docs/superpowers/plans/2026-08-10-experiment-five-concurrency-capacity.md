@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** dev에서 requests `2 CPU/4Gi`, limits `4 CPU/8Gi`인 executor 실험 5건을 동시에 실행하고 Streamlit 워크벤치에 상태·로그·이벤트가 갱신되도록 한다.
+**Goal:** dev에서 requests `1 CPU/2Gi`, limits `4 CPU/8Gi`인 executor 실험 5건을 비용 절충형 단일 노드에 동시에 실행하고 Streamlit 워크벤치에 상태·로그·이벤트가 갱신되도록 한다.
 
-**Architecture:** 첫 번째 PR에서 GKE와 Kubernetes 용량을 올리고 dev root 다음 admin root 순서로 적용한다. 애플리케이션 #669를 동시 2건으로 canary한 뒤 두 번째 PR에서 launcher 상한만 5로 올리고 최종 5건 smoke를 수행한다.
+**Architecture:** #669의 requests를 `1 CPU/2Gi`로 먼저 맞추고, 첫 번째 infra PR에서 `e2-standard-8`·100GB와 Kubernetes 용량을 준비한 뒤 dev root 다음 admin root 순서로 적용한다. 수정된 #669를 동시 2건으로 canary한 뒤 두 번째 infra PR에서 launcher 상한만 5로 올리고 최종 5건 smoke를 수행한다.
 
 **Tech Stack:** Terraform 1.13.5, GKE, Kubernetes ResourceQuota/LimitRange, GitHub Actions, ArgoCD, Ruby manifest contract tests
 
@@ -12,17 +12,18 @@
 
 | 대상 | 현재 | 목표 |
 | --- | --- | --- |
-| `batch-od` machine type | `e2-standard-2` | `e2-standard-16` |
+| `batch-od` machine type | `e2-standard-2` | `e2-standard-8` |
+| `batch-od` boot disk | `pd-standard` 30GB | `pd-standard` 100GB |
 | LimitRange Container/Pod max | `1 CPU/2Gi` | `4 CPU/8Gi` |
 | Jobs/Pods quota | `2/2` | `5/5` |
-| requests quota | `2 CPU/4Gi` | `10 CPU/20Gi` |
+| requests quota | `2 CPU/4Gi` | `5 CPU/10Gi` |
 | limits quota | `2 CPU/4Gi` | `20 CPU/40Gi` |
 | launcher concurrency | `2` | canary 후 `5` |
 
 다음 불변식은 유지한다.
 
 - 대상은 `autoresearch-503903`, `asia-northeast3-a`, dev 환경이다.
-- `batch-od`는 on-demand, autoscaling min 0/max 2이며 이름·taint·disk·node SA·Workload Metadata를 바꾸지 않는다.
+- `batch-od`는 on-demand, autoscaling min 0/max 2이며 이름·taint·disk type·node SA·Workload Metadata를 바꾸지 않는다. disk size만 100GB로 올린다.
 - LimitRange `default`와 `default_request`의 `500m/1Gi`는 바꾸지 않는다.
 - 첫 번째 PR에서 launcher 상한을 변경하지 않는다.
 - apply는 `scope: dev` 성공 후 `scope: admin`으로 분리하며 `scope: all`은 사용하지 않는다.
@@ -36,6 +37,7 @@
 **Files:**
 
 - Modify: `terraform/envs/dev/variables.tf`
+- Modify: `terraform/envs/dev/gke.tf`
 - Modify: `terraform/admin/autoresearch-k8s/experiment_jobs.tf`
 - Modify: `terraform/admin/autoresearch-k8s/tests/experiment_jobs_contract.tftest.hcl`
 - Modify: `terraform/admin/autoresearch-k8s/README.md`
@@ -59,7 +61,22 @@
 
 - [ ] **Step 2: 계약 테스트를 목표값으로 먼저 변경**
 
-  `experiment_jobs_contract.tftest.hcl`에서 quota 6개 항목과 Container/Pod max가 위 표와 정확히 일치함을 assert한다. 변경 전 테스트가 실패하는지 확인한다.
+  `experiment_jobs_contract.tftest.hcl`에서 quota 6개 항목이 Jobs/Pods 5,
+  requests `5 CPU/10Gi`, limits `20 CPU/40Gi`이고 Container/Pod max가
+  `4 CPU/8Gi`인지 assert한다. 변경 전 테스트가 requests `10 CPU/20Gi` 때문에
+  실패하는지 확인한다.
+
+  ```hcl
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.cpu"] == "5"
+    error_message = "requests.cpu quota는 5 × 1 CPU = 5여야 한다."
+  }
+
+  assert {
+    condition     = kubernetes_resource_quota_v1.experiment_jobs.spec[0].hard["requests.memory"] == "10Gi"
+    error_message = "requests.memory quota는 5 × 2Gi = 10Gi여야 한다."
+  }
+  ```
 
   ```bash
   terraform -chdir=terraform/admin/autoresearch-k8s test \
@@ -68,7 +85,9 @@
 
 - [ ] **Step 3: Terraform 최소 변경**
 
-  `batch_od_gke_machine_type`을 `e2-standard-16`으로 바꾸고 ResourceQuota와 LimitRange를 목표값으로 갱신한다. 다른 node pool 속성과 Kubernetes 경계는 건드리지 않는다.
+  `batch_od_gke_machine_type`을 `e2-standard-8`, `batch-od`의 `disk_size_gb`를
+  `100`으로 바꾸고 ResourceQuota와 LimitRange를 목표값으로 갱신한다. 다른 node
+  pool 속성과 Kubernetes 경계는 건드리지 않는다.
 
 - [ ] **Step 4: 관련 문서 정합화**
 
@@ -91,7 +110,10 @@
 
 - [ ] **Step 6: 용량 PR 생성 및 병합**
 
-  저장소 템플릿과 `CONTRIBUTING.md`를 따라 Draft PR을 만들고 Terraform plan을 검토한다. dev는 `batch-od` machine type 변경만, admin은 quota·LimitRange in-place 변경만 보여야 한다. CI와 필수 승인을 받은 뒤 squash merge한다.
+  저장소 템플릿과 `CONTRIBUTING.md`를 따라 기존 PR #625를 갱신하고 Terraform
+  plan을 검토한다. dev는 `batch-od` machine type·disk size 변경만 보여야 하고,
+  admin은 계약 테스트와 validate로 quota·LimitRange 목표값을 증명한다. CI와 필수
+  승인을 받은 뒤 squash merge한다.
 
 ---
 
@@ -119,7 +141,8 @@
     --project autoresearch-503903
   ```
 
-  machine type `e2-standard-16`, autoscaling min 0/max 2, 기존 taint가 확인돼야 한다.
+  machine type `e2-standard-8`, `pd-standard` 100GB, autoscaling min 0/max 2,
+  기존 taint가 확인돼야 한다.
 
 - [ ] **Step 3: admin root 적용**
 
@@ -132,7 +155,10 @@
   kubectl -n autoresearch-experiments get resourcequota experiment-jobs-quota -o yaml
   ```
 
-  LimitRange는 Container/Pod `4 CPU/8Gi`, quota는 Jobs/Pods 5, requests `10 CPU/20Gi`, limits `20 CPU/40Gi`여야 한다. 결과를 #624에 기록한다.
+  LimitRange는 Container/Pod `4 CPU/8Gi`, quota는 Jobs/Pods 5, requests
+  `5 CPU/10Gi`, limits `20 CPU/40Gi`여야 한다. canary node가 생기면 allocatable
+  ephemeral storage가 40Gi보다 크고 `DiskPressure=False`인지 함께 확인한다.
+  결과를 #624에 기록한다.
 
 ---
 
@@ -149,7 +175,30 @@
 
 - [ ] **Step 1: #669 계약 확인**
 
-  #669가 #665 이후 `main`을 반영했고 모든 executor container에서 `envFrom`과 `env[].valueFrom`을 사용하지 않는지 확인한다. Job resources가 requests `2 CPU/4Gi`, limits `4 CPU/8Gi`인지 확인한 뒤 승인·병합한다.
+  #669가 #665 이후 `main`을 반영했고 모든 executor container에서 `envFrom`과
+  `env[].valueFrom`을 사용하지 않는지 확인한다. 먼저
+  `tests/test_launcher_job_resources.py`의 requests 기대값을 `1 CPU/2Gi`로 바꾸고
+  기존 구현에서 실패하는지 확인한다. 그 뒤 `agent_orchestration/launcher/jobs.py`의
+  `_container_resources()` requests만 `1 CPU/2Gi`로 낮추고 limits `4 CPU/8Gi`는
+  유지한다. 관련 테스트를 통과시킨 뒤 승인·병합한다.
+
+  ```python
+  for container in _all_containers(job):
+      assert container.resources.requests["memory"] == "2Gi", container.name
+      assert container.resources.requests["cpu"] == "1", container.name
+  ```
+
+  ```python
+  return V1ResourceRequirements(
+      requests={"cpu": "1", "memory": "2Gi"},
+      limits={"cpu": "4", "memory": "8Gi"},
+  )
+  ```
+
+  ```bash
+  uv run pytest tests/test_launcher_job_resources.py \
+    tests/test_harness_resource_budget.py -q
+  ```
 
 - [ ] **Step 2: 이미지 승격과 ArgoCD 동기화 확인**
 
@@ -157,7 +206,9 @@
 
 - [ ] **Step 3: 동시 2건 canary**
 
-  같은 조건의 실험 2건을 동시에 제출한다. 두 Pod가 목표 resources로 `Running`에 도달하고 quota 403, LimitRange `FailedCreate`, 장기 `Pending`이 없어야 한다.
+  같은 조건의 실험 2건을 동시에 제출한다. 두 Pod가 requests `1 CPU/2Gi`, limits
+  `4 CPU/8Gi`로 `Running`에 도달하고 quota 403, LimitRange `FailedCreate`, 장기
+  `Pending`이 없어야 한다.
 
   ```bash
   kubectl -n autoresearch-experiments get jobs,pods -o wide
@@ -223,9 +274,9 @@
 
 ## 완료 조건
 
-- `batch-od`: `e2-standard-16`, min 0/max 2
+- `batch-od`: `e2-standard-8`, `pd-standard` 100GB, min 0/max 2
 - LimitRange Container/Pod max: `4 CPU/8Gi`
-- ResourceQuota: Jobs/Pods 5, requests `10 CPU/20Gi`, limits `20 CPU/40Gi`
+- ResourceQuota: Jobs/Pods 5, requests `5 CPU/10Gi`, limits `20 CPU/40Gi`
 - #669 자원값으로 동시 2건 canary 통과
 - launcher concurrency 5와 실험 5건 smoke 통과
 - Streamlit에 5건의 상태·로그·이벤트 갱신
