@@ -86,7 +86,7 @@ module ExperimentLauncherManifestContractTest
     environment = container.fetch("env").to_h { |item| [item.fetch("name"), item] }
 
     expect_equal(
-      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:f463fd301e3e3b42e525aa7fd03e92ea2bf5ee0b98dea8921438231067f66701",
+      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:40e89a060a646d6a3ed73dae7115ec7fac7e3f2aeb64a63d93d0179c1569b8ce",
       container.fetch("image"),
       "launcher image"
     )

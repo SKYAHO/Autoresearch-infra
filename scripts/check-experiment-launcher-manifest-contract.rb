@@ -154,7 +154,7 @@ module ExperimentLauncherManifestContract
   end
 
   def check_cron_job!(cron_job)
-    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:f463fd301e3e3b42e525aa7fd03e92ea2bf5ee0b98dea8921438231067f66701"
+    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:40e89a060a646d6a3ed73dae7115ec7fac7e3f2aeb64a63d93d0179c1569b8ce"
     expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:f9a73d1ed207644e89750971e88f1e7e5ab32dfba2092e0fc71d7352b632354a"
     # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
     # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위

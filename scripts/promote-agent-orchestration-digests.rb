@@ -5,9 +5,13 @@
 module AgentOrchestrationDigestPromotion
   ROOT = File.expand_path("..", __dir__)
   TARGETS = {
-    api: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api", files: { "api-deployment.yaml" => 2, "api-migration-job.yaml" => 2, "launcher-cronjob.yaml" => 1, "runner-deployment.yaml" => 1, "deployment-verification-job.yaml" => 1 } },
+    # #616 log-collector-deployment.yaml은 image를 둘 쓴다 — 본체는 launcher image의
+    # 다른 진입점이고, bootstrap-db initContainer는 launcher image에 없는 모듈 때문에
+    # API image다(launcher-cronjob.yaml과 같은 이유). 둘 다 등록하지 않으면
+    # validate_directory_references!가 "허용 범위 밖 image 참조"로 승격을 막는다.
+    api: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api", files: { "api-deployment.yaml" => 2, "api-migration-job.yaml" => 2, "launcher-cronjob.yaml" => 1, "log-collector-deployment.yaml" => 1, "runner-deployment.yaml" => 1, "deployment-verification-job.yaml" => 1 } },
     ui: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-ui", files: { "ui-deployment.yaml" => 1 } },
-    launcher: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher", files: { "launcher-cronjob.yaml" => 1 } },
+    launcher: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher", files: { "launcher-cronjob.yaml" => 1, "log-collector-deployment.yaml" => 1 } },
     runner: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-runner", files: { "runner-deployment.yaml" => 1 } },
     executor: { repository: "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor", files: { "launcher-cronjob.yaml" => 1 } }
   }.freeze
