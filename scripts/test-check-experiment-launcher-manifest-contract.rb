@@ -86,12 +86,12 @@ module ExperimentLauncherManifestContractTest
     environment = container.fetch("env").to_h { |item| [item.fetch("name"), item] }
 
     expect_equal(
-      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:40e89a060a646d6a3ed73dae7115ec7fac7e3f2aeb64a63d93d0179c1569b8ce",
+      "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:fe7e9c34cca92d40e635e0adcfce27c830726b014b57eaeeec84d93df29f17e8",
       container.fetch("image"),
       "launcher image"
     )
     expected = {
-      "ORCH_EXECUTOR_IMAGE" => "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:f9a73d1ed207644e89750971e88f1e7e5ab32dfba2092e0fc71d7352b632354a",
+      "ORCH_EXECUTOR_IMAGE" => "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:1ce54c594490e5262b824c24725322f895074c5d895e96027e7c596f7bc65927",
       "ORCH_EXPERIMENT_RESULTS_ROOT" => "gs://autoresearch-503903-autoresearch-dev-experiment-results",
       "ORCH_TRAINING_DATASET_URI" => "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
       "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
