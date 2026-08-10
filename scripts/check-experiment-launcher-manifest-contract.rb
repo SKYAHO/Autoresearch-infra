@@ -58,6 +58,54 @@ module ExperimentLauncherManifestContract
     )
     check_image_digest_consistency!(File.dirname(manifest_path))
     check_api_executor_token!(File.dirname(manifest_path))
+    check_log_collector_contract!(File.dirname(manifest_path), cron_job)
+  end
+
+  # (#616) 수집기 Deployment와 launcher CronJob이 공유하는 두 계약을 고정한다.
+  # 둘 다 지금까지 주석으로만 있었고, 이 저장소는 "한쪽만 갱신되어 조용히 어긋나는"
+  # 실패를 이미 겪었다(#562).
+  #
+  # 특히 두 번째 검사가 노리는 것은 #579의 임시 TTL 3600을 기본값 30으로 회수하는
+  # 변경이다. 그 PR은 launcher-cronjob.yaml만 건드릴 가능성이 높은데, 그때 수집기의
+  # 주기가 그대로면 마지막 컨테이너의 꼬리 청크를 flush할 창이 사라진다.
+  def check_log_collector_contract!(manifest_directory, cron_job)
+    path = File.join(manifest_directory, "log-collector-deployment.yaml")
+    # 수집기 배포 전에는 이 파일이 없다. 없는 것은 위반이 아니다.
+    return unless File.file?(path)
+
+    deployment = YAML.load_stream(File.read(path)).compact.find do |document|
+      document["kind"] == "Deployment"
+    end
+    raise ContractError, "수집기 Deployment 문서가 없습니다" unless deployment
+
+    collector = pod_environment(deployment.dig("spec", "template", "spec", "containers"))
+    launcher = pod_environment(
+      cron_job.dig("spec", "jobTemplate", "spec", "template", "spec", "containers")
+    )
+
+    expect_equal(
+      launcher["ORCH_JOB_NAMESPACE"],
+      collector["ORCH_JOB_NAMESPACE"],
+      "수집 대상 namespace(갈리면 수집기가 조용히 빈 결과만 남깁니다)"
+    )
+
+    # launcher가 값을 생략하면 앱 기본값 30이 적용된다(launcher/config.py).
+    ttl = Integer(launcher.fetch("ORCH_TTL_AFTER_FINISHED_SEC", "30"))
+    interval = Integer(collector.fetch("ORCH_LOG_COLLECT_INTERVAL_SEC", "5"))
+    return if interval < ttl
+
+    raise ContractError,
+          "ORCH_LOG_COLLECT_INTERVAL_SEC(#{interval})는 " \
+          "ORCH_TTL_AFTER_FINISHED_SEC(#{ttl})보다 작아야 합니다. 완료 Job이 " \
+          "회수되기 전에 마지막 컨테이너의 꼬리 청크를 flush할 창이 필요합니다."
+  end
+
+  # container 배열에서 `name: value` 환경 변수만 뽑는다. valueFrom(secretKeyRef)은
+  # 값이 manifest에 없으므로 비교 대상이 아니다.
+  def pod_environment(containers)
+    Array(containers).flat_map { |container| Array(container["env"]) }
+                     .reject { |entry| entry["value"].nil? }
+                     .to_h { |entry| [entry.fetch("name"), entry.fetch("value").to_s] }
   end
 
   # (#575) candidate 보고 인증은 발신·수신 양쪽이 같은 token을 가져야 성립한다.
