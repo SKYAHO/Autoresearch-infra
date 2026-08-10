@@ -733,9 +733,9 @@ variable "batch_od_gke_node_pool_name" {
 }
 
 variable "batch_od_gke_machine_type" {
-  description = "batch on-demand pool 머신 타입(#297). batch-spot과 동일 사양."
+  description = "실험 5건 동시 실행용 batch on-demand pool 머신 타입(#297, #624). e2-standard-16 한 노드가 requests 10 vCPU/20Gi를 수용하며 min 0이라 유휴 비용은 없다."
   type        = string
-  default     = "e2-standard-2"
+  default     = "e2-standard-16"
 }
 
 variable "ctr_retrain_gke_node_count_max" {

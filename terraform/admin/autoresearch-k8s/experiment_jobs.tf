@@ -39,10 +39,10 @@ resource "kubernetes_service_account_v1" "experiment_job" {
 # 만들었지만 Autoresearch-airflow의 어떤 KPO도 현재 이 pool로 스케줄되지 않는다
 # (#523) — 유휴 상태이므로 별도 경합 계획 없이 실험 Job이 그대로 쓴다. 다른
 # 컴포넌트가 이 pool을 실제로 쓰기 시작하면 그 변경에서 capacity·우선순위 계획을
-# 다시 승인한다. quota는 pool의
-# e2-standard-2 두 노드(min 0/max 2)에서 각각 한 Job이 안정적으로 실행되는
-# 보수적 상한이다. 완료 Job도 TTL 전에는 quota에 포함되므로 무한 재시도·대량 제출로
-# batch 비용이 늘어나는 경로를 차단한다.
+# 다시 승인한다. e2-standard-16 한 노드가 실험 5건의 총 requests
+# 10 CPU/20Gi를 수용한다. pool의 min 0/max 2는 유지하며, quota는 5건을 넘는
+# 제출과 총 limits 20 CPU/40Gi를 차단한다. 완료 Job도 TTL 전에는 quota에
+# 포함되므로 무한 재시도·대량 제출로 batch 비용이 늘어나는 경로를 차단한다.
 resource "kubernetes_resource_quota_v1" "experiment_jobs" {
   metadata {
     name      = "experiment-jobs-quota"
@@ -51,12 +51,12 @@ resource "kubernetes_resource_quota_v1" "experiment_jobs" {
 
   spec {
     hard = {
-      "count/jobs.batch" = "2"
-      "pods"             = "2"
-      "requests.cpu"     = "2"
-      "requests.memory"  = "4Gi"
-      "limits.cpu"       = "2"
-      "limits.memory"    = "4Gi"
+      "count/jobs.batch" = "5"
+      "pods"             = "5"
+      "requests.cpu"     = "10"
+      "requests.memory"  = "20Gi"
+      "limits.cpu"       = "20"
+      "limits.memory"    = "40Gi"
     }
   }
 
@@ -81,8 +81,8 @@ resource "kubernetes_limit_range_v1" "experiment_jobs" {
         memory = "1Gi"
       }
       max = {
-        cpu    = "1"
-        memory = "2Gi"
+        cpu    = "4"
+        memory = "8Gi"
       }
     }
 
@@ -96,32 +96,29 @@ resource "kubernetes_limit_range_v1" "experiment_jobs" {
     # 점유된다.
     #
     # initContainers 계산: k8s는 일반 initContainer(순차 실행)를 app 컨테이너
-    # 합계와 max() 비교하므로, initContainer 1개(1 vCPU) + app 컨테이너 1개
-    # (1 vCPU)는 max(1,1)=1로 이 상한 경계값에 걸려 통과한다. 반면
-    # `restartPolicy: Always`인 native sidecar initContainer는 app 컨테이너와
-    # 동시에 떠 있어 합산(sum) 대상이 되므로 같은 조합이 2 vCPU로 상한을
-    # 넘겨 거부된다.
+    # 합계와 max() 비교한다. executor의 일반 initContainer 7개와 app 컨테이너
+    # 1개가 각각 최대 4 CPU/8Gi여도 Pod 실효값은 max(init 최댓값, app 합계)인
+    # 4 CPU/8Gi다. 반면 `restartPolicy: Always`인 native sidecar initContainer는
+    # app 컨테이너와 동시에 떠 있어 합산(sum) 대상이므로 이 상한을 넘는다.
     #
     # #539의 branch-bootstrap Job은 정확히 전자에 해당한다 — initContainer
     # `github-token-minter` 1개 + app 컨테이너 `branch-bootstrap` 1개이고,
     # 두 컨테이너 모두 LimitRange 기본값(500m/1Gi)을 받으므로 Pod 합계는
-    # max(500m, 500m)=500m, max(1Gi, 1Gi)=1Gi로 상한 안에 들어온다. 다만 이는
-    # 여유가 아니라 "sidecar가 아니어서" 통과하는 것이므로, token-minter를
-    # native sidecar(`restartPolicy: Always`)로 바꾸는 변경은 이 상한에 먼저
-    # 걸린다. 같은 root의 admission 정책이 initContainer·app 컨테이너를 각각
-    # 하나로 못 박아 그 이상은 애초에 제출되지 않는다.
+    # max(500m, 500m)=500m, max(1Gi, 1Gi)=1Gi로 상한 안에 들어온다. 같은 root의
+    # admission 정책이 initContainer·app 컨테이너를 각각 하나로 못 박아 그
+    # 이상은 애초에 제출되지 않는다. branch-bootstrap의 컨테이너 구성이나
+    # resource 기본값을 바꾸는 변경은 이 상한을 함께 재검토해야 한다.
     #
-    # 헤드룸 0: 이 값을 컨테이너 상한과 동일하게 둬 컨테이너가 하나라도 추가되면
-    # (의도적 sidecar든 GCS FUSE CSI 같은 주입형 sidecar든) 무조건 거부된다.
-    # 이 namespace에는 현재 sidecar를 주입하는 mutating webhook이 없다 — 값을
-    # 올리는 대신 "이 namespace에는 sidecar 주입을 쓰지 않는다"를 제약으로
-    # 유지한다. 다중 컨테이너 Pod가 실제로 필요해지면 그 변경에서 상한 값을
-    # 함께 재검토한다.
+    # executor 헤드룸 0: 이 값을 컨테이너 상한과 동일하게 둬 최대 자원을 쓰는
+    # executor에 sidecar가 추가되면(의도적 sidecar든 GCS FUSE CSI 같은 주입형
+    # sidecar든) 거부된다. 이 namespace에는 현재 sidecar를 주입하는 mutating
+    # webhook이 없다. 다중 app 컨테이너나 native sidecar가 실제로 필요해지면
+    # 그 변경에서 상한 값을 함께 재검토한다.
     limit {
       type = "Pod"
       max = {
-        cpu    = "1"
-        memory = "2Gi"
+        cpu    = "4"
+        memory = "8Gi"
       }
     }
   }
