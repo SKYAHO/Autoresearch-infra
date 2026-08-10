@@ -3,6 +3,31 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-11: 실험 동시 실행 5건 용량 상향 (#624)
+
+- 데모 촬영을 위해 실험 동시 실행을 2건에서 5건으로 올렸다. 용량은 두 PR로
+  나눠 배포했다. 첫 PR(#625)이 `batch-od` node pool을 `e2-standard-8`·
+  `pd-standard` 100GB로, LimitRange Container/Pod max를 4 CPU/8Gi로,
+  ResourceQuota를 Jobs/Pods 5·requests 5 CPU/10Gi·limits 20 CPU/40Gi로 올렸고,
+  두 번째 PR이 launcher의 `ORCH_MAX_CONCURRENT_EXPERIMENTS`만 `"5"`로 바꿨다.
+- **순서를 나눈 이유는 launcher가 Job 생성 전에 DB 상태를 `RUNNING`으로 바꾸기
+  때문이다.** 인프라 용량보다 상한을 먼저 올리면 Job 없는 `RUNNING` 실험이
+  남는다. 같은 이유로 롤백은 항상 launcher 상한을 먼저 `2`로 되돌려 새 선점을
+  막고, active Job이 끝난 뒤에만 admin quota·LimitRange, dev node pool 순서로
+  되돌린다. namespace·KSA·결과 버킷 삭제나 state 직접 조작은 롤백 수단이 아니다.
+- 상한 상향 전 게이트는 #669 자원값(requests 1 CPU/2Gi, limits 4 CPU/8Gi)으로
+  실행한 동시 2건 canary였다. canary의 실질 목적은 동시 2건이 같은 Codex 자격
+  증명 Secret을 읽을 때의 경합 확인이었고, 어드미션·quota·스케줄러(동시 2건이
+  한 `e2-standard-8` 노드에 배치), 컨테이너별 자원값 반영, CPU 경합 하의
+  verifier 전체 pytest까지 함께 확인했다.
+- **가설이 자기 메모리 요구량 때문에 `OOMKilled`되는 것은 canary 실패가
+  아니다.** 실측 피크 10.3 GiB인 MLP 가설(#673)은 container limit 8 GiB를 넘는
+  것이 이미 알려져 있어 데모 가설 목록에서 제외했다. 이 구분을 runbook의 배포
+  게이트에도 명시해, 가설 성패와 인프라 경로 판정이 섞이지 않게 했다.
+- launcher 상한은 namespace ResourceQuota의 hard ceiling과 같은 값(5)으로
+  유지한다. quota를 낮추는 변경은 상한을 먼저 낮춘 뒤에만 한다. 두 값은
+  `scripts/check-experiment-launcher-manifest-contract.rb`가 리터럴로 고정한다.
+
 ## 2026-08-10: v0.12.1 executor·launcher digest 승격 (#613)
 
 - Autoresearch source `fb42ddf`(v0.12.1)의 executor
