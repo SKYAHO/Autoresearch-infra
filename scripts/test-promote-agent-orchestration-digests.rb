@@ -17,7 +17,7 @@ def refs
 end
 # 승격 봇이 갱신하는 현재 API digest다. 특정 version이 아니라 "지금 main에 승격된 값"을
 # 뜻하므로, digest 승격 PR은 이 상수도 함께 옮긴다.
-PROMOTED_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:136a6c692b2347dfafdf76c0b62d5ec59ca9848965c76630f139928b299e7e53"
+PROMOTED_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:cbdf93a090fc21188963720581d5f3516b6a3f30ca39f6155d8af55530a02cea"
 
 def expect_equal(expected, actual, description)
   return if expected == actual
