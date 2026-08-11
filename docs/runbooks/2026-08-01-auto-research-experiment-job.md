@@ -848,16 +848,29 @@ kubectl -n autoresearch-experiments create secret generic \
   --from-file=private-key.pem="$sdir/private-key.pem" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# (#630) `autoresearch` namespace Secret에는 **세 key를 모두** 넣는다. PR 생성기가
+# private-key.pem을 mount하기 때문이다. `create --dry-run | apply`는 Secret을 통째로
+# 치환하므로, 두 ID만 적어 실행하면 방금 넣은 키가 지워진다 — 그 상태는 PR 생성기가
+# pull_request_token_failed로만 조용히 실패해 바로 드러나지 않는다.
 kubectl -n autoresearch create secret generic \
   autoresearch-experiment-branch-writer-app \
   --from-file=app-id="$sdir/app-id" \
   --from-file=installation-id="$sdir/installation-id" \
+  --from-file=private-key.pem="$sdir/private-key.pem" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 rm -rf "$sdir"; trap - EXIT
 # 원본을 다른 곳에 보관하지 않았다면 이 줄은 실행하지 않는다. App private key는
 # GitHub에서 재발급만 가능하고 기존 키를 되살릴 수 없다.
 shred -u /path/to/branch-writer.pem
+```
+
+등록 뒤 세 key가 모두 있는지 확인한다. `app-id`·`installation-id`·`private-key.pem`
+셋이 나와야 하며, 하나라도 빠지면 그 Secret은 반쪽 상태다.
+
+```bash
+kubectl -n autoresearch get secret autoresearch-experiment-branch-writer-app \
+  -o go-template='{{range $k,$v := .data}}{{$k}} {{end}}'
 ```
 
 Secret 이름은 admission 정책이 서버 측에서 검사한다
