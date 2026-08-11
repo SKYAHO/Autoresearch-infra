@@ -379,6 +379,27 @@ variable "agent_orchestration_log_collector_k8s_service_account" {
   }
 }
 
+# #630 실험 PR 생성기는 완주한 실험의 exp 브랜치를 dev로 향하는 PR로 연다.
+# 로그 수집기와 GCP 권한 집합은 같지만(Workload Identity + DB password) Kubernetes
+# 권한이 다르다 — 이 프로세스는 Kubernetes API를 아예 호출하지 않으므로 RoleBinding도
+# 토큰 마운트도 없다. 신원을 합치면 PR만 여는 프로세스가 쓰지도 않는 `pods/log`
+# read와 in-cluster token을 갖게 된다.
+#
+# 이 값은 terraform/admin/autoresearch-k8s의
+# agent_orchestration_pull_request_k8s_service_account와 반드시 같아야 한다 —
+# 불일치는 두 root의 apply를 모두 통과한 뒤 Workload Identity principal이 어긋나
+# Secret Manager 403으로만 드러난다.
+variable "agent_orchestration_pull_request_k8s_service_account" {
+  description = "실험 PR 생성기 GSA에 Workload Identity로 매핑할 Kubernetes service account."
+  type        = string
+  default     = "agent-orchestration-pull-request"
+
+  validation {
+    condition     = length(var.agent_orchestration_pull_request_k8s_service_account) >= 1 && length(var.agent_orchestration_pull_request_k8s_service_account) <= 63 && can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.agent_orchestration_pull_request_k8s_service_account))
+    error_message = "agent_orchestration_pull_request_k8s_service_account must be a valid Kubernetes service account name."
+  }
+}
+
 variable "mlflow_db_name" {
   description = "기존 Cloud SQL 인스턴스 내 MLflow 전용 database 이름(Airflow/앱과 분리)."
   type        = string

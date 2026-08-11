@@ -34,6 +34,11 @@ output "agent_orchestration_service_accounts" {
       name                      = kubernetes_service_account_v1.agent_orchestration_log_collector.metadata[0].name
       gcp_service_account_email = local.agent_orchestration_log_collector_gcp_service_account_email
     }
+    # #630 실험 PR 생성기. Kubernetes RBAC도 토큰 마운트도 없다.
+    pull_request = {
+      name                      = kubernetes_service_account_v1.agent_orchestration_pull_request.metadata[0].name
+      gcp_service_account_email = local.agent_orchestration_pull_request_gcp_service_account_email
+    }
   }
 }
 

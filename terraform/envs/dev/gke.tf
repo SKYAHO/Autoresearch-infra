@@ -122,6 +122,30 @@ resource "google_service_account_iam_member" "agent_orchestration_log_collector_
   depends_on = [google_container_cluster.dev]
 }
 
+# #630 실험 PR 생성기. 완주한 실험의 exp 브랜치를 dev로 향하는 PR로 연다.
+# GCP 권한은 DB password secret 하나뿐이다(secret_manager.tf). GitHub 접근은 GCP IAM이
+# 아니라 branch-writer App의 installation token이 담당한다.
+#
+# **이 Pod은 App private key 원본을 mount한다.** 애플리케이션 코드가 발급 시
+# `pull_requests: write`만 요청하지만, 그것은 관례이지 강제되는 경계가 아니다 — 키를
+# 가진 주체는 installation 전체 권한(`contents: write` 포함)의 token을 언제든 발급할
+# 수 있다. 실효 경계는 "이 Pod에 키가 있다"까지이며, GCP IAM으로는 좁힐 수 없다.
+#
+# roles/cloudsql.client는 주지 않는다. 수집기와 같은 이유로 private IP에 비밀번호로
+# 붙어 `cloudsql.instances.connect`를 호출하지 않는다(#623 참조).
+resource "google_service_account" "agent_orchestration_pull_request" {
+  account_id   = local.agent_orchestration_pull_request_sa_name
+  display_name = "Autoresearch dev Agent Orchestration experiment pull request opener workload identity SA"
+}
+
+resource "google_service_account_iam_member" "agent_orchestration_pull_request_wi" {
+  service_account_id = google_service_account.agent_orchestration_pull_request.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.agent_orchestration_pull_request_workload_identity_principal}"
+
+  depends_on = [google_container_cluster.dev]
+}
+
 resource "google_service_account" "agent_orchestration_runner" {
   account_id   = local.agent_orchestration_runner_sa_name
   display_name = "Autoresearch dev Agent Orchestration Codex Runner workload identity SA"

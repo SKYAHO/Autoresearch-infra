@@ -83,11 +83,13 @@ Workload Identity IAM만 관리합니다. 애플리케이션 저장소는 고정
 | API KSA | `autoresearch/agent-orchestration-api` | Job·Pod·로그 상태와 결과의 인증된 읽기만 허용. #539에서 Job `create` 권한은 launcher KSA로 옮겨 API에는 남기지 않는다. 이 RBAC를 실제로 쓰려면 API Pod의 egress에 Kubernetes API 경로가 있어야 한다 — 해당 정책은 이 root가 아니라 `deploy/agent-orchestration/network-policy.yaml`이 소유한다(#484에서 services CIDR·control plane CIDR TCP 443 추가) |
 | launcher KSA | `autoresearch/agent-orchestration-launcher` | #539 실험 브랜치 Job의 유일한 생성 주체. Jobs `create/get/list`만 가지며 `delete`/`update`/`patch`는 없다 |
 | 수집기 KSA | `autoresearch/agent-orchestration-log-collector` | #616 실험 로그 수집기. `experiment-job-observer`만 갖고 Job **생성** 권한은 없다. launcher SA를 재사용하지 않는 이유는 재사용하면 "Job을 만들 수 있는 신원"과 "namespace의 모든 Pod 로그를 읽을 수 있는 신원"이 하나로 합쳐지기 때문이다. Deployment는 `deploy/agent-orchestration/log-collector-deployment.yaml`이 소유한다 |
+| PR 생성기 KSA | `autoresearch/agent-orchestration-pull-request` | #630 실험 PR 생성기. **RoleBinding이 하나도 없고 토큰도 마운트하지 않는다** — DB를 읽고 GitHub REST를 부를 뿐 Kubernetes API를 호출하지 않는다. 수집기 KSA를 재사용하지 않는 이유는 재사용하면 PR만 여는 프로세스가 쓰지도 않는 `pods/log` read와 in-cluster token을 갖기 때문이다. GitHub 접근은 branch-writer App의 installation token이 담당한다 — **이 Pod은 App private key 원본을 mount하므로 `pull_requests: write`만 요청하는 것은 애플리케이션 관례이지 강제되는 경계가 아니다.** Deployment는 `deploy/agent-orchestration/pull-request-opener-deployment.yaml`이 소유한다 |
 | Pod Security | `restricted` / `v1.35` | privileged·host namespace·hostPath·root 실행 등 위험한 Pod 거부 |
 | 기본 네트워크 | ingress/egress 차단 | DNS, GKE metadata, Private Google APIs HTTPS만 명시 허용 |
 
 실험 경로에서 Kubernetes API 토큰을 마운트하는 주체는 **launcher와 수집기 둘뿐**입니다
-(#616 이전에는 launcher 하나였습니다). executor Pod는 Kubernetes API를 전혀 쓰지 않아
+(#616 이전에는 launcher 하나였습니다). #630 PR 생성기는 Kubernetes API를 쓰지 않아
+마운트하지 않습니다. executor Pod는 Kubernetes API를 전혀 쓰지 않아
 Job spec에서 마운트를 끕니다 — 그 경계는 그대로입니다.
 
 `experiment-job` KSA에는 Kubernetes RoleBinding을 만들지 않고, Kubernetes API 토큰

@@ -71,6 +71,27 @@ resource "kubernetes_service_account_v1" "agent_orchestration_log_collector" {
   automount_service_account_token = true
 }
 
+# #630 실험 PR 생성기. launcher 이미지의 또 다른 진입점으로 도는 다섯 번째 주체다.
+#
+# **Kubernetes RoleBinding이 없고 토큰도 마운트하지 않는다.** 이 프로세스는 DB를 읽고
+# GitHub REST를 부를 뿐 Kubernetes API를 전혀 호출하지 않는다. 로그 수집기 KSA를
+# 재사용하면 PR만 여는 프로세스가 쓰지도 않는 `pods/log` read와 in-cluster token을
+# 갖게 되므로 신원을 나눈다 — 이 root가 다른 곳에서 지키는 최소 권한과 같은 기준이다.
+#
+# GCP 권한(Workload Identity → DB password secretAccessor)은 수집기와 같은 집합이지만,
+# 감사 로그에서 "로그를 읽은 것"과 "PR을 연 것"이 구분된다.
+resource "kubernetes_service_account_v1" "agent_orchestration_pull_request" {
+  metadata {
+    name      = var.agent_orchestration_pull_request_k8s_service_account
+    namespace = kubernetes_namespace_v1.autoresearch.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = local.agent_orchestration_pull_request_gcp_service_account_email
+    }
+  }
+
+  automount_service_account_token = false
+}
+
 resource "kubernetes_service_account_v1" "agent_orchestration_runner" {
   metadata {
     name      = var.agent_orchestration_runner_k8s_service_account

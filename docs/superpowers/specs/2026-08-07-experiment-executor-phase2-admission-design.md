@@ -393,7 +393,35 @@ API Pod만 단일 key `secretKeyRef`로 읽으며, UI·runner·launcher에는 �
 **참고 — 상류 GitHub 보호막**: `SKYAHO/Autoresearch`의 `main-protection` ruleset은
 `required_approving_review_count: 1`, `require_last_push_approval: true`,
 `bypass_actors: []`다. executor 토큰에는 `pull_requests` 권한이 없어 PR을 만들
-수조차 없다. 즉 executor 경로에서 `main`이 오염되는 경로는 없다. 다만
+수조차 없다. 즉 executor 경로에서 `main`이 오염되는 경로는 없다.
+
+> **[정정 — #630, 2026-08-11] 이 근거가 약해졌습니다.**
+>
+> 위 문장은 `branch-writer` App 자체에 `pull_requests` 권한이 없다는 사실에 기대고
+> 있었습니다. `#629`에서 PR 생성기를 위해 그 App에 **`Pull requests: write`를
+> 추가**했으므로, 같은 App private key를 mount하는 executor의 token-minter도
+> 이론적으로는 그 범위의 token을 발급할 수 있습니다.
+>
+> 지금 그것을 막는 것은 App 권한이 아니라 **애플리케이션 코드의 고정 딕셔너리**입니다
+> (`agent_orchestration/executor/token_minter.py`).
+>
+> ```python
+> TOKEN_PERMISSIONS = {
+>     "branch": {"contents": "write"},
+>     "clone":  {"contents": "read", "issues": "read"},
+>     "push":   {"contents": "write"},
+> }
+> ```
+>
+> 즉 근거가 **"GitHub이 강제하는 권한 경계"에서 "앱 저장소 코드"로 내려앉았습니다.**
+> executor는 `--sandbox danger-full-access`로 Codex가 도는 컨테이너를 포함하므로,
+> 이 딕셔너리를 바꾸는 변경은 상류 보호막을 함께 무르는 변경으로 취급해야 합니다.
+>
+> `main-protection`이 `required_approving_review_count: 1`·`bypass_actors: []`인 것은
+> 그대로이므로 **머지에는 여전히 사람의 승인이 필요합니다.** 무너진 것은 "PR을 열
+> 수조차 없다"는 한 겹입니다.
+
+다만
 `dev-protection`은 `pull_request` 규칙이 없어 **직접 push가 가능**하고, `exp/*`는
 보호가 없으며, 저장소는 public이다. 이 저장소의 경계는 그 잔여 범위를 대상으로
 한다.

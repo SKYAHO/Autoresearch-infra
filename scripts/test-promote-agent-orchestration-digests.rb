@@ -17,7 +17,7 @@ def refs
 end
 # 승격 봇이 갱신하는 현재 API digest다. 특정 version이 아니라 "지금 main에 승격된 값"을
 # 뜻하므로, digest 승격 PR은 이 상수도 함께 옮긴다.
-PROMOTED_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:136a6c692b2347dfafdf76c0b62d5ec59ca9848965c76630f139928b299e7e53"
+PROMOTED_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:cbdf93a090fc21188963720581d5f3516b6a3f30ca39f6155d8af55530a02cea"
 
 def expect_equal(expected, actual, description)
   return if expected == actual
@@ -34,10 +34,11 @@ def check_promoted_api_digest!
       target.fetch(:repository)
     )
   end
-  # #616 log-collector-deployment.yaml의 bootstrap-db initContainer가 8번째 참조다.
+  # #616 log-collector-deployment.yaml과 #630 pull-request-opener-deployment.yaml의
+  # bootstrap-db initContainer가 각각 한 참조씩 더한다.
   # 개수를 상수로 박아 두는 이유는 manifest가 늘 때 TARGETS 등록을 강제하기 위해서다 —
   # 등록을 빠뜨리면 promote!의 validate_directory_references!가 승격을 막는다.
-  expect_equal(Array.new(8, PROMOTED_API_REF), actual, "승격된 API image 참조")
+  expect_equal(Array.new(9, PROMOTED_API_REF), actual, "승격된 API image 참조")
 end
 
 check_promoted_api_digest!
