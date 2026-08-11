@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: bootstrap-db
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:cbdf93a090fc21188963720581d5f3516b6a3f30ca39f6155d8af55530a02cea
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:637359ad1f5e983a69de1908626994f712a03482c45acb2f2752c1252fa42680
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -63,7 +63,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: api
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:cbdf93a090fc21188963720581d5f3516b6a3f30ca39f6155d8af55530a02cea
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:637359ad1f5e983a69de1908626994f712a03482c45acb2f2752c1252fa42680
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
