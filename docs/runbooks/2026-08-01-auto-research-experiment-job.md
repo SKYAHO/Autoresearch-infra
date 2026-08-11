@@ -769,6 +769,32 @@ digest 롤백이 필요하면 `launcher-cronjob.yaml`과 `log-collector-deployme
 launcher 참조를 **함께** 위 rollback 값으로 되돌린다. 한쪽만 되돌리면
 `check-experiment-launcher-manifest-contract.rb`의 digest 일관성 검사가 CI에서 막는다.
 
+#### PR 생성기 배포 순서 (#630)
+
+ArgoCD가 `deploy/agent-orchestration`을 `main`에서 자동 sync(폴링 최대 3분)하므로
+**manifest가 머지되는 순간 Deployment가 뜬다.** 아래 순서를 지키지 않으면 그
+Deployment는 뜨자마자 실패 상태로 남는다.
+
+| 순서 | 작업 | 안 하면 |
+|---|---|---|
+| 1 | `autoresearch` namespace Secret에 `private-key.pem` 추가 | volume mount 실패로 `ContainerCreating`에서 멈춤 |
+| 2 | branch-writer App에 `Pull requests: write` (`#629`) | 기동은 하되 `pull_request_forbidden`만 반복 |
+| 3 | `pull_request` 진입점을 포함한 launcher digest가 승격됨 | `ModuleNotFoundError`로 CrashLoopBackOff |
+| 4 | manifest 머지 | — |
+
+2번은 **없어도 배포 자체는 안전하다.** 앱이 `pull_request_forbidden`을 기록하지
+않으므로 권한을 부여한 뒤 다음 주기에 자동으로 회복된다. 1·3번은 그렇지 않다.
+
+3번을 확인하는 방법은 승격 커밋의 source SHA가 `pull_request.py`를 포함하는지 보는
+것이다.
+
+```bash
+# infra: 현재 launcher digest가 어느 앱 커밋에서 왔는지
+git log --oneline -1 --grep='자동 승격' -- deploy/agent-orchestration/launcher-cronjob.yaml
+# 앱 저장소: 그 커밋에 모듈이 있는지
+git ls-tree <source-sha> agent_orchestration/launcher/ --name-only | grep pull_request
+```
+
 #### merge와 apply 사이 구간 (#616)
 
 `agent-orchestration` ArgoCD Application은 `targetRevision = main`에 automated sync라

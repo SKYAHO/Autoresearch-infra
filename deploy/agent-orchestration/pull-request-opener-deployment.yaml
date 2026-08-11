@@ -3,8 +3,14 @@
 # 하지 않아, 결과가 브랜치에만 남고 dev에 닿을 경로가 없었다.
 #
 # executor 컨테이너는 건드리지 않는다 — candidate-finalizer에는 이미 push token과
-# API token이 있고 Codex가 `--sandbox danger-full-access`로 그 안에서 돈다. 거기에
-# `Pull requests: write`까지 얹지 않으려고 밖에서 관측하고 밖에서 행동한다.
+# API token이 있고 Codex가 `--sandbox danger-full-access`로 그 안에서 돈다. 거기서
+# PR을 열지 않고 밖에서 관측하고 밖에서 행동한다.
+#
+# 다만 **경계가 완전하지는 않다.** 이 Pod은 branch-writer App private key 원본을
+# mount하므로, 애플리케이션이 `pull_requests: write`만 요청하는 것은 관례이지 강제되는
+# 제약이 아니다. 그리고 App에 그 권한이 생기면서 executor가 가진 같은 키도 범위 안에
+# 들어왔다 — 그것을 막는 것은 이제 App 권한이 아니라 앱 코드의 고정
+# `TOKEN_PERMISSIONS`다(`executor/token_minter.py`).
 # 정본 계약은 애플리케이션 저장소의
 # docs/specs/2026-08-11-passed-experiment-pull-request.md다.
 #
