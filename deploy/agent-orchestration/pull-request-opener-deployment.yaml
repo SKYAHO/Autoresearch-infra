@@ -1,0 +1,273 @@
+# #630 실험 PR 생성기는 완주한(`PASSED`) 실험의 exp 브랜치를 dev로 향하는 Pull
+# Request로 연다. 지금까지 executor가 커밋·push하고 report.md까지 쓴 뒤 아무것도
+# 하지 않아, 결과가 브랜치에만 남고 dev에 닿을 경로가 없었다.
+#
+# executor 컨테이너는 건드리지 않는다 — candidate-finalizer에는 이미 push token과
+# API token이 있고 Codex가 `--sandbox danger-full-access`로 그 안에서 돈다. 거기에
+# `Pull requests: write`까지 얹지 않으려고 밖에서 관측하고 밖에서 행동한다.
+# 정본 계약은 애플리케이션 저장소의
+# docs/specs/2026-08-11-passed-experiment-pull-request.md다.
+#
+# 로그 수집기(#616)와 같은 이미지·같은 namespace에서 진입점만 다르게 돈다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestration-pull-request-opener
+  namespace: autoresearch
+  labels:
+    app.kubernetes.io/name: agent-orchestration-pull-request-opener
+    app.kubernetes.io/part-of: agent-orchestration
+    app.kubernetes.io/component: pull-request-opener
+spec:
+  # replica 1이다. 여러 개 띄우면 같은 실험에 두 번 PR을 만들려 시도한다 — 멱등 기록이
+  # 중복 PR을 막지만(GitHub 422 → 기존 번호 조회) 그 경합을 만들 이유가 없다.
+  replicas: 1
+  # 교체 중 두 Pod이 겹치지 않게 한다. 겹치면 위의 경합이 실제로 생긴다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-pull-request-opener
+      app.kubernetes.io/part-of: agent-orchestration
+      app.kubernetes.io/component: pull-request-opener
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-orchestration-pull-request-opener
+        app.kubernetes.io/part-of: agent-orchestration
+        app.kubernetes.io/component: pull-request-opener
+    spec:
+      # 로그 수집기 SA를 재사용하지 않는다. GCP 권한 집합은 같지만(Workload Identity +
+      # DB password) Kubernetes 권한이 다르다 — 이 프로세스는 Kubernetes API를 아예
+      # 호출하지 않는다. 재사용하면 PR만 여는 프로세스가 쓰지도 않는 `pods/log` read를
+      # 갖게 된다. terraform/admin/autoresearch-k8s가 이 KSA를 만들며 **RoleBinding을
+      # 하나도 붙이지 않는다.**
+      serviceAccountName: agent-orchestration-pull-request
+      # Kubernetes API를 호출하지 않으므로 토큰을 마운트하지 않는다. Workload Identity의
+      # GCP 인증은 GKE metadata server 경로라 in-cluster token이 필요 없다.
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
+        # agent_orchestration/bootstrap_secrets.py는 애플리케이션 저장소 최상위
+        # 모듈인데 launcher.Dockerfile이 COPY하지 않아 launcher image에 없다.
+        # launcher-cronjob.yaml·log-collector-deployment.yaml과 같은 패턴이다.
+        - name: bootstrap-db
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:cbdf93a090fc21188963720581d5f3516b6a3f30ca39f6155d8af55530a02cea
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - agent_orchestration.bootstrap_secrets
+          env:
+            - name: ORCH_DB_PASSWORD_SECRET_ID
+              value: projects/autoresearch-503903/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
+            - name: ORCH_DB_HOST
+              value: 192.168.0.3
+            - name: ORCH_DB_NAME
+              value: agent_orchestration
+            - name: ORCH_DB_USER
+              value: agent_orchestration_app
+            - name: ORCH_RUNTIME_DIR
+              value: /runtime
+          volumeMounts:
+            - name: db-runtime
+              mountPath: /runtime
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: pull-request-opener
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:0d500c1bc907c2d1bab53107aa3d6c1a03de0ba0c1585b801a79a3590f2a47c9
+          imagePullPolicy: IfNotPresent
+          # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
+          # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
+          # 남지 않는다. 다른 두 워크로드와 같은 방식이며 진입점만 다르다.
+          command:
+            - python
+            - -c
+            - |
+              import os
+              from pathlib import Path
+
+              entries = [
+                  line.split("=", 1)[1]
+                  for line in Path("/runtime/db.env").read_text(encoding="utf-8").splitlines()
+                  if line.startswith("ORCH_DATABASE_URL=")
+              ]
+              if len(entries) != 1:
+                  raise SystemExit("Expected exactly one ORCH_DATABASE_URL runtime entry")
+              os.environ["ORCH_DATABASE_URL"] = entries[0]
+              os.execvp(
+                  "python",
+                  ["python", "-m", "agent_orchestration.launcher.pull_request"],
+              )
+          env:
+            # PR을 여는 대상 저장소다. 앱이 이 값의 형식을 기동 시점에 검증한다.
+            - name: ORCH_GITHUB_REPOSITORY
+              value: SKYAHO/Autoresearch
+            # 워크벤치 폴링과 달리 사람이 화면 앞에서 기다리는 지연이 아니다. 60초면
+            # 충분하고 GitHub API 호출량도 그만큼 줄어든다.
+            - name: ORCH_PULL_REQUEST_INTERVAL_SEC
+              value: "60"
+            # branch-writer App private key 경로다. **executor의
+            # ORCH_GITHUB_APP_PRIVATE_KEY_FILE과 이름이 다르다** — 같은 App의 key지만
+            # 두 워크로드가 서로 다른 namespace의 서로 다른 경로에 mount하므로,
+            # 이름을 겹치면 한쪽 경로를 바꿀 때 다른 쪽이 조용히 따라간다.
+            - name: ORCH_PULL_REQUEST_APP_PRIVATE_KEY_FILE
+              value: /var/run/github-app/key.pem
+            # 아래 두 값은 App JWT 서명과 installation 선택에 쓴다. private key와 달리
+            # 비밀이 아니지만, Secret에 함께 있어 같은 자리에서 읽는다.
+            - name: ORCH_GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: autoresearch-experiment-branch-writer-app
+                  key: app-id
+            - name: ORCH_GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: autoresearch-experiment-branch-writer-app
+                  key: installation-id
+            # 이 프로세스가 읽는 환경 변수는 위 다섯과 ORCH_DATABASE_URL뿐이다
+            # (launcher/pull_request.py의 PullRequestSettings). LauncherSettings를
+            # 재사용하지 않으므로 executor image digest 같은 Job 생성용 값은 주지
+            # 않는다 — 안 쓰는 값에 배포를 묶으면 executor 릴리스마다 이 파일을 따라
+            # 고쳐야 한다(#616 선례).
+          volumeMounts:
+            - name: db-runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: github-app-key
+              mountPath: /var/run/github-app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: db-runtime
+          emptyDir:
+            medium: Memory
+        # branch-writer App private key. 이 Secret은 Terraform·Git에 없고 운영자가
+        # runbook 절차로 등록한다. executor용 사본은 autoresearch-experiments
+        # namespace에 따로 있으며, **회전 시 두 곳을 함께 갱신해야 한다.**
+        - name: github-app-key
+          secret:
+            secretName: autoresearch-experiment-branch-writer-app
+            items:
+              - key: private-key.pem
+                path: key.pem
+            defaultMode: 0400
+---
+# PR 생성기는 다른 상주 워크로드와 달리 **공개 인터넷 443이 필요하다** — api.github.com을
+# 호출한다. 로그 수집기·launcher 정책은 공개 egress를 열지 않으므로 그대로 복제할 수
+# 없고, experiment_jobs의 branch-bootstrap egress가 같은 목적의 선례다.
+#
+# 이 정책이 없으면 이 Pod의 egress가 무제한이 된다. namespace에 default-deny가 없고
+# terraform의 autoresearch-egress가 part-of NotIn [agent-orchestration]으로 제외하므로,
+# 어느 정책에도 걸리지 않은 agent-orchestration Pod은 아무 데나 나갈 수 있다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-orchestration-pull-request-opener
+  namespace: autoresearch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-orchestration-pull-request-opener
+      app.kubernetes.io/part-of: agent-orchestration
+      app.kubernetes.io/component: pull-request-opener
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            # dev Terraform var.private_services_cidr와 반드시 일치한다.
+            cidr: 192.168.0.0/20
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            # dev Terraform var.gke_services_cidr와 반드시 일치한다.
+            cidr: 172.16.128.0/24
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.252/32
+      ports:
+        - protocol: TCP
+          port: 987
+        - protocol: TCP
+          port: 988
+    - to:
+        - ipBlock:
+            # Secret Manager private.googleapis.com 고정 VIP.
+            cidr: 199.36.153.8/30
+      ports:
+        - protocol: TCP
+          port: 443
+    # api.github.com. GitHub은 고정 IP를 보장하지 않아 공개 443을 열되 사설 대역을
+    # except로 빼, 이 Pod이 클러스터·VPC 내부로 되돌아가지 못하게 한다. experiment_jobs의
+    # branch-bootstrap egress와 같은 방식이다.
+    #
+    # kube-apiserver로 가는 경로는 열지 않는다 — 이 프로세스는 Kubernetes API를
+    # 호출하지 않으며 토큰도 마운트하지 않는다.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 443

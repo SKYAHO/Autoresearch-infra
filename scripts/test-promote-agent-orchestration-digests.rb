@@ -34,10 +34,11 @@ def check_promoted_api_digest!
       target.fetch(:repository)
     )
   end
-  # #616 log-collector-deployment.yaml의 bootstrap-db initContainer가 8번째 참조다.
+  # #616 log-collector-deployment.yaml과 #630 pull-request-opener-deployment.yaml의
+  # bootstrap-db initContainer가 각각 한 참조씩 더한다.
   # 개수를 상수로 박아 두는 이유는 manifest가 늘 때 TARGETS 등록을 강제하기 위해서다 —
   # 등록을 빠뜨리면 promote!의 validate_directory_references!가 승격을 막는다.
-  expect_equal(Array.new(8, PROMOTED_API_REF), actual, "승격된 API image 참조")
+  expect_equal(Array.new(9, PROMOTED_API_REF), actual, "승격된 API image 참조")
 end
 
 check_promoted_api_digest!
