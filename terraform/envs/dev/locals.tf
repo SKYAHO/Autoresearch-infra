@@ -69,6 +69,10 @@ locals {
   # Job을 만들지 않고 Pod 로그만 읽으므로 별도 주체로 둔다. account_id 30자 제한
   # 때문에 `-orch-log-collector`가 아니라 `-orch-logcol`(28자)이다.
   agent_orchestration_log_collector_sa_name = "${local.resource_prefix}-orch-logcol"
+  # #630 실험 PR 생성기. 수집기와 GCP 권한 집합은 같지만(WI + DB password) Kubernetes
+  # 권한이 다르다 — 이쪽은 Kubernetes API를 아예 호출하지 않는다. 신원을 합치면 PR만
+  # 여는 프로세스가 쓰지도 않는 `pods/log` read를 갖게 된다.
+  agent_orchestration_pull_request_sa_name = "${local.resource_prefix}-orch-pr"
   # 실험 Job은 API·Codex Runner와 다른 GSA를 사용한다. 결과 버킷 object 생성과
   # 게시된 학습 snapshot 읽기만 허용하고 Secret Manager·Cloud SQL·Kubernetes API
   # 권한은 부여하지 않는다.
@@ -139,6 +143,7 @@ locals {
   agent_orchestration_runner_workload_identity_principal        = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_runner_k8s_service_account}]"
   agent_orchestration_launcher_workload_identity_principal      = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_launcher_k8s_service_account}]"
   agent_orchestration_log_collector_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_log_collector_k8s_service_account}]"
+  agent_orchestration_pull_request_workload_identity_principal  = "${var.project_id}.svc.id.goog[${var.agent_orchestration_k8s_namespace}/${var.agent_orchestration_pull_request_k8s_service_account}]"
   experiment_job_workload_identity_principal                    = "${var.project_id}.svc.id.goog[${var.experiment_job_k8s_namespace}/${var.experiment_job_k8s_service_account}]"
 
   mlflow_workload_identity_principal = "${var.project_id}.svc.id.goog[${var.mlflow_k8s_namespace}/${var.mlflow_k8s_service_account}]"
