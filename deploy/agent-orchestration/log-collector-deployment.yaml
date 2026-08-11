@@ -61,7 +61,7 @@ spec:
         # launcher image로 실행하면 ModuleNotFoundError로 죽는다.
         # launcher-cronjob.yaml·api-migration-job.yaml과 같은 패턴이다.
         - name: bootstrap-db
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:136a6c692b2347dfafdf76c0b62d5ec59ca9848965c76630f139928b299e7e53
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:a4e16cd059032defeec604e71efe2b70602c0664b4a2eb272f2bf02b1ed4fcfc
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -98,7 +98,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: log-collector
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:d6aa767ae052a1499275fc631c926b89b48cbed73d3d0c0ef33fe491fbf6008e
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:6485878133d05b4b0e0058239eb6207ff93dfb65b7b6194866953254b5bfa5c8
           imagePullPolicy: IfNotPresent
           # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
           # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
