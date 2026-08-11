@@ -807,11 +807,25 @@ private key는 Terraform·Git·manifest 어디에도 넣지 않는다. Secret은
 |---|---|---|---|
 | `autoresearch-experiments` | `autoresearch-experiment-branch-writer-app` | `private-key.pem` | executor Job의 initContainer가 volume으로 mount |
 | `autoresearch` | `autoresearch-experiment-branch-writer-app` | `app-id`, `installation-id` | launcher CronJob이 env로 읽어 Job manifest에 리터럴로 넣음 |
+| `autoresearch` | `autoresearch-experiment-branch-writer-app` | `private-key.pem` | **(#630)** PR 생성기가 volume으로 mount |
 
-private key가 `autoresearch` namespace에 필요 없고 두 ID가 실험 namespace에 필요
-없는 이유는 경로가 다르기 때문이다 — 키는 executor Pod의 initContainer까지만 가고,
-두 ID는 launcher가 Job manifest를 조립할 때 필요하다. **실험 namespace의 Secret에는
-`private-key.pem` 외의 key를 넣지 않는다.**
+**#630에서 이 경계가 바뀌었다.** 이전에는 *"private key가 `autoresearch` namespace에
+필요 없다"*가 성립했는데, PR 생성기가 그 namespace에서 돌며 App token을 직접
+발급하므로 이제 키가 양쪽에 필요하다. 두 ID가 실험 namespace에 필요 없는 것은
+그대로다 — **실험 namespace의 Secret에는 `private-key.pem` 외의 key를 넣지 않는다.**
+
+경로가 갈리는 지점은 다음과 같다.
+
+| 주체 | namespace | 무엇을 하나 |
+|---|---|---|
+| executor initContainer | `autoresearch-experiments` | 키로 token을 발급해 브랜치를 push |
+| launcher CronJob | `autoresearch` | 두 ID를 Job manifest에 리터럴로 넣음 (키는 안 씀) |
+| PR 생성기 | `autoresearch` | 키로 token을 발급해 PR을 염 (`pull_requests: write`만) |
+
+**회전 시 두 namespace의 `private-key.pem`을 함께 갱신한다.** 한쪽만 갱신하면 그
+경로만 조용히 실패한다 — executor는 push 실패로 바로 드러나지만, PR 생성기는
+`pull_request_token_failed` 사유가 로그에만 남고 화면에는 "PR이 안 열린다"로만
+보인다.
 
 `set -eu`가 없으면 `cp`가 실패해도 다음 명령이 그대로 진행된다. 그 경로에서는
 private key Secret만 빠진 채 두 ID Secret이 만들어지고, 마지막 `shred -u`가 원본
