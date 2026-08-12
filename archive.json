@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-12T06:18:53Z",
+  "generated_at": "2026-08-12T06:33:56Z",
   "reports": [
+    {
+      "number": 634,
+      "title": "feat: apply workflow를 main merge 시 plan 자동 실행 + apply만 수동 승인으로 분리",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-12T06:33:43Z",
+      "summary_ko": [
+        "main 브랜치에 Terraform 관련 변경사항이 머지될 때 Terraform plan이 자동으로 실행되도록 workflow 트리거를 확장하였습니다.",
+        "실제 인프라 리소스를 수정하는 apply 단계는 Environment 승인 게이트를 유지하여 사람이 직접 승인해야만 실행되도록 설정하였습니다.",
+        "자동 실행 조건에 맞춰 push 이벤트 발생 시의 scope 동작 규칙 및 워크플로우 설명을 운영 문서에 반영하였습니다."
+      ],
+      "report_url": "pr/634/"
+    },
     {
       "number": 636,
       "title": "fix: manifest contract 이미지 검사를 digest에서 repository 비교로 낮춘다 (#635)",
