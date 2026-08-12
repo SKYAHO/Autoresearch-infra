@@ -1,7 +1,15 @@
 # #451 apply workflow 단일 진입점. admin-apply(#307/#312)·dev-apply(#341)·
 # terraform-apply(#448 재사용 워크플로우) 3개 파일을 이 하나로 통합했다.
-# 한 번의 dispatch가 dev root + admin root 8개(총 9개) 전체를 plan하고,
+# 한 번의 실행이 dev root + admin root 8개(총 9개) 전체를 plan하고,
 # **승인 1회**로 전체를 apply한다(`scope: all`, 기본값).
+#
+# ## 트리거 — main 머지는 plan 자동, apply는 항상 사람이 승인 (#633)
+#
+# main push(관련 경로 변경 시)는 `plan` job을 자동으로 실행한다. `apply` job은
+# 트리거와 무관하게 항상 `apply` Environment(6인 필수 리뷰어) 게이트에 걸려
+# 있어 사람이 직접 승인해야만 실행된다 — 자동 apply는 없다. `scope` 부분
+# 적용(부트스트랩·복구, 아래 절 참고)은 `workflow_dispatch`로 계속 수동
+# 실행한다.
 #
 # ## 전제 조건 — merge 전 반드시 확인
 #
@@ -90,6 +98,24 @@
 name: apply
 
 on:
+  # #633 main 머지 시 plan을 자동 실행한다. apply job은 여전히 `apply`
+  # Environment(6인 필수 리뷰어) 승인 게이트에 걸려 있어 사람이 직접 클릭해야만
+  # 실행된다 — 자동 apply는 없다. push 이벤트에는 `github.event.inputs`가
+  # 없어 아래 `if: github.event.inputs.scope != 'dev'` 류 조건이 전부 null
+  # 비교로 참이 되므로, 코드 변경 없이 기존 `scope: all` 기본값과 동일하게
+  # dev+admin 전체를 plan한다.
+  push:
+    branches: [main]
+    paths:
+      - "terraform/envs/dev/**"
+      - "terraform/admin/**"
+      - "terraform/modules/**"
+      - "config/environments/**"
+      - "scripts/terraform-env"
+      - "scripts/environment_catalog.rb"
+      - ".github/workflows/apply.yml"
+  # scope로 dev/admin만 부분 적용하거나(부트스트랩·복구), 문제 해결 후 재실행할 때
+  # 계속 수동 dispatch로 쓴다.
   workflow_dispatch:
     inputs:
       scope:
