@@ -1,7 +1,15 @@
 # #451 apply workflow 단일 진입점. admin-apply(#307/#312)·dev-apply(#341)·
 # terraform-apply(#448 재사용 워크플로우) 3개 파일을 이 하나로 통합했다.
-# 한 번의 dispatch가 dev root + admin root 8개(총 9개) 전체를 plan하고,
+# 한 번의 실행이 dev root + admin root 8개(총 9개) 전체를 plan하고,
 # **승인 1회**로 전체를 apply한다(`scope: all`, 기본값).
+#
+# ## 트리거 — main 머지는 plan 자동, apply는 항상 사람이 승인 (#633)
+#
+# main push(관련 경로 변경 시)는 `plan` job을 자동으로 실행한다. `apply` job은
+# 트리거와 무관하게 항상 `apply` Environment(6인 필수 리뷰어) 게이트에 걸려
+# 있어 사람이 직접 승인해야만 실행된다 — 자동 apply는 없다. `scope` 부분
+# 적용(부트스트랩·복구, 아래 절 참고)은 `workflow_dispatch`로 계속 수동
+# 실행한다.
 #
 # ## 전제 조건 — merge 전 반드시 확인
 #
@@ -90,6 +98,39 @@
 name: apply
 
 on:
+  # #633 main 머지 시 plan을 자동 실행한다. apply job은 여전히 `apply`
+  # Environment(6인 필수 리뷰어) 승인 게이트에 걸려 있어 사람이 직접 클릭해야만
+  # 실행된다 — 자동 apply는 없다. push 이벤트에는 `github.event.inputs`가
+  # 없어 아래 `if: github.event.inputs.scope != 'dev'` 류 조건이 전부 null
+  # 비교로 참이 되므로, 코드 변경 없이 기존 `scope: all` 기본값과 동일하게
+  # dev+admin 전체를 plan한다.
+  # #634 리뷰 — push 트리거는 scope를 고를 수 없어 항상 dev+admin을 함께
+  # plan한다. "dev 변경이 admin의 live 조회값에 영향을 줄 때는 scope를
+  # 분리한다"는 위 절의 규칙을 자동으로는 지킬 수 없다는 뜻이다. 다만 apply
+  # job은 이 트리거에서도 여전히 승인 게이트 뒤에 있으므로, 그런 의존이 있는
+  # 변경이라면 사람이 승인 시점에 plan을 보고 판단하거나(위험이 낮으면 그대로
+  # 승인) run을 취소하고 `scope: dev` → `scope: admin` 순서로 수동
+  # 재dispatch한다 — 이 판단은 기존에도(수동 `scope: all` dispatch 때도)
+  # 승인자가 매번 해야 했던 것과 같아서 새로 생기는 안전 구멍은 아니다.
+  #
+  # admin root plan은 GKE 클러스터 존재에 의존한다(위 "부트스트랩/재구축"
+  # 절). 재구축 등으로 클러스터가 없는 동안에는 이 push 트리거가 merge마다
+  # admin plan을 자동 실패시킨다 — `apply.yml`의 job은 required status
+  # check가 아니므로(`lint`만 required) merge 자체는 막히지 않고, Actions
+  # 탭에 예상된 실패로 반복 표시될 뿐이다. 그 기간에는 `scope: dev` 수동
+  # dispatch로 클러스터를 먼저 복구한다.
+  push:
+    branches: [main]
+    paths:
+      - "terraform/envs/dev/**"
+      - "terraform/admin/**"
+      - "terraform/modules/**"
+      - "config/environments/**"
+      - "scripts/terraform-env"
+      - "scripts/environment_catalog.rb"
+      - ".github/workflows/apply.yml"
+  # scope로 dev/admin만 부분 적용하거나(부트스트랩·복구), 문제 해결 후 재실행할 때
+  # 계속 수동 dispatch로 쓴다.
   workflow_dispatch:
     inputs:
       scope:
@@ -105,10 +146,6 @@ on:
 permissions:
   id-token: write # GitHub OIDC → GCP WIF
   contents: read
-
-concurrency:
-  group: apply
-  cancel-in-progress: false
 
 env:
   TF_IN_AUTOMATION: "true"
@@ -135,6 +172,17 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    # #634 리뷰 — 예전엔 workflow 전체(plan+apply)를 하나의 concurrency group으로
+    # 묶어 뒀는데, 그러면 이전 run의 apply job이 승인 대기 중(pending
+    # deployment)인 동안 workflow 자체가 "진행 중"으로 취급돼 이후 push의 plan
+    # job까지 큐에 밀린다 — "merge마다 plan이 자동 실행된다"는 #633의 목표가
+    # 승인이 늦어지는 동안 조용히 깨진다. plan과 apply를 별도 group으로
+    # 나눠, plan은 서로만(같은 root 동시 실행 시 state lock 경합 방지)
+    # 줄서고 승인 대기와는 무관하게 즉시 시작하게 한다. 동시에 두 apply가
+    # 도는 것만 막으면 되므로 apply는 apply끼리만 별도로 묶는다(아래).
+    concurrency:
+      group: apply-plan
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -340,6 +388,11 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     environment: apply
+    # 동시에 두 run이 terraform apply를 실행/승인 대기하지 못하게 apply끼리만
+    # 묶는다(plan과는 분리 — 위 plan job 주석).
+    concurrency:
+      group: apply-apply
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
