@@ -15,9 +15,6 @@ def refs
   suffixes = { api: "a", ui: "b", launcher: "c", runner: "d", executor: "e" }
   AgentOrchestrationDigestPromotion::TARGETS.to_h { |name, target| [name, "#{target[:repository]}@sha256:#{suffixes.fetch(name) * 64}"] }
 end
-# 승격 봇이 갱신하는 현재 API digest다. 특정 version이 아니라 "지금 main에 승격된 값"을
-# 뜻하므로, digest 승격 PR은 이 상수도 함께 옮긴다.
-PROMOTED_API_REF = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:cbdf93a090fc21188963720581d5f3516b6a3f30ca39f6155d8af55530a02cea"
 
 def expect_equal(expected, actual, description)
   return if expected == actual
@@ -34,11 +31,18 @@ def check_promoted_api_digest!
       target.fetch(:repository)
     )
   end
+  # (#635) 기대 digest는 "지금 main에 승격된 값"이라 리터럴로 박으면 승격 봇이
+  # 이 상수를 모른 채 manifest만 갱신할 때마다 self-test가 깨진다. 실제로 이
+  # 테스트가 검증해야 할 건 특정 digest 값이 아니라 "manifest 전체가 같은 값을
+  # 가리키는가"이므로, 기대값을 첫 참조에서 그대로 파생한다.
+  #
   # #616 log-collector-deployment.yaml과 #630 pull-request-opener-deployment.yaml의
   # bootstrap-db initContainer가 각각 한 참조씩 더한다.
   # 개수를 상수로 박아 두는 이유는 manifest가 늘 때 TARGETS 등록을 강제하기 위해서다 —
   # 등록을 빠뜨리면 promote!의 validate_directory_references!가 승격을 막는다.
-  expect_equal(Array.new(9, PROMOTED_API_REF), actual, "승격된 API image 참조")
+  raise "승격된 API image 참조가 없습니다" if actual.empty?
+
+  expect_equal(Array.new(9, actual.first), actual, "승격된 API image 참조")
 end
 
 check_promoted_api_digest!
