@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ui
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-ui@sha256:cbc80c1ce01aaac61b26fe8f10a8f5850cc780a67f115d7772ece5876c2a37ba
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-ui@sha256:8def8ff0bb781bf0f56cfbaae96b81bda3d3ed504de660969e2fd649fc8f6bfa
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

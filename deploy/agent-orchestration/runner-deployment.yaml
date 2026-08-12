@@ -54,7 +54,7 @@ spec:
         - name: bootstrap-codex-auth
           # bootstrap_secrets.py is intentionally in the API image. This init
           # container still runs with the Runner-only KSA and OAuth-only GSA.
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:637359ad1f5e983a69de1908626994f712a03482c45acb2f2752c1252fa42680
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:61af32a8fda241a474d3a858122d66ff24985b7cf67c6a9f0039863ff952ff62
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -81,7 +81,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: runner
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-runner@sha256:9ce7f2d07345bf1af888d3bbcf7a720d8bec73fb96b64003b493af73ba1cee3d
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-runner@sha256:2303289c2ab37f6fd31ba9e44a49f8276696d483b8c68a5596af82a6142a7605
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

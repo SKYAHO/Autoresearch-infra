@@ -66,7 +66,7 @@ spec:
         # 모듈인데 launcher.Dockerfile이 COPY하지 않아 launcher image에 없다.
         # launcher-cronjob.yaml·log-collector-deployment.yaml과 같은 패턴이다.
         - name: bootstrap-db
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:637359ad1f5e983a69de1908626994f712a03482c45acb2f2752c1252fa42680
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:61af32a8fda241a474d3a858122d66ff24985b7cf67c6a9f0039863ff952ff62
           imagePullPolicy: IfNotPresent
           command:
             - python
@@ -103,7 +103,7 @@ spec:
               drop: ["ALL"]
       containers:
         - name: pull-request-opener
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:68d4b26043dcca9a46c1e2b637b64dcf9b96d2bcada3d79906a0b7a01066aa33
+          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:418462fef4370c8c8e3c1717de18639b858cf6ca1a5e2cc8534ce7514f7bf2e9
           imagePullPolicy: IfNotPresent
           # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
           # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
