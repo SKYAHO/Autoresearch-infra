@@ -3,6 +3,22 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-12: manifest contract의 이미지 계약을 digest에서 repository로 낮춘다 (#635)
+
+- `scripts/check-experiment-launcher-manifest-contract.rb`와
+  `scripts/test-check-experiment-launcher-manifest-contract.rb`가 launcher/
+  executor/API 이미지를 정확한 sha256 digest 리터럴로 고정하고 있어, digest
+  자동 승격(`autoresearch-release-bot[bot]`)이 일어날 때마다 `lint` required
+  check가 깨졌다. #600에서도 이미 "세 곳(manifest·check·test)을 같은 커밋에서
+  함께 갱신해야 한다"는 함정으로 기록된 문제였다.
+- digest 자체의 cross-file 일관성은 `check_image_digest_consistency!`가 이미
+  검사하므로, 계약 스크립트는 "container/env가 올바른 이미지 계열
+  (repository)을 가리키는가"만 확인하도록 낮췄다 — 정확한 digest 비교를
+  repository 비교로 바꿔 자동 승격이 더 이상 lint를 깨지 않는다.
+- namespace ResourceQuota 상한처럼 **값 자체가 계약**인 리터럴(#624의
+  `ORCH_MAX_CONCURRENT_EXPERIMENTS` 등)은 그대로 두었다 — 바뀌는 대상은 봇이
+  주기적으로 갱신하는 digest뿐이다.
+
 ## 2026-08-11: 실험 동시 실행 5건 용량 상향 (#624)
 
 - 데모 촬영을 위해 실험 동시 실행을 2건에서 5건으로 올렸다. 용량은 두 PR로

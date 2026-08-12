@@ -201,14 +201,26 @@ module ExperimentLauncherManifestContract
     end
   end
 
-  def check_cron_job!(cron_job)
-    expected_launcher_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:0d500c1bc907c2d1bab53107aa3d6c1a03de0ba0c1585b801a79a3590f2a47c9"
-    expected_executor_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:219d6edcb4d52c29c4d40208223de39212b5a73d9e66f0fd53122f4158b3e612"
-    # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
-    # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
-    # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
-    expected_bootstrap_image = "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:cbdf93a090fc21188963720581d5f3516b6a3f30ca39f6155d8af55530a02cea"
+  # (#635) 여기서는 digest가 아니라 repository(이미지 이름)만 고정한다. 정확한
+  # digest는 승격 봇이 바꿀 때마다 바뀌는 값이라 리터럴로 박아 두면 승격마다
+  # lint가 깨진다. digest 자체가 manifest 전체에서 하나로 일치하는지는
+  # check_image_digest_consistency!가 이미 cross-file로 검사하므로, 여기서는
+  # "이 container/env가 올바른 이미지 계열을 가리키는가"만 확인하면 충분하다.
+  LAUNCHER_IMAGE_REPOSITORY =
+    "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher"
+  EXECUTOR_IMAGE_REPOSITORY =
+    "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor"
+  # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
+  # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
+  # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
+  API_IMAGE_REPOSITORY =
+    "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api"
 
+  def image_repository(image)
+    image.to_s.split("@", 2).first
+  end
+
+  def check_cron_job!(cron_job)
     spec = cron_job.fetch("spec")
     expect_equal("* * * * *", spec["schedule"], "launcher schedule")
     expect_equal("Forbid", spec["concurrencyPolicy"], "launcher concurrencyPolicy")
@@ -232,13 +244,26 @@ module ExperimentLauncherManifestContract
     containers = pod_spec.fetch("containers")
     expect_equal(["bootstrap-db"], init_containers.map { |item| item["name"] }, "launcher initContainer")
     expect_equal(["launcher"], containers.map { |item| item["name"] }, "launcher app container")
-    expect_equal(expected_bootstrap_image, init_containers.first["image"], "launcher bootstrap image")
-    expect_equal(expected_launcher_image, containers.first["image"], "launcher image")
+    expect_equal(
+      API_IMAGE_REPOSITORY,
+      image_repository(init_containers.first["image"]),
+      "launcher bootstrap image repository"
+    )
+    expect_equal(
+      LAUNCHER_IMAGE_REPOSITORY,
+      image_repository(containers.first["image"]),
+      "launcher image repository"
+    )
 
     environment = containers.first.fetch("env").to_h { |item| [item.fetch("name"), item] }
+    expect_equal(
+      EXECUTOR_IMAGE_REPOSITORY,
+      image_repository(environment.dig("ORCH_EXECUTOR_IMAGE", "value")),
+      "launcher ORCH_EXECUTOR_IMAGE repository"
+    )
+
     expected_literals = {
       "ORCH_JOB_NAMESPACE" => "autoresearch-experiments",
-      "ORCH_EXECUTOR_IMAGE" => expected_executor_image,
       # (#604) 값이 없으면 executor가 results_root_unset 경고만 남기고 측정 산출물을
       # Pod와 함께 잃는다. 기존 objectCreator IAM과 executor의
       # if_generation_match=0 precondition이 write-once 경계를 이루므로 새 IAM 없이
