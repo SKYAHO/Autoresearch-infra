@@ -4,10 +4,10 @@
 
 ## 현재 상태
 
-- GCP 프로젝트: `autoresearch-503903`
+- GCP 프로젝트: `autoresearch-505505`
 - dev root module: `terraform/envs/dev`
-- Terraform backend: GCS `autoresearch-503903-dev-tfstate`, prefix `dev/`
-- 최신 apply·검증: 2026-07-29~30 — #404 프로젝트 이전 재구축(autoresearch-503903, dev root 전체 + admin root 7종, vault 드랍 #412/#416). 직전 기준선은 2026-07-23. dev root와 K8s admin root 7개(autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s 순, vault-k8s는 #416에서 제외) 모두 최종 plan `No changes`. vault.tf·vault-k8s root 코드는 #478에서 완전 삭제(state 정리는 별도 승인 대기).
+- Terraform backend: GCS `autoresearch-505505-dev-tfstate`, prefix `dev/`
+- 최신 apply·검증: 2026-07-29~30 — #404 프로젝트 이전 재구축(autoresearch-505505, dev root 전체 + admin root 7종, vault 드랍 #412/#416). 직전 기준선은 2026-07-23. dev root와 K8s admin root 7개(autoresearch-k8s→airflow-k8s→monitoring-k8s→elastic-k8s→mlflow-k8s→argo-rollouts-k8s→argocd-k8s 순, vault-k8s는 #416에서 제외) 모두 최종 plan `No changes`. vault.tf·vault-k8s root 코드는 #478에서 완전 삭제(state 정리는 별도 승인 대기).
   이후 스택(MLflow #91~95, ELK #96~103, Redis #129, Feast 피처 테이블·Vertex #281, Cloud
   SQL tier #273, batch-od 노드풀 #297, Inference Server #302, admin root 승인 게이트 CI
   apply #307/#312 등) apply 이력은 `docs/CHANGE_HISTORY.md`를 기준으로 한다.
@@ -89,7 +89,7 @@ Cloud SQL / GKE 는 `google_compute_subnetwork.dev.self_link`(`output.dev_subnet
 | Format | `DOCKER` | 컨테이너 이미지 |
 | Location | `asia-northeast3` | `var.region`, dev 기본 region |
 | Labels | `default_labels` 상속 | provider `default_labels`에서 일괄 적용 |
-| Image URL | `asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker` | `output.artifact_registry_image_url` |
+| Image URL | `asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker` | `output.artifact_registry_image_url` |
 | IAM | GKE node SA에 reader, Cloud Build와 배포 리포별 pusher SA에 repository 단위 writer | app 이미지 pull 및 Autoresearch/Autoresearch-airflow 이미지 push용 |
 
 배포 workflow는 `output.artifact_registry_repo_id`(repo명)와 `output.artifact_registry_image_url`(이미지 base URL)을 참조한다.
@@ -241,7 +241,7 @@ Redis Cluster/PSC 제거 plan을 따로 검토한다. 실제 삭제와 state 조
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| Bucket | `autoresearch-503903-autoresearch-dev-raw-data` | `${project_id}-${resource_prefix}-raw-data`, 전역 unique 이름 |
+| Bucket | `autoresearch-505505-autoresearch-dev-raw-data` | `${project_id}-${resource_prefix}-raw-data`, 전역 unique 이름 |
 | Location | `asia-northeast3` | `var.raw_data_bucket_location` |
 | Storage class | `STANDARD` | dev 원본 적재/검증용 |
 | Public access | 차단 | `public_access_prevention = "enforced"` |
@@ -370,13 +370,13 @@ terraform init
 
 # 1. 신규 dataset을 state에 편입
 terraform import google_bigquery_dataset.data_lake_raw \
-  projects/autoresearch-503903/datasets/data_lake_raw
+  projects/autoresearch-505505/datasets/data_lake_raw
 
 # 2. 이전된 raw 테이블 2종을 새 주소로 편입
 terraform import google_bigquery_table.data_lake_action_log \
-  projects/autoresearch-503903/datasets/data_lake_raw/tables/data_lake_action_log
+  projects/autoresearch-505505/datasets/data_lake_raw/tables/data_lake_action_log
 terraform import google_bigquery_table.data_lake_youtube_trending_kr \
-  projects/autoresearch-503903/datasets/data_lake_raw/tables/data_lake_youtube_trending_kr
+  projects/autoresearch-505505/datasets/data_lake_raw/tables/data_lake_youtube_trending_kr
 ```
 
 > `terraform import`는 리소스 주소가 이미 state에 있으면 실패한다. 위 2번은
@@ -546,7 +546,7 @@ Environment 값을 쓴다. prod 좌표가 repo-level vars와 `prod` Environment 
 
 한쪽만 고치면 Environment 값이 이겨 **prod apply가 옛 좌표로 조용히 동작한다.**
 #404 프로젝트 이전에서 repo vars의 `GCP_PROJECT_ID`·`GCS_REGISTRY_PATH`·
-`GCS_STAGING_LOCATION`이 `autoresearch-503903`으로 갱신됐던 것이 이 경로에
+`GCS_STAGING_LOCATION`이 `autoresearch-505505`으로 갱신됐던 것이 이 경로에
 해당한다. 앱 워크플로우의 필수 변수 검사는 값이 **비어 있는 경우만** 잡고, 값이
 그럴듯하게 틀린 경우는 잡지 못한다.
 
@@ -986,7 +986,7 @@ GSA 측 `roles/iam.workloadIdentityUser` 바인딩은 이 저장소 Terraform
 scheduler:
   serviceAccount:
     annotations:
-      iam.gke.io/gcp-service-account: autoresearch-dev-airflow@autoresearch-503903.iam.gserviceaccount.com
+      iam.gke.io/gcp-service-account: autoresearch-dev-airflow@autoresearch-505505.iam.gserviceaccount.com
 ```
 
 > `externalTrafficPolicy: Local`에서는 webserver pod가 있는 노드만 LB 헬스체크를
@@ -1040,12 +1040,12 @@ localhost redirect URI 기준(#54)으로만 동작한다. SOCKS 프록시는 내
 | batch Spot 노드풀 | `batch-spot`, n2-standard-2, pd-standard 30GB(#422 — N2 quota pool 격리) | autoscaling min=0/max=8(#330에서 2→8, min=0이라 유휴 비용 불변). taint `workload=batch-spot`. 재시도 내성 있는 KPO용(#173) |
 | batch 비-Spot 노드풀 | `batch-od`, e2-standard-8, pd-standard 100GB(#624) | autoscaling min=0/max=2. taint `workload=batch-od`. 실험 5건의 requests 5 vCPU/10Gi를 한 노드에 수용하며 재시도 내성이 없는 장시간 KPO용(#297). limits 20 vCPU/40Gi는 비용 절충으로 overcommit하며 canary/smoke에서 throttling·MemoryPressure를 확인 |
 | CTR 재학습 노드풀 | `ctr-model-retrain`, n2-highmem-4, pd-standard 30GB | autoscaling min=0/max=2(#316 도입, #330에서 1→2). taint `dedicated=ctr-model-retrain`. 비-Spot(evict 방지). 옛 프로젝트에선 라이브 선적용이었고, 새 프로젝트에선 #404 재구축의 main apply로 신규 생성됨(#331 편입— import 이력 무효) |
-| 노드 SA | `autoresearch-dev-gke-nodes@autoresearch-503903.iam.gserviceaccount.com` | AR reader + logging/metric writer |
-| app SA(WI) | `autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com` | app KSA 전용. Cloud SQL client + DB password secret accessor |
-| app WI principal | `autoresearch-503903.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
-| Airflow batch SA(WI) | `autoresearch-dev-airflow-batch@autoresearch-503903.iam.gserviceaccount.com` | batch KSA 전용. API key secrets, raw_data, Feast 권한 |
-| Airflow batch WI principal | `autoresearch-503903.svc.id.goog[airflow/autoresearch-batch]` | Airflow batch KSA가 batch GSA를 가장 |
-| Airflow scheduler WI principal | `autoresearch-503903.svc.id.goog[airflow/airflow-scheduler]` | #240 스케줄러 파드 내 직접 실행 오퍼레이터용. airflow GSA를 가장. KSA annotation은 Airflow 저장소 Helm values에서 관리 |
+| 노드 SA | `autoresearch-dev-gke-nodes@autoresearch-505505.iam.gserviceaccount.com` | AR reader + logging/metric writer |
+| app SA(WI) | `autoresearch-dev-app@autoresearch-505505.iam.gserviceaccount.com` | app KSA 전용. Cloud SQL client + DB password secret accessor |
+| app WI principal | `autoresearch-505505.svc.id.goog[autoresearch/autoresearch-app]` | Terraform에서 GCP SA IAM binding까지 생성 |
+| Airflow batch SA(WI) | `autoresearch-dev-airflow-batch@autoresearch-505505.iam.gserviceaccount.com` | batch KSA 전용. API key secrets, raw_data, Feast 권한 |
+| Airflow batch WI principal | `autoresearch-505505.svc.id.goog[airflow/autoresearch-batch]` | Airflow batch KSA가 batch GSA를 가장 |
+| Airflow scheduler WI principal | `autoresearch-505505.svc.id.goog[airflow/airflow-scheduler]` | #240 스케줄러 파드 내 직접 실행 오퍼레이터용. airflow GSA를 가장. KSA annotation은 Airflow 저장소 Helm values에서 관리 |
 | Egress | Cloud NAT(`autoresearch-dev-nat`) | private 노드 AR(`*.pkg.dev`) pull |
 | NetworkPolicy enforcement | Calico enabled (#116) | admin root들의 NetworkPolicy 강제. 활성화 apply 시 노드풀 롤링 재생성 |
 | deletion_protection | false (dev) | 운영 전환 시 true |
@@ -1085,11 +1085,11 @@ terraform apply
 
 ```bash
 gcloud auth login
-gcloud config set project autoresearch-503903
+gcloud config set project autoresearch-505505
 # 기본 경로(#45): DNS 엔드포인트 — IP 등록 불필요
 gcloud container clusters get-credentials autoresearch-dev-gke \
   --zone asia-northeast3-a \
-  --project autoresearch-503903 \
+  --project autoresearch-505505 \
   --dns-endpoint
 
 kubectl config current-context
@@ -1106,7 +1106,7 @@ kubectl get ns
   하려면 Kubernetes RBAC가 필요하다. `airflow` namespace 작업 권한은 #32에서 별도로
   구성한다.
 - **잘못된 context**: `kubectl config current-context`가
-  `gke_autoresearch-503903_asia-northeast3-a_autoresearch-dev-gke` 계열인지 확인한다.
+  `gke_autoresearch-505505_asia-northeast3-a_autoresearch-dev-gke` 계열인지 확인한다.
 
 **Off-boarding**: `terraform/admin/gke-team-access/terraform.tfvars`의
 `team_member_emails`에서 이메일을 제거하고 apply하면 GKE·Bastion의 project IAM과
@@ -1135,7 +1135,7 @@ metadata:
   namespace: autoresearch
   name: autoresearch-app
   annotations:
-    iam.gke.io/gcp-service-account: autoresearch-dev-app@autoresearch-503903.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: autoresearch-dev-app@autoresearch-505505.iam.gserviceaccount.com
 ```
 
 ### Airflow dev runtime (#32)
@@ -1188,11 +1188,11 @@ Secret value는 운영자가 별도 주입한다.
 
 ```bash
 gcloud secrets versions add autoresearch-dev-youtube-api-key \
-  --project autoresearch-503903 \
+  --project autoresearch-505505 \
   --data-file=-
 
 gcloud secrets versions add autoresearch-dev-openrouter-api-key \
-  --project autoresearch-503903 \
+  --project autoresearch-505505 \
   --data-file=-
 ```
 
@@ -1206,10 +1206,10 @@ Airflow DAG은 KPO pod에 Kubernetes Secret
 ```powershell
 $YouTubeApiKey = gcloud secrets versions access latest `
   --secret autoresearch-dev-youtube-api-key `
-  --project autoresearch-503903
+  --project autoresearch-505505
 $OpenRouterApiKey = gcloud secrets versions access latest `
   --secret autoresearch-dev-openrouter-api-key `
-  --project autoresearch-503903
+  --project autoresearch-505505
 
 $envFile = New-TemporaryFile
 try {
@@ -1260,14 +1260,14 @@ database**다(`postgresql.enabled=false`, 연결은 operator 주입 Secret
 수동 trigger 전에 입력 파일을 확인한다.
 
 ```bash
-gcloud storage ls gs://autoresearch-503903-autoresearch-dev-raw-data/data_lake/youtube_trending_kr/dt=2026-07-07/part-0.parquet
-gcloud storage ls gs://autoresearch-503903-autoresearch-dev-raw-data/asset/virtual_user/vu_1000.parquet
+gcloud storage ls gs://autoresearch-505505-autoresearch-dev-raw-data/data_lake/youtube_trending_kr/dt=2026-07-07/part-0.parquet
+gcloud storage ls gs://autoresearch-505505-autoresearch-dev-raw-data/asset/virtual_user/vu_1000.parquet
 ```
 
 출력 partition이 이미 있으면 DAG는 overwrite 없이 skip한다.
 
 ```bash
-gcloud storage ls gs://autoresearch-503903-autoresearch-dev-raw-data/data_lake/action_log/dt=2026-07-07/part-0.parquet
+gcloud storage ls gs://autoresearch-505505-autoresearch-dev-raw-data/data_lake/action_log/dt=2026-07-07/part-0.parquet
 ```
 
 입력이 있고 출력이 없으면 Airflow UI 또는 CLI에서
@@ -1283,7 +1283,7 @@ GCS output 생성을 확인한다.
 `bb39385`에서 해당 필드를 DAG parse 시점 `Variable.get(...)` 값으로
 해결하도록 수정했고, git-sync 반영 후 DAG run
 `manual__smoke_2026-07-07T20260707T165929Z`가 성공했다. 출력 파일
-`gs://autoresearch-503903-autoresearch-dev-raw-data/data_lake/action_log/dt=2026-07-07/part-0.parquet`
+`gs://autoresearch-505505-autoresearch-dev-raw-data/data_lake/action_log/dt=2026-07-07/part-0.parquet`
 생성도 확인됐다.
 
 ### Live drift state 반영
@@ -1294,7 +1294,7 @@ resource 추가 후 state import를 수행했다.
 ```bash
 scripts/terraform-env --environment dev --root terraform/envs/dev import \
   google_container_node_pool.airflow \
-  projects/autoresearch-503903/locations/asia-northeast3-a/clusters/autoresearch-dev-gke/nodePools/airflow-dev
+  projects/autoresearch-505505/locations/asia-northeast3-a/clusters/autoresearch-dev-gke/nodePools/airflow-dev
 ```
 
 같은 작업에서 Airflow Workload Identity member와 Cloud Build IAM member도
@@ -1326,7 +1326,7 @@ metadata와 resource-level IAM만 `4 added, 0 changed, 0 destroyed`로
   일시적으로 Pending/Unavailable이 될 수 있으므로 Airflow 등 워크로드가 올라간
   뒤에는 작업 시간을 조율한다.
 - **Cloud Operations**(GKE 기본 On): Logging/Monitoring 비용 발생 가능. 비용 민감 시 클러스터 `logging_service`/`monitoring_service` 비활성화 검토.
-- **State**: dev 루트는 GCS 원격 backend(`autoresearch-503903-dev-tfstate`)를 사용한다. 비밀번호 평문 저장은 Terraform state의 근본 한계 → 버킷 IAM/UBLA 로 보호.
+- **State**: dev 루트는 GCS 원격 backend(`autoresearch-505505-dev-tfstate`)를 사용한다. 비밀번호 평문 저장은 Terraform state의 근본 한계 → 버킷 IAM/UBLA 로 보호.
 - 비밀번호 rotation: `random_password` 재생성(수동 `terraform -replace=random_password.db_app_password` 또는 keepers) → SQL user(`cloud_sql.tf`)와 Secret version(`secret_manager.tf`)에 동일 값 반영. 같은 소스라 parity 유지.
 - 롤백: `terraform destroy`로 dev stack 제거. state는 GCS backend에 남으며, 비용 리소스(Cloud SQL/GKE/NAT) 삭제 여부를 반드시 확인한다.
 
@@ -1430,7 +1430,7 @@ Airflow는 두 Terraform root로 나눈다.
 | Namespace | `airflow` | `var.airflow_k8s_namespace`. GKE 클러스터 내 신규 namespace |
 | KSA | `airflow` | `var.airflow_k8s_service_account`. `iam.gke.io/gcp-service-account` annotation으로 GCP SA 매핑 |
 | GCP SA | `autoresearch-dev-airflow` | `${resource_prefix}-airflow`. WI 전용, JSON 키 미발급 |
-| WI principal | `autoresearch-503903.svc.id.goog[airflow/airflow]` | KSA annotation으로 사용 |
+| WI principal | `autoresearch-505505.svc.id.goog[airflow/airflow]` | KSA annotation으로 사용 |
 | RBAC(Role) | `airflow-components` (namespace-scoped) | pods/configmaps/secrets/services, apps, batch 전 동사. KSA에 바인딩 |
 | 설치자 RBAC | `installer-admin`(for_each) | `terraform/admin/airflow-k8s/terraform.tfvars`의 `installer_user_emails` 팀원에게 namespace 내 `admin` ClusterRole 바인딩. Helm 설치 경로 |
 | 자동 배포 RBAC | `airflow-deployer-admin` | GitHub Actions deployer GSA에만 namespace 내 `admin` ClusterRole 바인딩. cluster-wide 권한 없음 |
@@ -1442,7 +1442,7 @@ Airflow는 두 Terraform root로 나눈다.
 | egress 규칙 주의(#122) | service VIP 트래픽은 selector가 아니라 **services CIDR ipBlock**으로 허용 | 이 클러스터의 Calico는 egress를 DNAT 이전(VIP 기준)에 평가한다 |
 | Cloud SQL DB | `airflow` | 기존 dev 인스턴스 내 신규 database(metadata DB) |
 | Secret Manager | `autoresearch-dev-youtube-api-key`, `autoresearch-dev-openrouter-api-key` | secret payload는 Terraform 밖에서 주입. secret metadata와 Airflow SA/batch SA accessor만 Terraform 관리 |
-| GCS buckets | `autoresearch-503903-autoresearch-dev-airflow-dags`, `...-airflow-logs` | DAG 버전관리 / task log 영속화. `prevent_destroy=true` |
+| GCS buckets | `autoresearch-505505-autoresearch-dev-airflow-dags`, `...-airflow-logs` | DAG 버전관리 / task log 영속화. `prevent_destroy=true` |
 | Airflow SA 접근 권한 | Cloud SQL client, Secret Manager accessor(Airflow API/OAuth secrets), BigQuery jobUser(project), GCS objectAdmin(dags/logs/feast_registry/feast_staging), GCS objectViewer+objectCreator(raw_data), BigQuery dataEditor(feast_offline_store, data_lake_raw) | raw_data는 읽기+새 객체 생성만 허용해 기존 원본 삭제/덮어쓰기를 차단 |
 | Airflow batch SA 접근 권한 | Secret Manager accessor(YouTube/OpenRouter), BigQuery jobUser(project), GCS objectViewer+objectCreator(raw_data), 조건부 GCS objectUser(raw_data, `data_lake/action_log/` prefix 한정 — delete/update 포함, #517), GCS objectAdmin(feast_registry/feast_staging), BigQuery dataEditor(feast_offline_store, data_lake_raw) | app GSA에서 Airflow API key 접근권을 제거하고 batch 실행에 필요한 권한만 분리. `action_log` prefix 안에서는 batch SA가 원자적 게시 staging 정리를 위해 삭제/덮어쓰기도 가능 — 바로 위 Airflow SA(비-batch)는 이 조건부 권한이 없어 원본 삭제/덮어쓰기 차단이 그대로 유지된다 |
 
@@ -1454,7 +1454,7 @@ Airflow는 두 Terraform root로 나눈다.
 # 1) roles/container.viewer가 있는지 확인 (#45: DNS 엔드포인트면 IP 등록 불필요)
 # 2) credentials 획득
 gcloud container clusters get-credentials autoresearch-dev-gke \
-  --zone asia-northeast3-a --project autoresearch-503903 --dns-endpoint
+  --zone asia-northeast3-a --project autoresearch-505505 --dns-endpoint
 # 3) K8s 경계 root 적용(관리자만)
 cd terraform/admin/airflow-k8s
 terraform init
@@ -1481,7 +1481,7 @@ Airflow 저장소의 GitHub Actions variable은 다음 dev output과 고정 인�
 
 | Variable | 값 |
 | --- | --- |
-| `GCP_PROJECT_ID` | `autoresearch-503903` |
+| `GCP_PROJECT_ID` | `autoresearch-505505` |
 | `GKE_CLUSTER` | dev output `gke_cluster_name` |
 | `GKE_LOCATION` | `asia-northeast3-a` |
 | `GKE_DEPLOYER_SA` | dev output `github_actions_airflow_deployer_service_account_email` |
@@ -1518,9 +1518,9 @@ OAuth 동의 화면(External, 팀원 5명 테스트 사용자)과 클라이언�
 ```bash
 # 값이 셸 히스토리에 남지 않도록 stdin으로 입력 (실행 → 값 붙여넣기 → Enter → Ctrl+D)
 gcloud secrets versions add autoresearch-dev-airflow-oauth-client-id \
-  --project autoresearch-503903 --data-file=-
+  --project autoresearch-505505 --data-file=-
 gcloud secrets versions add autoresearch-dev-airflow-oauth-client-secret \
-  --project autoresearch-503903 --data-file=-
+  --project autoresearch-505505 --data-file=-
 ```
 
 Airflow 담당은 이 두 secret을 읽어 FAB `AUTH_OAUTH`(Google provider)를 구성하고
@@ -1539,7 +1539,7 @@ Build API를 enable하지 않고, API 활성화와 기본 bucket 생성 후 필�
 | API | `cloudbuild.googleapis.com` | 수동 활성화 |
 | Build SA | `611398460162-compute@developer.gserviceaccount.com` | Cloud Build에서 사용하는 Compute default SA |
 | Artifact Registry 권한 | `roles/artifactregistry.writer` on `autoresearch-dev-docker` | 이미지 push |
-| Cloud Build bucket 권한 | `roles/storage.objectViewer` on `autoresearch-503903_cloudbuild` | build staging object 조회 |
+| Cloud Build bucket 권한 | `roles/storage.objectViewer` on `autoresearch-505505_cloudbuild` | build staging object 조회 |
 | Logging 권한 | `roles/logging.logWriter` on project | build log 기록 |
 
 ### 사람이 제출하는 빌드용 전용 SA (#269)
@@ -1552,9 +1552,9 @@ MLflow·Feast·batch 이미지처럼 운영자가 `gcloud builds submit`으로 �
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| Build SA | `autoresearch-cloud-build@autoresearch-503903.iam.gserviceaccount.com` | `cloud_build.tf`가 관리 |
+| Build SA | `autoresearch-cloud-build@autoresearch-505505.iam.gserviceaccount.com` | `cloud_build.tf`가 관리 |
 | Artifact Registry 권한 | `roles/artifactregistry.writer` on `autoresearch-dev-docker` | push 대상은 dev 저장소 하나로 제한 |
-| Cloud Build bucket 권한 | `roles/storage.objectViewer` + `roles/storage.legacyBucketReader` on `autoresearch-503903_cloudbuild` | **source 읽기 전용**. 로그는 Cloud Logging으로 보내므로 공유 버킷 쓰기·삭제 권한이 없다. `objectViewer`에는 `storage.buckets.get`이 없어 legacyBucketReader가 함께 필요하다(#204 교훈) |
+| Cloud Build bucket 권한 | `roles/storage.objectViewer` + `roles/storage.legacyBucketReader` on `autoresearch-505505_cloudbuild` | **source 읽기 전용**. 로그는 Cloud Logging으로 보내므로 공유 버킷 쓰기·삭제 권한이 없다. `objectViewer`에는 `storage.buckets.get`이 없어 legacyBucketReader가 함께 필요하다(#204 교훈) |
 | Logging 권한 | `roles/logging.logWriter` on project | build log 기록 |
 | 팀원 권한 | 전용 SA에 대한 `roles/iam.serviceAccountUser` | `gke-team-access`가 관리. SA 키 발급·권한 변경 권한은 아님 |
 
@@ -1574,10 +1574,10 @@ options:
 
 ```bash
 gcloud builds submit \
-  --project=autoresearch-503903 \
-  --service-account=projects/autoresearch-503903/serviceAccounts/autoresearch-cloud-build@autoresearch-503903.iam.gserviceaccount.com \
+  --project=autoresearch-505505 \
+  --service-account=projects/autoresearch-505505/serviceAccounts/autoresearch-cloud-build@autoresearch-505505.iam.gserviceaccount.com \
   --config=cloudbuild.yaml \
-  --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/<image>:<tag> .
+  --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/<image>:<tag> .
 ```
 
 빌드 로그는 Cloud Logging에서 본다(`gcloud beta builds submit`을 쓰면 스트리밍도 된다).
@@ -1636,7 +1636,7 @@ Autoresearch가 main 머지/`workflow_dispatch` 시 코드 tar.gz를 GCS에 올�
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| 버킷 | `autoresearch-503903-code-artifacts`(서울) | UBLA + public access 차단, versioning 없음. output `code_artifacts_bucket_name` |
+| 버킷 | `autoresearch-505505-code-artifacts`(서울) | UBLA + public access 차단, versioning 없음. output `code_artifacts_bucket_name` |
 | 업로더 SA | `autoresearch-dev-code-uploader` | GitHub Actions가 WIF로 가장. output `code_uploader_service_account_email` |
 | WI 가장 허용 | `workflow_ref` = `…/code-archive.yml@refs/heads/main`만 | push(main)·dispatch(main) 모두 이 ref. 임의 브랜치·워크플로우 차단(#175/#221 관례) |
 | 업로더 권한 | 버킷 한정 `roles/storage.objectAdmin` | `latest.txt` 덮어쓰기 필요. 프로젝트 수준 아님 |
@@ -1869,7 +1869,7 @@ root module에 넣으면 "API가 켜져야 생성 가능한 리소스"와 순환
 ```bash
 # required_services output 전체를 한 번에 활성화
 scripts/terraform-env --environment dev --root terraform/envs/dev output -json required_services \
-  | jq -r '.[]' | xargs gcloud services enable --project=autoresearch-503903
+  | jq -r '.[]' | xargs gcloud services enable --project=autoresearch-505505
 ```
 
 > Private Google Access(`enable_private_google_access`, 기본 `true`) 사용 시,
@@ -1893,7 +1893,7 @@ git diff --check
 PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자동으로 `terraform fmt/validate/plan` 을 실행하고 결과를 PR 댓글로 게시한다. 저장소가 공개라 **댓글에는 변경 리소스 주소와 create/update/delete 요약만** 올리고, plan 원문(속성 diff)은 게시하지 않는다(#211). 상세는 Actions 실행 로그에서 확인한다. plan 오류 시에는 오류 원문 대신 Actions 링크와 exit code만 남긴다.
 
 - **인증**: SA key 없이 GitHub OIDC + Workload Identity Federation(WIF). CI SA(`terraform-ci`)는 현재 dev plan에 필요한 `roles/viewer`와 state bucket 접근 권한만 가진다. Secret payload를 읽는 data source는 사용하지 않는다.
-- **state**: GCS 원격 backend(`autoresearch-503903-dev-tfstate`). 부트스트랩 절차는 [docs/TERRAFORM_BOOTSTRAP.md](TERRAFORM_BOOTSTRAP.md) 참조.
+- **state**: GCS 원격 backend(`autoresearch-505505-dev-tfstate`). 부트스트랩 절차는 [docs/TERRAFORM_BOOTSTRAP.md](TERRAFORM_BOOTSTRAP.md) 참조.
 - **제한**: WIF `attribute_condition` 은 허용 리포 목록(`allowed_github_repositories` — 현재 infra + Autoresearch-airflow + Autoresearch, #121/#157) 기반이지만, CI SA(`terraform-ci`) 가장 바인딩은 infra 저장소만 허용한다. workflow job guard로 fork PR이 아닌 내부 브랜치 PR에서만 plan을 실행한다.
 - **apply 자동화는 범위 밖**(별도 이슈). 본 워크플로는 plan 만 게시한다.
 - **drift 감지(#153)**: `.github/workflows/terraform-drift.yml`이 매일 09:23 KST에 dev root `plan -detailed-exitcode`를 실행하고, drift/오류 시 `[DRIFT]` 이슈를 생성(중복 시 코멘트)한다. 공개 이슈에는 리소스 주소·요약만 올리고 plan 원문은 게시하지 않는다(#211). CI SA viewer 권한만 사용 — apply 권한 없음. admin root는 master 접근 불가로 대상 외이며 운영자 로컬 plan으로 확인한다.
@@ -1903,7 +1903,7 @@ PR 이 열리면 GitHub Actions(`.github/workflows/terraform-plan.yml`)가 자�
   - **SA는 계속 분리한다**: dev root apply는 `autoresearch-dev-dev-apply`(projectIamAdmin 포함 role 19종 열거, 프로젝트 최강 자격), admin root apply는 `autoresearch-dev-admin-apply`(`roles/container.admin`+`compute.viewer`+state objectAdmin)를 쓴다. 같은 job 안에서 `google-github-actions/auth@v2`를 두 번 호출해 SA를 전환한다(공식 지원 패턴 — 재인증마다 활성 자격증명을 덮어씀). dev root plan은 읽기 전용 CI SA, admin root plan은 admin-apply SA(cluster read 필요)를 쓴다.
   - **진입점을 하나로 합치며 수용한 트레이드오프**: 이전에는 "최강 자격의 사용 경로를 파일 하나로 고정"(#341)이 파일 경로 단위 WIF 가장 조건(`admin-apply.yml@main`/`dev-apply.yml@main`)으로 성립했다. 진입점이 하나(`apply.yml@main`)가 되면서 이 파일 하나가 두 SA를 모두 가장하게 됐고, 통제는 (1) SA 분리 유지, (2) `apply.yml@main` workflow_ref 제한, (3) `apply` Environment 승인 게이트로 좁혀졌다. **이 게이트는 GCP가 아니라 GitHub의 job 스케줄링이 강제한다**(WIF 조건은 workflow_ref만 검사) — 승인 전 job이 최강 SA를 요청하지 않는다는 보증은 이 파일의 코드 리뷰뿐이다. GCP 측 강제(`assertion.environment` attribute 도입)는 #451 이후 후보로 남아 있다. 또한 승인이 하나로 합쳐져 **plan 요약이 최대 8개 root 분량**으로 온다 — #306 교훈(요약의 in-place가 접근 변경을 숨길 수 있음)이 이전보다 중요해졌으므로 승인 전 해당 리소스가 보이면 반드시 Actions 로그의 상세 diff를 확인한다.
   - **secret 노출은 step 단위로 좁힌다**: admin root 전용 allowlist(#305, 삭제 시 접근 상실이라 폴백 없음) TF_VAR는 admin root를 다루는 step의 `env:`에만 선언한다. dev root apply step(dev-apply SA)의 프로세스 환경에는 이 secret들이 없다(#449 리뷰에서 지적된 "노출면 확대" 우려를 단일 job 구조에서도 같은 원칙으로 유지).
-  - **plan 경로**는 `apply-plans/<root>/<run_id>.tfplan` 단일 prefix로 통일됐다(dev root의 `<root>`는 `dev`). **회수 절차**(승인 전 상세 diff 확인용): `gcloud storage cp gs://autoresearch-503903-dev-tfstate/apply-plans/<root>/<run_id>.tfplan /tmp/p.tfplan` → 해당 root 디렉터리에서 **CI와 같은 버전**(1.13.5)의 terraform으로 `terraform show -no-color /tmp/p.tfplan`(버전이 다르면 plan 파일을 읽지 못한다). **왕복 검증(dispatch → plan 성공 확인 → `gh run cancel`) 후 정리**: 취소 run은 apply job의 cleanup이 돌지 않아 plan 객체가 남는다(dev 1건 + admin 7건, 총 8건). 다음 dispatch 시 `Cleanup stale plans`가 어차피 지우지만, plan 바이너리는 민감 속성값을 포함할 수 있으므로 노출 창을 좁히려면 검증 직후 수동 삭제한다 — 실행 주체는 CI SA가 아니라 **state 버킷 objectAdmin을 가진 운영자 계정**(로컬 `gcloud`)이다. concurrency group이 `apply` 하나뿐이라 이 prefix를 쓰는 동시 run은 없다(#448 불변식 ①이 단일 진입점에서 자동 충족).
+  - **plan 경로**는 `apply-plans/<root>/<run_id>.tfplan` 단일 prefix로 통일됐다(dev root의 `<root>`는 `dev`). **회수 절차**(승인 전 상세 diff 확인용): `gcloud storage cp gs://autoresearch-505505-dev-tfstate/apply-plans/<root>/<run_id>.tfplan /tmp/p.tfplan` → 해당 root 디렉터리에서 **CI와 같은 버전**(1.13.5)의 terraform으로 `terraform show -no-color /tmp/p.tfplan`(버전이 다르면 plan 파일을 읽지 못한다). **왕복 검증(dispatch → plan 성공 확인 → `gh run cancel`) 후 정리**: 취소 run은 apply job의 cleanup이 돌지 않아 plan 객체가 남는다(dev 1건 + admin 7건, 총 8건). 다음 dispatch 시 `Cleanup stale plans`가 어차피 지우지만, plan 바이너리는 민감 속성값을 포함할 수 있으므로 노출 창을 좁히려면 검증 직후 수동 삭제한다 — 실행 주체는 CI SA가 아니라 **state 버킷 objectAdmin을 가진 운영자 계정**(로컬 `gcloud`)이다. concurrency group이 `apply` 하나뿐이라 이 prefix를 쓰는 동시 run은 없다(#448 불변식 ①이 단일 진입점에서 자동 충족).
   - **로컬 tfvars apply는 break-glass로만** 사용한다. `terraform import`가 필요한 변경은 CI가 수행하지 못하므로 로컬 break-glass로 선행한다.
   - **runner는 항상 `ubuntu-latest`(GitHub hosted), 셀프 호스티드로 옮기지 않는다(#541 6단계, 의도적 결정)**: `feast apply`(#541 5단계)는 self-hosted ARC 러너로 옮기지만 이 workflow는 그대로 둔다. 셀프 호스티드 러너는 admin root가 apply하는 그 GKE 클러스터 안의 Pod라, 옮기면 "apply가 자기 자신이 도는 인프라를 바꾸는" 순환 의존과 ARC 장애가 apply 가용성까지 끌고 내려가는 위험이 생긴다. `apply` Environment의 6인 승인 게이트도 hosted runner 격리를 전제로 한다.
 

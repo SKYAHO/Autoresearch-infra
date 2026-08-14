@@ -182,8 +182,12 @@ resource "google_project_iam_member" "admin_apply_container_admin" {
 }
 
 # Terraform state 읽기/쓰기(apply는 state를 갱신하므로 objectAdmin).
+# 이 버킷명은 config/environments/dev/environment.yaml의 state.bucket과 반드시
+# 같아야 한다. 카탈로그는 state.bucket을 backend config로만 공급하고 root의
+# tfvar 허용 목록(scripts/environment_catalog.rb)에는 넣지 않아, 여기만 리터럴로
+# 남아 프로젝트 이전 때 함께 갱신해야 하는 수동 지점이다(변수화는 후속 과제).
 resource "google_storage_bucket_iam_member" "admin_apply_state" {
-  bucket = "autoresearch-503903-dev-tfstate"
+  bucket = "autoresearch-505505-dev-tfstate"
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.admin_apply.email}"
 }

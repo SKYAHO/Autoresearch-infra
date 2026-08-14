@@ -3,7 +3,7 @@
 # 자동 로드하지 않으므로, 여기서 명시하지 않으면 전 run이 "No value for required
 # variable"로 실패한다. 값은 카탈로그와 동일하게 유지한다.
 variables {
-  project_id            = "autoresearch-503903"
+  project_id            = "autoresearch-505505"
   region                = "asia-northeast3"
   zone                  = "asia-northeast3-a"
   gke_cluster_name      = "autoresearch-dev-gke"

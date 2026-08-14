@@ -272,7 +272,7 @@ repository 등록과 SLM policy는 ES 내부 리소스라 운영자 절차로 �
 # 1) repository 등록 + 검증 (verify가 bucket 권한/경로를 end-to-end 확인)
 curl -sk -u "elastic:$PW" -X PUT https://localhost:19200/_snapshot/gcs_snapshots   -H 'Content-Type: application/json' -d '{
   "type": "gcs",
-  "settings": { "bucket": "autoresearch-503903-autoresearch-dev-es-snapshots" }
+  "settings": { "bucket": "autoresearch-505505-autoresearch-dev-es-snapshots" }
 }'
 
 # 2) SLM policy (일 1회 03:30 KST, 7일 보관)

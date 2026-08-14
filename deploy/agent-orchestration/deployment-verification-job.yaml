@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: verify
-          image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:9622da559b3db1c6d6b2b8360c281cb73b3987bdcf951b4599d1590aaf666c41
+          image: asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:9622da559b3db1c6d6b2b8360c281cb73b3987bdcf951b4599d1590aaf666c41
           imagePullPolicy: IfNotPresent
           command:
             - python

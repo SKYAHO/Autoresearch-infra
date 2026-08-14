@@ -15,7 +15,7 @@ MLflow tracking server(실험 Tracking + Model Registry)의 접속·운영·백�
 | 앱 배포 | ArgoCD Application `mlflow`(source `deploy/mlflow`, automated sync #460 — prune 없음) |
 | 이미지 | GAR `autoresearch-mlflow`(앱 `deploy/mlflow/Dockerfile`을 인프라 Cloud Build로 빌드) |
 | backend | Cloud SQL `autoresearch-dev-pg`, DB `mlflow`, user `mlflow`(private IP) |
-| artifact | GCS `autoresearch-503903-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
+| artifact | GCS `autoresearch-505505-autoresearch-mlflow-artifacts`, **proxy 모드**(`--serve-artifacts`) |
 | Service | `mlflow.mlflow:5000`(ClusterIP, **내부 전용**) |
 | UI 인증(#232) | 앞단 **OAuth2-proxy**(`mlflow-oauth-proxy:4180`), Google 로그인 + 허용 이메일 목록. Secret `mlflow-oauth` |
 | 시크릿 | DB 비번=Secret Manager `autoresearch-dev-mlflow-db-password`, pod 주입=K8s Secret `mlflow-db` |
@@ -75,7 +75,7 @@ Secret은 GitOps 관리 대상이 아니므로 이 복구에 ArgoCD manifest rol
 
 ```bash
 gcloud compute ssh autoresearch-dev-bastion \
-  --zone asia-northeast3-a --project autoresearch-503903 --tunnel-through-iap \
+  --zone asia-northeast3-a --project autoresearch-505505 --tunnel-through-iap \
   -- -N -L 4180:mlflow.dev.autoresearch.internal:4180
 # 터널 창은 두고, 브라우저: http://localhost:4180 → sign-in → Google 로그인
 ```
@@ -132,7 +132,7 @@ pod는 DB host(private IP)·비번을 K8s Secret `mlflow-db`에서 받는다. �
 ```bash
 umask 077
 env_file="$(mktemp)"; trap 'rm -f "$env_file"' EXIT
-PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project autoresearch-503903)"
+PW="$(gcloud secrets versions access latest --secret autoresearch-dev-mlflow-db-password --project autoresearch-505505)"
 HOST="$(scripts/terraform-env --environment dev --root terraform/envs/dev output -raw cloud_sql_private_ip_address)"
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_HOST=%s\n' "$PW" "$HOST" > "$env_file"; unset PW
 kubectl create secret generic mlflow-db -n mlflow --from-env-file="$env_file" \

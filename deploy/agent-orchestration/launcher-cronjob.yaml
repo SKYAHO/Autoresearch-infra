@@ -49,7 +49,7 @@ spec:
             # 해당 모듈을 추가하는 애플리케이션 변경이 선행돼야 하며, 그 전까지는
             # API image 참조가 유일하게 동작하는 구성이다.
             - name: bootstrap-db
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:9622da559b3db1c6d6b2b8360c281cb73b3987bdcf951b4599d1590aaf666c41
+              image: asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/autoresearch-agent-orchestration-api@sha256:9622da559b3db1c6d6b2b8360c281cb73b3987bdcf951b4599d1590aaf666c41
               imagePullPolicy: IfNotPresent
               command:
                 - python
@@ -57,7 +57,7 @@ spec:
                 - agent_orchestration.bootstrap_secrets
               env:
                 - name: ORCH_DB_PASSWORD_SECRET_ID
-                  value: projects/autoresearch-503903/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
+                  value: projects/autoresearch-505505/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
                 - name: ORCH_DB_HOST
                   value: 192.168.0.3
                 - name: ORCH_DB_NAME
@@ -86,7 +86,7 @@ spec:
                   drop: ["ALL"]
           containers:
             - name: launcher
-              image: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:c1b6e2e2004a2825272fb976c3462d26831e74b9e635097f11e4307d464ffcb1
+              image: asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher@sha256:c1b6e2e2004a2825272fb976c3462d26831e74b9e635097f11e4307d464ffcb1
               imagePullPolicy: IfNotPresent
               # bootstrap initContainer가 권한 제한 memory volume에 쓴 DB URL만 현재
               # process 환경으로 옮긴다. Secret 원문은 manifest·Kubernetes Secret·로그에
@@ -114,19 +114,19 @@ spec:
                 - name: ORCH_JOB_NAMESPACE
                   value: autoresearch-experiments
                 - name: ORCH_EXECUTOR_IMAGE
-                  value: asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:8c1abc1773d6a6c06613be83d51a48c8cc8012fe39c6fe6e20cc4e9ae33ea6f3
+                  value: asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/autoresearch-agent-orchestration-executor@sha256:8c1abc1773d6a6c06613be83d51a48c8cc8012fe39c6fe6e20cc4e9ae33ea6f3
                 # (#604) Stage 1 측정 산출물은 executor Pod 종료 뒤에도 이 root 아래
                 # experiments/{issue_number}/{experiment_id}/에 남아야 한다. Job GSA의
                 # objectCreator와 executor results_store의 if_generation_match=0
                 # precondition이 기존 객체 교체를 막아 결과를 write-once로 유지한다.
                 - name: ORCH_EXPERIMENT_RESULTS_ROOT
-                  value: gs://autoresearch-503903-autoresearch-dev-experiment-results
+                  value: gs://autoresearch-505505-autoresearch-dev-experiment-results
                 - name: ORCH_EXECUTOR_SERVICE_ACCOUNT
                   value: experiment-job
                 - name: ORCH_EXECUTOR_NODE_POOL
                   value: batch-od
                 - name: ORCH_TRAINING_DATASET_URI
-                  value: gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/
+                  value: gs://autoresearch-505505-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/
                 - name: ORCH_TRAINING_TIMEOUT_SEC
                   value: "1800"
                 - name: ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC

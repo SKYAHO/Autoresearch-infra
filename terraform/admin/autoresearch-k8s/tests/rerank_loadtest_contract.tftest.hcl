@@ -1,7 +1,7 @@
 # Rerank load-test RBAC contract. Keep this separate from the experiment runtime
 # contract so each test file describes one admin root boundary.
 variables {
-  project_id            = "autoresearch-503903"
+  project_id            = "autoresearch-505505"
   region                = "asia-northeast3"
   zone                  = "asia-northeast3-a"
   gke_cluster_name      = "autoresearch-dev-gke"

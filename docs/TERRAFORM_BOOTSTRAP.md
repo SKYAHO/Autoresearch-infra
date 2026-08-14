@@ -8,7 +8,7 @@
 
 - GCP 인증 완료(`gcloud auth application-default login`)
 - `container`/`compute`/`iam`/`cloudresourcemanager` 등 API 활성화(대상 프로젝트에서 필요 — 새 프로젝트는 #404에서 완료, 옛 프로젝트는 #5)
-- 활성 `autoresearch-503903` 프로젝트 접근 권한
+- 활성 `autoresearch-505505` 프로젝트 접근 권한
 
 ## 1. bootstrap apply
 
@@ -20,7 +20,7 @@ terraform -chdir=terraform/bootstrap apply
 변수는 프로젝트별 `terraform/bootstrap/<project-id>.tfvars`(비커밋)에 기록하고 `apply -var-file=<project-id>.tfvars`로 지정한다(`terraform.tfvars`는 모든 workspace에 자동 로드되어 workspace 분리 운용과 충돌). 배포 저장소를 포함한 필수 운영 값:
 
 ```hcl
-project_id = "autoresearch-503903"
+project_id = "autoresearch-505505"
 
 # #121/#157: 배포 GitHub Actions의 WIF 토큰 발급 허용
 allowed_github_repositories = [
@@ -32,7 +32,7 @@ allowed_github_repositories = [
 # state 버킷 이름은 전역 유니크라 프로젝트를 넘나드는 안전한 기본값이 없다.
 # 그래서 default 없는 필수 변수다(#413) — 부트스트랩 대상 프로젝트의 버킷명을
 # 반드시 지정한다. 각 root `versions.tf`의 backend bucket과 같은 값이어야 한다.
-state_bucket_name = "autoresearch-503903-dev-tfstate"
+state_bucket_name = "autoresearch-505505-dev-tfstate"
 ```
 
 `project_id`와 `state_bucket_name`은 default가 없으므로 값을 주지 않으면
@@ -115,12 +115,12 @@ GitHub → Settings → Secrets and variables → Actions → **Variables** 에 
 
 | variable | 값 |
 |---|---|
-| `GCP_PROJECT_ID` | `autoresearch-503903` |
+| `GCP_PROJECT_ID` | `autoresearch-505505` |
 | `WIF_POOL_ID` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github` |
 | `WIF_PROVIDER_ID` | `projects/<N>/locations/global/workloadIdentityPools/autoresearch-github/providers/github` |
-| `CI_SA_EMAIL` | `terraform-ci@autoresearch-503903.iam.gserviceaccount.com` |
+| `CI_SA_EMAIL` | `terraform-ci@autoresearch-505505.iam.gserviceaccount.com` |
 
-`<N>` 은 프로젝트 번호. `gcloud projects describe autoresearch-503903 --format='value(projectNumber)'` 로 확인.
+`<N>` 은 프로젝트 번호. `gcloud projects describe autoresearch-505505 --format='value(projectNumber)'` 로 확인.
 
 ## 4. dev 루트 backend 마이그레이션
 
@@ -128,7 +128,7 @@ GitHub → Settings → Secrets and variables → Actions → **Variables** 에 
 scripts/terraform-env --environment dev --root terraform/envs/dev init -migrate-state
 ```
 
-현재 dev 루트는 GCS backend(`autoresearch-503903-dev-tfstate`, prefix `dev/`)를 사용한다. 새 환경에서 local state로 먼저 apply했다면 이 단계에서 state가 GCS로 이동한다.
+현재 dev 루트는 GCS backend(`autoresearch-505505-dev-tfstate`, prefix `dev/`)를 사용한다. 새 환경에서 local state로 먼저 apply했다면 이 단계에서 state가 GCS로 이동한다.
 
 ## 롤백
 
