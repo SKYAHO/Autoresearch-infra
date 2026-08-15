@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-15T16:28:20Z",
+  "generated_at": "2026-08-15T16:48:27Z",
   "reports": [
+    {
+      "number": 638,
+      "title": "feat: GCP 프로젝트 좌표를 autoresearch-505505로 교체",
+      "author": "hyochangsung",
+      "merged_at": "2026-08-15T16:48:12Z",
+      "summary_ko": [
+        "dev 인프라를 구 GCP 프로젝트(autoresearch-503903)에서 신규 프로젝트(autoresearch-505505)로 이관하기 위해 저장소 내 모든 프로젝트 좌표를 일괄 교체했습니다.",
+        "환경 카탈로그 설정, K8s 배포 매니페스트 10종, CI 검증 스크립트, Admin K8s 테스트, 운영 가이드 문서의 프로젝트 ID 및 GCS State 버킷명을 변경했습니다.",
+        "과거 실행 기록 및 이력 문서 15종은 기록 보존을 위해 이전 좌표를 유지하였으며, 실제 GCP 자원 생성 및 데이터 이관은 후속 작업으로 분리 진행됩니다."
+      ],
+      "report_url": "pr/638/"
+    },
     {
       "number": 634,
       "title": "feat: apply workflow를 main merge 시 plan 자동 실행 + apply만 수동 승인으로 분리",
