@@ -2,14 +2,14 @@
 
 `terraform/envs/dev`는 AutoResearch dev GCP 인프라의 Terraform root module입니다.
 
-현재 dev 스택은 GCS 원격 backend를 사용하며, 2026-07-08 기준 GCP 프로젝트 `autoresearch-503903`에 apply 완료되었습니다.
+현재 dev 스택은 GCS 원격 backend를 사용하며, 2026-07-08 기준 GCP 프로젝트 `autoresearch-505505`에 apply 완료되었습니다.
 
 ## 포함 범위
 
 - Google provider 설정
 - dev 환경 공통 변수
 - 리소스 naming/label 공통값
-- GCS backend(`autoresearch-503903-dev-tfstate`, prefix `dev/`)
+- GCS backend(`autoresearch-505505-dev-tfstate`, prefix `dev/`)
 - dev VPC/subnet, Cloud Router/NAT, IAP SSH firewall
 - Artifact Registry Docker repository
 - Cloud SQL PostgreSQL(private IP only), DB/user, DB password Secret Manager 저장
@@ -103,7 +103,7 @@ BigQuery job/read session, Feast registry/staging bucket 권한은 기존에 있
 
 | 대상 | Role | 범위 | 용도 |
 |---|---|---|---|
-| `autoresearch-503903-code-artifacts` bucket | `roles/storage.objectViewer` | 버킷 단위 (`code_artifacts.tf`) | Feast 이미지 entrypoint가 `code/latest.txt`, `code/<sha>.tar.gz` 다운로드 |
+| `autoresearch-505505-code-artifacts` bucket | `roles/storage.objectViewer` | 버킷 단위 (`code_artifacts.tf`) | Feast 이미지 entrypoint가 `code/latest.txt`, `code/<sha>.tar.gz` 다운로드 |
 | project (condition 제한) | `roles/redis.dbConnectionUser` | `projects/<project>/locations/asia-northeast3/clusters/autoresearch-dev-redis-cluster` 한정 (`redis.tf`) | Redis Cluster IAM 인증 토큰 발급 |
 | `autoresearch-dev-redis-server-ca` secret | `roles/secretmanager.secretAccessor` | secret 단위 (`secret_manager.tf`) | TLS(`SERVER_AUTHENTICATION`) 검증용 CA 조회 |
 

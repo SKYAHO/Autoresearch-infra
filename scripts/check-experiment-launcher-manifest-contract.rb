@@ -207,14 +207,14 @@ module ExperimentLauncherManifestContract
   # check_image_digest_consistency!가 이미 cross-file로 검사하므로, 여기서는
   # "이 container/env가 올바른 이미지 계열을 가리키는가"만 확인하면 충분하다.
   LAUNCHER_IMAGE_REPOSITORY =
-    "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher"
+    "asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/autoresearch-agent-orchestration-launcher"
   EXECUTOR_IMAGE_REPOSITORY =
-    "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-executor"
+    "asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/autoresearch-agent-orchestration-executor"
   # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
   # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소 최상위
   # 모듈인데 launcher.Dockerfile이 이를 COPY하지 않아 launcher image에 없다.
   API_IMAGE_REPOSITORY =
-    "asia-northeast3-docker.pkg.dev/autoresearch-503903/autoresearch-dev-docker/autoresearch-agent-orchestration-api"
+    "asia-northeast3-docker.pkg.dev/autoresearch-505505/autoresearch-dev-docker/autoresearch-agent-orchestration-api"
 
   def image_repository(image)
     image.to_s.split("@", 2).first
@@ -269,11 +269,11 @@ module ExperimentLauncherManifestContract
       # if_generation_match=0 precondition이 write-once 경계를 이루므로 새 IAM 없이
       # 이 root만 launcher가 executor Job에 전달한다.
       "ORCH_EXPERIMENT_RESULTS_ROOT" =>
-        "gs://autoresearch-503903-autoresearch-dev-experiment-results",
+        "gs://autoresearch-505505-autoresearch-dev-experiment-results",
       "ORCH_EXECUTOR_SERVICE_ACCOUNT" => "experiment-job",
       "ORCH_EXECUTOR_NODE_POOL" => "batch-od",
       "ORCH_TRAINING_DATASET_URI" =>
-        "gs://autoresearch-503903-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
+        "gs://autoresearch-505505-autoresearch-dev-experiment-results/training-snapshots/by-hash/d3d273e66324042cd8e547068c194231cf1812d53cb68236edba56b067055293/",
       "ORCH_TRAINING_TIMEOUT_SEC" => "1800",
       "ORCH_TRAINING_DOWNLOAD_TIMEOUT_SEC" => "600",
       "ORCH_UV_SYNC_TIMEOUT_SEC" => "900",

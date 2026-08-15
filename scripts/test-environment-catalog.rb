@@ -60,7 +60,7 @@ VALID_CATALOG = <<~YAML.freeze
   schema_version: 1
   environment: dev
   gcp:
-    project_id: autoresearch-503903
+    project_id: autoresearch-505505
     region: asia-northeast3
     zone: asia-northeast3-a
     name_prefix: autoresearch
@@ -75,7 +75,7 @@ VALID_CATALOG = <<~YAML.freeze
     private_services_cidr: 192.168.0.0/20
     redis_psc_subnet_cidr: 10.10.16.0/29
   state:
-    bucket: autoresearch-503903-dev-tfstate
+    bucket: autoresearch-505505-dev-tfstate
     roots:
       terraform/envs/dev: dev/
       terraform/admin/actions-runner-k8s: admin/actions-runner-k8s/
@@ -95,7 +95,7 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
   catalog.validate!
 
   variables = catalog.terraform_variables("terraform/envs/dev")
-  assert(variables.fetch("project_id") == "autoresearch-503903", "project_id를 Terraform 입력으로 내보내야 합니다")
+  assert(variables.fetch("project_id") == "autoresearch-505505", "project_id를 Terraform 입력으로 내보내야 합니다")
   assert(variables.fetch("region") == "asia-northeast3", "region을 Terraform 입력으로 내보내야 합니다")
   assert(variables.fetch("zone") == "asia-northeast3-a", "zone을 Terraform 입력으로 내보내야 합니다")
 
@@ -115,7 +115,7 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
 
   missing_project_path = write_catalog(
     directory,
-    VALID_CATALOG.sub(/^ *project_id: autoresearch-503903\n/, "")
+    VALID_CATALOG.sub(/^ *project_id: autoresearch-505505\n/, "")
   )
   assert_catalog_error("project_id 누락을 허용하면 안 됩니다") do
     EnvironmentCatalog.load(missing_project_path).validate!
@@ -145,7 +145,7 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
     "--catalog", valid_path, "--field", "gcp.project_id"
   ])
   assert(status.success?, "카탈로그 필드 조회가 실패했습니다: #{stderr}")
-  assert(stdout == "autoresearch-503903\n", "카탈로그 project_id 조회값이 다릅니다")
+  assert(stdout == "autoresearch-505505\n", "카탈로그 project_id 조회값이 다릅니다")
 
   _stdout, stderr, status = run_catalog_cli([
     "--catalog", valid_path, "--field", "gcp.unknown"
@@ -166,8 +166,8 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
     variables = JSON.parse(File.read(generated.fetch(:var_file)))
     backend = File.read(generated.fetch(:backend_file))
 
-    assert(variables.fetch("project_id") == "autoresearch-503903", "생성 var-file의 project_id가 다릅니다")
-    assert(backend.include?("bucket = \"autoresearch-503903-dev-tfstate\""), "생성 backend의 bucket이 다릅니다")
+    assert(variables.fetch("project_id") == "autoresearch-505505", "생성 var-file의 project_id가 다릅니다")
+    assert(backend.include?("bucket = \"autoresearch-505505-dev-tfstate\""), "생성 backend의 bucket이 다릅니다")
     assert(backend.include?("prefix = \"dev/\""), "생성 backend의 prefix가 다릅니다")
   end
 
@@ -208,7 +208,7 @@ Dir.mktmpdir("environment-catalog-test-") do |directory|
   EnvironmentCatalog::BACKEND_ROOTS.each do |backend_root|
     config = catalog.backend_config(backend_root)
     assert(
-      config.fetch("bucket") == "autoresearch-503903-dev-tfstate",
+      config.fetch("bucket") == "autoresearch-505505-dev-tfstate",
       "#{backend_root}의 backend bucket이 카탈로그와 다릅니다"
     )
     prefix = config.fetch("prefix")

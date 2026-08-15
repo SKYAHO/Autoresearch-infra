@@ -152,7 +152,7 @@ branch_ruleset_main.json     # main branch ruleset 정의
   Artifact Registry, Cloud SQL(PostgreSQL 15, private IP), GKE,
   Secret Manager, GCS, BigQuery, Cloud Run(내부 proxy),
   Cloud DNS(private zone `dev.autoresearch.internal`), bastion host(IAP 전용)
-- **State:** GCS remote backend(`autoresearch-503903-dev-tfstate`)
+- **State:** GCS remote backend(`autoresearch-505505-dev-tfstate`)
 - **CI:** GitHub Actions — `lint`(actionlint, required check),
   Terraform plan(OIDC/WIF, PR 댓글 게시), Claude Code PR Review
 - **정책:** GCP API는 수동 활성화 (`google_project_service` 미사용),

@@ -2,7 +2,7 @@ schema_version: 1
 environment: dev
 
 gcp:
-  project_id: autoresearch-503903
+  project_id: autoresearch-505505
   region: asia-northeast3
   zone: asia-northeast3-a
   name_prefix: autoresearch
@@ -20,7 +20,7 @@ network:
   redis_psc_subnet_cidr: 10.10.16.0/29
 
 state:
-  bucket: autoresearch-503903-dev-tfstate
+  bucket: autoresearch-505505-dev-tfstate
   roots:
     terraform/envs/dev: dev/
     terraform/admin/actions-runner-k8s: admin/actions-runner-k8s/

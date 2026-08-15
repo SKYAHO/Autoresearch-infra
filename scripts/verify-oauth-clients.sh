@@ -4,11 +4,11 @@
 # 프리픽스), SM 정본이 있는 4종은 K8s ↔ SM 해시 일치까지 값 비노출로 검증한다.
 #
 # 사용: scripts/verify-oauth-clients.sh [k8s-context] [project-id]
-#   기본 context=현재 kubectl context, project=autoresearch-503903
+#   기본 context=현재 kubectl context, project=autoresearch-505505
 set -eu
 
 CTX="${1:-$(kubectl config current-context)}"
-PROJECT="${2:-autoresearch-503903}"
+PROJECT="${2:-autoresearch-505505}"
 EXPECT_NUM="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 FAIL=0
 WARN=0

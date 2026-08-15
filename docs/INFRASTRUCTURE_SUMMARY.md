@@ -50,7 +50,7 @@
 
 | 항목 | 값 |
 |---|---|
-| GCP project | `autoresearch-503903` |
+| GCP project | `autoresearch-505505` |
 | 기본 region / zone | `asia-northeast3` / `asia-northeast3-a` |
 | Terraform dev root | `terraform/envs/dev` |
 | Bootstrap root | `terraform/bootstrap` |
@@ -71,7 +71,7 @@ flowchart TB
     apprepo["이미지 배포 Actions<br/>Autoresearch / Autoresearch-airflow"]
     oauth["Google OAuth<br/>redirect: localhost:8080"]
 
-    subgraph gcp["GCP project<br/>autoresearch-503903"]
+    subgraph gcp["GCP project<br/>autoresearch-505505"]
         iap["IAP TCP forwarding"]
         wif["GitHub OIDC / WIF"]
         state["GCS Terraform state"]
@@ -155,12 +155,12 @@ flowchart TB
 
 | 용어 | 뜻 | 이 인프라에서의 의미 |
 |---|---|---|
-| Project | GCP 리소스를 담는 최상위 논리 공간 | `autoresearch-503903` 하나에 dev 인프라를 구성 |
+| Project | GCP 리소스를 담는 최상위 논리 공간 | `autoresearch-505505` 하나에 dev 인프라를 구성 |
 | Region | GCP 리소스가 위치하는 지리적 권역 | `asia-northeast3` 서울 region |
 | Zone | Region 안의 더 작은 가용 영역 | `asia-northeast3-a`에 zonal GKE와 Bastion 배치 |
 | Terraform root | Terraform을 실행하는 기준 디렉터리 | `terraform/envs/dev`, `terraform/bootstrap`, `terraform/admin/*` |
 | State | Terraform이 "내가 관리 중"이라고 기억하는 리소스 목록 | GCS backend bucket에 저장 |
-| Backend | Terraform state 저장 위치 설정 | `autoresearch-503903-dev-tfstate` GCS bucket 사용 |
+| Backend | Terraform state 저장 위치 설정 | `autoresearch-505505-dev-tfstate` GCS bucket 사용 |
 | CIDR | IP 주소 범위를 표현하는 표기법 | `10.10.0.0/20`처럼 subnet 대역을 표현 |
 | VPC | 클라우드 안의 사설 네트워크 | dev 리소스가 서로 통신하는 네트워크 경계 |
 | Subnet | VPC 안에서 IP 대역을 나눈 구간 | `10.10.0.0/20` dev subnet |
@@ -212,7 +212,7 @@ flowchart TB
     checks["GitHub Actions<br/>lint / review"]
     ci["GitHub Actions<br/>terraform plan / approved apply"]
     wif["Workload Identity Federation<br/>terraform-ci / dev-apply / admin-apply"]
-    gcp["GCP project<br/>autoresearch-503903"]
+    gcp["GCP project<br/>autoresearch-505505"]
 
     vpc["VPC<br/>autoresearch-dev-vpc"]
     subnet["Subnet<br/>10.10.0.0/20"]
@@ -318,7 +318,7 @@ flowchart LR
     oidc["GitHub OIDC token"]
     wif["GCP WIF provider"]
     cisa["terraform-ci service account"]
-    state["GCS backend<br/>autoresearch-503903-dev-tfstate/dev"]
+    state["GCS backend<br/>autoresearch-505505-dev-tfstate/dev"]
     plan["Terraform plan<br/>terraform/envs/dev"]
 
     dev --> actions --> oidc --> wif --> cisa
@@ -522,7 +522,7 @@ flowchart LR
 
 | 설정 | 값 | 설명 |
 |---|---|---|
-| Raw data bucket | `autoresearch-503903-autoresearch-dev-raw-data` | YouTube, action log, virtual user, persona 원본을 prefix로 나누어 저장한다. |
+| Raw data bucket | `autoresearch-505505-autoresearch-dev-raw-data` | YouTube, action log, virtual user, persona 원본을 prefix로 나누어 저장한다. |
 | Raw bucket versioning | enabled | 원본 데이터 실수 삭제/덮어쓰기 대응을 위해 versioning을 켰다. |
 | Feast prod registry/staging | `gs://<project>-feast-registry/registry.db`, `gs://<project>-feast-staging/` | 기존 prod 객체·주소를 유지한다. |
 | Feast dev registry/staging | `gs://<project>-feast-registry-dev/registry.db`, `gs://<project>-feast-staging-dev/` | bucket-level IAM에서 prod와 분리하며 ARC dev runner가 사용한다(#424/#541). |
