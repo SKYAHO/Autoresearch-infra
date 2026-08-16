@@ -56,7 +56,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
-        # agent_orchestration/bootstrap_secrets.py는 애플리케이션 저장소 최상위
+        # applications/experiment_platform/shared/bootstrap_secrets.py는 애플리케이션 저장소 최상위
         # 모듈인데 launcher.Dockerfile이 COPY하지 않아 launcher image에 없다.
         # launcher image로 실행하면 ModuleNotFoundError로 죽는다.
         # launcher-cronjob.yaml·api-migration-job.yaml과 같은 패턴이다.
@@ -66,7 +66,7 @@ spec:
           command:
             - python
             - -m
-            - agent_orchestration.bootstrap_secrets
+            - applications.experiment_platform.shared.bootstrap_secrets
           env:
             - name: ORCH_DB_PASSWORD_SECRET_ID
               value: projects/autoresearch-505505/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
@@ -120,7 +120,7 @@ spec:
               os.environ["ORCH_DATABASE_URL"] = entries[0]
               os.execvp(
                   "python",
-                  ["python", "-m", "agent_orchestration.launcher.log_collector"],
+                  ["python", "-m", "applications.experiment_platform.launcher.log_collector"],
               )
           env:
             # 수집 대상 Job이 사는 namespace다. launcher가 Job을 만드는 곳
