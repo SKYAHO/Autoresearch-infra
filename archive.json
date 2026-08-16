@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-16T09:16:00Z",
+  "generated_at": "2026-08-16T09:17:01Z",
   "reports": [
+    {
+      "number": 642,
+      "title": "fix: agent-orchestration 매니페스트의 모듈 경로를 이미지 구조에 맞춘다",
+      "author": "hyochangsung",
+      "merged_at": "2026-08-16T09:15:47Z",
+      "summary_ko": [
+        "애플리케이션 저장소 패키지 변경에 맞춰 agent-orchestration Kubernetes 매니페스트의 파이썬 모듈 경로를 수정하였습니다.",
+        "컨테이너 실행 시 발생하던 ModuleNotFoundError 오류를 해결하여 DB 초기화 및 서비스 파드가 정상 기동되도록 조치하였습니다.",
+        "ArgoCD 배포 상태 오류(OutOfSync)를 해소하고 클러스터 동기화가 정상 수행되도록 설정하였습니다."
+      ],
+      "report_url": "pr/642/"
+    },
     {
       "number": 640,
       "title": "chore: ARC PoC 러너 스케일셋 제거",
