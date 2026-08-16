@@ -46,7 +46,7 @@ spec:
           command:
             - python
             - -m
-            - agent_orchestration.bootstrap_secrets
+            - applications.experiment_platform.shared.bootstrap_secrets
           env:
             - name: ORCH_DB_PASSWORD_SECRET_ID
               value: projects/autoresearch-505505/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
@@ -90,7 +90,7 @@ spec:
               os.environ["ORCH_DATABASE_URL"] = entries[0]
               os.execvp(
                   "alembic",
-                  ["alembic", "-c", "agent_orchestration/alembic.ini", "upgrade", "head"],
+                  ["alembic", "-c", "applications/experiment_platform/alembic.ini", "upgrade", "head"],
               )
           env:
             - name: ORCH_RUNTIME_DIR

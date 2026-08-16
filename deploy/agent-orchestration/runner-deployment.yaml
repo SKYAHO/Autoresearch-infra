@@ -59,7 +59,7 @@ spec:
           command:
             - python
             - -m
-            - agent_orchestration.bootstrap_secrets
+            - applications.experiment_platform.shared.bootstrap_secrets
             - runner-codex-auth
           env:
             - name: ORCH_CODEX_AUTH_SECRET_ID

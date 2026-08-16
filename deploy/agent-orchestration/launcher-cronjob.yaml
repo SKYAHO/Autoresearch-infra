@@ -37,7 +37,7 @@ spec:
               type: RuntimeDefault
           initContainers:
             # DB bootstrap은 launcher image가 아니라 API image로 실행한다.
-            # `agent_orchestration/bootstrap_secrets.py`는 애플리케이션 저장소
+            # `applications/experiment_platform/shared/bootstrap_secrets.py`는 애플리케이션 저장소
             # 최상위 모듈인데 `launcher.Dockerfile`은 `__init__.py`, `launcher/`,
             # `app/`, `github_app.py`, `github_refs.py`만 COPY하므로 launcher
             # image에 들어 있지 않다. launcher image로 실행하면 initContainer가
@@ -54,7 +54,7 @@ spec:
               command:
                 - python
                 - -m
-                - agent_orchestration.bootstrap_secrets
+                - applications.experiment_platform.shared.bootstrap_secrets
               env:
                 - name: ORCH_DB_PASSWORD_SECRET_ID
                   value: projects/autoresearch-505505/secrets/autoresearch-dev-agent-orchestration-db-password/versions/latest
@@ -108,7 +108,7 @@ spec:
                   os.environ["ORCH_DATABASE_URL"] = entries[0]
                   os.execvp(
                       "python",
-                      ["python", "-m", "agent_orchestration.launcher.main"],
+                      ["python", "-m", "applications.experiment_platform.launcher.main"],
                   )
               env:
                 - name: ORCH_JOB_NAMESPACE
