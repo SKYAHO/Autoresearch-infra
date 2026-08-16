@@ -1,7 +1,9 @@
-# #316 CTR 재학습 전용 격리 노드풀. 라이브에는 #317 브랜치에서 이미 apply돼
-# 있으므로, main 기준 첫 apply 전에 반드시 import 한다(리소스 재생성 방지):
-#   terraform import google_container_node_pool.ctr_model_retrain \
-#     projects/ar-infra-501607/locations/asia-northeast3-a/clusters/autoresearch-dev-gke/nodePools/ctr-model-retrain
+# #316 CTR 재학습 전용 격리 노드풀.
+# 과거 기록: #317 브랜치에서 라이브에 먼저 apply돼 있어 `ar-infra-501607` 시절
+# main 기준 첫 apply 전에 `terraform import`가 필요했다. 그 import는 완료됐고
+# 이후 두 번의 프로젝트 이전(→ autoresearch-503903 → autoresearch-505505)은
+# 전량 재생성으로 진행돼 이 노드풀도 코드에서 새로 만들어졌으므로, 지금은
+# import 선행이 필요 없다(#637).
 # max는 #330에서 1→2로 상향(변수화): min 0 유지라 유휴 비용 불변, 병렬 재학습/HPO 대비.
 resource "google_container_node_pool" "ctr_model_retrain" {
   name       = "ctr-model-retrain"

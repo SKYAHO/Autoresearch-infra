@@ -3,6 +3,58 @@
 완료된 설계 spec과 구현 plan의 핵심 결정만 보존한다. 현재 운영 절차는
 `TEAM_OPERATIONS_RUNBOOK.md`와 `TERRAFORM_DEV.md`를 우선한다.
 
+## 2026-08-14~16: GCP 프로젝트 이전 `autoresearch-503903` → `autoresearch-505505` (#637)
+
+- dev 스택 전체를 새 조직(`496492339145`) 하위의 새 프로젝트
+  `autoresearch-505505`(project number `5787490889`, 신규 결제 계정)로 이전했다.
+  1차 이전(#404)과 같은 "IaC 전량 재적용 + 데이터 복사" 전략이고, 절차 정본은
+  `MIGRATION_RUNBOOK.md`다. 이번 실측은 같은 문서의
+  **2차 이전 실측** 절에 반영했다.
+- **코드 교체 범위가 1차보다 훨씬 작았다.** #492의 좌표 카탈로그
+  (`config/environments/dev/environment.yaml`)가 backend·tfvar를 함께 공급해,
+  카탈로그 1파일 + `github_actions.tf`의 리터럴 1곳만 바꾸면 됐다(PR #638).
+  1차에서 root마다 `versions.tf`를 치환하던 단계는 사라졌다.
+- **좌표 가드가 runbook의 순서를 뒤집었다.** `terraform-plan.yml`이
+  `vars.GCP_PROJECT_ID`와 카탈로그 `project_id`의 일치를 fail-closed로 검사하므로,
+  카탈로그를 바꾸는 PR은 **repo variables를 머지 전에** 교체해야 plan이 통과한다.
+  #404 기준의 "머지 직후 교체"는 이 가드 이전 기준이라 runbook 본문을 정정했다.
+- **E2 quota를 두 번 잘못 읽었다.** `gcloud compute regions describe`의 `E2_CPUS`
+  usage가 0으로 보고돼 "강제되지 않는 잔존 지표"로 판단했으나, limit은 그대로
+  강제되고 있었다(한도 8 / 실사용 8.25). E2 자리를 만들려고 ARC PoC 러너 스케일셋을
+  제거했다(#639 → PR #640). 증설 신청 7건은 접수 후에도 승인되지 않아, quota 승인을
+  일정의 선행 조건으로 잡지 않는 것을 원칙으로 남겼다.
+- **데이터 이전 범위 결정이 이번 이전 최대의 오판이었다.** GCS 전량 + Cloud SQL
+  `mlflow`만 복사하고 BQ·Feast offline은 "Airflow 재실행으로 재생성"하기로 했는데,
+  `lake_to_bigquery_incremental`은 파티션 1개씩 적재하고 `catchup=False`라 자연
+  실행이 히스토리를 만들지 않는다. 결과적으로 신규 프로젝트 BQ가 전 테이블 0행으로
+  남았다(구 프로젝트에는 665개 파티션·행 500만 건이 있었다). **복사 제외의 근거는
+  "재생성 가능"이 아니라 "백필 경로가 실재하고 실행 비용이 감당 가능"이어야 한다**는
+  규칙을 runbook Phase 4~5와 Phase 6 삭제 게이트에 넣었다.
+- **Secret Manager payload는 Terraform 밖**이라 신규 프로젝트에서는 컨테이너만 생기고
+  version이 0개다. 그래서 평소의 SM→k8s 주입 방향이 성립하지 않아 **k8s→SM 역주입**으로
+  정본을 채웠고, k8s 쪽은 통째 재생성 대신 `kubectl patch --type merge`로 해당 키만
+  교체했다(통째 재생성 시 클러스터에만 있던 `OPENROUTER_API_KEY`·`YOUTUBE_PROXY_URL`이
+  소실된다).
+- cutover는 2026-08-15(infra#638·airflow#331 머지, ArgoCD 8앱 Synced, serving이 MLflow
+  champion v28을 로드해 healthcheck 200 — MLflow DB+artifacts 이관이 end-to-end로
+  검증됨), 전수 검증은 08-16이다. 인프라 이전 자체는 완결(state 10개,
+  `autoresearch-k8s` 55개, GCS 11버킷, Secret 21개, DAG import 오류 0, 코드·IAM의 옛
+  프로젝트 참조 0건).
+- **드러난 결함 2건은 이전이 아니라 앱 저장소 변경이 원인이고, 구 프로젝트에서도 이미
+  같은 방식으로 깨져 있었다** — ArgoCD `agent-orchestration`이 app#757의 모듈 이동
+  이후에도 옛 경로를 호출하던 것(#641 → PR #642), `youtube_gcs_action_log_pipeline`이
+  `CODE_ARTIFACTS_BUCKET`을 넘기지 않던 것(airflow#332 → airflow PR #333). 둘 다
+  2026-08-16에 머지하고 실동작으로 검증했다 — ArgoCD 앱이 `Synced/Healthy`로 전환돼
+  api·ui·runner·log-collector·pull-request-opener 5개 Deployment와 launcher CronJob이
+  기동했고, 직전까지 exit 2로 실패하던 `collect_youtube_trending_partition`이 success로
+  통과했다. 재구축은 기존 환경의 상태·데이터가 가려 주던 결함이 드러나는 계기라는 것을
+  runbook Phase 6에 명문화했다.
+- **BQ·Feast offline 데이터는 뒤늦게 `bq cp`로 확보했다**(2026-08-16). 행이 있는 7개
+  테이블(합계 약 1,050만 행)을 cross-project 복사했고 행 수·schema·파티셔닝·clustering·
+  label이 전부 일치했다. 결제를 분리한 구 프로젝트라도 job을 신규 프로젝트에 청구하면
+  BQ는 읽힌다 — 단 Cloud SQL은 인스턴스가 `SUSPENDED`로 내려가 같은 방법이 통하지 않는다.
+  **저장소별로 "결제 분리 후에도 읽히는가"가 다르다**는 것이 이 이전의 실측 교훈이다.
+
 ## 2026-08-12: manifest contract의 이미지 계약을 digest에서 repository로 낮춘다 (#635)
 
 - `scripts/check-experiment-launcher-manifest-contract.rb`와
