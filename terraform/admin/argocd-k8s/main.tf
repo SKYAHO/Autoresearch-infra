@@ -254,7 +254,8 @@ resource "kubernetes_manifest" "appproject_autoresearch_dev" {
         },
         {
           # #533 러너 namespace는 terraform/admin/actions-runner-k8s가 소유(ns/KSA/NP).
-          # ArgoCD는 deploy/actions-runner-controller, deploy/actions-runner-scale-set만
+          # ArgoCD는 deploy/actions-runner-controller,
+          # deploy/actions-runner-scale-set-feast-{dev,prod}만
           # 이 namespace에 배포한다.
           server    = "https://kubernetes.default.svc"
           namespace = var.actions_runner_namespace
@@ -588,62 +589,6 @@ resource "kubernetes_manifest" "application_actions_runner_controller" {
   }
 
   depends_on = [helm_release.argo_cd]
-}
-
-# #533 ARC 스케일셋 Application — infra repo의 deploy/actions-runner-scale-set
-# umbrella chart(gha-runner-scale-set)를 배포한다. 스케일셋 chart는 컨트롤러가
-# 설치하는 CRD(AutoscalingRunnerSet 등)를 전제하므로, 컨트롤러 Application을
-# depends_on으로 앞세운다. 이는 Terraform이 두 Application 객체의 생성 순서만
-# 보장할 뿐 ArgoCD sync 완료까지 기다리지 않으므로(이 root 어디도 wait_for를
-# 쓰지 않는 것과 동일 한계), 실제 CRD 설치 완료 확인은 Task 7 런/PR 검증에서
-# ArgoCD UI로 컨트롤러 Application이 Synced/Healthy인지 사람이 확인한다.
-resource "kubernetes_manifest" "application_actions_runner_scale_set" {
-  manifest = {
-    apiVersion = "argoproj.io/v1alpha1"
-    kind       = "Application"
-    metadata = {
-      name      = "actions-runner-scale-set"
-      namespace = kubernetes_namespace_v1.argocd.metadata[0].name
-    }
-    spec = {
-      project = kubernetes_manifest.appproject_autoresearch_dev.manifest.metadata.name
-      source = {
-        repoURL        = var.infra_repo_url
-        path           = "deploy/actions-runner-scale-set"
-        targetRevision = var.actions_runner_scale_set_target_revision
-        helm = {
-          releaseName = "actions-runner-scale-set"
-        }
-      }
-      destination = {
-        server    = "https://kubernetes.default.svc"
-        namespace = var.actions_runner_namespace
-      }
-      syncPolicy = {
-        automated = {
-          prune    = false
-          selfHeal = false
-        }
-        retry = {
-          limit = 3
-          backoff = {
-            duration    = "30s"
-            factor      = 2
-            maxDuration = "5m"
-          }
-        }
-        syncOptions = [
-          "ServerSideApply=true",
-          "CreateNamespace=false",
-        ]
-      }
-    }
-  }
-
-  depends_on = [
-    helm_release.argo_cd,
-    kubernetes_manifest.application_actions_runner_controller,
-  ]
 }
 
 # #541 5단계: feast apply 전용 러너 스케일셋 2개. PoC와 같은 컨트롤러를

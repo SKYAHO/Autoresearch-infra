@@ -1,7 +1,7 @@
 # 셀프 호스티드 러너(ARC)의 Kubernetes 경계는 GKE API 직접 접근이 필요해
 # terraform/envs/dev와 분리한다(별도 state). #533 설계.
 # ARC 컨트롤러/러너 chart 자체는 ArgoCD(deploy/actions-runner-controller,
-# deploy/actions-runner-scale-set)가 배포하고, 이 root는 namespace/KSA/
+# deploy/actions-runner-scale-set-feast-{dev,prod})가 배포하고, 이 root는 namespace/KSA/
 # NetworkPolicy/quota(플랫폼 경계)만 소유한다.
 #
 # 이 namespace는 ARC가 관리하는 임시 러너 Pod 템플릿을 이 root가 직접

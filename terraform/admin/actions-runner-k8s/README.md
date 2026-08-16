@@ -17,7 +17,7 @@ GitHub Actions 셀프 호스티드 러너(ARC, Actions Runner Controller)의 Kub
   예외(사내 사설 대역 except))
 
 chart(ARC 컨트롤러/러너)는 이 root가 아니라 **ArgoCD Application**
-(`deploy/actions-runner-controller`, `deploy/actions-runner-scale-set`)이
+(`deploy/actions-runner-controller`, `deploy/actions-runner-scale-set-feast-{dev,prod}`)이
 배포한다. 이 root는 플랫폼 경계만 소유한다("Terraform=경로, ArgoCD=앱").
 
 ## 범위 밖 (#533 설계 문서 참고)

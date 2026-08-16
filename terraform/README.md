@@ -22,7 +22,7 @@ terraform/
 | admin | `terraform/admin/autoresearch-k8s` | 앱 namespace/KSA와 Cloud SQL/Redis Cluster 최소 egress NetworkPolicy |
 | admin | `terraform/admin/airflow-k8s` | Airflow Kubernetes namespace/RBAC/NetworkPolicy |
 | admin | `terraform/admin/monitoring-k8s` | monitoring namespace와 port-forward RBAC 경계(chart는 ArgoCD Application이 관리, #183) |
-| admin | `terraform/admin/argocd-k8s` | ArgoCD namespace와 Helm 설치, AppProject/Application(monitoring·argo-rollouts·mlflow·serving·agent-orchestration·actions-runner-controller·actions-runner-scale-set) |
+| admin | `terraform/admin/argocd-k8s` | ArgoCD namespace와 Helm 설치, AppProject/Application(monitoring·argo-rollouts·mlflow·serving·agent-orchestration·actions-runner-controller·actions-runner-scale-set-feast-{dev,prod}) |
 | admin | `terraform/admin/argo-rollouts-k8s` | Argo Rollouts namespace/NetworkPolicy 경계(chart는 ArgoCD Application이 관리, #186) |
 | admin | `terraform/admin/elastic-k8s` | ECK/Elasticsearch namespace와 네트워크 경계 (#97) |
 | admin | `terraform/admin/actions-runner-k8s` | 셀프 호스티드 러너(ARC) namespace/KSA/quota/NetworkPolicy 경계(chart는 ArgoCD Application이 관리, #533) |
