@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-16T07:23:59Z",
+  "generated_at": "2026-08-16T07:24:31Z",
   "reports": [
+    {
+      "number": 640,
+      "title": "chore: ARC PoC 러너 스케일셋 제거",
+      "author": "hyochangsung",
+      "merged_at": "2026-08-16T07:23:47Z",
+      "summary_ko": [
+        "E2 CPU 쿼터 제약으로 인한 러너 스케줄링 병목을 해소하고자 검증이 완료된 ARC PoC 스케일셋 자원을 완전히 제거했습니다.",
+        "PoC 전용 Helm umbrella chart, ArgoCD Application 정의 및 수동 검증 GitHub 워크플로우를 함께 삭제했습니다.",
+        "feast-apply 전용 스케일셋과 ARC 컨트롤러 운영 체계는 그대로 유지하며 관련 인프라 문서 및 주석을 최신화했습니다."
+      ],
+      "report_url": "pr/640/"
+    },
     {
       "number": 638,
       "title": "feat: GCP 프로젝트 좌표를 autoresearch-505505로 교체",
