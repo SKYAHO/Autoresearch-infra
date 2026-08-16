@@ -752,7 +752,7 @@ live cluster 설정을 조회해야 확정된다. 계층 7의 외부 기본값 �
 | Agent Orchestration runner | app container 250m/512Mi → 1/2Gi (+PVC 1Gi); bootstrap init은 미지정 | 〃 |
 | Agent Orchestration UI | 100m/256Mi → 500m/512Mi | 〃 |
 | Agent Orchestration launcher(init/app 각각) | 50m/128Mi → 250m/256Mi | 〃 |
-| ARC ephemeral runner | 매니페스트 미지정 → `actions-runner` LimitRange가 500m/1Gi → 1/2Gi 주입 | infra `deploy/actions-runner-scale-set*` + `actions-runner-k8s` |
+| ARC ephemeral runner | 매니페스트 미지정 → `actions-runner` LimitRange가 500m/1Gi → 1/2Gi 주입 | infra `deploy/actions-runner-scale-set-feast-*` + `actions-runner-k8s` |
 | Airflow scheduler | 200m/512Mi → 1500m/1536Mi (+git-sync 250m/256Mi→500m/512Mi) | 앱 airflow repo Helm values |
 | Airflow webserver ×2 | 100m/512Mi → 500m/1Gi | 〃 |
 | KPO collect/merge | 500m/1Gi → 2/4Gi | airflow repo dags |

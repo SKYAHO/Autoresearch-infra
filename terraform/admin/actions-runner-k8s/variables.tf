@@ -102,10 +102,11 @@ variable "cluster_master_cidr" {
   }
 }
 
-# scale-set chart의 maxRunners 값과 짝을 이뤄야 한다 — Task 3
-# deploy/actions-runner-scale-set/values.yaml의 maxRunners를 이 값과 함께 바꾼다.
+# scale-set chart의 maxRunners 값과 짝을 이뤄야 한다 — #639에서 PoC 스케일셋을
+# 제거한 뒤로는 deploy/actions-runner-scale-set-feast-{dev,prod}/values.yaml의
+# maxRunners 합을 이 값과 함께 바꾼다.
 variable "actions_runner_max_pods" {
-  description = "actions-runner namespace pods ResourceQuota 상한(PoC 스케일셋 몫). scale-set chart maxRunners와 짝(pair)을 이룬다."
+  description = "actions-runner namespace pods ResourceQuota 상한. scale-set chart maxRunners와 짝(pair)을 이룬다."
   type        = number
   default     = 4
 }
