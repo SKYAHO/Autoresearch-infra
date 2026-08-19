@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-19T05:51:02Z",
+  "generated_at": "2026-08-19T06:00:49Z",
   "reports": [
+    {
+      "number": 646,
+      "title": "fix: mlflow-oauth-proxy가 airflow의 예약 ILB IP를 쓰던 것을 되돌린다",
+      "author": "hyeongyu-data",
+      "merged_at": "2026-08-19T06:00:35Z",
+      "summary_ko": [
+        "GCP 프로젝트 이전 과정에서 뒤바뀌었던 MLflow 내부 로드밸런서 IP를 정정했습니다.",
+        "MLflow 인증 프록시 서비스의 IP 주소를 Airflow IP에서 MLflow 전용 예약 IP(10.10.0.3)로 변경했습니다.",
+        "관련 매니페스트 내 주석의 IP 표기를 함께 정정하여 문서화와 설정의 일관성을 확보했습니다."
+      ],
+      "report_url": "pr/646/"
+    },
     {
       "number": 642,
       "title": "fix: agent-orchestration 매니페스트의 모듈 경로를 이미지 구조에 맞춘다",
