@@ -10,13 +10,23 @@
 > 이슈 #404 진행 기록을 본다. **이 문서만 위에서 아래로 따라가면 #404에서
 > 실제로 겪은 누락·장애가 절차상 재발하지 않는 것**이 목표다.
 
+> **2차 이전 반영(#637, 2026-08-14~16, `autoresearch-503903` →
+> `autoresearch-505505`).** 이 runbook을 실제로 한 번 더 따라가며 이전을
+> 수행했고, 그 결과를 두 갈래로 반영했다: ① 아래 Phase 0~6 절차 중
+> **2차 이전에서 틀린 것으로 드러난 지시는 본문에서 직접 정정**했고(특히
+> Phase 1의 repo variables 교체 순서 — 좌표 가드 도입으로 #404 기준이
+> 뒤집혔다), ② 새로 드러난 함정과 실측값은
+> [2차 이전 실측](#2차-이전-실측--autoresearch-503903--autoresearch-505505-2026-08-1416-637)
+> 절에 모았다. **#404 서술과 #637 서술이 충돌하면 #637이 최신이다.**
+> 1차 이전의 서술은 그때의 실측 기록이므로 소급 수정하지 않는다.
+
 대상 시나리오: 다른 GCP 프로젝트로의 전면 이전, 신규 환경(staging/prod) 신설,
 클러스터 전면 재구축. GCP는 프로젝트 간 리소스 이동을 지원하지 않으므로 전량
 IaC 재적용 + 데이터 복사가 기본 전략이다.
 
 ---
 
-## 전체 개요 — 이번에 무엇을, 왜, 어떻게 했나
+## 1차 이전 전체 개요 — `ar-infra-501607` → `autoresearch-503903` (#404)
 
 > 실제 작업에 쓰인 용어를 그대로 쓰되, 처음 등장할 때 괄호로 뜻을 풀어
 > 썼다. 명령어 수준 절차는 아래 Phase별 섹션을 본다.
@@ -590,40 +600,270 @@ GCP는 **프로젝트 간 리소스 이동을 지원하지 않는다** — 예�
 
 ---
 
+## 2차 이전 실측 — `autoresearch-503903` → `autoresearch-505505` (2026-08-14~16, #637)
+
+1차 이전으로 만든 위 절차를 실제로 한 번 더 따라간 기록이다. **1차와 겹치는
+함정은 여기 다시 쓰지 않았다** — 이 절은 "다시 겪었지만 절차가 막아 줬다"가
+아니라 **"절차가 틀렸거나 절차에 없던 것"만** 담는다.
+
+### 1차와 무엇이 달랐나
+
+- **코드 교체 범위가 훨씬 작았다.** 1차 이후 도입된 dev 환경 좌표
+  카탈로그(PR #492, `config/environments/dev/environment.yaml`) 덕분에 backend
+  버킷명이 root마다 하드코딩돼 있지 않다. 카탈로그 1파일 +
+  `terraform/envs/dev/github_actions.tf`의 리터럴 1곳만 바꾸면 전 root의
+  backend와 tfvar가 함께 바뀐다(PR #638). 1차에서 10여 개 파일을 일괄 치환하던
+  단계가 통째로 사라졌다.
+- **새 조직 하위로 들어갔다**(조직 `496492339145`, project number
+  `5787490889`, 결제 계정도 신규). 조직이 바뀌면 조직 정책과 quota 기본값이
+  함께 바뀐다 — 아래 Phase 0 항목이 전부 여기서 파생됐다.
+- **데이터 이전 범위를 좁혔다**: GCS 전량 + Cloud SQL `mlflow` 스키마만 복사하고
+  BQ·Feast offline·ES·`agent_orchestration` DB는 "Airflow 재실행으로 재생성"하기로
+  했다. **이 결정은 틀렸다** — 아래 전용 항목 참고.
+
+### Phase 0 — 조직 정책·API·quota
+
+- **조직 정책 전수 확인이 부트스트랩보다 먼저다.** 새 조직 하위로 들어갈 때
+  `iam.allowedPolicyMemberDomains`가 도메인 제한이면 WIF principalSet과 gmail
+  계정 IAM이 전부 거부돼 **CI apply가 전면 불가능**해진다. 505505는 `allowAll`이라
+  통과했지만 이건 확인해서 안 것이지 보장이 아니다.
+  `iam.disableServiceAccountKeyCreation`·`storage.uniformBucketLevelAccess`는
+  enforce였으나 이 스택이 이미 WIF·UBLA 전용이라 무관했다.
+- **`gcloud services enable`은 `--async`로 던진다.** 신규 프로젝트에서 동기
+  실행하면 10분 넘게 멈춘다. 49종을 async로 던지고 나중에
+  `gcloud services list --enabled`로 확인했다.
+- **quota는 1차와 정반대였다.** #404에서는 새 프로젝트가 더 후한 항목이 있었지만
+  (E2 24·N2 200·SSD 500), 505505는 신규 조직·신규 결제계정이라 더 박했다
+  (CPUS 32 vs 100, INSTANCES 8 vs 24, SSD 250 vs 500). 두 번의 실측에서 남는
+  규칙은 하나다 — **"새 프로젝트라서 박할 것"도 "후할 것"도 가정하지 말고 매번
+  실측한다.**
+- **`E2_CPUS`는 usage가 0으로 보고돼도 limit은 강제된다.**
+  `gcloud compute regions describe`의 `E2_CPUS` usage는 E2 VM이 여러 대 떠 있어도
+  0으로 나오고 소비는 일반 `CPUS`에 잡힌다. 이걸 근거로 **"E2_CPUS는 잔존
+  지표일 뿐 강제되지 않는다"고 한 번 오판했다.** 실제로는 한도 8에 bastion
+  (e2-micro 0.25) + airflow-dev 2대(e2-standard-2) + dev-default(e2-standard-4)로
+  8.25라 E2 노드 증설이 전면 불가였고, E2 자리를 만들려고 ARC PoC 러너 스케일셋을
+  제거해야 했다(#639 → PR #640). **없는 문제를 푸는 것보다 나쁜 것이 있는 문제를
+  없다고 판정하는 것이다** — quota는 usage 보고가 아니라 **실제 스케줄 결과**로
+  검증한다.
+- **E2는 Cloud Quotas API에서 `E2_CPUS`라는 이름으로 신청할 수 없다.**
+  `CPUS-PER-VM-FAMILY` + `dimensions.vm_family=E2` 차원으로 신청해야 한다.
+  `gcloud alpha/beta` 컴포넌트가 없으면 `curl`로 `quotaPreferences` REST를 직접
+  호출한다.
+- **quota 승인을 이전 일정의 선행 조건으로 잡지 않는다.** 증설 7건은 접수만 되고
+  2026-08-16까지 한 건도 승인되지 않았다(`grantedValue` 전부 기본값). 상시 가동분
+  (13 vCPU·5 인스턴스)은 기본 한도로도 돌아가므로 이전은 그대로 진행하고, 대규모
+  실험 동시 실행만 피한다.
+
+### Phase 1 — repo variables 교체 순서가 #404와 **뒤집혔다**
+
+`terraform-plan.yml`에 `vars.GCP_PROJECT_ID`와 카탈로그 `project_id`의 일치를
+검사하는 fail-closed 가드가 있다(워크플로우 27~41행, PR #492). 그래서 카탈로그를
+바꾸는 PR은 **repo variables를 먼저 교체해야** plan이 통과하고 머지가 가능하다.
+**#404 시절의 "infra repo variables는 머지 직후 교체"는 이 가드 도입 이전
+기준이며, 그대로 따르면 이전 PR이 CI에서 막혀 머지 자체가 안 된다.** 아래 Phase 1
+절차는 이 정정을 반영해 고쳐 뒀다. airflow repo는 여전히 머지 전 교체(자동 배포),
+app repo는 머지 후 교체로 1차와 같다.
+
+### Phase 2~3 — 신선 클러스터 함정 (1차에서 안 겪은 것)
+
+- **`autoresearch-k8s` root의 rerank loadtest는 순환이다.**
+  `kubernetes_network_policy_v1.rerank_loadtest_egress`가 `autoresearch-serving`
+  ClusterIP Service의 실존을 precondition으로 요구하는데, 그 Service는 ArgoCD가
+  `deploy/serving`에서 배포한다. Terraform → ArgoCD → Terraform 순환이라 신선
+  클러스터에서는 root 전체 apply가 실패한다. Terraform 1.15에는 `-exclude`가 없어
+  나머지 41개 리소스를 `-target`으로 전부 나열해 우회했고, serving이 뜬 뒤 loadtest
+  10개를 따로 적용해 55개를 채웠다.
+- **admin root의 팀원 이메일 allowlist는 GitHub secret이라 로컬 apply에서 읽을 수
+  없다.** 기본값이 `[]`라 모르고 apply하면 **팀 전원이 ArgoCD UI·GKE에서 잠긴다.**
+  구 클러스터의 적용된 RoleBinding subject와 `argocd-rbac-cm`의 `policy.csv`에서
+  실값을 역추출해 로컬 `terraform.tfvars`로 복원했다(팀 5명). **구 클러스터를
+  지우기 전에 이 값을 확보해 두는 것이 선행 조건이다.**
+- **Cloud SQL 운영자 접속 경로가 저장소 어디에도 문서화돼 있지 않았다.**
+  `agent_orchestration_runtime` role 선생성이 apply 전제인데 접속 절차가 없었다.
+  실제로 쓴 경로: `gcloud sql users set-password postgres`로 관리자 비밀번호를
+  만들어 SM `autoresearch-dev-postgres-admin-password`에 보관 → bastion IAP 터널
+  (`-L 5433:<sql-private-ip>:5432`) → `brew install libpq`의 psql.
+
+### Phase 4 — Secret은 신규 프로젝트에서 **방향이 뒤집힌다**
+
+- `TERRAFORM_DEV.md`가 규정한 대로 Secret Manager **payload는 Terraform 관리
+  밖**이다. 그래서 신규 프로젝트에는 SM 컨테이너만 생기고 **version이 0개**다
+  (이전 직후 6종이 그 상태였다).
+- 결과적으로 위 [Secret 인벤토리](#secret-인벤토리-operator-주입--수기-목록-금지-ns-전수-순회로-재확인)
+  표가 전제하는 "SM 정본 → k8s Secret" 방향이 **성립하지 않는다.** 신규 프로젝트에서는
+  **k8s → SM 역주입**이 맞다. `openrouter-api-key`와 actions-runner GitHub App
+  3종(`-app-id`/`-installation-id`/`-private-key`)을 클러스터 k8s Secret에서 읽어
+  SM v1을 만들고 해시로 대조했다(매핑은
+  `docs/runbooks/2026-08-05-actions-runner-github-app-secret.md` 기준).
+- **주입 절차를 문서 그대로 따르면 데이터가 날아간다.** 그 절차는 SM에서 읽어
+  k8s Secret을 **통째로 재생성**하는데, `openrouter`도 version 0개라 클러스터에만
+  존재하던 `OPENROUTER_API_KEY`·`YOUTUBE_PROXY_URL`이 함께 지워진다. 반드시
+  `kubectl patch --type merge`로 **해당 키만** 교체한다.
+- 프로젝트 종속이라 새로 발급해야 하는 것도 있다 —
+  `autoresearch-dev-youtube-api-key`는 신규 키 발급 후 SM v1 + k8s merge patch로
+  주입하고 YouTube API 200으로 검증했다.
+- `autoresearch-dev-agent-orchestration-codex-auth-bootstrap`은 Codex OAuth
+  `auth.json`이라 **계정 동일성 확인 없이 복사하면 안 된다**(candidate-finalizer용
+  "Codex #2"가 별도로 존재). 2026-08-16 기준 미주입으로 남았다.
+
+### Phase 5 — 데이터 복사 실측
+
+- **Terraform 인증은 ADC를 쓴다.** `GOOGLE_OAUTH_ACCESS_TOKEN`에 gcloud 토큰을
+  넣는 우회는 1시간 만료라 긴 복사 도중 끊긴다. 실제로 이미지 복사 2건이 만료로
+  실패했고, 더 나쁘게는 만료된 토큰 탓에 **"이미지가 원본에 없다"는 오진**을 했다.
+  재인증 후 확인하니 멀쩡히 존재했다. **인증 실패를 "대상 없음"으로 착각하지 말 것.**
+- AR 이미지는 `crane copy`(brew)로 복사한다. 같은 레지스트리 호스트라도
+  cross-project blob mount가 안 되는 이미지는 로컬을 경유해 매우 느리다
+  (airflow 966초, serving 1283초). digest 검증은 `crane digest` 왕복보다
+  `gcloud artifacts docker images list` 한 번이 훨씬 빠르다.
+- **GCS 서버사이드 복사 시간은 바이트가 아니라 객체 수에 비례한다** — 21.4GB
+  `mlflow-artifacts`는 10초, 2.7GB `raw-data`는 3689초였다. 일정 추정은 용량이
+  아니라 객체 수로 한다.
+- 라이브로 쓰이는 버킷(`airflow-logs`)은 복사 후에도 원본이 계속 자라 바이트 대조가
+  영원히 불일치한다. 대상 버킷의 최신 객체 타임스탬프가 rsync 시점에 멈춰 있고
+  원본에만 그 이후 객체가 있으면 정상이다.
+- **zsh는 따옴표 없는 변수를 단어 분리하지 않는다.** `for f in $FILES`나
+  `terraform ... $TARGETS`가 통째로 한 인자가 되어 조용히 실패한다.
+  `while IFS= read -r`를 쓰거나 인자를 직접 나열한다.
+
+### "재실행으로 재생성"은 성립하지 않았다 — 이번 이전 최대의 오판
+
+BQ·Feast offline을 복사 대상에서 빼고 "Airflow 재실행으로 재생성"하기로 한 결정의
+결과는, **2026-08-16까지 BQ 전 테이블 0행**이다
+(`data_lake_action_log`, `data_lake_youtube_trending_kr`,
+`feast_offline_store(.._dev).training_entity` 모두 `numRows=0`). 이유는 두 가지다.
+
+1. **증분 DAG는 히스토리를 만들지 않는다.** `lake_to_bigquery_incremental`은
+   이름 그대로 파티션 1개씩 `WRITE_TRUNCATE`로 적재하고 `catchup=False`다. 자연
+   실행은 그날 파티션만 만든다. 구 프로젝트의 `data_lake_youtube_trending_kr`은
+   2024-10-12~2026-08-14 구간 **665개 파티션·132,956행**,
+   `data_lake_action_log`은 **5,126,901행**이다. 재실행으로 복원하려면
+   `dag_run.conf.partition_date`를 바꿔 가며 수백 회 수동 트리거해야 한다.
+2. **그 재실행조차 최상류 DAG 하나가 막히면 통째로 멈춘다**(아래 잔여 결함 2).
+
+**교훈: "재생성 가능한 데이터"와 "재생성 절차가 실재하는 데이터"는 다르다.**
+증분 파이프라인이 만든 누적 산출물은 파이프라인을 다시 돌린다고 복원되지 않는다.
+이전 계획에서 데이터를 복사 대상에서 제외하려면, 근거는 "재생성 가능"이 아니라
+**"백필 경로가 실재하고 그 실행 시간·비용이 감당 가능"**이어야 한다.
+
+그리고 이 제외에는 얻는 것도 없었다 — **`bq cp`는 사실상 즉시 끝나는 메타데이터
+연산이고, dataset location만 같으면 cross-project로 동작한다.** 구 프로젝트 결제를
+비활성화한 뒤에도 복사는 가능하다(job을 신규 프로젝트에 청구하면 옛 프로젝트
+데이터를 읽을 수 있다는 것을 2026-08-16에 실측 확인했다). **단 프로젝트를
+`delete`하면 끝이므로, 삭제 게이트에 "데이터 확보 완료"를 넣는다**(아래 Phase 6
+절차에 추가했다).
+
+### Phase 6 — 신선 클러스터는 앱 저장소의 잠복 결함을 드러낸다
+
+2026-08-16 전수 검증에서 **인프라 이전 자체는 완결**로 확인됐다: state 10개
+(dev root + admin 9개), `autoresearch-k8s` 55개, GCS 11버킷, Cloud SQL DB 4종
+(+기본 `postgres`), Secret 21개, DAG 8개 import 오류 0, 프로젝트 IAM·코드·설정의
+옛 프로젝트 참조 0건.
+
+남은 결함 2건은 **이전이 만든 것이 아니라 앱 저장소 변경이 만든 것**이고, 구
+프로젝트에서도 같은 방식으로 이미 깨져 있었다 — 옛 상태·데이터가 증상을 가리고
+있었을 뿐이다.
+
+1. **ArgoCD `agent-orchestration` Missing**(#641) — app#757이
+   `agent_orchestration/`을 `applications/experiment_platform/`으로 옮겼는데
+   `deploy/agent-orchestration/` 6개 매니페스트가 옛 모듈 경로
+   (`agent_orchestration.bootstrap_secrets`)를 그대로 호출한다. 이미지 안에 그
+   모듈이 실제로 없다(`crane export`로 확인).
+2. **`youtube_gcs_action_log_pipeline` 실패** — batch 이미지가
+   `scripts/gcs_code_bootstrap.sh`로 전환되어 `CODE_ARTIFACTS_BUCKET`을 요구하는데
+   이 DAG만 그 env를 넘기지 않는다(`오류: CODE_ARTIFACTS_BUCKET 또는
+   CODE_ARCHIVE_LOCAL_PATH 환경 변수가 필요합니다`, exit 2). 구 프로젝트 08-14
+   로그에도 동일 실패가 있다. 이 하나가 `lake_to_bigquery_incremental` →
+   `feast_offline_feature_build` → `ctr_model_training` 체인을 통째로 막는다.
+
+**교훈: 재구축은 "코드가 실제로 처음부터 돌아가는가"를 검증하는 유일한 계기다.**
+기존 환경에 남아 있던 상태·데이터가 가려 주던 결함이 한꺼번에 드러나므로, 이전
+직후의 실패를 반사적으로 "이전 실수"로 분류하지 말고 **구 환경의 같은 시점 로그와
+대조**해서 잠복 결함과 이전 결함을 나눈다. 반대로, 잠복 결함이라고 해서 우선순위가
+낮은 것도 아니다 — 위 2번은 구 환경에서는 옛 데이터 덕에 견딜 만했지만 신규
+환경에서는 데이터 파이프라인 전체를 세운다.
+
+### 결과
+
+- 2026-08-14 착수 → **08-15 cutover**(infra#638·airflow#331 머지, repo variables
+  3개 저장소 교체, 신규 클러스터 ArgoCD 8앱 Synced, serving이 MLflow champion
+  v28을 로드해 healthcheck 200 — MLflow DB + artifacts 이관이 end-to-end로
+  검증됨) → **08-16 전수 검증**(Airflow 첫 helm 설치, feast apply 성공, DAG 6개
+  unpause, `feast_online_store_materialize`·`ctr_model_promote` 자연 실행 성공).
+- 2026-08-16 기준 미완: 잔여 결함 2건, `codex-auth-bootstrap` 시크릿 1종,
+  **BQ·Feast offline 데이터 확보**, quota 증설 7건 승인, 구 프로젝트 삭제
+  (결제 비활성 상태로 `ACTIVE` 유지 중).
+
+---
+
 ## Phase 0 — 새 프로젝트 부트스트랩
 
 사용자(콘솔/조직 관리자) 선행:
 
 1. 프로젝트 생성 + 결제 연결, 작업 계정에 owner 부여
    (조직이 다르면 IAM 전파에 수 분 — `gcloud projects describe`로 확인)
-2. **quota 실측 먼저, 신청은 그 다음**: 새 프로젝트 기본 한도가 옛것보다 후할
-   수 있다(#404 실측: E2 24·N2 200·SSD 500). 특히 `PREEMPTIBLE_CPUS`가 0이면
-   Spot이 일반 계열 quota를 소모한다(#422의 근거) — 한도가 부족하면 증설
-   신청보다 **머신 계열 이전**(quota 풀 갈아타기)이 승인 대기 없는 대안.
+2. **조직 정책 전수 확인**(조직이 바뀔 때 필수, #637): `gcloud resource-manager
+   org-policies list --organization=<org>`로 최소 `iam.allowedPolicyMemberDomains`를
+   본다. 도메인 제한이면 WIF principalSet과 외부 계정 IAM이 전부 거부돼 **CI apply가
+   전면 불가능**하므로, 부트스트랩을 시작하기 전에 예외를 받아야 한다.
+   `iam.disableServiceAccountKeyCreation`·`storage.uniformBucketLevelAccess`는
+   이 스택이 WIF·UBLA 전용이라 enforce여도 무관하다.
+3. **quota 실측 먼저, 신청은 그 다음**: 새 프로젝트 기본 한도는 옛것보다 후할 수도
+   (#404: E2 24·N2 200·SSD 500) 박할 수도(#637: CPUS 32·INSTANCES 8·SSD 250) 있다 —
+   **어느 쪽도 가정하지 말고 매번 조회한다.** 두 가지가 특히 함정이다.
+   - `PREEMPTIBLE_CPUS`가 0이면 Spot이 일반 계열 quota를 소모한다(#422의 근거).
+   - **`E2_CPUS`는 usage가 0으로 보고돼도 limit은 강제된다**(#637). E2 VM이 여러
+     대 떠 있어도 소비는 일반 `CPUS`에 잡히고 `E2_CPUS` usage는 0으로 나오므로,
+     이 값만 보고 "강제되지 않는다"고 판단하면 안 된다. 검증은 usage 보고가 아니라
+     **실제 노드 증설이 되는지**로 한다.
+   - 한도가 부족하면 증설 신청보다 **머신 계열 이전**(quota 풀 갈아타기)이 승인
+     대기 없는 대안이다. #637에서는 증설 7건이 접수 후 며칠간 한 건도 승인되지
+     않았다 — **승인을 이전 일정의 선행 조건으로 잡지 않는다.**
+   - 증설 신청 시 E2는 `E2_CPUS`가 아니라 `CPUS-PER-VM-FAMILY` +
+     `dimensions.vm_family=E2` 차원으로 접수한다. `gcloud alpha/beta`가 없으면
+     Cloud Quotas REST `quotaPreferences`를 `curl`로 직접 호출한다.
 
 운영자:
 
-3. API enable — `TERRAFORM_BOOTSTRAP.md`의 목록 + **`run.googleapis.com`**
-   (#404에서 누락돼 Cloud Run 생성 실패)
-4. bootstrap apply — **기존 local state를 재사용하면 기존 프로젝트 리소스를
+4. API enable — `TERRAFORM_BOOTSTRAP.md`의 목록 + **`run.googleapis.com`**
+   (#404에서 누락돼 Cloud Run 생성 실패). **`--async`로 던지고 나중에
+   `gcloud services list --enabled`로 확인한다** — 신규 프로젝트에서 동기 실행하면
+   10분 넘게 멈춘다(#637, 49종 enable).
+5. bootstrap apply — **기존 local state를 재사용하면 기존 프로젝트 리소스를
    파괴하려는 plan이 나온다**: `terraform -chdir=terraform/bootstrap workspace
    new <project-id>` 로 분리하고 `<project-id>.tfvars` + `-var-file`로 실행.
    state 버킷 이름은 전역 유니크 — 필수 변수라 값 없이는 멈춘다(#414).
-5. `<project>_cloudbuild` 버킷은 첫 빌드 전엔 없다 — dev root의 버킷 IAM이
+6. `<project>_cloudbuild` 버킷은 첫 빌드 전엔 없다 — dev root의 버킷 IAM이
    404 나면 수동 생성(`gcloud storage buckets create gs://<project>_cloudbuild
    --location=US`) 후 재시도.
+7. **구 환경에서만 얻을 수 있는 값을 먼저 확보한다**(#637): admin root의 팀원
+   이메일 allowlist는 GitHub secret이라 로컬 apply에서 읽히지 않고 기본값이 `[]`라,
+   모르고 apply하면 **팀 전원이 ArgoCD UI·GKE에서 잠긴다.** 구 클러스터의 적용된
+   RoleBinding subject와 `argocd-rbac-cm`의 `policy.csv`에서 역추출해 로컬
+   `terraform.tfvars`로 옮겨 둔다.
 
 ## Phase 1 — 코드·변수 전환 (순서가 생명)
 
-- backend 버킷명(전 root `versions.tf` + workflow 경로 + admin_apply SA IAM),
-  deploy manifest 좌표는 PR로 교체.
-- **infra repo variables는 머지 "직후"** 교체(GCP_PROJECT_ID·WIF_PROVIDER_ID·
-  CI_SA_EMAIL, 이후 DEV/ADMIN_APPLY_SA_EMAIL·WIF_POOL_ID) — 먼저 바꾸면 열린
-  PR들의 plan이 옛 프로젝트 기준으로 깨진다.
-- **airflow repo의 dev-gke environment 변수는 머지 "이전"** 교체 — 그 repo는
-  main 머지가 곧 자동 배포라서 순서가 infra와 반대다(#404 실측).
+- 좌표는 **카탈로그 1파일이 정본**이다(PR #492 이후):
+  `config/environments/dev/environment.yaml`의 `gcp.project_id`·`state.bucket`을
+  바꾸면 전 root의 backend와 tfvar가 함께 바뀐다. 카탈로그가 공급하지 않아 리터럴로
+  남는 곳은 `terraform/envs/dev/github_actions.tf`의 `admin_apply_state` 하나뿐이다
+  (#638). 1차 이전처럼 root마다 `versions.tf`를 치환하는 단계는 더 이상 없다.
+  deploy manifest 좌표는 별도 PR로 교체.
+- **infra repo variables는 머지 "이전"에 교체한다**(#637 정정).
+  `terraform-plan.yml`에 `vars.GCP_PROJECT_ID`와 카탈로그 `project_id`의 일치를
+  검사하는 fail-closed 가드가 있어, 카탈로그를 바꾼 PR은 변수를 먼저 바꿔야 plan이
+  통과하고 머지가 가능하다. **#404 기준의 "머지 직후 교체"는 이 가드 도입 이전
+  기준이며, 그대로 따르면 이전 PR이 CI에서 막힌다.** 열려 있는 다른 PR의 plan이
+  그동안 깨지는 것은 감수하고, 이전 PR을 우선 머지해 과도기를 짧게 끊는다.
+- **airflow repo의 dev-gke environment 변수도 머지 "이전"** 교체 — 그 repo는
+  main 머지가 곧 자동 배포다(#404 실측).
+- **app repo 변수는 머지 "이후"** 교체(#637 실측).
 - 과거 실측 기록 문서(날짜 박힌 검증 절)는 치환 대상이 아니다 — 사실 기록은
-  옛 값 유지가 옳다(#419 리뷰 교훈).
+  옛 값 유지가 옳다(#419 리뷰 교훈). 이 원칙은 인프라 저장소뿐 아니라 app·airflow
+  저장소의 QA·설계 기록에도 그대로 적용된다(#637에서 남은 옛 프로젝트 참조는 전부
+  이 부류였다).
 
 ## Phase 2 — dev root apply
 
@@ -657,9 +897,29 @@ Phase 2가 만든 GKE 클러스터가 이미 있어야 plan이 되므로, `scope
    Deployment는 Secret 없이는 rollout 대기 10분 타임아웃으로 apply가 실패한다.
 3. `gke-team-access`는 CI 제외(#314) — 로컬 apply로 마무리.
 4. 로컬 tfvars 함정: 모든 admin root의 로컬 `terraform.tfvars`에서 옛
-   project_id를 일괄 갱신하고 시작할 것(4회 재발 이력이 있는 함정).
+   project_id를 일괄 갱신하고 시작할 것(4회 재발 이력이 있는 함정). 이때 Phase 0의
+   7번에서 확보한 **팀원 이메일 allowlist도 함께 채운다** — 기본값 `[]`로 apply하면
+   접근 권한이 통째로 비는데, plan은 아무 경고 없이 통과한다(#637).
+5. **`autoresearch-k8s`의 rerank loadtest는 신선 클러스터에서 순환이다**(#637).
+   `kubernetes_network_policy_v1.rerank_loadtest_egress`가 `autoresearch-serving`
+   ClusterIP Service의 실존을 precondition으로 요구하는데 그 Service는 ArgoCD가
+   `deploy/serving`에서 배포한다. → loadtest 리소스를 뺀 나머지를 먼저 적용하고,
+   serving이 뜬 뒤 loadtest를 따로 적용한다. Terraform 1.15에는 `-exclude`가 없어
+   나머지를 `-target`으로 전부 나열해야 한다(zsh에서는 `$TARGETS` 변수 전개가 단어
+   분리되지 않으므로 인자를 직접 나열할 것).
 
 ## Secret 인벤토리 (operator 주입 — 수기 목록 금지, ns 전수 순회로 재확인)
+
+> **신규 프로젝트에서는 SM→k8s 방향이 성립하지 않는다**(#637). Secret Manager
+> payload는 Terraform 관리 밖(`TERRAFORM_DEV.md`)이라 새 프로젝트에는 컨테이너만
+> 생기고 **version이 0개**다. 그래서 아래 표가 전제하는 "SM 정본에서 읽어 k8s
+> Secret을 만든다"를 그대로 실행하면 **빈 값이 주입되거나, 더 나쁘게는 클러스터에만
+> 존재하던 키가 지워진다**(#637 실측: `openrouter`가 version 0개라 SM 기준으로
+> k8s Secret을 재생성했으면 `OPENROUTER_API_KEY`·`YOUTUBE_PROXY_URL`이 함께
+> 날아갈 뻔했다). 신규 프로젝트에서는 순서를 뒤집어 **구 클러스터 k8s Secret →
+> SM 역주입**으로 정본을 먼저 채우고, k8s 쪽을 손댈 때는 통째 재생성이 아니라
+> `kubectl patch --type merge`로 **해당 키만** 교체한다. 프로젝트 종속 값
+> (OAuth client, API key)만 신규 발급 후 같은 방식으로 주입한다.
 
 이전 시 복사 대상 식별은 아래 표가 아니라 **명령으로 시작**한다(#404에서 argocd
 ns가 수기 목록에서 빠져 ArgoCD 로그인이 깨진 채 넘어갔다):
@@ -719,14 +979,52 @@ done
 
 ## Phase 4~5 — 데이터 이전
 
+**먼저: 무엇을 복사 대상에서 뺄지 정할 때의 기준**(#637 오판에서 나온 규칙).
+
+- **"재실행으로 재생성 가능"은 제외 근거가 될 수 없다.** #637에서 BQ·Feast
+  offline을 "Airflow 재실행으로 재생성"하기로 하고 복사에서 뺐는데, 이전 완료
+  후에도 **BQ 전 테이블이 0행**으로 남았다. `lake_to_bigquery_incremental`처럼
+  증분 적재 DAG는 파티션 1개씩 처리하고 `catchup=False`라 자연 실행이 히스토리를
+  만들지 않기 때문이다(당시 구 프로젝트에는 665개 파티션·행 500만 건이 쌓여
+  있었다). 제외의 근거는 **"백필 경로가 실재하고 그 실행 시간·비용이 감당 가능"**
+  이어야 한다.
+- **복사가 싸면 그냥 복사한다.** `bq cp`는 사실상 즉시 끝나는 메타데이터
+  연산이다(dataset location만 같으면 cross-project로 동작). 뺄 이유가 없었다 —
+  #637에서 뒤늦게 복사했을 때 행이 있는 7개 테이블(합계 약 1,050만 행) 전체가
+  **10초대**에 끝났고, 행 수·schema·timePartitioning·clustering·**labels까지 전부
+  보존**돼 Terraform 드리프트도 생기지 않았다.
+- **구 프로젝트 결제를 끊어도 데이터는 아직 읽힌다** — job을 신규 프로젝트에
+  청구하면 옛 프로젝트 BQ를 조회·복사할 수 있다(#637 실측). 그러나
+  `gcloud projects delete`는 되돌릴 수 없으므로 **삭제 게이트에 "데이터 확보
+  완료"를 넣는다**(Phase 6 참조).
+
+**복사 절차**
+
 - GCS: `gcloud storage rsync -r`(서버사이드). BQ: `bq cp --force`(cross-project).
-- AR 이미지: digest 보존 복사(`docker pull --platform linux/amd64` → tag →
-  push, **digest 대조로 검증**). 경로 교체 PR보다 복사가 먼저다.
+- **복사 시간 추정은 용량이 아니라 객체 수로 한다**(#637 실측): 21.4GB
+  `mlflow-artifacts`가 10초, 2.7GB `raw-data`가 3689초였다.
+- 라이브로 쓰이는 버킷(`airflow-logs`)은 복사 후에도 원본이 계속 자라 **바이트
+  대조가 영원히 불일치한다.** 대상 버킷의 최신 객체 타임스탬프가 rsync 시점에
+  멈춰 있고 원본에만 그 이후 객체가 있으면 정상으로 판정한다.
+- AR 이미지: digest 보존 복사. `crane copy`(brew)가 실용적이다 — 같은 레지스트리
+  호스트라도 cross-project blob mount가 안 되는 이미지는 로컬을 경유해 매우
+  느리다(#637: airflow 966초, serving 1283초). **digest 대조로 검증**하되
+  `crane digest` 왕복보다 `gcloud artifacts docker images list` 한 번이 훨씬 빠르다.
+  경로 교체 PR보다 복사가 먼저다.
+- **인증은 ADC를 쓴다.** `GOOGLE_OAUTH_ACCESS_TOKEN`에 gcloud 토큰을 넣는 우회는
+  1시간 만료라 긴 복사 도중 끊긴다. #637에서 이미지 복사 2건이 만료로 실패했고,
+  더 나쁘게는 만료된 토큰 탓에 **"이미지가 원본에 없다"는 오진**을 했다(재인증 후
+  확인하니 멀쩡히 있었다). **인증 실패를 "대상 없음"으로 착각하지 말 것.**
 - **Cloud SQL: 반드시 "앱 scale=0 → export → import → 재기동" 순서**.
   #404에서 mlflow가 먼저 떠서 빈 스키마를 만들었고 import가
   `relation "alembic_version" already exists`로 충돌 — DB delete/create 후
   재import로 복구했다(DB delete는 커넥션 소멸 대기 재시도 필요).
   export/import는 SQL SA에 대상 버킷 objectAdmin 부여가 선행.
+- **Cloud SQL 운영자 접속 경로**(#637에서 저장소에 없어 매번 다시 알아낸 것):
+  `agent_orchestration_runtime` 같은 role 선생성이 apply 전제인데 접속 절차가
+  문서화돼 있지 않다. 실제 경로는 `gcloud sql users set-password postgres`로 관리자
+  비밀번호를 만들어 SM `autoresearch-dev-postgres-admin-password`에 보관 → bastion
+  IAP 터널(`-L 5433:<sql-private-ip>:5432`) → `brew install libpq`의 psql이다.
 - feast registry.db는 복사본이 옛 BQ 좌표를 품는다 — 복사 후 **feast apply
   1회 재실행**으로 재생성.
 - ES 스냅샷 저장소·SLM은 클러스터 밖 설정이 아니라 **ES API 등록**이다 —
@@ -737,7 +1035,18 @@ done
 
 1. 스모크: 수동 DAG 1회 + **야간 스케줄 자연 실행 관찰**(수동과 다른 경로를
    탄다 — #404에서 batch KSA 부재가 야간에만 드러났다), UI 5종 Google 로그인,
-   serving 응답.
+   serving 응답. **DAG는 "성공했다"가 아니라 "체인이 끝까지 갔다"로 본다**(#637) —
+   최상류 수집 DAG가 실패하면 하류는 실패가 아니라 **run 자체가 0건**이거나
+   센서가 `up_for_reschedule`로 조용히 대기하므로, DAG 목록만 훑으면 정상으로
+   보인다. 산출물(BQ 행 수, feature table 행 수)로 확인한다.
+   - **신선 클러스터는 앱 저장소의 잠복 결함을 드러낸다**(#637). 이전 직후의 실패를
+     반사적으로 "이전 실수"로 분류하지 말고 **구 환경의 같은 시점 로그와 대조**해
+     잠복 결함과 이전 결함을 나눈다. #637에서 남은 결함 2건(ArgoCD
+     `agent-orchestration`의 옛 모듈 경로 참조, `youtube_gcs_action_log_pipeline`의
+     `CODE_ARTIFACTS_BUCKET` 미전달)은 둘 다 구 프로젝트에서 이미 같은 방식으로 깨져
+     있었고 옛 데이터가 증상을 가리고 있었을 뿐이다. 반대로 **잠복 결함이라고
+     우선순위가 낮은 것도 아니다** — 후자는 신규 환경에서 데이터 파이프라인 전체를
+     세웠다.
 2. **내부 UI FQDN 터널 접속 확인**: Airflow/MLflow 등 내부 ILB 매니페스트의
    `loadBalancerIP`가 **리터럴로 하드코딩**돼 있으면, DNS(Terraform 소유)는
    새 프로젝트 예약 IP를 가리키는데 Service는 옛 프로젝트 IP를 그대로 가리켜
@@ -763,7 +1072,11 @@ done
    `DELETE_REQUESTED`, `gcloud projects undelete`로 유예 내 **프로젝트 복원**
    가능 — 리소스·데이터 복구는 보장되지 않으므로 실질 롤백은 IaC 재적용 +
    백업 복원으로 계획한다).
-   정리 전 하드 게이트는 **세 가지**다(이번 이전 실측 기준).
+   정리 전 하드 게이트는 **네 가지**다(#404 세 가지 + #637에서 추가된 한 가지).
+   - **데이터 확보 완료**(#637 추가). 복사 대상에서 뺀 데이터가 신규 환경에 실제로
+     존재하는지를 **행 수로** 확인한다 — "재실행으로 재생성하기로 했다"는 계획이
+     아니라 결과를 본다. 결제 분리 상태에서는 아직 옛 프로젝트 BQ를 읽어 복사할 수
+     있지만 `delete` 후에는 불가능하므로, 이 게이트를 통과하지 못하면 삭제를 미룬다.
    - **OAuth client 의존 0** 재확인(`scripts/verify-oauth-clients.sh`).
    - **주기 워크로드가 최소 1회 자연 실행되어 성공**했는지. 이번 이전에서
      batch KSA 부재(#427)는 수동 스모크가 아니라 **야간 스케줄이 자연 실행될
@@ -777,7 +1090,7 @@ done
    `terraform init -reconfigure` — 옛 버킷 403("billing account absent")이
    보이면 이 케이스다.
 
-## 알려진 함정 압축 목록 (#404 실측)
+## 알려진 함정 압축 목록 (1차 #404 실측)
 
 닭-달걀(첫 apply 로컬), plan 플랫폼 종속, CRD 선적용, ns 의존 간선 누락(#436),
 Secret 선주입, 수기 인벤토리 누락(argocd), URL-인코딩 비번(#438), SQL 선기동
@@ -792,3 +1105,24 @@ DNS 예약 IP 불일치(#425→#426 — 리터럴 값 갱신으로 해소, outpu
 구분됐다. `terraform/envs/dev`에 편입해 해소(#494)), 옛 프로젝트 참조 잔재(vault helm-values 2곳·
 gke_ctr_retrain.tf import 지시 주석 — 실행 지시라 다음 재구축에서 삭제 요청된
 프로젝트를 대상으로 삼게 된다).
+
+## 알려진 함정 압축 목록 (2차 #637 실측)
+
+조직 정책 미확인(`allowedPolicyMemberDomains`가 막으면 CI apply 전면 불가),
+`services enable` 동기 실행 10분+ 정지(`--async` 필수), quota 기본값이 1차와
+정반대(가정 금지·매번 실측), **`E2_CPUS` usage 0 오판**(limit은 강제되며 검증은
+실제 증설 여부로), Cloud Quotas는 E2를 `CPUS-PER-VM-FAMILY`+`vm_family` 차원으로만
+접수, quota 증설 승인은 며칠째 0건(일정 선행 조건으로 잡지 말 것),
+**좌표 가드로 repo variables 교체 순서가 1차와 역전**(머지 전 교체해야 plan 통과),
+rerank loadtest ↔ serving Service 순환(신선 클러스터에서 `-target` 우회, TF 1.15는
+`-exclude` 없음), 팀원 이메일 allowlist가 GitHub secret이라 로컬 apply 시 기본값
+`[]`로 전원 잠김, Cloud SQL 운영자 접속 경로 미문서화(bastion IAP 터널 + psql),
+**SM payload가 Terraform 밖이라 신규 프로젝트는 version 0개 — 주입 방향이 k8s→SM으로
+역전**되고 k8s는 통째 재생성 대신 `patch --type merge`, Codex `auth.json`은 계정
+동일성 확인 전 복사 금지, ADC 대신 1시간 토큰 우회 시 만료가 **"대상 없음" 오진**을
+유발, cross-project blob mount 불가 이미지의 `crane copy`가 로컬 경유로 매우 느림,
+GCS 복사 시간은 바이트가 아니라 **객체 수**에 비례, 라이브 버킷은 바이트 대조가
+영구 불일치(타임스탬프로 판정), zsh는 따옴표 없는 변수를 단어 분리하지 않아
+`$TARGETS` 전개가 조용히 실패, **"재실행으로 재생성"을 복사 제외 근거로 삼아 BQ가
+0행으로 남음**(증분 DAG는 히스토리를 만들지 않는다), 신선 클러스터가 앱 저장소
+잠복 결함을 드러냄(구 환경 로그와 대조해 이전 결함과 분리할 것).
