@@ -96,3 +96,10 @@ PR에서는 GitHub Actions의 `lint`와 Terraform `plan` status check를 사용�
 ```bash
 terraform -chdir=terraform/envs/dev fmt -check -recursive
 ```
+
+
+## 프로젝트 발표 자료
+
+[소개·처리 흐름·대시보드 보기](docs/presentation/README.md) · [PDF](docs/presentation/project.pdf) · [PPT](docs/presentation/project.pptx)
+
+2026-09-15 기준 공개 코드와 검증 기록을 정리한 발표용 자료입니다.
